@@ -10,7 +10,10 @@ import ApiKeys from './routes/ApiKeys.jsx';
 import Usage from './routes/Usage.jsx';
 import Settings from './routes/Settings.jsx';
 import Profile from './routes/Profile.jsx';
-import { NotFound, Forbidden, ServerError, Maintenance } from './routes/ErrorPages.jsx';
+import {
+  NotFound, Forbidden, ServerError, Maintenance,
+  Gone, BadRequest, RateLimited, NotModified, MovedPermanently, Unauthorized,
+} from './routes/ErrorPages.jsx';
 import { Sandbox } from './routes/Sandbox.jsx';
 import { Signup, VerifyEmail, ForgotPassword, ResetPassword, Login } from './routes/Auth.jsx';
 import { Landing, Pricing } from './routes/Marketing.jsx';
@@ -294,7 +297,19 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/account/profile" element={<Profile />} />
+      {/*
+        The design draws ten codes. Four already had routes; these six are new.
+        They exist so a link, a redirect or a support article can name the page
+        that explains a condition — the app itself reaches most of them only by
+        being sent there.
+      */}
+      <Route path="/301" element={<MovedPermanently />} />
+      <Route path="/304" element={<NotModified />} />
+      <Route path="/400" element={<BadRequest />} />
+      <Route path="/401" element={<Unauthorized />} />
       <Route path="/403" element={<Forbidden />} />
+      <Route path="/410" element={<Gone />} />
+      <Route path="/429" element={<RateLimited />} />
       <Route path="/500" element={<ServerError onRetry={() => window.location.reload()} />} />
       <Route path="/maintenance" element={<Maintenance />} />
       <Route path="*" element={<NotFound />} />

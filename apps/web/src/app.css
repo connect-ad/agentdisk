@@ -12,7 +12,7 @@
 @keyframes dw-in{from{transform:translateX(var(--s-8));opacity:0}to{transform:none;opacity:1}}
 .dw__head{display:flex;align-items:flex-start;gap:var(--s-5);padding:var(--s-6);
   border-bottom:1px solid var(--line);flex:none}
-.dw__title{font-size:var(--t-16);font-weight:var(--w-semi);color:var(--ink);
+.dw__title{font-family:var(--font-display);font-size:var(--t-16);font-weight:var(--w-semi);color:var(--ink);
   letter-spacing:var(--tr-snug);min-width:0;overflow-wrap:anywhere}
 .dw__body{flex:1;overflow-y:auto;padding:var(--s-6);display:flex;
   flex-direction:column;gap:var(--s-6)}

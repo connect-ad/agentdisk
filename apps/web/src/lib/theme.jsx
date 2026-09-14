@@ -19,6 +19,23 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
  */
 
 const KEY = 'agentdisk:theme';
+const ACCENT_KEY = 'agentdisk:accent';
+
+/**
+ * The four accents AgentDisk Dashboard.dc.html ships.
+ *
+ * Violet is the design's default and what the product shipped before the
+ * picker existed, so it is stored as the absence of a choice: no attribute on
+ * <html>, no localStorage key. That keeps an unchosen accent identical to the
+ * old behaviour rather than merely equivalent to it.
+ */
+export const ACCENTS = [
+  { id: 'violet', label: 'Violet' },
+  { id: 'indigo', label: 'Indigo' },
+  { id: 'teal', label: 'Teal' },
+  { id: 'blue', label: 'Blue' },
+];
+const ACCENT_IDS = ACCENTS.map(a => a.id);
 const ThemeContext = createContext(null);
 
 function read() {
@@ -46,10 +63,36 @@ function apply(value) {
   else root.setAttribute('data-theme', value);
 }
 
+function readAccent() {
+  try {
+    const v = localStorage.getItem(ACCENT_KEY);
+    return ACCENT_IDS.includes(v) ? v : 'violet';
+  } catch {
+    return 'violet';
+  }
+}
+
+function writeAccent(value) {
+  try {
+    if (value === 'violet') localStorage.removeItem(ACCENT_KEY);
+    else localStorage.setItem(ACCENT_KEY, value);
+  } catch {
+    /* Private mode, or site data blocked. The choice will not persist. */
+  }
+}
+
+function applyAccent(value) {
+  const root = document.documentElement;
+  if (value === 'violet') root.removeAttribute('data-accent');
+  else root.setAttribute('data-accent', value);
+}
+
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(read);
+  const [accent, setAccent] = useState(readAccent);
 
   useEffect(() => { apply(theme); }, [theme]);
+  useEffect(() => { applyAccent(accent); }, [accent]);
 
   const choose = useCallback(value => {
     setTheme(value);
@@ -76,7 +119,16 @@ export function ThemeProvider({ children }) {
     });
   }, []);
 
-  const value = useMemo(() => ({ theme, setTheme: choose, toggle }), [theme, choose, toggle]);
+  const chooseAccent = useCallback(value => {
+    if (!ACCENT_IDS.includes(value)) return;
+    setAccent(value);
+    writeAccent(value);
+  }, []);
+
+  const value = useMemo(
+    () => ({ theme, setTheme: choose, toggle, accent, setAccent: chooseAccent }),
+    [theme, choose, toggle, accent, chooseAccent]
+  );
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
@@ -84,5 +136,5 @@ export function useTheme() {
   const ctx = useContext(ThemeContext);
   // Screens outside the provider (the marketing pages) still render; they just
   // follow the system setting with no control to change it.
-  return ctx ?? { theme: 'system', setTheme: () => {}, toggle: () => {} };
+  return ctx ?? { theme: 'system', setTheme: () => {}, toggle: () => {}, accent: 'violet', setAccent: () => {} };
 }

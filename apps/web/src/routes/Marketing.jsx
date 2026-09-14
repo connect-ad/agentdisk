@@ -1,85 +1,109 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
-import { Button, Icon, Badge, CodeBlock, Tabs, Switch, Panel } from '../components/index.js';
+import { Button, Icon } from '../components/index.js';
 import { useAuth } from '../lib/auth.jsx';
+import { PLANS, OVERAGES } from '../lib/pricing.js';
+import Logo from '../components-local/Logo.jsx';
 
 /**
- * 8.1 Landing · 8.2 Pricing — MVP-0.
- * Static marketing. The only stateful bits are the hero code tabs and the
- * billing toggle, which is inert until Stripe ships and says so plainly rather
- * than pretending to work.
+ * 8.1 Landing · 8.2 Pricing.
+ *
+ * Rebuilt to `AgentDisk Site.dc.html`. The previous version was the same page
+ * in new colours: a different headline, a six-card use-cases section the design
+ * does not have, and a four-tab code panel where the design draws a terminal
+ * transcript. Copy and section order now follow the design.
+ *
+ * Every price and limit comes from `lib/pricing.js`, which is the one module
+ * that changes when pricing goes dynamic.
  */
 
-const SNIPPETS = {
-  curl: `# Give an agent a scoped key, then let it write
-curl -X POST https://api.agentdisk.io/v1/files \\
-  -H "Authorization: Bearer $AGENTDISK_KEY" \\
-  -d '{"path":"memory/2026-03-05.md","size":812}'
+/* ── landing content, from the design ─────────────────────────────────────── */
 
-# => 201 Created
-# { "id": "file_8Kq2xR", "path": "memory/2026-03-05.md",
-#   "status": "processing", "agent": "research-assistant" }`,
-  mcp: `{
-  "mcpServers": {
-    "agentdisk": {
-      "url": "https://mcp.agentdisk.io/v1",
-      "headers": { "Authorization": "Bearer ad_live_..." }
-    }
-  }
-}`,
-  python: `from agentdisk import Client
+const HERO_TAGS = ['NO CARD REQUIRED', 'S3-COMPATIBLE', 'EU + US REGIONS'];
 
-drive = Client(api_key=os.environ["AGENTDISK_KEY"])
-drive.files.create("memory/2026-03-05.md", body=notes)
-
-for f in drive.files.search("competitor pricing"):
-    print(f.path, f.size)`,
-  ts: `import { AgentDisk } from "@agentdisk/sdk";
-
-const drive = new AgentDisk({ apiKey: process.env.AGENTDISK_KEY });
-await drive.files.create("memory/2026-03-05.md", { body: notes });
-
-const hits = await drive.files.search("competitor pricing");`
-};
+/**
+ * The hero transcript. `tone` colours a line; absent means body text.
+ * Modelled as data rather than markup so the panel stays one element and the
+ * tones stay tokens.
+ */
+const TRANSCRIPT = [
+  { text: '> write /projects/research/corpus.parquet' },
+  { text: '  ✓ 812 MB · sha256:9f2c41ab · v3', tone: 'ok' },
+  { text: '' },
+  { text: '> list /projects/research/*' },
+  { text: '  corpus.parquet      812 MB   12m ago' },
+  { text: '  embeddings.index    504 MB    3h ago' },
+  { text: '  run-manifest.json    18 KB    3h ago' },
+  { text: '' },
+  { text: '> delete /projects/*' },
+  { text: '  ✗ 403 scope_denied', tone: 'danger' },
+  { text: '  key adk_live_••••4aUgT lacks delete', tone: 'warn' },
+];
 
 const FEATURES = [
-  { icon: 'bolt', title: 'REST that reads like a filesystem', body: 'Files, folders and metadata over plain HTTP. No SDK required, no bespoke object model to learn.' },
-  { icon: 'terminal', title: 'MCP-native, not bolted on', body: 'Ten MCP tools from MVP-1, each carrying the scope it needs. Your agent connects with a config block, not a client library.' },
-  { icon: 'shield', title: 'Scoped keys, least privilege', body: 'Every credential names its operations and its path prefix. Read-only is the default on every create form.' }
+  {
+    kicker: 'SCOPED',
+    title: "Keys that can't overreach",
+    body: 'Every key carries explicit scopes and an optional path prefix. Denied calls are logged with the scope they needed.',
+  },
+  {
+    kicker: 'PERSISTENT',
+    title: 'State between runs',
+    body: 'Agents pick up where they left off. Files, folders and metadata survive process restarts.',
+  },
+  {
+    kicker: 'MCP NATIVE',
+    title: 'One config block',
+    body: 'File tools registered in any MCP client. No SDK, no wrapper service to maintain.',
+  },
+  {
+    kicker: 'AUDITED',
+    title: 'Who touched what',
+    body: 'Human and agent actions land in the same log, with actor, path, scope and source IP.',
+  },
 ];
 
 const STEPS = [
-  { n: 1, title: 'Create a workspace', body: 'One workspace per project. It gets a stable ID that never changes, even if you rename it.' },
-  { n: 2, title: 'Get a scoped API key', body: 'Choose read / write / delete / list and an optional path prefix. The key is shown exactly once.' },
-  { n: 3, title: 'Your agent reads and writes files', body: 'Over REST or MCP. Everything it touches is attributed to it in the audit log.' }
+  {
+    n: '1',
+    title: 'Create a key',
+    body: 'Pick scopes and a prefix. The key is shown once.',
+    code: "adk keys create \\\n  --scopes read,write,list \\\n  --prefix /projects/*",
+  },
+  {
+    n: '2',
+    title: 'Point your client at it',
+    body: 'One entry in your MCP config, or one env var for REST.',
+    code: "export AGENTDISK_KEY=adk_live_…\nexport AGENTDISK_WORKSPACE=ws_8f3…",
+  },
+  {
+    n: '3',
+    title: 'Let the agent work',
+    body: 'Watch the audit log fill in as calls arrive.',
+    code: "> write /projects/notes.md\n  ✓ 4.2 KB · v1",
+  },
 ];
 
-const USE_CASES = [
-  { title: 'Agent memory & journals', body: 'Give a long-running agent somewhere durable to keep notes between sessions.', replaces: 'Replaces: a Postgres table you did not want to own' },
-  { title: 'Content pipelines', body: 'Drafts, revisions and assets moving between specialised agents.', replaces: 'Replaces: S3 plus glue code' },
-  { title: 'Automation artifacts', body: 'Reports, exports and screenshots produced by scheduled runs.', replaces: 'Replaces: emailing yourself zip files' },
-  { title: 'Human-in-the-loop approvals', body: 'An agent writes; a human opens the dashboard and sees exactly what changed.', replaces: 'Replaces: screenshots in Slack' },
-  { title: 'Multi-agent access control', body: 'Separate sub-keys per agent, each restricted to its own path prefix.', replaces: 'Replaces: one shared root credential' },
-  { title: 'Webhook-driven workflows', body: 'Fire downstream jobs the moment an object lands or finishes processing.', replaces: 'Replaces: polling on a timer' }
-];
+/* ── shared chrome ────────────────────────────────────────────────────────── */
 
 export function Nav() {
   const { user } = useAuth();
   return (
     <nav className="mk__nav">
-      <span className="row" style={{ gap: 'var(--s-4)' }}>
-        <span className="auth__logo" aria-hidden="true">A</span>
-        <span className="auth__wordmark">AgentDisk</span>
-      </span>
+      <Link to="/" className="mk__brand">
+        <Logo size={28} />
+        <span className="mk__wordmark">AgentDisk</span>
+      </Link>
       <span className="mk__navlinks">
-        <Link to="/docs">Docs</Link>
+        <Link to="/">Product</Link>
         <Link to="/pricing">Pricing</Link>
+        <Link to="/docs">Docs</Link>
         {user ? (
           <Button size="sm" as={Link} to="/app">Open dashboard</Button>
         ) : (
           <>
             <Link to="/login">Sign in</Link>
-            <Button size="sm" as={Link} to="/signup">Get started</Button>
+            <Button size="sm" as={Link} to="/signup">Start free</Button>
           </>
         )}
       </span>
@@ -90,62 +114,84 @@ export function Nav() {
 export function Footer() {
   return (
     <footer className="mk__foot">
-      <div className="mk__wrap row" style={{ gap: 'var(--s-7)', flexWrap: 'wrap' }}>
-        <span>© 2026 AgentDisk</span>
-        <span className="toolbar__spacer" />
-        <Link to="/docs">Docs</Link>
-        <Link to="/pricing">Pricing</Link>
-        <Link to="/terms">Terms</Link>
-        <Link to="/privacy">Privacy</Link>
+      <div className="mk__wrap mk__footrow">
+        <span className="mk__footbrand">
+          <Logo size={22} alt="" />
+          <span className="mk__footmark">AgentDisk</span>
+          {/* Static in the design and static here. A live status claim needs a
+              status source, and there isn't one. */}
+          <span className="mk__footmeta">EU-CENTRAL-1</span>
+        </span>
+        <span className="mk__footlinks">
+          <Link to="/docs">Docs</Link>
+          <Link to="/pricing">Pricing</Link>
+          <Link to="/terms">Terms</Link>
+          <Link to="/privacy">Privacy</Link>
+        </span>
       </div>
     </footer>
   );
 }
 
+/* ── landing pieces. Local because each is used once, inside one map. ─────── */
+
+function TerminalPanel() {
+  return (
+    <div className="term">
+      <div className="term__bar">
+        <span className="term__dot term__dot--r" />
+        <span className="term__dot term__dot--y" />
+        <span className="term__dot term__dot--g" />
+        <span className="term__cap">agent session</span>
+      </div>
+      <pre className="term__body">
+        {TRANSCRIPT.map((line, i) => (
+          <span key={i} className={line.tone ? `term__ln term__ln--${line.tone}` : 'term__ln'}>
+            {line.text}{'\n'}
+          </span>
+        ))}
+      </pre>
+    </div>
+  );
+}
+
 export function Landing() {
-  const [tab, setTab] = useState('curl');
   return (
     <div className="mk">
       <Nav />
       <div className="mk__wrap">
+
         <section className="mk__hero">
           <div>
-            <h1 className="mk__h1">Persistent storage your agents can actually use.</h1>
+            <span className="mk__badge">
+              <span className="mk__badgedot" aria-hidden="true" />
+              <span className="mk__badgetext">MCP SERVER · GENERALLY AVAILABLE</span>
+            </span>
+            <h1 className="mk__h1">Storage your agents can actually reason about.</h1>
             <p className="mk__lead">
-              Files, folders, and metadata for AI agents — over REST and MCP. Scoped
-              credentials, predictable pricing, zero servers to run.
+              AgentDisk gives every AI agent a scoped, persistent workspace for files,
+              folders and metadata — over a REST API and an MCP server. You keep the
+              audit log.
             </p>
             <div className="mk__ctas">
-              <Button size="lg" as={Link} to="/signup">Start building free</Button>
-              <Button size="lg" variant="secondary" as={Link} to="/docs" iconRight={<Icon name="chevronRight" size={15} />}>
-                Read the docs
+              <Button size="lg" as={Link} to="/signup"
+                iconRight={<Icon name="chevronRight" size={16} />}>
+                Start free
               </Button>
+              <Button size="lg" variant="secondary" as={Link} to="/docs">Read the docs</Button>
+            </div>
+            <div className="mk__tags">
+              {HERO_TAGS.map(t => <span key={t} className="mk__tag">{t}</span>)}
             </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s-5)' }}>
-            <Tabs
-              value={tab}
-              onChange={setTab}
-              items={[
-                { value: 'curl', label: 'curl' },
-                { value: 'mcp', label: 'MCP' },
-                { value: 'python', label: 'Python' },
-                { value: 'ts', label: 'TypeScript' }
-              ]}
-            />
-            <CodeBlock code={SNIPPETS[tab]} filename={tab === 'mcp' ? 'claude_desktop_config.json' : undefined} />
-          </div>
+          <TerminalPanel />
         </section>
-      </div>
 
-      <div className="mk__wrap">
         <section className="mk__section">
-          <p className="mk__eyebrow">Built for agents</p>
-          <h2 className="mk__h2">Not a consumer drive with an API bolted on.</h2>
-          <div className="mk__grid3">
+          <div className="mk__grid4">
             {FEATURES.map(f => (
-              <div className="mk__card" key={f.title}>
-                <span style={{ color: 'var(--accent)' }}><Icon name={f.icon} size={19} /></span>
+              <div key={f.kicker} className="mk__card">
+                <div className="mk__kicker">{f.kicker}</div>
                 <h3>{f.title}</h3>
                 <p>{f.body}</p>
               </div>
@@ -154,144 +200,121 @@ export function Landing() {
         </section>
 
         <section className="mk__section">
-          <p className="mk__eyebrow">How it works</p>
-          <h2 className="mk__h2">Three steps, about four minutes.</h2>
-          <div className="mk__grid3">
-            {STEPS.map(s => (
-              <div className="mk__card" key={s.n}>
-                <div className="mk__step">
-                  <span className="mk__stepno" aria-hidden="true">{s.n}</span>
-                  <div>
-                    <h3>{s.title}</h3>
-                    <p style={{ marginTop: 'var(--s-3)' }}>{s.body}</p>
+          <div className="mk__panel">
+            <h2 className="mk__h2">Three steps to a working agent workspace</h2>
+            <div className="mk__grid3">
+              {STEPS.map(s => (
+                <div key={s.n} className="mk__step">
+                  <div className="mk__stephead">
+                    <span className="mk__stepno">{s.n}</span>
+                    <span className="mk__steptitle">{s.title}</span>
                   </div>
+                  <p className="mk__stepbody">{s.body}</p>
+                  <pre className="mk__stepcode">{s.code}</pre>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </section>
 
         <section className="mk__section">
-          <p className="mk__eyebrow">Use cases</p>
-          <h2 className="mk__h2">What people actually build with it.</h2>
-          <div className="mk__grid3">
-            {USE_CASES.map(u => (
-              <div className="mk__card" key={u.title}>
-                <h3>{u.title}</h3>
-                <p>{u.body}</p>
-                <span className="mk__replaces">{u.replaces}</span>
-              </div>
-            ))}
+          <div className="mk__band">
+            <div className="mk__bandtext">
+              <h2 className="mk__h2">Give an agent a disk in four minutes.</h2>
+              <p className="mk__bandsub">
+                The free tier is {PLANS[0].lines[0]} and {PLANS[0].lines[1]}.
+                No card, no sales call.
+              </p>
+            </div>
+            <Button size="lg" as={Link} to="/signup">Create a workspace</Button>
           </div>
         </section>
-      </div>
 
-      <section className="mk__band">
-        <div className="mk__wrap">
-          <h2 className="mk__h2">No credit card. No servers. Just an API key.</h2>
-          <div className="mk__ctas" style={{ justifyContent: 'center' }}>
-            <Button size="lg" as={Link} to="/signup">Create a free workspace</Button>
-          </div>
-        </div>
-      </section>
+      </div>
       <Footer />
     </div>
   );
 }
 
-const PLANS = [
-  {
-    name: 'Free', price: '$0', per: 'forever', cta: 'Start free', popular: false,
-    feats: ['1 GB storage', '1,000 files', '10,000 requests / month', '1 agent', 'REST API', 'Community support']
-  },
-  {
-    name: 'Pro', price: '$20', per: 'per month', cta: 'Start free trial', popular: true,
-    feats: ['10 GB storage', '10,000 files', '100,000 requests / month', 'Unlimited agents', 'REST + MCP', 'Webhooks', 'Email support']
-  },
-  {
-    name: 'Team', price: '$80', per: 'per month', cta: 'Talk to us', popular: false,
-    feats: ['100 GB storage', '100,000 files', '1M requests / month', 'Members & roles', 'SSO (coming soon)', 'Audit export', 'Priority support']
-  }
-];
-
-const FAQ = [
-  { q: 'What happens if I hit a limit?', a: "Writes against that metric start returning a 429 and the dashboard shows a limit banner. Nothing is deleted, nothing is charged — you either free up room or move up a plan." },
-  { q: 'Can I change plans anytime?', a: 'Yes, up or down, effective immediately. Downgrading below your current usage keeps your data readable but blocks new writes until you are back under the cap.' },
-  { q: 'Is there a free tier forever?', a: 'Yes. The Free plan is not a trial. It is hard-capped, so it can never generate a bill.' },
-  { q: 'How is storage measured?', a: 'Bytes actually stored, measured hourly and averaged over the period. Deleted files stop counting once they leave the 30-day trash window.' },
-  { q: 'Do you charge for egress?', a: 'Every plan includes a generous egress allowance. Past it you are rate-limited, not billed — hard caps mean no surprise invoices.' }
-];
+/* ── pricing ──────────────────────────────────────────────────────────────── */
 
 export function Pricing() {
-  const [annual, setAnnual] = useState(false);
   return (
     <div className="mk">
       <Nav />
       <div className="mk__wrap">
-        <section className="mk__section" style={{ borderTop: 0 }}>
-          <p className="mk__eyebrow">Simple, hard-capped pricing</p>
-          <h2 className="mk__h2">You&rsquo;ll never get a surprise bill.</h2>
+
+        <section className="mk__hero mk__hero--single">
+          <h1 className="mk__h1">Pay for storage and requests. Nothing else.</h1>
           <p className="mk__lead">
-            Every plan has clear limits. Hit one, and you&rsquo;ll get a friendly
-            heads-up — never an unexpected charge.
+            Every plan includes the MCP server, webhooks and the full audit log.
           </p>
 
-          <div className="row" style={{ gap: 'var(--s-5)', marginTop: 'var(--s-8)' }}>
-            <Switch label="Annual billing" checked={annual} onChange={() => setAnnual(a => !a)} />
-            <Badge>2 months free</Badge>
-            <span className="ad-meta">Annual billing available at launch.</span>
-          </div>
-
-          {/* Semantic group: these are alternatives, not decorative cards. */}
-          <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
-            <legend className="ad-label" style={{ marginTop: 'var(--s-8)' }}>Choose a plan</legend>
-            <div className="mk__grid3">
-              {PLANS.map(p => (
-                <div className={['mk__plan', p.popular ? 'mk__plan--pop' : ''].filter(Boolean).join(' ')} key={p.name}>
-                  <div className="row" style={{ gap: 'var(--s-4)' }}>
-                    <h3 style={{ fontSize: 'var(--t-16)', fontWeight: 'var(--w-semi)', color: 'var(--ink)' }}>{p.name}</h3>
-                    {p.popular ? <Badge tone="accent">Most popular</Badge> : null}
-                  </div>
-                  <div>
-                    <span className="mk__price">{p.price}</span>
-                    <span className="ad-meta" style={{ marginLeft: 'var(--s-3)' }}>{p.per}</span>
-                  </div>
-                  <Button full variant={p.popular ? 'primary' : 'secondary'} as={Link} to="/signup">{p.cta}</Button>
-                  <ul className="mk__feats">
-                    {p.feats.map(f => (
-                      <li key={f}>
-                        <span style={{ color: 'var(--ok)', flex: 'none', marginTop: 2 }}><Icon name="check" size={13} /></span>
-                        <span>{f}</span>
-                      </li>
-                    ))}
-                  </ul>
+          <div className="mk__prices">
+            {PLANS.map(p => (
+              <div key={p.id} className={p.featured ? 'mk__plan mk__plan--pop' : 'mk__plan'}>
+                <div className="mk__planhead">
+                  <span className="mk__kicker">{p.kicker}</span>
+                  {p.featured ? <span className="mk__planflag">MOST TEAMS</span> : null}
                 </div>
-              ))}
-            </div>
-          </fieldset>
-        </section>
-
-        <section className="mk__section">
-          <h2 className="mk__h2">Questions</h2>
-          <div style={{ marginTop: 'var(--s-7)' }}>
-            {FAQ.map(f => (
-              <details className="mk__faq" key={f.q}>
-                <summary>{f.q}</summary>
-                <p>{f.a}</p>
-              </details>
+                <div className="mk__planprice">
+                  <span className="mk__price">{p.price}</span>
+                  <span className="mk__planunit">{p.unit}</span>
+                </div>
+                <div className="mk__feats">
+                  {p.lines.map(l => (
+                    <span key={l} className="mk__feat">
+                      <Icon name="check" size={15} />
+                      <span>{l}</span>
+                    </span>
+                  ))}
+                </div>
+                <Button
+                  full
+                  as={Link}
+                  to={p.ctaTo}
+                  variant={p.featured ? 'primary' : 'secondary'}
+                >
+                  {p.cta}
+                </Button>
+              </div>
             ))}
           </div>
         </section>
-      </div>
 
-      <section className="mk__band">
-        <div className="mk__wrap">
-          <h2 className="mk__h2">Start on Free. Move up only when you need to.</h2>
-          <div className="mk__ctas" style={{ justifyContent: 'center' }}>
+        {/*
+          The design draws a "Metered above plan limits" table. No overage rate
+          exists anywhere in the codebase, so there is nothing to put in it and
+          the section renders only once OVERAGES has entries. Inventing four
+          figures is how backlog/024 started.
+        */}
+        {OVERAGES.length > 0 ? (
+          <section className="mk__section">
+            <div className="mk__table">
+              <div className="mk__tablehead">
+                <h3 className="ad-h3">Metered above plan limits</h3>
+              </div>
+              {OVERAGES.map(o => (
+                <div key={o.label} className="mk__tablerow">
+                  <span>{o.label}</span>
+                  <span className="ad-mono">{o.rate}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        <section className="mk__section">
+          <div className="mk__band">
+            <div className="mk__bandtext">
+              <h2 className="mk__h2">Start on Free. Move up only when you need to.</h2>
+              <p className="mk__bandsub">No card required, and no sales call to start.</p>
+            </div>
             <Button size="lg" as={Link} to="/signup">Create a free workspace</Button>
           </div>
-        </div>
-      </section>
+        </section>
+
+      </div>
       <Footer />
     </div>
   );

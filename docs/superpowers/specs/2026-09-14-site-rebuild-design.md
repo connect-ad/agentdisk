@@ -26,7 +26,8 @@ Confirmed with the author before writing this:
 |---|---|
 | 1 | Match layout exactly; **real data flows through it**, not the design's mockup values |
 | 2 | Pricing uses the design's **layout**, the app's **real numbers** from `plans.ts` |
-| 3 | Accent stays violet `#6D28D9` / `#B592FF` (Design System + Site files agree; the Dashboard file's indigo is the outlier) |
+| 3 | Accent stays violet `#6D28D9` / `#B592FF`. **Correction:** an earlier note called the Dashboard file's indigo a drift. It is not — that file carries a configurable accent with four presets, defaults to `#7C3AED`, and overrides it to exactly `#6D28D9` / `#B592FF`. The indigo is the base-palette placeholder the accent system overwrites. All three files agree. |
+| 3b | The four accent presets (violet, indigo, teal, blue) ship as a user preference beside the light/dark toggle |
 | 4 | **Adopt the design's copy** across the marketing pages |
 | 5 | **Delete** the six-card "What people actually build with it" section |
 | 6 | Build **all ten** error pages as real routes |
@@ -34,6 +35,29 @@ Confirmed with the author before writing this:
 | 8 | Site first, verify, then Dashboard, then Patterns |
 | 9 | Logo: author supplies `agentdisk-logo.png`; code tolerates its absence |
 | 10 | `AI-Shoot Prototype.dc.html` and `ChatSidebar.dc.html` are a different product — ignored |
+
+## Accent presets
+
+`AgentDisk Dashboard.dc.html` defines four accents and applies the chosen one
+over the base palette:
+
+| Preset | Light | Soft | Border | Dark | Dark soft | Dark border |
+|---|---|---|---|---|---|---|
+| Violet (default) | `#6D28D9` | `#F3EDFE` | `#D7C4FB` | `#B592FF` | `#1E1533` | `#452F6E` |
+| Indigo | `#4F46E5` | `#EEF0FE` | `#C6CCFA` | `#8B98FF` | `#181C33` | `#333C6B` |
+| Teal | `#0D7A70` | `#E9F8F6` | `#A9DFD8` | `#5EDBCB` | `#0C2321` | `#1F4F49` |
+| Blue | `#2563EB` | `#EBF1FE` | `#BBD1FB` | `#7EA8FF` | `#0F1B33` | `#2A3E6E` |
+
+Implemented the same way as the colour mode: a `data-accent` attribute on
+`<html>` with a block per preset redefining only `--accent`, `--accent-soft`
+and `--accent-line`. Everything downstream — `--acc`, `--accSoft`, `--accBd`,
+the ring, the focus outline — follows through `var()` with no further change.
+Stored alongside the theme in `lib/theme.jsx`; default violet, so a reader who
+never touches it sees exactly what ships today.
+
+**Testing note:** this doubles the palette surface. The suite checks the
+default only; a smoke check confirms each preset resolves and that no preset
+leaves `--accent` undefined.
 
 ## Approach
 

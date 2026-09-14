@@ -25,7 +25,7 @@ Confirmed with the author before writing this:
 | # | Decision |
 |---|---|
 | 1 | Match layout exactly; **real data flows through it**, not the design's mockup values |
-| 2 | Pricing uses the design's **layout**, the app's **real numbers** from `plans.ts` |
+| 2 | Pricing uses the design's **layout**; numbers come from one module and go dynamic at the end of the project |
 | 3 | Accent stays violet `#6D28D9` / `#B592FF`. **Correction:** an earlier note called the Dashboard file's indigo a drift. It is not — that file carries a configurable accent with four presets, defaults to `#7C3AED`, and overrides it to exactly `#6D28D9` / `#B592FF`. The indigo is the base-palette placeholder the accent system overwrites. All three files agree. |
 | 3b | The four accent presets (violet, indigo, teal, blue) ship as a user preference beside the light/dark toggle |
 | 4 | **Adopt the design's copy** across the marketing pages |
@@ -111,42 +111,31 @@ stays inline in its route file.
 `h1` "Pay for storage and requests. Nothing else.", lead, three `PlanCard`s,
 then a "Metered above plan limits" table.
 
-**Three sources disagree, and one of them does not exist.** Checked while
-writing this spec:
+**Pricing becomes dynamic at the end of the project.** The author's direction:
+this phase is design setup, so pricing must not block it. The page is built to
+the design's layout, and every number it renders comes from one module —
+`src/lib/pricing.js` — exporting a single `PLANS` array. Swapping that module
+for an API call later is a one-file change; no page markup moves.
 
-| | Free tier | Middle tier | Top tier |
-|---|---|---|---|
-| Design | FREE · $0 · 5 GB | **TEAM** · $49 · 50 GB | SCALE · $249 · 500 GB |
-| Live page | Free · $0 | Pro · $20 | Team · $80 |
-| `plans.ts` (enforced) | free · **2 GB** | pro · 50 GB | **team** · 500 GB |
+The module holds today's real values, not the design's mockup ones, for one
+reason that survives the swap: the design advertises **5 GB free** where
+`plans.ts` enforces **2 GB**, and a signup that promises quota the upload path
+refuses is a bug whichever way pricing is sourced later. Limits therefore
+mirror `plans.ts` (2 / 50 / 500 GB) and names stay Free / Pro / Team, which is
+what the API, audit rows and Stripe mapping already call them. Prices are
+today's $0 / $20 / $80.
 
-Two problems, both material:
+Each value carries a comment naming its source, so the later dynamic work knows
+which fields are authoritative and which are placeholders:
 
-1. **The names collide.** The design's `TEAM` is the 50 GB tier; the code's
-   `team` is the *500 GB* tier. Adopting the design's names would label a
-   500 GB customer "Scale" while every API response and audit row calls them
-   `team`. It would also advertise 5 GB free where the enforced limit is 2 GB —
-   a promise the storage quota refuses at upload time.
-2. **Prices are not data anywhere.** `plans.ts` carries limits only; there are
-   no dollar amounts and no overage rates in the codebase. The only prices that
-   exist are hardcoded strings in `Marketing.jsx`. `backlog/024` records that
-   there is also no purchase path.
+| Field | Source today | After |
+|---|---|---|
+| name, limits | mirrors `plans.ts` | from the API |
+| price | today's marketing page | from Stripe |
+| overage rates | **absent** — table omitted | from Stripe |
 
-Therefore, pending the author's answer to the open question below, this spec
-builds the pricing page as:
-
-- **Limits** read from `plans.ts` — the only enforced numbers
-- **Names** from `plans.ts` (Free / Pro / Team), *not* the design's
-  FREE / TEAM / SCALE, because the design's names mislabel the tiers relative
-  to what the API enforces
-- **Prices** carried in one exported constant in the web app, commented as the
-  sole price source and as needing to match Stripe, holding today's live values
-  ($0 / $20 / $80) rather than the design's
-- **The metered-overage table omitted**, because no overage rate exists to put
-  in it and inventing four is how `backlog/024` started
-
-This is the one place the rebuild deliberately does **not** match the design,
-and it is a money question rather than a design one.
+The metered-overage table is omitted while no overage rate exists anywhere in
+the codebase. Inventing four is how `backlog/024` started.
 
 ### Docs (`/docs`)
 
@@ -244,27 +233,11 @@ theme migration, which looked perfect on screen.
 - `apps/web` unit tests 105/105, build clean, adherence lint clean
 - Keyboard: every new interactive control reachable, Escape closes what opens
 
-## Open questions for the author
+## Open question for the author
 
-### 1. Pricing — names and prices
+### Cookie consent
 
-The table in the pricing section shows three disagreeing sources. The spec's
-default is to keep the app's names and prices and take only the design's
-layout. The alternatives:
-
-- **Adopt the design's tiers wholesale** (FREE/TEAM/SCALE at $0/$49/$249, 5 GB
-  free). This needs `plans.ts` changed to match, because otherwise the page
-  advertises quota the API refuses. That is a billing change, not a design one.
-- **Rename the code's plans** to the design's vocabulary. Touches stored rows,
-  audit history and any Stripe mapping.
-- **Keep as specced** — app names and prices, design layout.
-
-Nothing here is safe to guess at, because every option that moves a number
-either changes what customers are charged or what the API lets them store.
-
-### 2. Cookie consent
-
-The **cookie consent** decision above is the only other thing in the design
+The **cookie consent** decision above is the only thing in the design
 this spec declines to build. If the intent is to ship consent for a real analytics
 product that is coming, say so and it moves into phase 1 with the categories
 wired to something. If not, it should come out of the design file so the two

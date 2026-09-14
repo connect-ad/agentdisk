@@ -209,8 +209,31 @@ export default function Dashboard() {
         </Link>
       </div>
 
+      {/*
+        Quick start, from the design. Three cards rather than one code block.
+        They are links to the screens that actually do each step, so every one
+        goes somewhere real.
+      */}
+      <div>
+        <h2 className="ds__h2">Quick start</h2>
+        <div className="ds__quick">
+          {[
+            { n: '1', title: 'Create an agent identity', body: 'Each identity holds its own keys and scopes.', cta: 'Go to agents', to: `${root}/agents` },
+            { n: '2', title: 'Mint a scoped key', body: 'Pick the operations it needs and an optional path prefix.', cta: 'Go to API keys', to: `${root}/keys` },
+            { n: '3', title: 'Connect over MCP', body: 'One config block in any MCP-capable client.', cta: 'Go to MCP', to: `${root}/mcp` },
+          ].map(q => (
+            <Link key={q.n} to={q.to} className="ds__qcard">
+              <span className="ds__qnum">{q.n}</span>
+              <span className="ds__qtitle">{q.title}</span>
+              <span className="ds__qbody">{q.body}</span>
+              <span className="ds__qcta">{q.cta}<Icon name="chevronRight" size={13} /></span>
+            </Link>
+          ))}
+        </div>
+      </div>
+
       {empty ? (
-        <Panel title="Quick start">
+        <Panel title="Your first file">
           <EmptyState icon={<Icon name="folder" size={19} />} title="Nothing here yet">
             Mint an API key, then have an agent write its first file. Everything it does will show
             up here.
@@ -226,6 +249,15 @@ export default function Dashboard() {
           <DataTable columns={columns} rows={loading ? [] : rows} loading={loading} skeletonRows={5} />
         </Panel>
       )}
+
+      {/*
+        The design also draws a "Storage by type" breakdown here. There is no
+        endpoint that returns storage grouped by mime type, and this screen's
+        rule — stated at the top of this file — is that every figure comes from
+        the API. A plausible-looking breakdown of invented proportions is
+        exactly the decorative number that rule exists to prevent, so the panel
+        is left out until the data exists rather than filled in.
+      */}
     </>
   );
 }

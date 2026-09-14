@@ -6,12 +6,13 @@
   "description": "AgentDisk dashboard SPA (Workers static assets). Screens per docs/design/03 PART 8.",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/check-jsx-identifiers.mjs && vite build",
     "preview": "vite preview",
     "deploy:dev": "wrangler deploy --env dev",
     "deploy:prod": "wrangler deploy --env prod",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check:jsx": "node scripts/check-jsx-identifiers.mjs"
   },
   "dependencies": {
     "firebase": "^12.18.0",

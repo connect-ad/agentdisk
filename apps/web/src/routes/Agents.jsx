@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   PageHead, Panel, DataTable, Button, IconButton, Icon, Input, Badge,
   Modal, ConfirmModal, EmptyState, Alert, Toast
@@ -215,24 +215,60 @@ export default function Agents() {
         </div>
       ) : null}
 
-      <Panel flush title="Agents">
-        <DataTable
-          columns={columns}
-          rows={rows}
-          loading={loading}
-          skeletonRows={4}
-          empty={
-            <EmptyState
-              icon={<Icon name="agent" size={19} />}
-              title="No agents yet"
-              actions={canWrite ? <Button size="sm" onClick={() => { setFormError(null); setDialog('create'); }}>Create an agent</Button> : null}
+      {/*
+        The design lays agents out as cards rather than table rows: a status
+        dot, the name, a badge, the mono id, then keys / requests / last seen
+        along the bottom. Every figure here was already computed for the table
+        it replaces — nothing new is fetched and nothing is invented. Requests
+        per agent has no endpoint (one call per agent, as the note at the top of
+        this file explains), so that column shows the key count and the last
+        seen time, which are real.
+      */}
+      {loading ? (
+        <Panel flush title="Agents">
+          <DataTable columns={columns} rows={[]} loading skeletonRows={4} />
+        </Panel>
+      ) : rows.length === 0 ? (
+        <Panel flush title="Agents">
+          <EmptyState
+            icon={<Icon name="agent" size={19} />}
+            title="No agents yet"
+            actions={canWrite ? <Button size="sm" onClick={() => { setFormError(null); setDialog('create'); }}>Create an agent</Button> : null}
+          >
+            Agents are the identities your AI systems use to access storage.
+          </EmptyState>
+        </Panel>
+      ) : (
+        <div className="ds__cards">
+          {rows.map(a => (
+            <Link
+              key={a.id}
+              to={`/w/${ws}/agents/${a.id}`}
+              className="ds__acard"
+              style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
             >
-              Agents are the identities your AI systems use to access storage.
-            </EmptyState>
-          }
-          onRowClick={r => navigate(`/w/${ws}/agents/${r.id}`)}
-        />
-      </Panel>
+              <div className="ds__ahead">
+                <span className={a.badge === 'active' ? 'ds__adot ds__adot--ok' : 'ds__adot ds__adot--off'} />
+                <span className="ds__aname">{a.name}</span>
+                <Badge tone={a.badge === 'active' ? 'ok' : a.badge === 'no_key' ? 'warn' : undefined}>
+                  {a.badge === 'active' ? 'Active' : a.badge === 'no_key' ? 'No key' : 'Disabled'}
+                </Badge>
+              </div>
+              <div className="ds__aid">{a.id}</div>
+              <div className="ds__afoot">
+                <span>
+                  <span className="ds__afig">{a.keys}</span>
+                  <span className="ds__akey">KEYS</span>
+                </span>
+                <span style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                  <span style={{ fontSize: 'var(--t-12)', color: 'var(--ink-2)' }}>{a.lastActive}</span>
+                  <span className="ds__akey">LAST SEEN</span>
+                </span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
 
       {/* --- 8.14 Create agent --- */}
       <Modal

@@ -429,3 +429,103 @@
   .doc{grid-template-columns:minmax(0,1fr);gap:var(--s-7)}
   .doc__toc{display:none}
 }
+
+/* ==========================================================================
+   Dashboard screen vocabulary (AgentDisk Dashboard.dc.html, Layer 4)
+
+   The design repeats a small set of shapes across all twelve screens: a head
+   (title + subtitle + action), quick-start cards, a two-column split, labelled
+   meters, agent cards, and numbered step panels. Defined once here so every
+   screen picks them up rather than each route re-describing the same layout.
+   ========================================================================== */
+
+.ds__head{display:flex;align-items:flex-end;justify-content:space-between;
+  gap:var(--s-6);margin-bottom:var(--s-7);flex-wrap:wrap}
+.ds__headbody{min-width:0}
+.ds__h2{font-family:var(--font-display);font-size:var(--t-21);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink);
+  margin-bottom:var(--s-2)}
+.ds__sub{font-size:var(--t-13);color:var(--ink-2);max-width:70ch;
+  text-wrap:pretty}
+
+/* quick start */
+.ds__quick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:var(--s-5)}
+.ds__qcard{border:1px solid var(--line);background:var(--surface);
+  border-radius:var(--r-3);padding:var(--s-6);text-align:left;cursor:pointer;
+  display:flex;flex-direction:column;gap:var(--s-4);min-width:0;
+  transition:border-color var(--d-1) var(--ease),background var(--d-1) var(--ease)}
+.ds__qcard:hover{border-color:var(--accent-line);background:var(--surface-2)}
+.ds__qnum{width:30px;height:30px;border-radius:var(--r-2);flex:none;
+  background:var(--accent-soft);border:1px solid var(--accent-line);
+  display:grid;place-items:center;font-family:var(--font-mono);
+  font-size:var(--t-12);font-weight:var(--w-semi);color:var(--accent-ink)}
+.ds__qtitle{font-size:var(--t-14);font-weight:var(--w-semi);color:var(--ink)}
+.ds__qbody{font-size:var(--t-12);line-height:var(--lh-normal);color:var(--ink-2)}
+.ds__qcta{display:flex;align-items:center;gap:var(--s-3);font-size:var(--t-12);
+  font-weight:var(--w-semi);color:var(--accent-ink)}
+
+/* two-column split */
+.ds__two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-6)}
+
+/* labelled meter */
+.ds__meter{margin-bottom:var(--s-6)}
+.ds__meterhead{display:flex;align-items:baseline;justify-content:space-between;
+  gap:var(--s-4);margin-bottom:var(--s-3)}
+.ds__meterlabel{font-size:var(--t-13);font-weight:var(--w-med);color:var(--ink)}
+.ds__metervalue{font-family:var(--font-mono);font-size:var(--t-12);color:var(--ink-2)}
+.ds__bar{height:6px;border-radius:var(--r-full);background:var(--surface-3);
+  overflow:hidden}
+.ds__barfill{height:100%;border-radius:var(--r-full);background:var(--accent)}
+.ds__barfill--warn{background:var(--warn)}
+.ds__barfill--danger{background:var(--danger)}
+
+/* agent cards */
+.ds__cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-5)}
+.ds__acard{border:1px solid var(--line);background:var(--surface);
+  border-radius:var(--r-3);padding:var(--s-6);min-width:0}
+.ds__ahead{display:flex;align-items:center;gap:var(--s-4);margin-bottom:var(--s-4)}
+.ds__adot{width:8px;height:8px;border-radius:var(--r-full);flex:none;
+  background:var(--ink-4)}
+.ds__adot--ok{background:var(--ok)}
+.ds__adot--off{background:var(--ink-4)}
+.ds__aname{font-size:var(--t-14);font-weight:var(--w-semi);color:var(--ink);
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ds__aid{font-family:var(--font-mono);font-size:var(--t-11);color:var(--ink-3);
+  margin-bottom:var(--s-5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ds__afoot{display:flex;gap:var(--s-7);padding-top:var(--s-5);
+  border-top:1px solid var(--line)}
+.ds__afig{font-family:var(--font-display);font-size:var(--t-18);
+  font-weight:var(--w-semi);color:var(--ink);display:block}
+.ds__akey{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-wide);color:var(--ink-3);display:block;
+  margin-top:var(--s-1)}
+
+/* numbered step panel */
+.ds__step{border:1px solid var(--line);background:var(--surface);
+  border-radius:var(--r-3);padding:var(--s-6)}
+.ds__stephead{display:flex;align-items:center;gap:var(--s-5);margin-bottom:var(--s-4)}
+.ds__stepnum{width:24px;height:24px;border-radius:var(--r-2);flex:none;
+  background:var(--accent-soft);border:1px solid var(--accent-line);
+  display:grid;place-items:center;font-family:var(--font-mono);
+  font-size:var(--t-11);font-weight:var(--w-semi);color:var(--accent-ink)}
+
+/* recent activity rows */
+.ds__actrow{display:flex;align-items:center;gap:var(--s-5);
+  padding:var(--s-4) 0;border-bottom:1px solid var(--line)}
+.ds__actrow:last-child{border-bottom:0}
+.ds__actdot{width:7px;height:7px;flex:none;border-radius:var(--r-full);
+  background:var(--accent)}
+.ds__actdot--human{border-radius:var(--r-1);background:var(--ink-4)}
+.ds__acttext{font-size:var(--t-13);color:var(--ink);display:block;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ds__acttarget{font-family:var(--font-mono);font-size:var(--t-10);
+  color:var(--ink-3);display:block;margin-top:var(--s-1);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ds__actago{font-family:var(--font-mono);font-size:var(--t-10);
+  color:var(--ink-3);flex:none}
+
+@media (max-width:1080px){
+  .ds__quick{grid-template-columns:minmax(0,1fr)}
+  .ds__two,.ds__cards{grid-template-columns:minmax(0,1fr)}
+}

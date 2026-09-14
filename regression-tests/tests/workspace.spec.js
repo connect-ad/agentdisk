@@ -37,35 +37,33 @@ test('a real workspace still resolves', async ({ page }) => {
 for (const segment of BOGUS) {
   test(`/w/${segment} does not silently substitute the real workspace`, async ({ page }) => {
     await page.goto(`/w/${segment}`);
-    // Give any redirect a chance to happen before asserting.
-    await page.waitForTimeout(3_000);
 
-    const finalPath = new URL(page.url()).pathname;
-    const body = await page.locator('body').innerText();
+    // Wait for the not-found screen to actually render rather than sleeping and
+    // hoping. A fixed timeout passed in isolation and failed under the load of
+    // a full run — and a flaky test in a suite whose whole job is comparing two
+    // runs is worse than no test, because it makes the comparison lie.
+    await expect(
+      page.locator('body'),
+      `/w/${segment} rendered neither a not-found screen nor a redirect`
+    ).toContainText(/couldn't find|404|no such|don't have access|not found/i, { timeout: 25_000 });
 
     // The load-bearing assertion: a bad ID must never end up showing the
-    // signed-in person's own workspace.
-    expect(
-      finalPath,
-      `/w/${segment} silently became ${finalPath} — this is the substitution bug`
-    ).not.toContain(`/w/${realSegment}`);
-
-    // And it must say so, rather than rendering an empty or borrowed shell.
-    expect(
-      /couldn't find|404|no such|don't have access|not found/i.test(body),
-      `/w/${segment} rendered neither a not-found screen nor a redirect; body began: ${body.slice(0, 200)}`
-    ).toBe(true);
+    // signed-in person's own workspace. Polled, because a late redirect would
+    // otherwise slip past a single read.
+    await expect
+      .poll(() => new URL(page.url()).pathname, { timeout: 5_000 })
+      .not.toContain(`/w/${realSegment}`);
   });
 
   test(`/w/${segment}/files does not leak the real workspace's files`, async ({ page }) => {
     await page.goto(`/w/${segment}/files`);
-    await page.waitForTimeout(3_000);
 
-    const finalPath = new URL(page.url()).pathname;
-    expect(
-      finalPath,
-      `/w/${segment}/files resolved to ${finalPath} — a bogus address showed a real workspace`
-    ).not.toContain(`/w/${realSegment}`);
+    await expect(page.locator('body'))
+      .toContainText(/couldn't find|404|no such|don't have access|not found/i, { timeout: 25_000 });
+
+    await expect
+      .poll(() => new URL(page.url()).pathname, { timeout: 5_000 })
+      .not.toContain(`/w/${realSegment}`);
   });
 }
 

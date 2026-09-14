@@ -354,3 +354,76 @@
 @media (max-width:1080px){
   .err{grid-template-columns:minmax(0,1fr);gap:var(--s-8);padding:var(--s-10) 0}
 }
+
+/* --- docs (routes/Docs.jsx) ---
+   Three columns from the design: TOC, article, "on this page" rail. Drops to
+   two on tablet and one on mobile, as the design's grid does. */
+.doc{display:grid;grid-template-columns:212px minmax(0,1fr) 176px;
+  gap:var(--s-9);align-items:start;padding:var(--s-9) 0}
+.doc__toc{min-width:0;position:sticky;top:calc(var(--topbar-h) + var(--s-6))}
+.doc__tocgroup{margin-bottom:var(--s-7)}
+.doc__toclabel{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--ink-3);margin-bottom:var(--s-4)}
+.doc__tocitem{display:block;padding:var(--s-3) var(--s-4);
+  border-radius:var(--r-2);font-size:var(--t-12);color:var(--ink-2)}
+.doc__tocitem.is-current{font-weight:var(--w-semi);color:var(--accent-ink);
+  background:var(--accent-soft)}
+
+.doc__body{min-width:0}
+.doc__crumb{display:flex;align-items:center;gap:var(--s-3);flex-wrap:wrap;
+  margin-bottom:var(--s-5);font-size:var(--t-12);color:var(--ink-3)}
+.doc__crumbnow{color:var(--ink);font-weight:var(--w-med)}
+.doc__h1{font-family:var(--font-display);font-size:var(--t-32);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-mid);
+  line-height:var(--lh-snug);color:var(--ink);margin-bottom:var(--s-5)}
+.doc__lead{font-size:var(--t-16);line-height:var(--lh-loose);color:var(--ink-2);
+  margin-bottom:var(--s-8)}
+.doc__h2{font-family:var(--font-display);font-size:var(--t-18);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink);
+  margin:var(--s-9) 0 var(--s-4)}
+.doc__p{font-size:var(--t-14);line-height:var(--lh-loose);color:var(--ink-2);
+  margin-bottom:var(--s-6);max-width:70ch;text-wrap:pretty}
+.doc__p code,.doc__note code{font-family:var(--font-mono);
+  font-size:var(--t-13);color:var(--ink)}
+.doc__note{display:flex;align-items:flex-start;gap:var(--s-4);
+  border:1px solid var(--accent-line);background:var(--accent-soft);
+  border-radius:var(--r-3);padding:var(--s-5) var(--s-6);margin-bottom:var(--s-8);
+  font-size:var(--t-13);line-height:var(--lh-normal);color:var(--ink-2)}
+
+.doc__code{border:1px solid var(--line);border-radius:var(--r-3);
+  overflow:hidden;background:var(--dark);margin-bottom:var(--s-8)}
+.doc__codebar{display:flex;align-items:center;justify-content:space-between;
+  padding:var(--s-4) var(--s-5);border-bottom:1px solid var(--line)}
+.doc__codecap{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-wide);color:var(--ink-3)}
+.doc__codebody{margin:0;padding:var(--s-6);overflow-x:auto;
+  font-family:var(--font-mono);font-size:var(--t-12);line-height:1.7;
+  color:var(--dark-ink)}
+
+.doc__tools{border:1px solid var(--line);border-radius:var(--r-3);
+  overflow:hidden;margin-bottom:var(--s-8)}
+.doc__tool{display:flex;align-items:center;gap:var(--s-5);
+  padding:var(--s-5) var(--s-6);border-bottom:1px solid var(--line)}
+.doc__tool:last-child{border-bottom:0}
+.doc__toolname{font-family:var(--font-mono);font-size:var(--t-12);
+  font-weight:var(--w-semi);color:var(--accent-ink);width:104px;flex:0 0 104px}
+.doc__toolbody{flex:1;min-width:0;font-size:var(--t-13);color:var(--ink-2)}
+.doc__toolscope{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-wide);color:var(--ink-3);flex:none}
+
+.doc__rail{min-width:0;position:sticky;top:calc(var(--topbar-h) + var(--s-6))}
+.doc__raillabel{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--ink-3);margin-bottom:var(--s-5)}
+.doc__raillist{display:flex;flex-direction:column;gap:var(--s-4);
+  border-left:1px solid var(--line);padding-left:var(--s-5)}
+.doc__railitem{font-size:var(--t-12);line-height:var(--lh-snug);color:var(--ink-2)}
+.doc__railitem.is-current{font-weight:var(--w-semi);color:var(--accent-ink)}
+
+@media (max-width:1080px){
+  .doc{grid-template-columns:196px minmax(0,1fr)}
+  .doc__rail{display:none}
+}
+@media (max-width:700px){
+  .doc{grid-template-columns:minmax(0,1fr);gap:var(--s-7)}
+  .doc__toc{display:none}
+}

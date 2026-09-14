@@ -529,3 +529,19 @@
   .ds__quick{grid-template-columns:minmax(0,1fr)}
   .ds__two,.ds__cards{grid-template-columns:minmax(0,1fr)}
 }
+
+/* --- accent picker (components-local/AccentPicker.jsx) ---
+   The trigger's dot shows the accent in force; the swatches are literal
+   because each one has to show the colour it selects, which is the one place
+   a token cannot be used — a token would show the *current* accent four
+   times. */
+.accent-dot{width:13px;height:13px;border-radius:var(--r-full);display:block;
+  background:var(--accent);border:1px solid var(--accent-line)}
+.accent-swatch{width:14px;height:14px;border-radius:var(--r-full);display:block;
+  place-self:center}
+.accent-swatch--violet{background:#6D28D9}
+.accent-swatch--indigo{background:#4F46E5}
+.accent-swatch--teal{background:#0D7A70}
+.accent-swatch--blue{background:#2563EB}
+.wsx__grouplabel{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--ink-3);padding:var(--s-3) var(--s-4) var(--s-2)}

@@ -183,7 +183,29 @@ export default function McpConnection() {
         </Alert>
       ) : null}
 
-      <Panel title="Connect your agent" subtitle="Paste this into your MCP client's config.">
+      {/*
+        The design lays this screen out as three numbered steps rather than one
+        panel. Step 1 sends you to the keys screen, step 2 is the config block,
+        step 3 reports the real handshake state — which is the badge this screen
+        already computes from actual call history, not a fixture.
+      */}
+      <div className="ds__step">
+        <div className="ds__stephead">
+          <span className="ds__stepnum">1</span>
+          <span className="panel__title">Create a scoped key</span>
+        </div>
+        <p className="ad-small ad-measure" style={{ marginBottom: 'var(--s-5)' }}>
+          Give the agent the narrowest scopes it needs. A research agent usually wants
+          read, write and list under one prefix.
+        </p>
+        <Button size="sm" variant="secondary" as={Link} to={`/w/${ws}/keys`}>Go to API keys</Button>
+      </div>
+
+      <div className="ds__step">
+        <div className="ds__stephead">
+          <span className="ds__stepnum">2</span>
+          <span className="panel__title">Add the server to your client</span>
+        </div>
         <Tabs value={client} onChange={setClient} items={CLIENTS.map(c => ({ value: c.value, label: c.label }))} />
         <CodeBlock filename={current.file} code={config} />
         {/*
@@ -198,7 +220,38 @@ export default function McpConnection() {
           created it. Keys are only ever shown once, so if you no longer have it,{' '}
           <Link to={`/w/${ws}/keys`}>mint a new one</Link>.
         </p>
-      </Panel>
+      </div>
+
+      <div className="ds__step">
+        <div className="ds__stephead">
+          <span className="ds__stepnum">3</span>
+          <span className="panel__title">Verify the handshake</span>
+        </div>
+        {/*
+          The design shows a green "connected 14 minutes ago · 5 tools
+          registered" line unconditionally. This reports what actually
+          happened: the connection state above is derived from real call
+          history, and says "Never connected" or "No usable key" when that is
+          the truth. A screen that always claims success teaches people to
+          distrust it the first time it is wrong.
+        */}
+        {connection ? (
+          <Alert
+            tone={connection.tone}
+            title={
+              connection.label === 'Active now'
+                ? 'This workspace has answered an MCP call recently'
+                : connection.label === 'Never connected'
+                  ? 'No MCP call has reached this workspace yet'
+                  : connection.label
+            }
+          >
+            {connection.label === 'No usable key'
+              ? 'An agent needs a live API key before it can complete the handshake.'
+              : 'Tool availability follows the connecting key’s own scopes.'}
+          </Alert>
+        ) : null}
+      </div>
 
       <Panel
         flush

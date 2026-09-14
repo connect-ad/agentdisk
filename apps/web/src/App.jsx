@@ -26,6 +26,7 @@ import RequireAuth, { RequireWorkspace } from './lib/RequireAuth.jsx';
 import WorkspaceSwitcher from './components-local/WorkspaceSwitcher.jsx';
 import AccountMenu from './components-local/AccountMenu.jsx';
 import ThemeToggle from './components-local/ThemeToggle.jsx';
+import AccentPicker from './components-local/AccentPicker.jsx';
 import WorkspaceIdChip from './components-local/WorkspaceIdChip.jsx';
 import { useAuth } from './lib/auth.jsx';
 import { useWorkspace } from './lib/workspace.jsx';
@@ -245,6 +246,7 @@ function WorkspaceLayout() {
       }
       topbarActions={
         <>
+          <AccentPicker />
           <ThemeToggle />
           <Button size="sm" variant="ghost" as={Link} to="/docs">Docs</Button>
         </>

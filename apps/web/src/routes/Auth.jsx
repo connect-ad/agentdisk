@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Input, Button, Icon, Alert, Meter } from '../components/index.js';
 import { useAuth, describeAuthError } from '../lib/auth.jsx';
+import Logo from '../components-local/Logo.jsx';
 
 /**
  * 8.3 Signup · 8.4 Email Verification · 8.5 Forgot Password ·
@@ -31,10 +32,10 @@ function AuthShell({ title, subtitle, children, footer, legal }) {
   return (
     <div className="auth">
       <div className="auth__inner">
-        <div className="auth__brand">
-          <span className="auth__logo" aria-hidden="true">A</span>
+        <Link to="/" className="auth__brand">
+          <Logo size={26} />
           <span className="auth__wordmark">AgentDisk</span>
-        </div>
+        </Link>
         <div className="auth__card">
           <div>
             <h1 className="auth__h1">{title}</h1>

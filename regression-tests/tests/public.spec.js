@@ -11,8 +11,13 @@ import { test, expect } from '@playwright/test';
 
 /** Every route a stranger can reach, with something on it only that page has. */
 const PUBLIC_ROUTES = [
-  { path: '/', name: 'landing', expect: /Persistent storage your agents can actually use/i },
-  { path: '/pricing', name: 'pricing', expect: /Simple, hard-capped pricing/i },
+  // Copy changed by the site rebuild, decision 4 in
+  // docs/superpowers/specs/2026-09-14-site-rebuild-design.md: adopt the
+  // design's copy across the marketing pages. Not a weakened assertion — it
+  // still pins one sentence that only this page has.
+  { path: '/', name: 'landing', expect: /Storage your agents can actually reason about/i },
+  // Same decision 4.
+  { path: '/pricing', name: 'pricing', expect: /Pay for storage and requests/i },
   { path: '/docs', name: 'docs', expect: /docs/i },
   { path: '/terms', name: 'terms', expect: /terms/i },
   { path: '/privacy', name: 'privacy', expect: /privacy/i },
@@ -38,7 +43,9 @@ test('the landing page keeps its primary calls to action', async ({ page }) => {
   await page.goto('/');
 
   // Signed-out visitors must always have a way in and a way to read more.
-  await expect(page.getByRole('link', { name: /start building free|create a free workspace/i }).first())
+  // The design's primary CTA is "Start free" (decision 4). The assertion is
+  // that a signed-out visitor always has a way in, whatever it is labelled.
+  await expect(page.getByRole('link', { name: /start free|create a workspace/i }).first())
     .toBeVisible();
   await expect(page.getByRole('link', { name: /^sign in$/i }).first()).toBeVisible();
 });

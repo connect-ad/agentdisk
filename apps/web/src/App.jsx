@@ -139,7 +139,10 @@ function WorkspaceLayout() {
    * link points into a workspace that does not exist is not a 404, it is a
    * second thing to get wrong.
    */
-  if (!open) return <NotFound />;
+  // echoPath={false}: this answers "no such workspace" and "not a member"
+  // identically, and the guarantee is strongest when the two responses contain
+  // nothing at all derived from the requested URL. See NotFound.
+  if (!open) return <NotFound echoPath={false} />;
 
   // Past the guard `open` is always a workspace this person is a member of, so
   // nothing below needs a fallback for its absence.

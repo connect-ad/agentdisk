@@ -243,10 +243,27 @@ export function ErrorPage({ code, facts = [], reference, onRetry }) {
 
 /* ── the routed pages ─────────────────────────────────────────────────────── */
 
-export function NotFound() {
+export function NotFound({ echoPath = true }) {
   const { pathname } = useLocation();
-  // The address that actually failed, not the design's invented one.
-  return <ErrorPage code="404" facts={[{ value: pathname }, { value: 'No page at this address' }]} />;
+
+  /**
+   * The generic 404 shows the address that actually failed — useful when the
+   * cause is a typo, and safe, because it is the reader's own input.
+   *
+   * `echoPath={false}` is for the workspace 404 in App.jsx, and it is a
+   * security decision rather than a cosmetic one. That screen answers both
+   * "no such workspace" and "that workspace exists but is not yours" with the
+   * same page, so a stranger cannot use it to discover which workspace IDs are
+   * real. The strongest form of that guarantee is that the two responses are
+   * byte-identical, which a page containing *anything* derived from the
+   * requested URL cannot be — and the address bar already shows it, so nothing
+   * is lost by leaving it out.
+   */
+  const facts = echoPath
+    ? [{ value: pathname }, { value: 'No page at this address' }]
+    : [];
+
+  return <ErrorPage code="404" facts={facts} />;
 }
 
 export function Forbidden() {

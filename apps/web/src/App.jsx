@@ -288,7 +288,11 @@ function WorkspaceLayout() {
         <>
           <AccentPicker />
           <ThemeToggle />
-          <Button size="sm" variant="ghost" as={Link} to="/docs">Docs</Button>
+          {/* Hidden on mobile, where the reference drops it too
+              (`showDocsLink: !mob`) — /docs is still reachable from the footer
+              and by URL, and on a 390px bar this is what leaves the workspace
+              switcher enough room to read. */}
+          <Button size="sm" variant="ghost" as={Link} to="/docs" className="shell__docs">Docs</Button>
         </>
       }
     >

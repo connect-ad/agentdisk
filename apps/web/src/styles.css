@@ -661,7 +661,14 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
    tablet 700–1079, desktop >= 1080. The gutter is the one thing every band
    reads, so it changes here and nowhere else. */
 @media (max-width:1350px){ :root{--gutter:1.5rem} }
-@media (max-width:875px){ :root{--gutter:1rem} }
+@media (max-width:875px){
+  :root{--gutter:1rem}
+  /* The reference hides the Docs link on mobile (`showDocsLink: !mob`). On a
+     390px bar it is the difference between the workspace switcher having room
+     to read and being crushed to 30px while its label spills over the controls
+     beside it. */
+  .shell__docs{display:none}
+}
 
 /* The column. Below desktop the sheet fills its frame, so there is nothing to
    centre and no edge to draw; from 1080 up the bands stop at 1180px and the
@@ -735,10 +742,10 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
    WorkspaceSwitcher and AccountMenu are styled entirely with these classes
    (app.css says so, deliberately, so the two read as one family). They moved
    from the sidebar to the top bar; the classes had to come with them. */
-.shell__wsbtn{display:flex;align-items:center;gap:var(--s-4);width:100%;padding:var(--s-4);background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-2);cursor:pointer;text-align:left;transition:background var(--d-1) var(--ease),border-color var(--d-1) var(--ease)}
+.shell__wsbtn{display:flex;align-items:center;gap:var(--s-4);width:100%;min-width:0;padding:var(--s-4);background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-2);cursor:pointer;text-align:left;transition:background var(--d-1) var(--ease),border-color var(--d-1) var(--ease)}
 .shell__wsbtn:hover{background:var(--surface-3);border-color:var(--line-2)}
 .shell__wsmark{width:1.25rem;height:1.25rem;flex:none;border-radius:var(--r-1);background:var(--accent-soft);border:1px solid var(--accent-line);color:var(--accent);display:grid;place-items:center;font-size:var(--t-10);font-weight:var(--w-bold)}
-.shell__wsname{font-size:var(--t-13-5);font-weight:var(--w-semi);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell__wsname{min-width:0;font-size:var(--t-13-5);font-weight:var(--w-semi);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .shell__wsmeta{font-size:var(--t-11);color:var(--ink-3)}
 .shell__user{display:flex;align-items:center;gap:var(--s-4);width:100%;padding:var(--s-3);border:0;border-radius:var(--r-2);background:transparent;cursor:pointer;text-align:left;transition:background var(--d-1) var(--ease)}
 .shell__user:hover{background:var(--surface-2)}

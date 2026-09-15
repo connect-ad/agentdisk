@@ -668,6 +668,11 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
      to read and being crushed to 30px while its label spills over the controls
      beside it. */
   .shell__docs{display:none}
+  /* The accent picker goes with it. The reference has no such control at all,
+     so nothing here is owed to it; on a 390px bar its 43px is the difference
+     between the workspace name being readable and being squeezed to an
+     ellipsis. Hidden below 875px, not removed. */
+  .shell__accent{display:none}
 }
 
 /* The column. Below desktop the sheet fills its frame, so there is nothing to

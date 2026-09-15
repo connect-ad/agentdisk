@@ -46,7 +46,7 @@ export default function AccentPicker() {
   const current = ACCENTS.find(a => a.id === accent) ?? ACCENTS[0];
 
   return (
-    <div className="wsx" ref={root}>
+    <div className="wsx shell__accent" ref={root}>
       <button
         type="button"
         ref={trigger}

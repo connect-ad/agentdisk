@@ -118,7 +118,7 @@ function InfoStrip({ open, user, wsRoot }) {
         <span className="avatar" aria-hidden="true">
           {(user.name || user.email || 'U').slice(0, 1).toUpperCase()}
         </span>
-        <span className="ad-truncate">{user.name}</span>
+        <span className="shell__stripname ad-truncate">{user.name}</span>
       </span>
       <span className="shell__stripsep" aria-hidden="true" />
       <span className="shell__stripitem">

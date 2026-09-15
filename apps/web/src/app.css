@@ -575,10 +575,10 @@
 .wstat{background:var(--surface);border:1px solid var(--line);
   border-radius:var(--r-3);padding:var(--s-6);min-width:0}
 .wstat__head{display:flex;align-items:center;gap:var(--s-4);margin-bottom:var(--s-4)}
-.wstat__label{font-family:var(--font-mono);font-size:var(--t-10);
+.wstat__label{font-family:var(--font-mono);font-size:var(--t-9-5);
   letter-spacing:var(--tr-caps);color:var(--ink-3);min-width:0;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.wstat__flag{font-family:var(--font-mono);font-size:var(--t-10);
+.wstat__flag{font-family:var(--font-mono);font-size:var(--t-9);
   font-weight:var(--w-semi);letter-spacing:var(--tr-wide);padding:var(--s-1) var(--s-3);
   border-radius:var(--r-1);flex:none}
 .wstat__flag--warn{color:var(--warn-ink);background:var(--warn-soft);
@@ -586,13 +586,13 @@
 .wstat__flag--danger{color:var(--danger-ink);background:var(--danger-soft);
   border:1px solid var(--danger-line)}
 .wstat__figure{display:flex;align-items:baseline;gap:var(--s-3)}
-.wstat__value{font-family:var(--font-display);font-size:var(--t-32);
+.wstat__value{font-family:var(--font-display);font-size:var(--t-34);
   font-weight:var(--w-semi);letter-spacing:var(--tr-mid);color:var(--ink);
   line-height:1;font-variant-numeric:tabular-nums}
-.wstat__unit{font-size:var(--t-13);font-weight:var(--w-med);color:var(--ink-2)}
+.wstat__unit{font-size:var(--t-12-5);font-weight:var(--w-med);color:var(--ink-2)}
 .wstat__meter{margin-top:var(--s-5)}
 .wstat__meterfoot{display:flex;justify-content:space-between;
-  margin-top:var(--s-3);font-family:var(--font-mono);font-size:var(--t-10);
+  margin-top:var(--s-3);font-family:var(--font-mono);font-size:var(--t-10-5);
   color:var(--ink-3)}
 .wstat__meterfoot--bare{margin-top:var(--s-5)}
 /* The no-quota tile's trend line, from the design: a rising arrow in --ok
@@ -600,7 +600,7 @@
    and a tile with a meter end at the same height. */
 .wstat__delta{margin-top:var(--s-5);display:flex;align-items:center;gap:var(--s-3);height:22px}
 .wstat__deltaico{flex:none;color:var(--ok)}
-.wstat__delta span{font-size:var(--t-12);color:var(--ink-2)}
+.wstat__delta span{font-size:var(--t-11-5);color:var(--ink-2)}
 
 @media (max-width:1080px){
   /* Only the grid changes. The padding used to collapse to 12px on all four
@@ -621,3 +621,7 @@
   padding:var(--s-1) var(--s-4);text-transform:uppercase;
   letter-spacing:var(--tr-wide)}
 .shell__striplink{font-size:var(--t-12);color:var(--ink-2)}
+/* The owner's name was the one string in the strip with no size of its own, so
+   it inherited the 14px body default where the reference draws it at 12.5/500
+   — the largest single type mismatch in the band. */
+.shell__stripname{font-size:var(--t-12-5);font-weight:var(--w-med);color:var(--ink)}

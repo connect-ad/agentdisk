@@ -202,7 +202,8 @@
   }
 }
 
-:root[data-theme="dark"]{
+:root[data-theme="dark"],
+:root:not([data-theme]){
   --ink:#E9ECF1; --ink-2:#9AA3B2; --ink-3:#909AA8; --ink-4:#6F7889;
   --paper:#0B0D11; --surface:#12151B; --surface-2:#171B22; --surface-3:#1F242D;
   --line:#252B35; --line-2:#343C49; --line-3:#434C5B;
@@ -271,22 +272,25 @@
     --accent-ink:#7EA8FF; --accent-soft:#0F1B33; --accent-soft-2:#1A2A4D; --accent-line:#2A3E6E;
   }
 }
-:root[data-theme="dark"][data-accent="indigo"]{
+:root[data-theme="dark"][data-accent="indigo"],
+:root:not([data-theme])[data-accent="indigo"]{
   --accent:#8B98FF; --accent-hover:#A3ADFF; --accent-active:#BAC2FF;
   --accent-ink:#8B98FF; --accent-soft:#181C33; --accent-soft-2:#232A4D; --accent-line:#333C6B;
 }
-:root[data-theme="dark"][data-accent="teal"]{
+:root[data-theme="dark"][data-accent="teal"],
+:root:not([data-theme])[data-accent="teal"]{
   --accent:#5EDBCB; --accent-hover:#7FE4D8; --accent-active:#9FEDE4;
   --accent-ink:#5EDBCB; --accent-soft:#0C2321; --accent-soft-2:#123834; --accent-line:#1F4F49;
 }
-:root[data-theme="dark"][data-accent="blue"]{
+:root[data-theme="dark"][data-accent="blue"],
+:root:not([data-theme])[data-accent="blue"]{
   --accent:#7EA8FF; --accent-hover:#9BBCFF; --accent-active:#B8D0FF;
   --accent-ink:#7EA8FF; --accent-soft:#0F1B33; --accent-soft-2:#1A2A4D; --accent-line:#2A3E6E;
 }
 
 /* The browser's own widgets — scrollbars, form controls, the canvas behind a
    short page — need telling too, or they stay light under a dark palette. */
-:root{color-scheme:light}
+:root{color-scheme:dark}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark}}
 :root[data-theme="dark"]{color-scheme:dark}
 :root[data-theme="light"]{color-scheme:light}

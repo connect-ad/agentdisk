@@ -41,7 +41,17 @@ const ThemeContext = createContext(null);
 function read() {
   try {
     const v = localStorage.getItem(KEY);
-    return v === 'light' || v === 'dark' ? v : 'system';
+    // No stored choice means dark, not "follow the OS".
+    //
+    // This followed prefers-color-scheme at first, on the reasoning that the
+    // prototype's colourMode default was a canvas preview setting. It is not:
+    // every mockup in the design is dark, and a reader on a light OS was
+    // getting the light palette and reading it as the old theme still being
+    // live. The design's default is the product's default.
+    //
+    // Light is still one click away in the top bar, and an explicit choice
+    // still wins over everything.
+    return v === 'light' || v === 'dark' ? v : 'dark';
   } catch {
     return 'system';
   }

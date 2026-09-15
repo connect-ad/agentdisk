@@ -23,11 +23,18 @@ export default function Logo({ size = 28, className = '', alt = 'AgentDisk' }) {
   // at 28 and 6px at 22 - and lets it letterbox rather than crop. White is not
   // a themed token here on purpose: the artwork needs a light ground to read,
   // and every reference file draws it this way in dark mode too.
+  //
+  // `size` stays a number of px at the default 16px root - every call site
+  // passes one, and the prop would be worse named in any other unit - but it is
+  // emitted in rem so the mark grows with the root font-size like the type
+  // beside it. A bare number in a React style object becomes px, which is the
+  // one thing that would not scale.
+  const rem = (px) => `${px / 16}rem`;
   const box = {
-    width: size, height: size, flex: `0 0 ${size}px`,
-    borderRadius: size >= 26 ? '7px' : '6px',
+    width: rem(size), height: rem(size), flex: `0 0 ${rem(size)}`,
+    borderRadius: size >= 26 ? rem(7) : rem(6),
   };
-  const tile = { ...box, background: '#FFFFFF', objectFit: 'contain', padding: 2, boxSizing: 'border-box', display: 'block' };
+  const tile = { ...box, background: '#FFFFFF', objectFit: 'contain', padding: rem(2), boxSizing: 'border-box', display: 'block' };
 
   if (failed) {
     return (

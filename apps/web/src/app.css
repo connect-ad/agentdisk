@@ -6,7 +6,7 @@
 .dw{position:fixed;inset:0;z-index:80;display:flex;justify-content:flex-end}
 .dw__scrim{position:absolute;inset:0;background:var(--scrim);
   animation:ad-fade var(--d-2) var(--ease)}
-.dw__panel{position:relative;width:min(420px,100%);background:var(--surface);
+.dw__panel{position:relative;width:min(26.25rem,100%);background:var(--surface);
   border-left:1px solid var(--line);box-shadow:var(--sh-4);display:flex;
   flex-direction:column;animation:dw-in var(--d-3) var(--ease-out)}
 @keyframes dw-in{from{transform:translateX(var(--s-8));opacity:0}to{transform:none;opacity:1}}
@@ -18,7 +18,7 @@
   flex-direction:column;gap:var(--s-6)}
 .dw__foot{flex:none;padding:var(--s-5) var(--s-6);border-top:1px solid var(--line);
   background:var(--surface-2);display:flex;gap:var(--s-4);flex-wrap:wrap}
-@media (max-width:768px){
+@media (max-width:960px){
   .dw__panel{width:100%;border-left:0;animation:dw-up var(--d-3) var(--ease-out)}
   @keyframes dw-up{from{transform:translateY(var(--s-9));opacity:0}to{transform:none;opacity:1}}
 }
@@ -31,7 +31,7 @@
    4px space scale has no token for it, so it is pinned once here rather than
    repeated: it is what keeps the "New workspace" row's label aligned with the
    workspace rows' labels. */
-.wsx{position:relative;--wsx-mark:22px}
+.wsx{position:relative;--wsx-mark:1.375rem}
 .wsx__menu{position:absolute;top:calc(100% + var(--s-2));left:0;right:0;z-index:30;
   background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r-3);
   box-shadow:var(--sh-3);padding:var(--s-2);max-height:60vh;overflow-y:auto;
@@ -57,7 +57,7 @@
 
 /* --- file-browser bits with no design-system equivalent --- */
 .dz-overlay{position:absolute;inset:0;z-index:5;display:grid;place-items:center;
-  border:2px dashed var(--accent);border-radius:var(--r-3);
+  border:0.125rem dashed var(--accent);border-radius:var(--r-3);
   background:var(--accent-soft);pointer-events:none}
 .bulkbar{display:flex;align-items:center;gap:var(--s-5);padding:var(--s-4) var(--s-6);
   background:var(--accent-soft);border:1px solid var(--accent-line);
@@ -72,7 +72,7 @@
    handler, field and provider button below is untouched. */
 .auth{min-height:100vh;display:grid;place-items:center;padding:var(--s-9);
   background:var(--paper)}
-.auth__inner{width:100%;max-width:400px;display:flex;flex-direction:column;
+.auth__inner{width:100%;max-width:25rem;display:flex;flex-direction:column;
   gap:var(--s-6)}
 .auth__brand{display:flex;align-items:center;gap:var(--s-4);
   justify-content:center;text-decoration:none}
@@ -102,24 +102,24 @@
   gap:var(--s-6);height:var(--topbar-h);padding:0 var(--s-8);
   border-bottom:1px solid var(--line);
   background:color-mix(in srgb,var(--surface) 82%,transparent);
-  backdrop-filter:blur(8px)}
+  backdrop-filter:blur(0.5rem)}
 .mk__brand{display:flex;align-items:center;gap:var(--s-4);flex:none;
   text-decoration:none}
 .mk__brand:hover{text-decoration:none}
 .mk__wordmark{font-family:var(--font-display);font-size:var(--t-16);
   font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink)}
 .mk__navlinks{display:flex;align-items:center;gap:var(--s-7);margin-left:auto}
-.mk__wrap{max-width:1180px;margin:0 auto;padding:0 var(--s-10);width:100%}
+.mk__wrap{max-width:73.75rem;margin:0 auto;padding:0 var(--s-10);width:100%}
 
 /* hero */
 .mk__hero{padding:var(--s-11) 0 var(--s-9);display:grid;
-  grid-template-columns:minmax(0,1fr) minmax(0,460px);gap:var(--s-10);
+  grid-template-columns:minmax(0,1fr) minmax(0,28.75rem);gap:var(--s-10);
   align-items:center}
 .mk__hero--single{display:block}
 .mk__badge{display:inline-flex;align-items:center;gap:var(--s-4);
   border:1px solid var(--line-2);border-radius:var(--r-full);
   padding:var(--s-2) var(--s-5) var(--s-2) var(--s-4);margin-bottom:var(--s-7)}
-.mk__badgedot{width:6px;height:6px;border-radius:var(--r-full);
+.mk__badgedot{width:0.375rem;height:0.375rem;border-radius:var(--r-full);
   background:var(--ok);display:block;flex:none}
 .mk__badgetext{font-family:var(--font-mono);font-size:var(--t-10);
   letter-spacing:var(--tr-caps);color:var(--ink-2)}
@@ -139,7 +139,7 @@
 .term__bar{display:flex;align-items:center;gap:var(--s-3);
   padding:var(--s-4) var(--s-5);border-bottom:1px solid var(--line);
   background:var(--surface-2)}
-.term__dot{width:8px;height:8px;border-radius:var(--r-full);display:block;flex:none}
+.term__dot{width:0.5rem;height:0.5rem;border-radius:var(--r-full);display:block;flex:none}
 .term__dot--r{background:var(--danger)}
 .term__dot--y{background:var(--warn)}
 .term__dot--g{background:var(--ok)}
@@ -176,7 +176,7 @@
 /* steps */
 .mk__step{min-width:0;display:flex;flex-direction:column}
 .mk__stephead{display:flex;align-items:center;gap:var(--s-4);margin-bottom:var(--s-4)}
-.mk__stepno{width:24px;height:24px;flex:none;border-radius:var(--r-2);
+.mk__stepno{width:1.5rem;height:1.5rem;flex:none;border-radius:var(--r-2);
   background:var(--accent-soft);border:1px solid var(--accent-line);
   color:var(--accent-ink);display:grid;place-items:center;
   font-family:var(--font-mono);font-size:var(--t-11);font-weight:var(--w-semi)}
@@ -192,7 +192,7 @@
 .mk__band{border:1px solid var(--accent-line);background:var(--accent-soft);
   border-radius:var(--r-4);padding:var(--s-9);display:flex;flex-wrap:wrap;
   align-items:center;gap:var(--s-8)}
-.mk__bandtext{flex:1;min-width:220px}
+.mk__bandtext{flex:1;min-width:13.75rem}
 .mk__bandsub{font-size:var(--t-14);line-height:var(--lh-loose);color:var(--ink-2)}
 
 /* pricing */
@@ -203,7 +203,7 @@
   flex-direction:column;gap:var(--s-6);min-width:0}
 .mk__plan--pop{border-color:var(--accent-line);background:var(--accent-soft)}
 .mk__planhead{display:flex;align-items:center;justify-content:space-between;
-  min-height:22px;gap:var(--s-4)}
+  min-height:1.375rem;gap:var(--s-4)}
 .mk__planflag{font-family:var(--font-mono);font-size:var(--t-10);
   font-weight:var(--w-bold);letter-spacing:var(--tr-wide);
   background:var(--accent);color:var(--on-accent);border-radius:var(--r-1);
@@ -216,7 +216,7 @@
 .mk__feats{display:flex;flex-direction:column;gap:var(--s-4);flex:1}
 .mk__feat{display:flex;gap:var(--s-4);align-items:flex-start;
   font-size:var(--t-13);line-height:var(--lh-normal);color:var(--ink-2)}
-.mk__feat svg{flex:none;color:var(--accent);margin-top:2px}
+.mk__feat svg{flex:none;color:var(--accent);margin-top:0.125rem}
 .mk__table{border:1px solid var(--line);background:var(--surface);
   border-radius:var(--r-3);overflow:hidden}
 .mk__tablehead{padding:var(--s-5) var(--s-6);border-bottom:1px solid var(--line)}
@@ -237,13 +237,13 @@
   color:var(--ink-3);margin-left:var(--s-3)}
 .mk__footlinks{display:flex;gap:var(--s-7);flex-wrap:wrap;font-size:var(--t-13)}
 
-@media (max-width:1080px){
+@media (max-width:1350px){
   .mk__hero{grid-template-columns:minmax(0,1fr);padding:var(--s-10) 0 var(--s-8)}
   .mk__grid4{grid-template-columns:repeat(2,minmax(0,1fr))}
   .mk__prices{grid-template-columns:repeat(2,minmax(0,1fr))}
   .mk__wrap{padding:0 var(--s-8)}
 }
-@media (max-width:700px){
+@media (max-width:875px){
   .mk__h1{font-size:var(--t-32)}
   .mk__grid4,.mk__grid3,.mk__prices{grid-template-columns:minmax(0,1fr)}
   .mk__wrap{padding:0 var(--s-6)}
@@ -270,15 +270,15 @@
    Both were written for the sidebar: the workspace switcher as a full-width
    card, the account menu dropping upward off the bottom of the viewport. In
    the top bar the switcher is an inline control and both panels drop down. */
-.wsx__menu--right{left:auto;right:0;width:max(236px,100%)}
-.shell__user--bar{width:auto;max-width:220px;height:34px;padding:var(--s-2) var(--s-3) var(--s-2) var(--s-2);
+.wsx__menu--right{left:auto;right:0;width:max(14.75rem,100%)}
+.shell__user--bar{width:auto;max-width:13.75rem;height:2.125rem;padding:var(--s-2) var(--s-3) var(--s-2) var(--s-2);
   border:1px solid var(--line);border-radius:var(--r-full);background:var(--surface-2)}
 .shell__user--bar:hover{border-color:var(--line-2);background:var(--surface-2)}
 /* The email line is the sidebar's second row; in a pill it makes the control
    tall and pushes the top bar out of its 58px. The menu itself still shows it. */
 .shell__user--bar span span:last-child{display:none!important}
 .shell__user--bar span span:first-child{font-size:var(--t-13);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-@media (max-width:900px){
+@media (max-width:1125px){
   /* Name too — at this width the pill is just the avatar and the chevron. */
   .shell__user--bar span span{display:none!important}
 }
@@ -296,7 +296,7 @@
 /* --- error pages (routes/ErrorPages.jsx) ---
    Two columns on desktop, one below. The tone classes carry the code chip's
    colour trio; everything else is the shared marketing chrome. */
-.err{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:var(--s-10);
+.err{display:grid;grid-template-columns:minmax(0,1fr) 21.25rem;gap:var(--s-10);
   align-items:start;padding:var(--s-11) 0 var(--s-10);min-height:52vh}
 .err__main{min-width:0}
 .err__codebar{display:flex;align-items:center;gap:var(--s-5);
@@ -320,11 +320,11 @@
   max-width:54ch;text-wrap:pretty;margin-bottom:var(--s-8)}
 .err__facts{border:1px solid var(--line);background:var(--surface);
   border-radius:var(--r-3);overflow:hidden;margin-bottom:var(--s-7);
-  max-width:520px}
+  max-width:32.5rem}
 .err__fact{display:flex;align-items:center;gap:var(--s-5);
   padding:var(--s-5) var(--s-6);border-bottom:1px solid var(--line)}
 .err__fact:last-child{border-bottom:0}
-.err__dot{width:7px;height:7px;flex:none;border-radius:var(--r-1);display:block}
+.err__dot{width:0.4375rem;height:0.4375rem;flex:none;border-radius:var(--r-1);display:block}
 .err__dot--info{background:var(--accent)}
 .err__dot--warn{background:var(--warn)}
 .err__dot--danger{background:var(--danger)}
@@ -333,8 +333,8 @@
 .err__ref{font-size:var(--t-13);color:var(--ink-2);margin-bottom:var(--s-6)}
 .err__timer{display:flex;align-items:center;gap:var(--s-5);
   font-size:var(--t-13);color:var(--ink-2);margin-bottom:var(--s-7)}
-.err__spin{width:16px;height:16px;flex:none;border-radius:var(--r-full);
-  border:2px solid var(--surface-3);border-top-color:var(--accent);
+.err__spin{width:1rem;height:1rem;flex:none;border-radius:var(--r-full);
+  border:0.125rem solid var(--surface-3);border-top-color:var(--accent);
   display:block;animation:ad-spin .9s linear infinite}
 .err__actions{display:flex;gap:var(--s-5);flex-wrap:wrap}
 .err__side{min-width:0}
@@ -353,14 +353,14 @@
 .err__linknote{font-size:var(--t-12);color:var(--ink-2)}
 .err__chev{flex:none;color:var(--ink-3);font-size:var(--t-16)}
 
-@media (max-width:1080px){
+@media (max-width:1350px){
   .err{grid-template-columns:minmax(0,1fr);gap:var(--s-8);padding:var(--s-10) 0}
 }
 
 /* --- docs (routes/Docs.jsx) ---
    Three columns from the design: TOC, article, "on this page" rail. Drops to
    two on tablet and one on mobile, as the design's grid does. */
-.doc{display:grid;grid-template-columns:212px minmax(0,1fr) 176px;
+.doc{display:grid;grid-template-columns:13.25rem minmax(0,1fr) 11rem;
   gap:var(--s-9);align-items:start;padding:var(--s-9) 0}
 .doc__toc{min-width:0;position:sticky;top:calc(var(--topbar-h) + var(--s-6))}
 .doc__tocgroup{margin-bottom:var(--s-7)}
@@ -408,7 +408,7 @@
   padding:var(--s-5) var(--s-6);border-bottom:1px solid var(--line)}
 .doc__tool:last-child{border-bottom:0}
 .doc__toolname{font-family:var(--font-mono);font-size:var(--t-12);
-  font-weight:var(--w-semi);color:var(--accent-ink);width:104px;flex:0 0 104px}
+  font-weight:var(--w-semi);color:var(--accent-ink);width:6.5rem;flex:0 0 6.5rem}
 .doc__toolbody{flex:1;min-width:0;font-size:var(--t-13);color:var(--ink-2)}
 .doc__toolscope{font-family:var(--font-mono);font-size:var(--t-10);
   letter-spacing:var(--tr-wide);color:var(--ink-3);flex:none}
@@ -421,11 +421,11 @@
 .doc__railitem{font-size:var(--t-12);line-height:var(--lh-snug);color:var(--ink-2)}
 .doc__railitem.is-current{font-weight:var(--w-semi);color:var(--accent-ink)}
 
-@media (max-width:1080px){
-  .doc{grid-template-columns:196px minmax(0,1fr)}
+@media (max-width:1350px){
+  .doc{grid-template-columns:12.25rem minmax(0,1fr)}
   .doc__rail{display:none}
 }
-@media (max-width:700px){
+@media (max-width:875px){
   .doc{grid-template-columns:minmax(0,1fr);gap:var(--s-7)}
   .doc__toc{display:none}
 }
@@ -456,7 +456,7 @@
   display:flex;flex-direction:column;gap:var(--s-4);min-width:0;
   transition:border-color var(--d-1) var(--ease),background var(--d-1) var(--ease)}
 .ds__qcard:hover{border-color:var(--accent-line);background:var(--surface-2)}
-.ds__qnum{width:30px;height:30px;border-radius:var(--r-2);flex:none;
+.ds__qnum{width:1.875rem;height:1.875rem;border-radius:var(--r-2);flex:none;
   background:var(--accent-soft);border:1px solid var(--accent-line);
   display:grid;place-items:center;font-family:var(--font-mono);
   font-size:var(--t-12);font-weight:var(--w-semi);color:var(--accent-ink)}
@@ -474,7 +474,7 @@
   gap:var(--s-4);margin-bottom:var(--s-3)}
 .ds__meterlabel{font-size:var(--t-13);font-weight:var(--w-med);color:var(--ink)}
 .ds__metervalue{font-family:var(--font-mono);font-size:var(--t-12);color:var(--ink-2)}
-.ds__bar{height:6px;border-radius:var(--r-full);background:var(--surface-3);
+.ds__bar{height:0.375rem;border-radius:var(--r-full);background:var(--surface-3);
   overflow:hidden}
 .ds__barfill{height:100%;border-radius:var(--r-full);background:var(--accent)}
 .ds__barfill--warn{background:var(--warn)}
@@ -485,7 +485,7 @@
 .ds__acard{border:1px solid var(--line);background:var(--surface);
   border-radius:var(--r-3);padding:var(--s-6);min-width:0}
 .ds__ahead{display:flex;align-items:center;gap:var(--s-4);margin-bottom:var(--s-4)}
-.ds__adot{width:8px;height:8px;border-radius:var(--r-full);flex:none;
+.ds__adot{width:0.5rem;height:0.5rem;border-radius:var(--r-full);flex:none;
   background:var(--ink-4)}
 .ds__adot--ok{background:var(--ok)}
 .ds__adot--off{background:var(--ink-4)}
@@ -505,7 +505,7 @@
 .ds__step{border:1px solid var(--line);background:var(--surface);
   border-radius:var(--r-3);padding:var(--s-6)}
 .ds__stephead{display:flex;align-items:center;gap:var(--s-5);margin-bottom:var(--s-4)}
-.ds__stepnum{width:24px;height:24px;border-radius:var(--r-2);flex:none;
+.ds__stepnum{width:1.5rem;height:1.5rem;border-radius:var(--r-2);flex:none;
   background:var(--accent-soft);border:1px solid var(--accent-line);
   display:grid;place-items:center;font-family:var(--font-mono);
   font-size:var(--t-11);font-weight:var(--w-semi);color:var(--accent-ink)}
@@ -514,7 +514,7 @@
 .ds__actrow{display:flex;align-items:center;gap:var(--s-5);
   padding:var(--s-4) 0;border-bottom:1px solid var(--line)}
 .ds__actrow:last-child{border-bottom:0}
-.ds__actdot{width:7px;height:7px;flex:none;border-radius:var(--r-full);
+.ds__actdot{width:0.4375rem;height:0.4375rem;flex:none;border-radius:var(--r-full);
   background:var(--accent)}
 .ds__actdot--human{border-radius:var(--r-1);background:var(--ink-4)}
 .ds__acttext{font-size:var(--t-13);color:var(--ink);display:block;
@@ -525,7 +525,7 @@
 .ds__actago{font-family:var(--font-mono);font-size:var(--t-10);
   color:var(--ink-3);flex:none}
 
-@media (max-width:1080px){
+@media (max-width:1350px){
   .ds__quick{grid-template-columns:minmax(0,1fr)}
   .ds__two,.ds__cards{grid-template-columns:minmax(0,1fr)}
 }
@@ -535,9 +535,9 @@
    because each one has to show the colour it selects, which is the one place
    a token cannot be used — a token would show the *current* accent four
    times. */
-.accent-dot{width:13px;height:13px;border-radius:var(--r-full);display:block;
+.accent-dot{width:0.8125rem;height:0.8125rem;border-radius:var(--r-full);display:block;
   background:var(--accent);border:1px solid var(--accent-line)}
-.accent-swatch{width:14px;height:14px;border-radius:var(--r-full);display:block;
+.accent-swatch{width:0.875rem;height:0.875rem;border-radius:var(--r-full);display:block;
   place-self:center}
 .accent-swatch--violet{background:#6D28D9}
 .accent-swatch--indigo{background:#4F46E5}
@@ -561,11 +561,11 @@
   transition:border-color var(--d-1) var(--ease),background var(--d-1) var(--ease)}
 .sup__topic:hover{border-color:var(--line-2)}
 .sup__topic.is-on{background:var(--accent-soft);border-color:var(--accent-line)}
-.sup__radio{width:15px;height:15px;flex:none;border-radius:var(--r-full);
+.sup__radio{width:0.9375rem;height:0.9375rem;flex:none;border-radius:var(--r-full);
   border:1.5px solid var(--line-2);background:transparent}
-.sup__radio.is-on{border:4.5px solid var(--accent);background:var(--surface)}
+.sup__radio.is-on{border:0.28125rem solid var(--accent);background:var(--surface)}
 .sup__topiclabel{font-size:var(--t-13);color:var(--ink);min-width:0}
-@media (max-width:700px){ .sup__topics{grid-template-columns:minmax(0,1fr)} }
+@media (max-width:875px){ .sup__topics{grid-template-columns:minmax(0,1fr)} }
 
 /* --- Layer 2: the workspace stats band (components-local/WorkspaceStats.jsx)
    Sits between the info strip and the tab bar, so it is on every screen. */
@@ -598,22 +598,22 @@
 /* The no-quota tile's trend line, from the design: a rising arrow in --ok
    followed by the figure in body type, on a 22px line so a tile with a trend
    and a tile with a meter end at the same height. */
-.wstat__delta{margin-top:var(--s-5);display:flex;align-items:center;gap:var(--s-3);height:22px}
+.wstat__delta{margin-top:var(--s-5);display:flex;align-items:center;gap:var(--s-3);height:1.375rem}
 .wstat__deltaico{flex:none;color:var(--ok)}
 .wstat__delta span{font-size:var(--t-11-5);color:var(--ink-2)}
 
-@media (max-width:1080px){
+@media (max-width:1350px){
   /* Only the grid changes. The padding used to collapse to 12px on all four
      sides here; the reference keeps this band at 16px top and bottom at every
      breakpoint and lets the shared gutter handle the sides. */
   .shell__statsinner{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
-@media (max-width:700px){
+@media (max-width:875px){
   /* The design scrolls these horizontally rather than stacking four tall
      cards above every screen's content. */
   .shell__statsinner{display:flex;overflow-x:auto;scrollbar-width:none}
   .shell__statsinner::-webkit-scrollbar{display:none}
-  .wstat{flex:0 0 196px}
+  .wstat{flex:0 0 12.25rem}
 }
 .shell__stripplan{font-size:var(--t-11);font-weight:var(--w-semi);
   color:var(--accent-ink);background:var(--accent-soft);

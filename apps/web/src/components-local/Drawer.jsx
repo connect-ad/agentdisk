@@ -10,7 +10,7 @@ const FOCUSABLE = 'input,select,textarea,button,[href],[tabindex]:not([tabindex=
  * upstreamed into the design system rather than forked further.
  *
  * Spec: role=dialog, aria-modal, labelled by the title; traps focus and restores
- * it to the trigger on close; becomes a full-screen sheet below 768px (app.css).
+ * it to the trigger on close; becomes a full-screen sheet below 960px (app.css).
  */
 export function Drawer({ open = true, title, footer, onClose, children }) {
   const panel = useRef(null);

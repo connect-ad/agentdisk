@@ -254,11 +254,16 @@
 /* Workspace ID chip — components-local/WorkspaceIdChip.jsx. Monospace because
    the value is an opaque token that gets transcribed into config files, and a
    proportional font makes 1/l and 0/O indistinguishable while doing it. */
-.wsid{display:inline-flex;align-items:center;gap:var(--s-3);max-width:100%;
+/* min-width:0 on both the chip and its value, or neither can shrink: a flex
+   item's automatic minimum size is its min-content width, and a nowrap ws_...
+   ID has no wrap point, so the chip stays full width, ignores max-width:100%
+   and pushes the whole document wider than the viewport. The ellipsis only
+   works once shrinking is allowed. Surfaced at 390px by the 25% scale-up. */
+.wsid{display:inline-flex;align-items:center;gap:var(--s-3);max-width:100%;min-width:0;
   background:var(--surface-2);border:1px solid var(--line);
   border-radius:var(--r-2);padding:var(--s-1) var(--s-3);
   font-family:var(--font-mono);font-size:var(--t-12);color:var(--ink-2)}
-.wsid__value{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+.wsid__value{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   user-select:all}
 .wsid__copy{display:inline-flex;align-items:center;gap:var(--s-2);flex:none;
   background:none;border:0;padding:0;cursor:pointer;color:var(--ink-3);

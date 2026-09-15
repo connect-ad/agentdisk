@@ -1,12 +1,11 @@
 import React, { useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
-  PageHead, StatTile, Panel, DataTable, FileCell, Button, Icon,
-  EmptyState, CodeBlock, Alert, Badge
+  Panel, DataTable, FileCell, Button, Icon,
+  EmptyState, CodeBlock, Alert
 } from '../components/index.js';
 import { useResource } from '../lib/useResource.js';
 import { useWorkspace } from '../lib/workspace.jsx';
-import WorkspaceIdChip from '../components-local/WorkspaceIdChip.jsx';
 
 /**
  * 8.8 Dashboard / Overview — MVP-0
@@ -118,31 +117,18 @@ export default function Dashboard() {
 
   return (
     <>
-      <PageHead
-        title="Dashboard"
-        subtitle="Storage, agents and everything they did to your files."
-        meta={
-          <>
-            {/* The real `ws_...` ID, from the workspace context rather than
-                from the URL. The URL segment is a readable slug now, and this
-                chip is the thing people copy into an API call or an MCP config
-                — showing them the slug there would hand them a value nothing
-                accepts. The plan waits on `whoami` and is absent until then;
-                showing a placeholder plan would be a decorative number, which
-                is the one thing this dashboard refuses to do. */}
-            <WorkspaceIdChip workspaceId={workspaceId} />
-            {status === 'loaded' ? <Badge tone="accent">{plan}</Badge> : null}
-          </>
-        }
-        actions={
-          canWrite ? (
-            <Button variant="secondary" as={Link} to={`${root}/files`} icon={<Icon name="upload" size={14} />}>
-              Upload files
-            </Button>
-          ) : null
-        }
-      />
+      {/*
+        No page head here.
 
+        The design goes straight from the tab bar to the content, because the
+        strip above already names the workspace, shows the ws_... ID with its
+        copy button, and carries the plan. Repeating all three in a heading was
+        the same identifier twice on one screen, each with its own copy button —
+        which invites the question of which one is the real value.
+
+        The upload action moves to Files, which is where uploading happens and
+        where the design puts it.
+      */}
       {status === 'failed' ? (
         <Alert
           tone="danger"
@@ -153,61 +139,29 @@ export default function Dashboard() {
         </Alert>
       ) : null}
 
-      {storagePct >= 95 && !loading ? (
-        <Alert tone="danger" title={`You're at ${storagePct}% of your ${plan} plan storage`}>
-          Uploads are refused at the limit. Free space by deleting files, or move to a larger plan.
+      {/*
+        The design warns at 78%, well before the limit, because the point of
+        the warning is to be seen while there is still time to act — at 95% the
+        next upload is already likely to fail. Tone follows severity, and the
+        percentage is in the text, so the warning never rests on colour alone.
+      */}
+      {storagePct >= 75 && !loading ? (
+        <Alert
+          tone={storagePct >= 90 ? 'danger' : 'warn'}
+          title={`Storage is at ${storagePct}% of your ${plan} plan limit`}
+          actions={<Button size="sm" variant="secondary" as={Link} to={`${root}/usage`}>Review usage</Button>}
+        >
+          Agents receive <code className="inline">507 Insufficient Storage</code> once the
+          quota is reached. Free space by deleting files, or move to a larger plan.
         </Alert>
       ) : null}
 
-      {/* Stat tiles are real links so they are keyboard-reachable (spec: Accessibility). */}
-      <div className="grid-stats">
-        <Link to={`${root}/usage`} style={{ textDecoration: 'none', color: 'inherit' }}>
-          <StatTile
-            label="Storage used"
-            icon={<Icon name="database" size={13} />}
-            value={formatBytes(storageUsed)}
-            meter={storageUsed}
-            meterMax={storageMax || 1}
-            sub={storageMax ? `of ${formatBytes(storageMax)} on ${plan}` : ''}
-            loading={loading}
-          />
-        </Link>
-        <Link to={`${root}/files`} style={{ textDecoration: 'none', color: 'inherit' }}>
-          <StatTile
-            label="Files"
-            icon={<Icon name="file" size={13} />}
-            value={fileCount.toLocaleString()}
-            sub={fileCount === 0 ? 'Nothing stored yet' : ''}
-            loading={loading}
-          />
-        </Link>
-        <Link to={`${root}/agents`} style={{ textDecoration: 'none', color: 'inherit' }}>
-          <StatTile
-            label="Agents"
-            icon={<Icon name="agent" size={13} />}
-            value={agentCount.toLocaleString()}
-            sub={
-              agentCount === 0
-                ? 'No agents yet'
-                : activeAgents === agentCount
-                  ? `${activeAgents} active`
-                  : `${activeAgents} active, ${agentCount - activeAgents} disabled`
-            }
-            loading={loading}
-          />
-        </Link>
-        <Link to={`${root}/usage`} style={{ textDecoration: 'none', color: 'inherit' }}>
-          <StatTile
-            label="Requests this period"
-            icon={<Icon name="bolt" size={13} />}
-            value={requestsUsed.toLocaleString()}
-            meter={requestsUsed}
-            meterMax={requestsMax || 1}
-            sub={requestsMax ? `of ${requestsMax.toLocaleString()}` : ''}
-            loading={loading}
-          />
-        </Link>
-      </div>
+      {/*
+        The four headline figures moved into the shell (Layer 2 of the
+        design), so they sit above the tab bar and are present on every screen
+        rather than only here. WorkspaceStats fetches whoami once for all tabs,
+        which is one round trip fewer than this screen used to make.
+      */}
 
       {/*
         Quick start, from the design. Three cards rather than one code block.
@@ -218,9 +172,9 @@ export default function Dashboard() {
         <h2 className="ds__h2">Quick start</h2>
         <div className="ds__quick">
           {[
-            { n: '1', title: 'Create an agent identity', body: 'Each identity holds its own keys and scopes.', cta: 'Go to agents', to: `${root}/agents` },
-            { n: '2', title: 'Mint a scoped key', body: 'Pick the operations it needs and an optional path prefix.', cta: 'Go to API keys', to: `${root}/keys` },
-            { n: '3', title: 'Connect over MCP', body: 'One config block in any MCP-capable client.', cta: 'Go to MCP', to: `${root}/mcp` },
+            { n: '1', title: 'Create a scoped key', body: 'Read, write, list or delete — optionally locked to one path prefix.', cta: 'Create key', to: `${root}/keys` },
+            { n: '2', title: 'Connect over MCP', body: 'Paste one config block into Claude Desktop, VS Code or the CLI.', cta: 'View setup', to: `${root}/mcp` },
+            { n: '3', title: 'Give an agent a folder', body: 'Scope it to a path prefix and watch the audit log fill in.', cta: 'Open Files', to: `${root}/files` },
           ].map(q => (
             <Link key={q.n} to={q.to} className="ds__qcard">
               <span className="ds__qnum">{q.n}</span>

@@ -34,7 +34,7 @@ function isModifiedClick(e) {
 }
 
 export function AppShell({
-  nav = [], active, workspaceSlot, userSlot, infoStrip, topbarActions,
+  nav = [], active, workspaceSlot, userSlot, infoStrip, statsBand, topbarActions,
   children, flush = false, onNavigate, className = '', ...rest
 }) {
   // The old shell grouped nav into three labelled sections down a sidebar. A
@@ -62,6 +62,13 @@ export function AppShell({
       </header>
 
       {infoStrip ? <div className="shell__strip">{infoStrip}</div> : null}
+
+      {/*
+        Layer 2 in the design: the workspace's headline figures, above the tab
+        bar and therefore present on every screen rather than only the overview.
+        The host supplies the content; the shell only places it.
+      */}
+      {statsBand ? <div className="shell__stats">{statsBand}</div> : null}
 
       <nav className="shell__tabs" aria-label="Workspace sections">
         <div className="shell__tablist">

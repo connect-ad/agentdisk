@@ -566,3 +566,51 @@
 .sup__radio.is-on{border:4.5px solid var(--accent);background:var(--surface)}
 .sup__topiclabel{font-size:var(--t-13);color:var(--ink);min-width:0}
 @media (max-width:700px){ .sup__topics{grid-template-columns:minmax(0,1fr)} }
+
+/* --- Layer 2: the workspace stats band (components-local/WorkspaceStats.jsx)
+   Sits between the info strip and the tab bar, so it is on every screen. */
+.shell__stats{background:var(--surface-2);border-bottom:1px solid var(--line);flex:none}
+.shell__statsinner{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:var(--s-5);padding:var(--s-6) var(--s-7)}
+.wstat{background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-3);padding:var(--s-6);min-width:0}
+.wstat__head{display:flex;align-items:center;gap:var(--s-4);margin-bottom:var(--s-4)}
+.wstat__label{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--ink-3);min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wstat__flag{font-family:var(--font-mono);font-size:var(--t-10);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-wide);padding:var(--s-1) var(--s-3);
+  border-radius:var(--r-1);flex:none}
+.wstat__flag--warn{color:var(--warn-ink);background:var(--warn-soft);
+  border:1px solid var(--warn-line)}
+.wstat__flag--danger{color:var(--danger-ink);background:var(--danger-soft);
+  border:1px solid var(--danger-line)}
+.wstat__figure{display:flex;align-items:baseline;gap:var(--s-3)}
+.wstat__value{font-family:var(--font-display);font-size:var(--t-32);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-mid);color:var(--ink);
+  line-height:1;font-variant-numeric:tabular-nums}
+.wstat__unit{font-size:var(--t-13);font-weight:var(--w-med);color:var(--ink-2)}
+.wstat__meter{margin-top:var(--s-5)}
+.wstat__meterfoot{display:flex;justify-content:space-between;
+  margin-top:var(--s-3);font-family:var(--font-mono);font-size:var(--t-10);
+  color:var(--ink-3)}
+.wstat__meterfoot--bare{margin-top:var(--s-5)}
+
+@media (max-width:1080px){
+  .shell__statsinner{grid-template-columns:repeat(2,minmax(0,1fr));
+    padding:var(--s-5)}
+}
+@media (max-width:700px){
+  /* The design scrolls these horizontally rather than stacking four tall
+     cards above every screen's content. */
+  .shell__statsinner{display:flex;overflow-x:auto;scrollbar-width:none;
+    padding:var(--s-5)}
+  .shell__statsinner::-webkit-scrollbar{display:none}
+  .wstat{flex:0 0 196px}
+}
+.shell__stripplan{font-size:var(--t-11);font-weight:var(--w-semi);
+  color:var(--accent-ink);background:var(--accent-soft);
+  border:1px solid var(--accent-line);border-radius:var(--r-1);
+  padding:var(--s-1) var(--s-4);text-transform:uppercase;
+  letter-spacing:var(--tr-wide)}
+.shell__striplink{font-size:var(--t-12);color:var(--ink-2)}

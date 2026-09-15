@@ -29,6 +29,7 @@ import AccountMenu from './components-local/AccountMenu.jsx';
 import ThemeToggle from './components-local/ThemeToggle.jsx';
 import AccentPicker from './components-local/AccentPicker.jsx';
 import WorkspaceIdChip from './components-local/WorkspaceIdChip.jsx';
+import WorkspaceStats from './components-local/WorkspaceStats.jsx';
 import { useAuth } from './lib/auth.jsx';
 import { useWorkspace } from './lib/workspace.jsx';
 
@@ -40,7 +41,7 @@ import { useWorkspace } from './lib/workspace.jsx';
 export const NAV = [
   {
     items: [
-      { id: 'dash', label: 'Dashboard', icon: 'dashboard', path: '' },
+      { id: 'dash', label: 'Overview', icon: 'dashboard', path: '' },
       { id: 'files', label: 'Files', icon: 'folder', path: '/files' },
       { id: 'activity', label: 'Activity', icon: 'activity', path: '/activity' }
     ]
@@ -64,7 +65,6 @@ export const NAV = [
     items: [
       { id: 'usage', label: 'Usage', icon: 'chart', path: '/usage' },
       { id: 'settings', label: 'Settings', icon: 'gear', path: '/settings' },
-      { id: 'docs', label: 'Documentation', icon: 'book', href: 'https://docs.agentdisk.io', external: true }
     ]
   }
 ];
@@ -232,19 +232,38 @@ function WorkspaceLayout() {
       }}
       infoStrip={
         <div className="shell__stripinner">
+          {/* The design leads with the owner. `role` is this person's role in
+              this workspace, which is what the API actually returns — the
+              design's "OWNER · Rina Kessler" names the workspace's owner, and
+              no endpoint reports who that is. So this says what is true: your
+              role, and you. */}
           <span className="shell__stripitem">
-            <span className="shell__striplabel">WORKSPACE</span>
-            <span className="ad-truncate">{workspaceName}</span>
+            <span className="shell__striplabel">{(open.role ?? 'member').toUpperCase()}</span>
+            <span className="avatar" aria-hidden="true">
+              {(USER.name || USER.email || 'U').slice(0, 1).toUpperCase()}
+            </span>
+            <span className="ad-truncate">{USER.name}</span>
           </span>
           <span className="shell__stripsep" aria-hidden="true" />
           <span className="shell__stripitem">
-            <span className="shell__striplabel">ID</span>
+            <span className="shell__striplabel">WORKSPACE ID</span>
             {/* The ws_... ID, never the slug — this is the value people paste
                 into an API call. */}
             <WorkspaceIdChip workspaceId={open.id} />
           </span>
+          {open.plan ? (
+            <>
+              <span className="shell__stripsep" aria-hidden="true" />
+              <span className="shell__stripitem">
+                <span className="shell__striplabel">PLAN</span>
+                <span className="shell__stripplan">{open.plan}</span>
+                <Link to={`${wsRoot}/settings`} className="shell__striplink">Change</Link>
+              </span>
+            </>
+          ) : null}
         </div>
       }
+      statsBand={<WorkspaceStats />}
       topbarActions={
         <>
           <AccentPicker />

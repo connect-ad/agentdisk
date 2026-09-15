@@ -73,7 +73,22 @@ test('the two failure kinds are indistinguishable', async ({ page }) => {
   const bodies = [];
   for (const segment of ['ws_0000000000000000', 'ws_1111111111111111']) {
     await page.goto(`/w/${segment}`);
-    await page.waitForTimeout(2_500);
+
+    // Wait for the answer, not for a fixed 2.5s.
+    //
+    // This compares two whole rendered bodies, so it is only meaningful once
+    // both have settled — and a flat `waitForTimeout(2_500)` does not
+    // guarantee that. Whichever load had not finished resolving the workspace
+    // list yet got snapshotted mid-render as "Loading your workspaces…", and
+    // the test then reported two unknown workspaces answering differently when
+    // all it had caught was one of them still loading. Measured at 3 failures
+    // in 5 identical runs against one build.
+    //
+    // Nothing about the assertion is relaxed: both bodies are still compared
+    // in full. This only makes sure there is something real to compare.
+    await expect(page.getByText(/loading your workspaces/i))
+      .toHaveCount(0, { timeout: 25_000 });
+
     bodies.push((await page.locator('body').innerText()).replace(/\s+/g, ' ').trim());
   }
   expect(bodies[0], 'unknown workspaces answer differently from one another').toBe(bodies[1]);

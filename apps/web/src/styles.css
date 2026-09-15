@@ -588,7 +588,7 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
 /* --- Layer 0: top bar --- */
 .shell__top{display:flex;align-items:center;gap:var(--s-4);min-height:var(--topbar-h);padding:var(--s-3) var(--s-7);border-bottom:1px solid var(--line);background:var(--surface);position:sticky;top:0;z-index:40;flex:none}
 .shell__brand{display:flex;align-items:center;gap:var(--s-4);flex:none}
-.shell__logo{width:28px;height:28px;border-radius:var(--r-2);background:var(--accent);display:grid;place-items:center;color:var(--on-accent);font-family:var(--font-mono);font-size:var(--t-13);font-weight:var(--w-semi);flex:none}
+.shell__logo{width:28px;height:28px;border-radius:7px;background:#FFFFFF;object-fit:contain;padding:2px;box-sizing:border-box;display:block;flex:none}
 .shell__wordmark{font-family:var(--font-display);font-size:var(--t-16);font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink)}
 .shell__rule{width:1px;height:22px;background:var(--line);flex:none;margin:0 var(--s-2)}
 .shell__ws{min-width:0;flex:0 1 auto}

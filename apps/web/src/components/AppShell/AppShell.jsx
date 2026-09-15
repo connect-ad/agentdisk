@@ -46,7 +46,11 @@ export function AppShell({
     <div className={['shell', className].filter(Boolean).join(' ')} {...rest}>
       <header className="shell__top">
         <div className="shell__brand">
-          <span className="shell__logo" aria-hidden="true">A</span>
+          {/* The reference draws the mark itself in the shell header, the same
+              28px white tile the marketing header and the design-system sheet
+              use. The wordmark beside it carries the accessible name, so this
+              is decorative. */}
+          <img className="shell__logo" src="/agentdisk-logo.png" alt="" aria-hidden="true" />
           <span className="shell__wordmark">AgentDisk</span>
         </div>
 

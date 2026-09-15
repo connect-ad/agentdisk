@@ -426,17 +426,31 @@ describe('the real workspace ID is still shown where it is needed', () => {
    * hand them something nothing accepts — a regression introduced *by* the
    * readable-URL change, not one that predates it.
    */
-  it('the Dashboard chip shows the ID even though the URL says the slug', async () => {
-    const Dashboard = (await import('../src/routes/Dashboard.jsx')).default;
-    mount(<Dashboard />, BUSY, { path: '/w/:ws', entry: `/w/${BUSY_SLUG}` });
+  /**
+   * The chip moved from the Dashboard's heading into the shell's workspace
+   * strip, where the design puts it and where it is now on every screen rather
+   * than only the overview.
+   *
+   * Tested through `mountApp` rather than by rendering one component, which
+   * makes this a stronger check than it was: it exercises App.jsx resolving the
+   * URL segment to a workspace and passing that workspace's real `id`. The
+   * original regression was precisely a screen reading the URL segment — which
+   * was the ID until slugs arrived and would silently have become the slug the
+   * moment they did. It is the value people paste into an API call, so a slug
+   * there hands them something nothing accepts.
+   */
+  it('the workspace strip shows the ID even though the URL says the slug', async () => {
+    mountApp(`/w/${BUSY_SLUG}`);
     await waitFor(() => expect(screen.getByText(BUSY_ID)).toBeTruthy());
     expect(screen.queryByText(BUSY_SLUG)).toBeNull();
   });
 
   it('and the same on the second workspace', async () => {
-    const Dashboard = (await import('../src/routes/Dashboard.jsx')).default;
-    mount(<Dashboard />, QUIET, { path: '/w/:ws', entry: `/w/${QUIET_SLUG}` });
+    // The pair is the point: a chip hardcoded to one workspace passes the test
+    // above and fails this one.
+    mountApp(`/w/${QUIET_SLUG}`);
     await waitFor(() => expect(screen.getByText(QUIET_ID)).toBeTruthy());
+    expect(screen.queryByText(QUIET_SLUG)).toBeNull();
   });
 });
 

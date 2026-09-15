@@ -33,6 +33,7 @@ const Dashboard = (await import('../src/routes/Dashboard.jsx')).default;
 const Settings = (await import('../src/routes/Settings.jsx')).default;
 const McpConnection = (await import('../src/routes/McpConnection.jsx')).default;
 const AccountMenu = (await import('../src/components-local/AccountMenu.jsx')).default;
+const WorkspaceStats = (await import('../src/components-local/WorkspaceStats.jsx')).default;
 
 afterEach(cleanup);
 
@@ -116,26 +117,35 @@ function mount(ui, fixture, { auth } = {}) {
 
 /* ------------------------- 18 #1 · Dashboard agents ----------------------- */
 
-describe('Dashboard agents tile', () => {
+describe('Agents figure', () => {
+  /**
+   * The figure moved, the guarantee did not.
+   *
+   * These four cards were on the Dashboard; the design puts them in the shell
+   * above the tab bar, so they are on every screen and WorkspaceStats owns
+   * them now. The behaviour under test is unchanged and is the one doc 18
+   * raised: the count is real for both workspaces, and the fixed placeholder
+   * that made them render identically never comes back.
+   */
   const tile = async () => {
-    const label = await screen.findByText('Agents');
-    return label.closest('a') ?? label.parentElement;
+    const label = await screen.findByText('AGENTS');
+    return label.closest('.wstat') ?? label.parentElement;
   };
 
   it('counts the workspace that has an agent', async () => {
-    mount(<Dashboard />, WITH);
+    mount(<WorkspaceStats />, WITH);
     await waitFor(async () => expect((await tile()).textContent).toContain('1'));
     expect((await tile()).textContent).toContain('active');
   });
 
   it('says zero for the workspace that has none', async () => {
-    mount(<Dashboard />, WITHOUT);
+    mount(<WorkspaceStats />, WITHOUT);
     await waitFor(async () => expect((await tile()).textContent).toContain('No agents yet'));
   });
 
   it('never renders the placeholder that used to be there', async () => {
-    mount(<Dashboard />, WITH);
-    await screen.findByText('Agents');
+    mount(<WorkspaceStats />, WITH);
+    await screen.findByText('AGENTS');
     // The exact string that made a workspace with an agent and one without
     // render identically.
     expect(screen.queryByText('Not built yet')).toBeNull();

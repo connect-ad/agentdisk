@@ -34,6 +34,7 @@ const Settings = (await import('../src/routes/Settings.jsx')).default;
 const McpConnection = (await import('../src/routes/McpConnection.jsx')).default;
 const AccountMenu = (await import('../src/components-local/AccountMenu.jsx')).default;
 const WorkspaceStats = (await import('../src/components-local/WorkspaceStats.jsx')).default;
+const { WorkspaceUsageProvider } = await import('../src/lib/usage.jsx');
 
 afterEach(cleanup);
 
@@ -106,11 +107,16 @@ function mount(ui, fixture, { auth } = {}) {
   };
   // A real `/w/:ws` route, so `useParams().ws` resolves and the links these
   // screens build point at the workspace rather than at `/w/undefined`.
+  // The shell owns the usage fetch now, so anything reading it — the stats
+  // band, the Layer 1 plan segment — needs the provider above it, exactly as
+  // `WorkspaceLayout` mounts it. Still only the API client is stubbed.
   return render(
     <MemoryRouter initialEntries={[`/w/${fixture.workspaceId}/x`]}>
-      <Routes>
-        <Route path="/w/:ws/x" element={ui} />
-      </Routes>
+      <WorkspaceUsageProvider>
+        <Routes>
+          <Route path="/w/:ws/x" element={ui} />
+        </Routes>
+      </WorkspaceUsageProvider>
     </MemoryRouter>
   );
 }

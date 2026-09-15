@@ -1,6 +1,6 @@
 import React from 'react';
 import { useWorkspace } from '../lib/workspace.jsx';
-import { useResource } from '../lib/useResource.js';
+import { useWorkspaceUsage } from '../lib/usage.jsx';
 
 /**
  * Layer 2 of the design: the workspace's headline figures, on every screen.
@@ -42,24 +42,12 @@ function formatCount(n, unit) {
   return { value: n.toLocaleString(), unit };
 }
 
-/**
- * Two calls, once, for the whole shell.
- *
- * `whoami` carries storage / files / requests; the agent count has its own
- * endpoint. Both are fetched here rather than per screen, so navigating between
- * tabs costs nothing — the overview used to make this same pair for itself.
- */
-const loadUsage = async (api, workspaceId) => {
-  const [me, agents] = await Promise.all([
-    api.whoami(workspaceId),
-    api.listAgents(workspaceId),
-  ]);
-  return { me, agents: agents.agents ?? [] };
-};
-
 export default function WorkspaceStats() {
   const { workspaceId } = useWorkspace();
-  const { status, data } = useResource(loadUsage);
+  /* The same two calls as before — whoami for storage / files / requests, and
+     the agent count from its own endpoint — but made once by the provider in
+     the shell, so the Layer 1 strip can read the plan off the same answer. */
+  const { status, data } = useWorkspaceUsage();
 
   // Nothing at all until the figures are real. A band of zeros is
   // indistinguishable from an empty workspace, and this sits on every screen.
@@ -150,9 +138,26 @@ export default function WorkspaceStats() {
                   <span>{c.limitLabel}</span>
                 </div>
               </div>
+            ) : c.note ? (
+              /* The design gives a tile with no quota a trend line instead of a
+                 meter: a rising arrow in --ok, then the figure in body type.
+                 The arrow only appears beside an actual count — the plan-name
+                 fallback below is not a delta and must not be drawn as one. */
+              <div className="wstat__delta">
+                <svg
+                  className="wstat__deltaico"
+                  width="12" height="12" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2.6"
+                  strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+                >
+                  <path d="M4 15l5-5 4 3 7-7" />
+                  <path d="M20 6v5h-5" />
+                </svg>
+                <span>{c.note}</span>
+              </div>
             ) : (
               <div className="wstat__meterfoot wstat__meterfoot--bare">
-                <span>{c.note ?? (plan ? `on ${plan}` : '')}</span>
+                <span>{plan ? `on ${plan}` : ''}</span>
               </div>
             )}
           </div>

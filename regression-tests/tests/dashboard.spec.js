@@ -19,7 +19,12 @@ import { workspaceRoot } from '../lib-ws.mjs';
  * that nav is a sidebar or a tab bar is the re-theme's business.
  */
 const SCREENS = [
-  { sub: '', name: 'overview', label: 'Dashboard', expect: /storage used/i },
+  // `Overview`, not `Dashboard` — the nav entry was renamed, and the marker is
+  // "Quick start" because the four stat tiles this used to look for (/storage
+  // used/i) moved out of <main> and into the shell, where they now sit above
+  // the tab bar on every screen. A marker inside the shell would pass on all
+  // eleven routes, which is the opposite of what this table is for.
+  { sub: '', name: 'overview', label: 'Overview', expect: /quick start/i },
   { sub: '/files', name: 'files', label: 'Files', expect: /sort:/i },
   { sub: '/activity', name: 'activity', label: 'Activity', expect: /actor:/i },
   { sub: '/agents', name: 'agents', label: 'Agent identities', expect: /identities your ai systems use/i },

@@ -595,6 +595,12 @@
   margin-top:var(--s-3);font-family:var(--font-mono);font-size:var(--t-10);
   color:var(--ink-3)}
 .wstat__meterfoot--bare{margin-top:var(--s-5)}
+/* The no-quota tile's trend line, from the design: a rising arrow in --ok
+   followed by the figure in body type, on a 22px line so a tile with a trend
+   and a tile with a meter end at the same height. */
+.wstat__delta{margin-top:var(--s-5);display:flex;align-items:center;gap:var(--s-3);height:22px}
+.wstat__deltaico{flex:none;color:var(--ok)}
+.wstat__delta span{font-size:var(--t-12);color:var(--ink-2)}
 
 @media (max-width:1080px){
   .shell__statsinner{grid-template-columns:repeat(2,minmax(0,1fr));

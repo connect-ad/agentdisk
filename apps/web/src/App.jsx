@@ -32,6 +32,7 @@ import WorkspaceIdChip from './components-local/WorkspaceIdChip.jsx';
 import WorkspaceStats from './components-local/WorkspaceStats.jsx';
 import { useAuth } from './lib/auth.jsx';
 import { useWorkspace } from './lib/workspace.jsx';
+import { WorkspaceUsageProvider, useWorkspacePlan } from './lib/usage.jsx';
 
 /**
  * Sidebar navigation — doc 03 §7.3. Three groups: workspace, agent access, account.
@@ -93,6 +94,56 @@ function activeId(pathname, wsRoot) {
 /**
  * The authenticated workspace shell. Every in-app screen renders inside this.
  */
+/**
+ * Layer 1 of the design: the workspace info strip — OWNER, WORKSPACE ID, PLAN.
+ *
+ * Split out of `WorkspaceLayout` so it renders *inside* `WorkspaceUsageProvider`
+ * and can read the plan from the `whoami` the stats band already fetches. The
+ * workspace record from `GET /v1/workspaces` carries id, name, slug and role
+ * and no plan, which is why this segment never appeared: the markup was always
+ * here, behind a check on a field the endpoint does not return.
+ */
+function InfoStrip({ open, user, wsRoot }) {
+  const plan = useWorkspacePlan();
+
+  return (
+    <div className="shell__stripinner">
+      {/* The design leads with the owner. `role` is this person's role in
+          this workspace, which is what the API actually returns — the
+          design's "OWNER · Rina Kessler" names the workspace's owner, and
+          no endpoint reports who that is. So this says what is true: your
+          role, and you. */}
+      <span className="shell__stripitem">
+        <span className="shell__striplabel">{(open.role ?? 'member').toUpperCase()}</span>
+        <span className="avatar" aria-hidden="true">
+          {(user.name || user.email || 'U').slice(0, 1).toUpperCase()}
+        </span>
+        <span className="ad-truncate">{user.name}</span>
+      </span>
+      <span className="shell__stripsep" aria-hidden="true" />
+      <span className="shell__stripitem">
+        <span className="shell__striplabel">WORKSPACE ID</span>
+        {/* The ws_... ID, never the slug — this is the value people paste
+            into an API call. */}
+        <WorkspaceIdChip workspaceId={open.id} />
+      </span>
+      {/* Held back until whoami answers rather than rendered against a
+          placeholder: a plan name is the kind of thing somebody acts on, and a
+          wrong one for half a second is worse than a late one. */}
+      {plan ? (
+        <>
+          <span className="shell__stripsep" aria-hidden="true" />
+          <span className="shell__stripitem">
+            <span className="shell__striplabel">PLAN</span>
+            <span className="shell__stripplan">{plan}</span>
+            <Link to={`${wsRoot}/settings`} className="shell__striplink">Change</Link>
+          </span>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function WorkspaceLayout() {
   const navigate = useNavigate();
   const { ws } = useParams();
@@ -194,6 +245,7 @@ function WorkspaceLayout() {
   };
 
   return (
+    <WorkspaceUsageProvider>
     <AppShell
       nav={navWithHrefs}
       active={active}
@@ -230,39 +282,7 @@ function WorkspaceLayout() {
         if (item.external) { window.location.assign(item.href); return; }
         navigate(wsRoot + item.path);
       }}
-      infoStrip={
-        <div className="shell__stripinner">
-          {/* The design leads with the owner. `role` is this person's role in
-              this workspace, which is what the API actually returns — the
-              design's "OWNER · Rina Kessler" names the workspace's owner, and
-              no endpoint reports who that is. So this says what is true: your
-              role, and you. */}
-          <span className="shell__stripitem">
-            <span className="shell__striplabel">{(open.role ?? 'member').toUpperCase()}</span>
-            <span className="avatar" aria-hidden="true">
-              {(USER.name || USER.email || 'U').slice(0, 1).toUpperCase()}
-            </span>
-            <span className="ad-truncate">{USER.name}</span>
-          </span>
-          <span className="shell__stripsep" aria-hidden="true" />
-          <span className="shell__stripitem">
-            <span className="shell__striplabel">WORKSPACE ID</span>
-            {/* The ws_... ID, never the slug — this is the value people paste
-                into an API call. */}
-            <WorkspaceIdChip workspaceId={open.id} />
-          </span>
-          {open.plan ? (
-            <>
-              <span className="shell__stripsep" aria-hidden="true" />
-              <span className="shell__stripitem">
-                <span className="shell__striplabel">PLAN</span>
-                <span className="shell__stripplan">{open.plan}</span>
-                <Link to={`${wsRoot}/settings`} className="shell__striplink">Change</Link>
-              </span>
-            </>
-          ) : null}
-        </div>
-      }
+      infoStrip={<InfoStrip open={open} user={USER} wsRoot={wsRoot} />}
       statsBand={<WorkspaceStats />}
       topbarActions={
         <>
@@ -274,6 +294,7 @@ function WorkspaceLayout() {
     >
       <Outlet />
     </AppShell>
+    </WorkspaceUsageProvider>
   );
 }
 

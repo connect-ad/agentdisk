@@ -571,7 +571,7 @@
    Sits between the info strip and the tab bar, so it is on every screen. */
 .shell__stats{background:var(--surface-2);border-bottom:1px solid var(--line);flex:none}
 .shell__statsinner{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
-  gap:var(--s-5);padding:var(--s-6) var(--s-7)}
+  gap:var(--s-5);padding:var(--s-6) var(--gutter)}
 .wstat{background:var(--surface);border:1px solid var(--line);
   border-radius:var(--r-3);padding:var(--s-6);min-width:0}
 .wstat__head{display:flex;align-items:center;gap:var(--s-4);margin-bottom:var(--s-4)}
@@ -603,14 +603,15 @@
 .wstat__delta span{font-size:var(--t-12);color:var(--ink-2)}
 
 @media (max-width:1080px){
-  .shell__statsinner{grid-template-columns:repeat(2,minmax(0,1fr));
-    padding:var(--s-5)}
+  /* Only the grid changes. The padding used to collapse to 12px on all four
+     sides here; the reference keeps this band at 16px top and bottom at every
+     breakpoint and lets the shared gutter handle the sides. */
+  .shell__statsinner{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media (max-width:700px){
   /* The design scrolls these horizontally rather than stacking four tall
      cards above every screen's content. */
-  .shell__statsinner{display:flex;overflow-x:auto;scrollbar-width:none;
-    padding:var(--s-5)}
+  .shell__statsinner{display:flex;overflow-x:auto;scrollbar-width:none}
   .shell__statsinner::-webkit-scrollbar{display:none}
   .wstat{flex:0 0 196px}
 }

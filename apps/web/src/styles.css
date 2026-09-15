@@ -162,6 +162,14 @@
   --nav-w-collapsed:56px; /* @kind spacing */
   --topbar-h:58px; /* @kind spacing */
   --measure:68ch; /* @kind other */
+  /* The shell's bounded column. The reference draws the whole dashboard inside
+     one sheet — `width: 1180px, margin: 0 auto` (AgentDisk Dashboard.dc.html,
+     rootStyle) — and every band inside it shares one wrapper, `wrap()`, whose
+     only side dimension is a pad of 32 / 24 / 16px. So both values below are
+     literal reference numbers, and one gutter token means the bar, strip,
+     stats, tabs and content cannot fall out of alignment with each other. */
+  --shell-w:1180px; /* @kind spacing */
+  --gutter:32px; /* @kind spacing */
 }
 
 /* ==========================================================================
@@ -583,10 +591,24 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
 /* ==========================================================================
    App shell
    ========================================================================== */
-.shell{display:flex;flex-direction:column;min-height:100vh;background:var(--paper)}
+/* The reference's breakpoints, named in the Design System file: mobile < 700,
+   tablet 700–1079, desktop >= 1080. The gutter is the one thing every band
+   reads, so it changes here and nowhere else. */
+@media (max-width:1080px){ :root{--gutter:24px} }
+@media (max-width:700px){ :root{--gutter:16px} }
+
+/* The column. Below desktop the sheet fills its frame, so there is nothing to
+   centre and no edge to draw; from 1080 up the bands stop at 1180px and the
+   page ground shows either side of them, which is the shape the reference has
+   always drawn. The edge is --line — the same token every horizontal rule in
+   the shell already uses, so the column closes with the rules that meet it. */
+.shell{display:flex;flex-direction:column;min-height:100vh;width:100%;max-width:var(--shell-w);margin:0 auto;background:var(--paper)}
+@media (min-width:1081px){
+  .shell{border-left:1px solid var(--line);border-right:1px solid var(--line)}
+}
 
 /* --- Layer 0: top bar --- */
-.shell__top{display:flex;align-items:center;gap:var(--s-4);min-height:var(--topbar-h);padding:var(--s-3) var(--s-7);border-bottom:1px solid var(--line);background:var(--surface);position:sticky;top:0;z-index:40;flex:none}
+.shell__top{display:flex;align-items:center;gap:var(--s-4);min-height:var(--topbar-h);padding:var(--s-3) var(--gutter);border-bottom:1px solid var(--line);background:var(--surface);position:sticky;top:0;z-index:40;flex:none}
 .shell__brand{display:flex;align-items:center;gap:var(--s-4);flex:none}
 .shell__logo{width:28px;height:28px;border-radius:7px;background:#FFFFFF;object-fit:contain;padding:2px;box-sizing:border-box;display:block;flex:none}
 .shell__wordmark{font-family:var(--font-display);font-size:var(--t-16);font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink)}
@@ -601,14 +623,14 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
 
 /* --- Layer 1: workspace info strip --- */
 .shell__strip{background:var(--surface-2);border-bottom:1px solid var(--line);flex:none}
-.shell__stripinner{display:flex;align-items:center;gap:var(--s-5);padding:var(--s-4) var(--s-7);flex-wrap:wrap;min-width:0}
+.shell__stripinner{display:flex;align-items:center;gap:var(--s-5);padding:var(--s-4) var(--gutter);flex-wrap:wrap;min-width:0}
 .shell__stripitem{display:flex;align-items:center;gap:var(--s-3);min-width:0}
 .shell__striplabel{font-family:var(--font-mono);font-size:var(--t-10);letter-spacing:var(--tr-caps);color:var(--ink-3);flex:none}
 .shell__stripsep{width:1px;height:16px;background:var(--line);flex:none}
 
 /* --- Layer 3: tab bar --- */
 .shell__tabs{background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:var(--topbar-h);z-index:30;flex:none}
-.shell__tablist{display:flex;gap:var(--s-1);padding:0 var(--s-7);overflow-x:auto;scrollbar-width:none}
+.shell__tablist{display:flex;gap:var(--s-1);padding:0 var(--gutter);overflow-x:auto;scrollbar-width:none}
 .shell__tablist::-webkit-scrollbar{display:none}
 .shell__tab{display:flex;align-items:center;gap:var(--s-3);height:42px;padding:0 var(--s-5);font-size:var(--t-13);font-weight:var(--w-med);color:var(--ink-2);text-decoration:none;white-space:nowrap;flex:none;box-shadow:inset 0 -2px 0 0 transparent;transition:color var(--d-1) var(--ease),box-shadow var(--d-1) var(--ease)}
 .shell__tab:hover{color:var(--ink);text-decoration:none}
@@ -636,7 +658,7 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
    the design shows the plan badge in that space rather than the role. */
 .shell__wsbtn--bar .shell__wsmeta{display:none}
 
-.shell__page{flex:1;padding:var(--s-8) var(--s-7);min-width:0;display:flex;flex-direction:column;gap:var(--s-7)}
+.shell__page{flex:1;padding:var(--s-8) var(--gutter);min-width:0;display:flex;flex-direction:column;gap:var(--s-7)}
 .shell__page--flush{padding:0}
 .shell__burger{display:none}
 .avatar{width:24px;height:24px;border-radius:var(--r-full);background:var(--accent-soft-2);color:var(--accent-ink);display:grid;place-items:center;font-size:var(--t-11);font-weight:var(--w-semi);flex:none;border:1px solid var(--accent-line)}
@@ -657,10 +679,11 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
 @media (max-width:900px){
   /* No drawer to open: the tab bar scrolls horizontally instead, which is how
      the design handles narrow widths. */
-  .shell__page{padding:var(--s-6) var(--s-5)}
-  .shell__top{padding:var(--s-3) var(--s-5)}
-  .shell__tablist{padding:0 var(--s-5)}
-  .shell__stripinner{padding:var(--s-4) var(--s-5)}
+  /* Side padding is the gutter's job now, at the reference's own breakpoints —
+     this block used to restate it at 12px from 900px down, which is both a
+     narrower gutter than the reference draws and a fourth breakpoint it does
+     not have. Only the vertical tightening belongs here. */
+  .shell__page{padding:var(--s-6) var(--gutter)}
   .shell__wordmark{display:none}
   .shell__wsbtn--bar{max-width:180px}
   .btn--md,.btn--lg{min-height:38px}

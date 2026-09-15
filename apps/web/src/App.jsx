@@ -10,6 +10,7 @@ import ApiKeys from './routes/ApiKeys.jsx';
 import Usage from './routes/Usage.jsx';
 import Settings from './routes/Settings.jsx';
 import Profile from './routes/Profile.jsx';
+import Support from './routes/Support.jsx';
 import {
   NotFound, Forbidden, ServerError, Maintenance,
   Gone, BadRequest, RateLimited, NotModified, MovedPermanently, Unauthorized,
@@ -289,6 +290,7 @@ export default function App() {
         <Route path="usage" element={<Usage />} />
         <Route path="settings" element={<Settings />} />
         <Route path="profile" element={<Profile />} />
+        <Route path="support" element={<Support />} />
       </Route>
       </Route>
       </Route>

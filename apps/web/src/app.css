@@ -545,3 +545,24 @@
 .accent-swatch--blue{background:#2563EB}
 .wsx__grouplabel{font-family:var(--font-mono);font-size:var(--t-10);
   letter-spacing:var(--tr-caps);color:var(--ink-3);padding:var(--s-3) var(--s-4) var(--s-2)}
+
+/* A panel that frames a destructive action. The design outlines the
+   delete-account card in the danger tone; Panel has no tone prop, so this is
+   the modifier rather than an unknown prop spread onto the section. */
+.panel--danger{border-color:var(--danger-line)}
+.panel--danger .panel__title{color:var(--danger-ink)}
+
+/* --- support (routes/Support.jsx) --- */
+.sup__topics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:var(--s-4)}
+.sup__topic{display:flex;align-items:center;gap:var(--s-5);width:100%;
+  padding:var(--s-5) var(--s-6);border-radius:var(--r-3);cursor:pointer;
+  text-align:left;background:var(--surface);border:1px solid var(--line);
+  transition:border-color var(--d-1) var(--ease),background var(--d-1) var(--ease)}
+.sup__topic:hover{border-color:var(--line-2)}
+.sup__topic.is-on{background:var(--accent-soft);border-color:var(--accent-line)}
+.sup__radio{width:15px;height:15px;flex:none;border-radius:var(--r-full);
+  border:1.5px solid var(--line-2);background:transparent}
+.sup__radio.is-on{border:4.5px solid var(--accent);background:var(--surface)}
+.sup__topiclabel{font-size:var(--t-13);color:var(--ink);min-width:0}
+@media (max-width:700px){ .sup__topics{grid-template-columns:minmax(0,1fr)} }

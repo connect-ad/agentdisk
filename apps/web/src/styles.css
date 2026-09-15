@@ -170,6 +170,10 @@
      stats, tabs and content cannot fall out of alignment with each other. */
   --shell-w:1180px; /* @kind spacing */
   --gutter:32px; /* @kind spacing */
+  /* The stage padding the reference sets around the sheet — `stageStyle`,
+     36px on the desktop frame — which is what puts the header on a gap rather
+     than against the top of the window. */
+  --sheet-gap:36px; /* @kind spacing */
 }
 
 /* ==========================================================================
@@ -603,8 +607,33 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
    always drawn. The edge is --line — the same token every horizontal rule in
    the shell already uses, so the column closes with the rules that meet it. */
 .shell{display:flex;flex-direction:column;min-height:100vh;width:100%;max-width:var(--shell-w);margin:0 auto;background:var(--paper)}
+
 @media (min-width:1081px){
-  .shell{border-left:1px solid var(--line);border-right:1px solid var(--line)}
+  /* The sheet, as the reference draws it: standing off the page ground with a
+     1px edge all the way round and a 14px corner. --r-4 is already that 14px
+     — the radius comment above calls it "the sheet and modal" — and the gap is
+     the stage padding the reference sets around the sheet (36px; 28px on the
+     narrow frame, which never applies here because below 1080 the sheet fills
+     the frame and there is no stage to stand off).
+
+     min-height gives the gap back, so a short screen does not gain a scrollbar
+     purely from the two margins. */
+  .shell{
+    margin-block:var(--sheet-gap);
+    min-height:calc(100vh - (2 * var(--sheet-gap)));
+    border:1px solid var(--line);
+    border-radius:var(--r-4);
+    box-shadow:var(--sh-4);
+  }
+  /* The corner has to be cut twice. The reference clips it once, with
+     `overflow:hidden` on the sheet — but that also makes the sheet a scroll
+     container, and the top bar and tab strip stick to the viewport, so they
+     would stop sticking. That is behaviour, not presentation, and this pass
+     does not touch behaviour. So the header carries the same curve itself:
+     it is the one child painting its own background (--surface) over the
+     sheet's top corners. Everything below it is transparent and lets the
+     sheet's own --paper and border-radius show through. */
+  .shell__top{border-radius:var(--r-4) var(--r-4) 0 0}
 }
 
 /* --- Layer 0: top bar --- */

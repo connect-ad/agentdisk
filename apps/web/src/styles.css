@@ -717,7 +717,7 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
 /* The workspace switcher and account menu both sit in the top bar now, so
    their panels drop downward. .wsx__menu--up is the sidebar-era placement and
    is no longer used by either. */
-.shell__wsbtn--bar{width:auto;max-width:16.25rem;padding:var(--s-2) var(--s-4);border-radius:var(--r-2)}
+.shell__wsbtn--bar{width:auto;max-width:min(16.25rem,100%);padding:var(--s-2) var(--s-4);border-radius:var(--r-2)}
 
 /* --- Layer 1: workspace info strip --- */
 .shell__strip{background:var(--surface-2);border-bottom:1px solid var(--line);flex:none}
@@ -751,7 +751,12 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
 .shell__user:hover{background:var(--surface-2)}
 
 /* In the bar both are inline controls on one line, at the design's 34px. */
-.shell__wsbtn--bar{width:auto;max-width:16.25rem;height:2.125rem;padding:0 var(--s-4);border-radius:var(--r-2)}
+/* min(cap, 100%) rather than the cap alone. `width:auto` makes this button
+   size to its content, so a bare max-width lets it grow past .shell__ws once
+   that wrapper has been squeezed narrower than the cap — the button then
+   overflows its own parent and the name paints over the controls beside it.
+   Capping at 100% as well keeps it inside whatever room the wrapper has. */
+.shell__wsbtn--bar{width:auto;max-width:min(16.25rem,100%);height:2.125rem;padding:0 var(--s-4);border-radius:var(--r-2)}
 /* The role line is the sidebar's second row; a bar control is one line, and
    the design shows the plan badge in that space rather than the role. */
 .shell__wsbtn--bar .shell__wsmeta{display:none}
@@ -783,7 +788,7 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
      not have. Only the vertical tightening belongs here. */
   .shell__page{padding:var(--s-6) var(--gutter)}
   .shell__wordmark{display:none}
-  .shell__wsbtn--bar{max-width:11.25rem}
+  .shell__wsbtn--bar{max-width:min(11.25rem,100%)}
   .btn--md,.btn--lg{min-height:2.375rem}
   .icon-btn{width:2.125rem;height:2.125rem}
 }

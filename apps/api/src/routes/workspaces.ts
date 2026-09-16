@@ -28,6 +28,7 @@ import { ApiError, forbidden, validationError } from "../lib/errors";
 import { newId } from "../lib/ids";
 import { isSlugConflict, uniqueWorkspaceSlug } from "../lib/slug";
 import { listWorkspacesForUser } from "../db/user-lookup";
+import { deleteWorkspaceCascade } from "../db/workspace-cascade";
 import type { UserRow } from "../db/user-lookup";
 
 /** 30 days, matching the reset the sandbox bootstrap uses. */
@@ -143,9 +144,6 @@ const deleteSchema = z.object({
   name: z.string(),
 });
 
-/** R2 accepts up to 1000 keys in one delete. */
-const R2_DELETE_CHUNK = 1000;
-
 /**
  * DELETE /v1/workspaces/:id - destroy a workspace and everything in it.
  *
@@ -224,46 +222,11 @@ export async function deleteWorkspaceForUser(
     });
   }
 
-  // R2 before D1, matching the purge job's ordering and for its reason: the
-  // rows are the only record of which objects exist, so losing them first
-  // orphans bytes that nothing can ever find again. A failure here leaves the
-  // workspace intact and retryable, which is the better half of the trade.
-  const objects = await db
-    .prepare(`SELECT r2_object_key FROM files WHERE workspace_id = ?`)
-    .bind(workspaceId)
-    .all<{ r2_object_key: string }>();
-
-  const keys = objects.results.map(row => row.r2_object_key);
-  for (let i = 0; i < keys.length; i += R2_DELETE_CHUNK) {
-    await files.delete(keys.slice(i, i + R2_DELETE_CHUNK));
-  }
-
-  // Every reference INTO the workspace is cleared before anything is removed.
-  // Within one statement SQLite deletes rows in an arbitrary order and checks
-  // foreign keys immediately, so a self-referencing tree (folders.parent_folder_id)
-  // or one referenced from outside it (files.folder_id) fails whichever way the
-  // DELETE is written - the same trap `deleteRecursive` documents.
-  await db.batch([
-    db.prepare(`UPDATE files SET folder_id = NULL WHERE workspace_id = ?`).bind(workspaceId),
-    db.prepare(`UPDATE folders SET parent_folder_id = NULL WHERE workspace_id = ?`).bind(workspaceId),
-    db
-      .prepare(
-        `DELETE FROM file_tags
-          WHERE file_id IN (SELECT id FROM files WHERE workspace_id = ?)`
-      )
-      .bind(workspaceId),
-    db.prepare(`DELETE FROM files WHERE workspace_id = ?`).bind(workspaceId),
-    db.prepare(`DELETE FROM folders WHERE workspace_id = ?`).bind(workspaceId),
-    // Keys before agents: api_keys.agent_id points at agents.
-    db.prepare(`DELETE FROM api_keys WHERE workspace_id = ?`).bind(workspaceId),
-    db.prepare(`DELETE FROM agents WHERE workspace_id = ?`).bind(workspaceId),
-    db.prepare(`DELETE FROM webhooks WHERE workspace_id = ?`).bind(workspaceId),
-    db.prepare(`DELETE FROM audit_events WHERE workspace_id = ?`).bind(workspaceId),
-    // Only the rows naming this workspace. An org-wide membership has a NULL
-    // workspace_id and grants the other workspaces on the same bill.
-    db.prepare(`DELETE FROM memberships WHERE workspace_id = ?`).bind(workspaceId),
-    db.prepare(`DELETE FROM workspaces WHERE id = ?`).bind(workspaceId),
-  ]);
+  // The ordering, the R2-before-D1 rule and the FK dance all live in
+  // deleteWorkspaceCascade now, shared with the claim merge's cleanup and the
+  // unclaimed sweep. The gates above are what make *this* caller a person's
+  // deliberate act; the cascade itself is the same operation in all three.
+  const { objectsDeleted } = await deleteWorkspaceCascade(db, files, workspaceId);
 
   // Logged, not audited, and that is forced rather than chosen: `audit_events`
   // is workspace-scoped by foreign key, so the one row describing a workspace's
@@ -275,10 +238,10 @@ export async function deleteWorkspaceForUser(
       message: "workspace deleted",
       workspaceId,
       userId: user.id,
-      files: keys.length,
+      files: objectsDeleted,
       at: new Date(now).toISOString(),
     })
   );
 
-  return json({ id: workspaceId, deleted: true, files: keys.length });
+  return json({ id: workspaceId, deleted: true, files: objectsDeleted });
 }

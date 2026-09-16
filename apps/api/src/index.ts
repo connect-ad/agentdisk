@@ -13,6 +13,7 @@ import { newId } from "./lib/ids";
 import { withAuth, type Requirement, type Handler } from "./middleware/auth";
 import { whoami } from "./routes/whoami";
 import { logoutAll } from "./routes/logout-all";
+import { claimWorkspace, previewClaim } from "./routes/claim";
 import { createWorkspace } from "./routes/create-workspace";
 import {
   createWorkspaceForUser,
@@ -75,6 +76,7 @@ import {
 } from "./routes/folders";
 import { readSigningConfig, type R2SigningConfig } from "./storage/presign";
 import { preflightResponse, withCorsHeaders } from "./lib/cors";
+import { expireUnclaimedWorkspaces } from "./jobs/sandbox-expiry";
 
 export interface Env {
   DB: D1Database;
@@ -127,8 +129,24 @@ export interface Env {
    */
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
-  /** Where Stripe's hosted portal returns the customer. Public configuration. */
+  /**
+   * Where Stripe's hosted portal returns the customer, and where a claim link
+   * points. Public configuration.
+   */
   DASHBOARD_URL?: string;
+
+  /**
+   * Whether the unclaimed-sandbox sweep actually deletes, or only reports.
+   *
+   * Absent or anything other than the exact string "true" means log-only, and
+   * that default is the safety property rather than a convenience: this
+   * environment already holds weeks of unclaimed sandboxes from earlier
+   * testing, every one of which is expired by the job's definition, so a
+   * delete-by-default deploy would destroy all of them on the first cron tick
+   * with no review and no undo. Read one TTL window of `sandbox expiry
+   * candidates` log lines first, then set this.
+   */
+  SANDBOX_EXPIRY_ENABLED?: string;
 
   /**
    * Encrypts staff TOTP secrets at rest (06 PART 16.16a). Staff login refuses
@@ -238,6 +256,7 @@ export default {
             waitUntil: (promise) => ctx.waitUntil(promise),
             queue: env.JOBS,
             firebase: firebaseConfig(env),
+            dashboardUrl: env.DASHBOARD_URL,
           },
           requirement,
           handler
@@ -267,6 +286,7 @@ export default {
               kv: env.CACHE,
               turnstileSecret: env.TURNSTILE_SECRET_KEY,
               allowedHostnames: env.TURNSTILE_ALLOWED_HOSTNAMES,
+              dashboardUrl: env.DASHBOARD_URL,
             });
           }
           // An API key is deliberately not accepted here: an agent key is
@@ -297,6 +317,60 @@ export default {
         return request.method === "GET"
           ? await listWorkspaces(env.DB, user)
           : await createWorkspaceForUser(request, env.DB, user, now);
+      }
+
+      // The claim link. Three path segments, where the routes above have one
+      // and two, so `index.ts`'s structural matching keeps them apart with no
+      // risk that a workspace named "claim" shadows this - a workspace is named
+      // by an opaque `ws_...` ID here, never by a word.
+      {
+        const match = /^\/v1\/workspaces\/claim\/([^/]+)$/.exec(url.pathname);
+        if (match !== null && (request.method === "GET" || request.method === "POST")) {
+          const token = decodeURIComponent(match[1] as string);
+          const now = Date.now();
+
+          // GET is genuinely public, and that is the design rather than an
+          // oversight. The token is the only thing that can name this
+          // workspace, so this is the same trust model as a signed download
+          // link - and a person following a claim link has usually never seen
+          // this product, so asking them to create an account before telling
+          // them what they would be claiming inverts the order of trust.
+          if (request.method === "GET") {
+            return await previewClaim(env.DB, token, now, env.DASHBOARD_URL);
+          }
+
+          // Claiming is a person's act. An API key is refused for the same
+          // reason it cannot delete a workspace: an agent credential that can
+          // decide who owns the workspace it lives in has acquired authority
+          // over the person who issued it.
+          const bearer = extractBearerToken(request);
+          if (bearer === null) throw unauthorized("no bearer token in the Authorization header");
+          if (isApiKeyToken(bearer)) throw unauthorized("api keys cannot claim workspaces");
+
+          const firebase = firebaseConfig(env);
+          if (firebase === null) {
+            throw unauthorized("no FIREBASE_PROJECT_ID configured; user tokens cannot be verified");
+          }
+          const { user } = await resolveVerifiedUser(bearer, {
+            db: env.DB,
+            cache: firebase.cache,
+            projectId: firebase.projectId,
+            now,
+          });
+
+          return await claimWorkspace(
+            request,
+            {
+              db: env.DB,
+              files: env.FILES,
+              signing: () => readSigningConfig(env),
+              requestId: id,
+              now,
+            },
+            user,
+            token
+          );
+        }
       }
 
       // DELETE /v1/workspaces/:id. Its own block rather than a branch of the
@@ -673,6 +747,44 @@ export default {
             JSON.stringify({
               level: "error",
               message: "reconcile run failed",
+              reason: err instanceof Error ? err.message : String(err),
+            })
+          );
+        }
+
+        // The third sweep. Its own try/catch, matching the two above, so one
+        // job failing cannot stop the others - and this one is the newest and
+        // the most likely to surprise.
+        //
+        // **Defaults to reporting, not deleting.** See SANDBOX_EXPIRY_ENABLED
+        // on Env: enabling deletion here without first reading a TTL window of
+        // candidate logs would destroy every unclaimed sandbox in this
+        // environment on the first tick.
+        try {
+          const expiry = await expireUnclaimedWorkspaces(
+            env.DB,
+            env.FILES,
+            now,
+            undefined,
+            undefined,
+            env.SANDBOX_EXPIRY_ENABLED !== "true"
+          );
+          console.log(
+            JSON.stringify({
+              level: "info",
+              message: "sandbox expiry run",
+              dryRun: expiry.dryRun,
+              examined: expiry.examined,
+              workspacesDeleted: expiry.workspacesDeleted,
+              objectsDeleted: expiry.objectsDeleted,
+              failed: expiry.failed,
+            })
+          );
+        } catch (err) {
+          console.log(
+            JSON.stringify({
+              level: "error",
+              message: "sandbox expiry run failed",
               reason: err instanceof Error ? err.message : String(err),
             })
           );

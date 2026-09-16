@@ -171,6 +171,35 @@ export class WorkspaceScopedStorage {
     });
   }
 
+  /**
+   * The object's bytes as a stream, for a caller that must move them somewhere
+   * this instance cannot name.
+   *
+   * Exists only for the claim merge (routes/claim.ts). `copy` above is the
+   * in-workspace answer and remains the one to reach for; this is the read half
+   * of a transfer whose write half belongs to a *different* bound instance, so
+   * the two halves cannot be expressed by one object. Still workspace-bound:
+   * the key is built from the constructor's workspace exactly as everywhere
+   * else, so this can only ever read this tenant's bytes.
+   */
+  async getBody(fileId: string): Promise<R2ObjectBody | null> {
+    return this.bucket.get(this.key(fileId));
+  }
+
+  /**
+   * Write a stream into this workspace's key for a file.
+   *
+   * Streamed rather than buffered, for the reason `copy` gives: a transfer must
+   * not be bounded by how much of a file fits in a Worker's memory.
+   */
+  async putStream(
+    fileId: string,
+    body: ReadableStream,
+    options: { httpMetadata?: R2HTTPMetadata }
+  ): Promise<void> {
+    await this.bucket.put(this.key(fileId), body, { httpMetadata: options.httpMetadata });
+  }
+
   async delete(fileId: string): Promise<void> {
     await this.bucket.delete(this.key(fileId));
   }
@@ -183,4 +212,48 @@ export class WorkspaceScopedStorage {
   prefix(): string {
     return workspacePrefix(this.workspaceId);
   }
+}
+
+/**
+ * Move one file's bytes from one workspace's storage into another's.
+ *
+ * **This is the codebase's one sanctioned cross-tenant storage operation, and
+ * it is written this way on purpose.** Every repository and storage class here
+ * binds its workspace in the constructor precisely so that no method can be
+ * handed an argument naming a second tenant. A merge genuinely needs two
+ * tenants, and there were two ways to allow it: relax the binding so one
+ * instance could take a workspace ID again, or require the caller to have
+ * already constructed both bound instances and hand them over explicitly. The
+ * first would weaken the guarantee for every other caller in the product to
+ * serve one. This is the second.
+ *
+ * The signature is the safety property: there is no workspace ID in it. A
+ * caller can only reach across a boundary it has already legitimately opened
+ * both sides of, and both sides still build their own keys from their own
+ * constructor-bound workspace.
+ *
+ * **Copy before delete, always.** The source object is removed only after the
+ * destination reports a successful write. This is the opposite of the purge
+ * job's delete-then-row ordering, and deliberately so: that job is discarding
+ * data for good, where a briefly-orphaned object costs nothing, whereas this is
+ * relocating data, where the destination must exist before the source stops
+ * existing. A failure here leaves a duplicate, which is recoverable; the other
+ * order loses the file.
+ */
+export async function transferObject(
+  source: WorkspaceScopedStorage,
+  sourceFileId: string,
+  destination: WorkspaceScopedStorage,
+  destinationFileId: string
+): Promise<void> {
+  const object = await source.getBody(sourceFileId);
+  if (object === null) {
+    throw new ApiError("CONFLICT", "This file's contents are no longer available.", {
+      internalReason: `transfer source object missing for ${sourceFileId}`,
+    });
+  }
+
+  await destination.putStream(destinationFileId, object.body, {
+    httpMetadata: object.httpMetadata,
+  });
 }

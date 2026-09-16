@@ -16,7 +16,12 @@
  */
 
 import { ApiError, forbidden, unauthorized, validationError } from "../lib/errors";
-import { limitsFor, type PlanLimits } from "../lib/plans";
+import { isSandboxWorkspace, limitsForWorkspace, type PlanLimits } from "../lib/plans";
+import {
+  UNCLAIMED_TTL_MS,
+  sandboxQuotaWarning,
+  type SandboxQuotaWarning,
+} from "../lib/claim";
 import { assertWithinQuota, type QuotaDemand } from "../lib/quota";
 import { createWorkspaceContext, type WorkspaceContext } from "../db/workspace-scoped";
 import { WorkspaceScopedStorage, type SigningSource } from "../storage/workspace-scoped";
@@ -79,6 +84,21 @@ export interface AuthContext {
    * else's account. Null for an API key - an agent has no "self" to act on.
    */
   self: SelfActions | null;
+  /**
+   * Where the dashboard lives, for a warning that wants to name the claim page.
+   */
+  dashboardUrl?: string;
+  /**
+   * A soft warning for a write that was allowed but is close to an unclaimed
+   * workspace's cap, or null.
+   *
+   * Set by `assertQuotaAndWarn` - never by a handler directly - and serialized
+   * onto the response by `withAuth` on the way out. Mutable because the quota
+   * demand is not known until the handler has parsed its own body: no route in
+   * this API declares `requirement.demand`, so the middleware cannot compute
+   * this before the handler runs.
+   */
+  sandboxWarning: SandboxQuotaWarning | null;
 }
 
 export interface SelfActions {
@@ -165,6 +185,11 @@ export interface WithAuthDeps {
    * missing Turnstile secret.
    */
   firebase: { cache: JwksCache; projectId: string } | null;
+  /**
+   * Where the dashboard lives, so a sandbox quota warning can point at the
+   * claim page. Optional: absent simply omits the link from the warning.
+   */
+  dashboardUrl?: string;
 }
 
 /**
@@ -249,7 +274,9 @@ export async function withAuth(
   // 5. Quota, and the account's standing with us (14 PART 29.4). The billing
   // row is only read for a request that intends to write - a read-only call
   // must not pay for a join it cannot be refused by.
-  const limits = limitsFor(workspace.plan_override, workspace.org_plan);
+  // Claim state, not just plan. An unclaimed sandbox is held to the tighter
+  // SANDBOX_LIMITS; everything else resolves exactly as before.
+  const limits = limitsForWorkspace(workspace);
   const demand = requirement.demand ?? {};
   const intendsWrite =
     (demand.bytes !== undefined && demand.bytes > 0) ||
@@ -293,6 +320,8 @@ export async function withAuth(
     members: new WorkspaceMembers(deps.db, identity.workspaceId),
     waitUntil: deps.waitUntil,
     queue: deps.queue,
+    sandboxWarning: null,
+    dashboardUrl: deps.dashboardUrl,
     self:
       identity.kind === "firebase_user"
         ? {
@@ -303,7 +332,90 @@ export async function withAuth(
   };
 
   // 6.
-  return handler(ctx, request);
+  const response = await handler(ctx, request);
+  // Read off the context, not a local: the handler is what computed it, beside
+  // its own quota check.
+  return attachSandboxWarning(response, ctx.sandboxWarning);
+}
+
+/**
+ * The hard quota block and the soft sandbox warning, as one call.
+ *
+ * Every write path calls this instead of `assertWithinQuota` directly, and the
+ * two being inseparable is the entire design. `backlog/017` records this
+ * product shipping an 80%/95% quota warning that lived only in the dashboard's
+ * own arithmetic, was never wired to the request path, and therefore lied about
+ * real usage. The defence against a second occurrence is not vigilance; it is
+ * that there is no way to perform the block without also computing the warning,
+ * from the same workspace row, the same limits and the same demand, in the same
+ * statement.
+ *
+ * Throws exactly what `assertWithinQuota` throws. On success it records the
+ * warning (or null) on the context, and `withAuth` attaches it to the response.
+ */
+export function assertQuotaAndWarn(ctx: AuthContext, demand: QuotaDemand): void {
+  assertWithinQuota(ctx.workspace, ctx.limits, demand, ctx.now);
+
+  // Only an unclaimed sandbox. A paying workspace near its limit is the
+  // dashboard's business, and an agent could not act on the advice anyway.
+  ctx.sandboxWarning = isSandboxWorkspace(ctx.workspace)
+    ? sandboxQuotaWarning({
+        workspaceId: ctx.workspaceId,
+        projected: {
+          bytes: ctx.workspace.storage_bytes_used + (demand.bytes ?? 0),
+          files: ctx.workspace.file_count + (demand.files ?? 0),
+        },
+        limits: { storageBytes: ctx.limits.storageBytes, fileCount: ctx.limits.fileCount },
+        dashboardUrl: ctx.dashboardUrl,
+        deletesAt: ctx.workspace.created_at + UNCLAIMED_TTL_MS,
+        now: ctx.now,
+      })
+    : null;
+}
+
+/**
+ * Put the sandbox warning on the way out, once, for every route.
+ *
+ * Done here rather than in each handler because "every write route remembers to
+ * include this" is precisely the kind of rule that holds for the three routes
+ * written the day it was introduced and fails for the fourth. There is exactly
+ * one write path through this middleware, so there is exactly one place the
+ * warning has to be attached.
+ *
+ * Both a header and a body field. The header is there for a caller that is not
+ * parsing the body - an agent streaming an upload result, say - and is cheap;
+ * the body field is what a normal client sees. The body is only rewritten for a
+ * successful JSON response, so a 204, a redirect or a stream passes through
+ * untouched, and a parse failure leaves the original response exactly as it was
+ * rather than turning a successful upload into a 500.
+ */
+async function attachSandboxWarning(
+  response: Response,
+  warning: SandboxQuotaWarning | null
+): Promise<Response> {
+  if (warning === null) return response;
+
+  const headers = new Headers(response.headers);
+  headers.set("x-agentdisk-quota-warning", `${warning.code}; ${warning.usedPercent}% ${warning.dimension}`);
+
+  const isJson = (headers.get("content-type") ?? "").includes("application/json");
+  if (!response.ok || !isJson) {
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  }
+
+  try {
+    const body = (await response.clone().json()) as unknown;
+    if (body === null || typeof body !== "object" || Array.isArray(body)) {
+      return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    }
+    return new Response(JSON.stringify({ ...(body as Record<string, unknown>), warning }), {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  } catch {
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  }
 }
 
 export { shouldTouchLastUsed, touchLastUsed };

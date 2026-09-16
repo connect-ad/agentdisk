@@ -23,12 +23,12 @@
 import { z } from "zod";
 import { ApiError, validationError } from "../lib/errors";
 import { basename, dirname, normalizePath } from "../lib/paths";
-import { assertFileSizeAllowed, assertWithinQuota } from "../lib/quota";
+import { assertFileSizeAllowed } from "../lib/quota";
 import { assertScope, assertScopedPath, scopeAllowsPath } from "../auth/scopes";
 import { newId } from "../lib/ids";
 import { MAX_INLINE_BYTES } from "../storage/workspace-scoped";
 import { DOWNLOAD_URL_TTL_SECONDS, UPLOAD_URL_TTL_SECONDS, redactPresigned } from "../storage/presign";
-import type { AuthContext } from "../middleware/auth";
+import { assertQuotaAndWarn, type AuthContext } from "../middleware/auth";
 import type { FileRow } from "../db/types";
 import { auditAndNotify } from "../lib/audit";
 
@@ -243,7 +243,7 @@ export async function createFile(ctx: AuthContext, request: Request): Promise<Re
 
   const declaredSize = inline !== null ? inline.byteLength : (body.sizeBytes as number);
   assertFileSizeAllowed(declaredSize, ctx.limits);
-  assertWithinQuota(ctx.workspace, ctx.limits, { bytes: declaredSize, files: 1 }, ctx.now);
+  assertQuotaAndWarn(ctx, { bytes: declaredSize, files: 1 });
 
   const fileId = newId("file", ctx.now);
   const row: FileRow = {
@@ -357,7 +357,7 @@ export async function completeFile(ctx: AuthContext, request: Request, fileId: s
   // orphaned in the bucket consuming storage nobody is accounting for.
   try {
     assertFileSizeAllowed(head.size, ctx.limits);
-    assertWithinQuota(ctx.workspace, ctx.limits, { bytes: head.size, files: 1 }, ctx.now);
+    assertQuotaAndWarn(ctx, { bytes: head.size, files: 1 });
   } catch (err) {
     await ctx.storage.delete(fileId);
     await ctx.db.files.markFailed(fileId, ctx.now);
@@ -552,7 +552,7 @@ export async function downloadFile(ctx: AuthContext, _request: Request, fileId: 
     });
   }
 
-  assertWithinQuota(ctx.workspace, ctx.limits, { egressBytes: row.size_bytes }, ctx.now);
+  assertQuotaAndWarn(ctx, { egressBytes: row.size_bytes });
 
   const url = await ctx.storage.downloadUrl(fileId);
   await ctx.db.counters.apply({ egressBytes: row.size_bytes }, ctx.now);

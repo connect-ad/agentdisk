@@ -89,6 +89,19 @@ export interface WorkspaceRow {
   egress_bytes_period: number;
   requests_period: number;
   period_reset_at: number;
+  /**
+   * When a real person took ownership. NULL means this is still an unclaimed
+   * sandbox - which decides both its limits (lib/plans.ts) and whether the
+   * unclaimed sweep may delete it (jobs/sandbox-expiry.ts).
+   */
+  claimed_at: number | null;
+  /**
+   * SHA-256 of the claim link's token, never the token. NULL for every
+   * workspace created before claiming existed, and for every one created by a
+   * signed-in person - who needs no link to reach what they already own.
+   */
+  claim_token_hash: string | null;
+  claim_token_expires_at: number | null;
   created_at: number;
   updated_at: number;
 }

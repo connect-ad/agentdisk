@@ -721,6 +721,66 @@
 .acct--support{max-width:40rem}
 .acct__sub{margin-top:calc(var(--s-3) * -1)}
 
+/* --- account rows (routes/Profile.jsx) ---
+   The reference draws Account as plain cards, not as Panels: no head bar, no
+   rule under a title, just a padded card with an h3 where one is needed — and
+   none at all on the first card, because the h2 above it is the screen's only
+   "Account". The Panel this replaces carried a second one inside it.
+   The row is the shape worth copying: a fixed 104px mono key, a value that
+   takes the rest and ellipsises, then the optional tag and Edit pinned right.
+   A fixed key column is what makes five rows read as a table rather than five
+   sentences, and it is why the design uses one. */
+.acctcard{border:1px solid var(--line);background:var(--surface);
+  border-radius:var(--r-3);padding:var(--s-6)}
+.acctcard--danger{border-color:var(--danger-line)}
+/* 15px and -0.01em are the reference's own h3. The type scale stops at 14.5
+   and its nearest tracking step is -0.025em, so both are pinned here with the
+   value they came from, the way .ds__qcard does for its 9px radius, rather
+   than bending two shared scales for one card. */
+.acctcard__h3{font-family:var(--font-display);font-size:0.9375rem;
+  font-weight:var(--w-semi);letter-spacing:-0.01em;color:var(--ink)}
+.acctcard--danger .acctcard__h3{color:var(--danger-ink)}
+.acctcard__body{margin-top:var(--s-5)}
+.acctcard__foot{margin-top:var(--s-6);display:flex;align-items:center;
+  gap:var(--s-5);flex-wrap:wrap}
+.acctcard__head{display:flex;align-items:center;gap:0.875rem;
+  padding-bottom:var(--s-6);border-bottom:1px solid var(--line)}
+/* Solid accent, not the soft-tinted .avatar the rest of the app uses at 24
+   and 32px: at 52px the soft version reads as an empty placeholder. */
+.acctcard__avatar{width:3.25rem;height:3.25rem;flex:0 0 3.25rem;
+  border-radius:var(--r-full);background:var(--accent);color:var(--on-accent);
+  display:grid;place-items:center;font-family:var(--font-display);
+  font-size:var(--t-18);font-weight:var(--w-semi);letter-spacing:var(--tr-none)}
+.acctcard__hint{margin-top:var(--s-3);font-size:var(--t-11-5);color:var(--ink-3)}
+.acctrow{display:flex;align-items:center;gap:0.875rem;padding:var(--s-5) 0;
+  border-bottom:1px solid var(--line)}
+.acctrow:last-child{border-bottom:0}
+.acctrow__k{width:6.5rem;flex:0 0 6.5rem;font-family:var(--font-mono);
+  font-size:var(--t-9-5);letter-spacing:var(--tr-caps);color:var(--ink-3)}
+.acctrow__v{flex:1;min-width:0;font-size:var(--t-13-5);color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acctrow__v--mono{font-family:var(--font-mono);font-size:var(--t-13)}
+.acctrow__v--quiet{color:var(--ink-3)}
+.acctrow__edit{flex:0 0 auto;background:transparent;border:0;padding:0;
+  font-family:var(--font-sans);font-size:var(--t-12-5);font-weight:var(--w-med);
+  color:var(--accent-ink);cursor:pointer}
+.acctrow__edit:hover{text-decoration:underline}
+/* An editing row stops being a row of text, so it drops the nowrap/ellipsis
+   the value carries and lets the field and its two buttons wrap on a narrow
+   screen instead of overflowing the card. */
+.acctrow--editing{align-items:flex-start}
+.acctrow__form{flex:1;min-width:0;display:flex;align-items:flex-end;
+  gap:var(--s-4);flex-wrap:wrap}
+.acctrow__field{flex:1;min-width:12rem}
+.sessrow{display:flex;align-items:center;gap:var(--s-5);padding:0.6875rem 0;
+  border-bottom:1px solid var(--line)}
+.sessrow:last-of-type{border-bottom:0}
+.sessrow__dev{display:block;font-size:var(--t-13);font-weight:var(--w-med);
+  color:var(--ink)}
+.sessrow__where{display:block;margin-top:var(--s-1);font-family:var(--font-mono);
+  font-size:var(--t-10-5);color:var(--ink-3)}
+.sessrow__when{flex:0 0 auto;font-size:var(--t-11-5);color:var(--ink-2)}
+
 /* --- billing hero (routes/SettingsTabs.jsx, BillingTab) ---
    The reference opens Billing on two cards side by side: an accent CURRENT
    PLAN card and a neutral one beside it. The chrome is what is borrowed, not

@@ -43,7 +43,7 @@ export default function Support() {
   const [body, setBody] = useState('');
 
   return (
-    <>
+    <div className="acct acct--support">
       <PageHead
         title="Support"
         subtitle="Tell us what broke and we will look at the same logs you can see."
@@ -107,6 +107,6 @@ export default function Support() {
           usually the fastest thing to quote.
         </p>
       </Panel>
-    </>
+    </div>
   );
 }

@@ -19,9 +19,22 @@ import { useWorkspaceUsage } from '../lib/usage.jsx';
  * ── Figures are real or absent ────────────────────────────────────────────
  * The design shows 39.1 GB, 12,481 objects, 4 identities and 1.94 M requests.
  * Those are mockup values. A card whose metric has no limit configured renders
- * without a meter rather than against an invented denominator, and the whole
- * band is hidden until the call resolves rather than showing zeros that look
- * like a real empty workspace.
+ * without a meter rather than against an invented denominator, and no tile
+ * shows a zero it has not been told — a band of zeros is indistinguishable
+ * from a real empty workspace.
+ *
+ * ── Why it no longer unmounts while loading ───────────────────────────────
+ * It used to satisfy that rule by returning null until the call resolved. The
+ * band is 118px of the page, above every screen's content, and `workspaceId`
+ * changing puts the fetch back into `loading` — so switching workspace removed
+ * the band, threw the whole page up by 118px, and dropped it back when the
+ * answer arrived. The rule is about not *stating* a figure, not about the tile
+ * existing: the four labels are static, so the tiles now hold their shape and
+ * spin where the number will be. Nothing claims a value it does not have, and
+ * nothing moves.
+ *
+ * A failed load keeps the same shape and shows an em dash. The screen inside
+ * the shell raises the error; the band's job is to not lie and to not jump.
  */
 
 function formatBytes(bytes) {
@@ -36,6 +49,20 @@ function formatBytes(bytes) {
   return { value: v >= 100 ? String(Math.round(v)) : v.toFixed(1), unit: units[u] };
 }
 
+/**
+ * The four tiles' labels and whether each carries a meter — the part of the
+ * band that is known before any request is made, and therefore the part that
+ * can hold the layout still while one is in flight. It mirrors the order and
+ * the shape of `cards` below; the two must stay in step or the tiles will
+ * change height when the figures land.
+ */
+const PLACEHOLDERS = [
+  { label: 'STORAGE', meter: true },
+  { label: 'FILES', meter: true },
+  { label: 'AGENTS', meter: false },
+  { label: 'REQUESTS THIS PERIOD', meter: true },
+];
+
 function formatCount(n, unit) {
   if (!Number.isFinite(n)) return { value: '—', unit: '' };
   if (n >= 1_000_000) return { value: (n / 1_000_000).toFixed(2), unit: 'M' };
@@ -49,9 +76,50 @@ export default function WorkspaceStats() {
      the shell, so the Layer 1 strip can read the plan off the same answer. */
   const { status, data } = useWorkspaceUsage();
 
-  // Nothing at all until the figures are real. A band of zeros is
-  // indistinguishable from an empty workspace, and this sits on every screen.
-  if (status !== 'loaded' || !workspaceId) return null;
+  // No workspace at all — the account area — has no figures to hold space for.
+  if (!workspaceId) return null;
+
+  if (status !== 'loaded') {
+    return (
+      <div className="shell__statsinner">
+        {PLACEHOLDERS.map(p => (
+          <div className="wstat wstat--pending" key={p.label} aria-busy={status === 'loading'}>
+            <div className="wstat__head">
+              <span className="wstat__label">{p.label}</span>
+            </div>
+            {/* The struts are how the tile keeps its exact height rather than
+                approximately: a hidden figure and unit in the same classes the
+                real ones use, so the row is built out of the same line boxes
+                instead of a min-height guessed at from the type scale. They
+                are aria-hidden and invisible — a measuring stick, not a value
+                anyone is shown or told. */}
+            <div className="wstat__figure">
+              <span className="wstat__value wstat__strut" aria-hidden="true">0</span>
+              {status === 'loading' ? (
+                <>
+                  <span className="spinner wstat__spinner" />
+                  <span className="sr-only">Loading</span>
+                </>
+              ) : (
+                <span className="wstat__value wstat__value--none">—</span>
+              )}
+            </div>
+            {/* The meter keeps its box so the tile is the same height either
+                way, but its numbers are the two things that would be invented,
+                so they are held as space rather than printed. */}
+            {p.meter ? (
+              <div className="wstat__meter">
+                <div className="ds__bar" />
+                <div className="wstat__meterfoot" aria-hidden="true"><span>&nbsp;</span></div>
+              </div>
+            ) : (
+              <div className="wstat__delta" aria-hidden="true" />
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   const usage = data?.me?.usage ?? {};
   const plan = data?.me?.workspace?.plan ?? null;

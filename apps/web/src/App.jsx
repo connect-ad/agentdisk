@@ -18,6 +18,7 @@ import {
 import { Sandbox } from './routes/Sandbox.jsx';
 import { Signup, VerifyEmail, ForgotPassword, ResetPassword, Login } from './routes/Auth.jsx';
 import { Landing, Pricing } from './routes/Marketing.jsx';
+import Claim from './routes/Claim.jsx';
 import { Terms, Privacy } from './routes/Legal.jsx';
 import Docs from './routes/Docs.jsx';
 import McpConnection from './routes/McpConnection.jsx';
@@ -27,7 +28,6 @@ import RequireAuth, { RequireWorkspace } from './lib/RequireAuth.jsx';
 import WorkspaceSwitcher from './components-local/WorkspaceSwitcher.jsx';
 import AccountMenu from './components-local/AccountMenu.jsx';
 import ThemeToggle from './components-local/ThemeToggle.jsx';
-import AccentPicker from './components-local/AccentPicker.jsx';
 import WorkspaceIdChip from './components-local/WorkspaceIdChip.jsx';
 import WorkspaceStats from './components-local/WorkspaceStats.jsx';
 import { useAuth } from './lib/auth.jsx';
@@ -286,7 +286,6 @@ function WorkspaceLayout() {
       statsBand={<WorkspaceStats />}
       topbarActions={
         <>
-          <AccentPicker />
           <ThemeToggle />
           {/* Hidden on mobile, where the reference drops it too
               (`showDocsLink: !mob`) — /docs is still reachable from the footer
@@ -310,6 +309,13 @@ export default function App() {
       <Route path="/docs" element={<Docs />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/privacy" element={<Privacy />} />
+      {/* Public on purpose: the preview half of this page works with no
+          account, because the claim token in the URL is the only thing that can
+          name the workspace. The page itself gates the act of claiming behind
+          sign-in, rather than RequireAuth gating the whole screen - which would
+          bounce a first-time visitor to /login before they could see what they
+          were being asked to sign up for. */}
+      <Route path="/claim/:token" element={<Claim />} />
       <Route element={<RequireAuth />}>
         <Route path="/app" element={<CurrentWorkspaceRedirect />} />
         {/* `/dashboard` is the shareable spelling of the same idea: a bookmark,

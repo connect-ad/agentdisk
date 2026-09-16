@@ -591,6 +591,32 @@
 .sup__topiclabel{font-size:var(--t-13);color:var(--ink);min-width:0}
 @media (max-width:875px){ .sup__topics{grid-template-columns:minmax(0,1fr)} }
 
+/* --- top progress bar (components-local/TopProgress.jsx) ---
+   Fixed to the viewport, above the sticky top bar, and outside the document
+   flow entirely: it must never be the reason something moves, since its whole
+   purpose is to report movement elsewhere. Two pixels tall — enough to read as
+   activity at the edge of vision, not enough to be a component.
+
+   The fill is indeterminate on purpose. Nothing here knows how many bytes are
+   left in a response, so a percentage would be invented; the easing instead
+   decelerates towards the end and never reaches it, which is what makes a
+   slow load look like progress rather than a hang. On completion it goes to
+   full width and fades, so the bar always ends by finishing. */
+.tprog{position:fixed;top:0;left:0;right:0;height:0.125rem;z-index:50;
+  pointer-events:none;overflow:hidden}
+.tprog__fill{height:100%;width:100%;background:var(--accent);
+  transform-origin:0 50%;transform:scaleX(0);
+  animation:tprog-run 8s var(--ease-out) forwards}
+@keyframes tprog-run{
+  0%{transform:scaleX(0)}
+  12%{transform:scaleX(0.35)}
+  35%{transform:scaleX(0.62)}
+  65%{transform:scaleX(0.82)}
+  100%{transform:scaleX(0.94)}
+}
+.tprog--done .tprog__fill{animation:none;transform:scaleX(1);opacity:0;
+  transition:transform var(--d-1) var(--ease-out),opacity var(--d-2) var(--ease) var(--d-1)}
+
 /* --- Layer 2: the workspace stats band (components-local/WorkspaceStats.jsx)
    Sits between the info strip and the tab bar, so it is on every screen. */
 .shell__stats{background:var(--surface-2);border-bottom:1px solid var(--line);flex:none}
@@ -613,7 +639,13 @@
 .wstat__value{font-family:var(--font-display);font-size:var(--t-34);
   font-weight:var(--w-semi);letter-spacing:var(--tr-mid);color:var(--ink);
   line-height:1;font-variant-numeric:tabular-nums}
-.wstat__unit{font-size:var(--t-12-5);font-weight:var(--w-med);color:var(--ink-2)}
+/* line-height 1, like the value beside it. Left at the body's 1.5 the unit's
+   half-leading hangs below the value's baseline and makes the figure row
+   almost a pixel taller than the same row without a unit — so REQUESTS, the
+   one tile with no unit, sat a pixel short of the other three and the band
+   changed height when the figures arrived. */
+.wstat__unit{font-size:var(--t-12-5);font-weight:var(--w-med);color:var(--ink-2);
+  line-height:1}
 .wstat__meter{margin-top:var(--s-5)}
 .wstat__meterfoot{display:flex;justify-content:space-between;
   margin-top:var(--s-3);font-family:var(--font-mono);font-size:var(--t-10-5);
@@ -625,6 +657,20 @@
 .wstat__delta{margin-top:var(--s-5);display:flex;align-items:center;gap:var(--s-3);height:1.375rem}
 .wstat__deltaico{flex:none;color:var(--ok)}
 .wstat__delta span{font-size:var(--t-11-5);color:var(--ink-2)}
+
+/* --- the same tile, before its figure exists ---
+   The band is 118px sitting above every screen's content, so it has to occupy
+   exactly the same space loading as loaded or the whole page jumps when the
+   answer lands. The figure row is pinned to the line box the value will make
+   — --t-34 at line-height 1, so 2.125rem — and the meter keeps its track and
+   the height of its caption line while printing neither number. */
+.wstat--pending .wstat__figure{position:relative}
+.wstat__strut{visibility:hidden}
+.wstat--pending .wstat__spinner,
+.wstat--pending .wstat__value--none{position:absolute;left:0;top:50%;
+  transform:translateY(-50%)}
+.wstat__spinner{width:1.125rem;height:1.125rem;border-width:0.125rem}
+.wstat__value--none{color:var(--ink-3);line-height:1}
 
 @media (max-width:1350px){
   /* Only the grid changes. The padding used to collapse to 12px on all four

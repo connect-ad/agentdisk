@@ -2,7 +2,21 @@ import React, { useState } from 'react';
 import { Icon } from '../Icon/Icon.jsx';
 import { Button } from '../Button/Button.jsx';
 
-export function ApiKeyDisplay({ secret, lastFour, prefix = 'ad_live', revealed = false, onAcknowledge, className = '', ...rest }) {
+/**
+ * `prefix` is the key's real stored prefix and is rendered verbatim.
+ *
+ * It used to default to 'ad_live' and have a '_' injected after it, so every
+ * masked key in the product read `ad_live_********XXXX` -- a prefix this API has
+ * never issued. Keys are `ask_live_`/`ask_test_` plus eight discriminating
+ * characters, which is exactly what `key_prefix` holds and what tells two keys
+ * apart in a list. A credential display showing a format the product does not
+ * use teaches people to ignore the part that identifies the key.
+ *
+ * No default: a caller that does not know the prefix shows none, rather than a
+ * plausible invention. Divergence from the vendored original, recorded in
+ * CLAUDE.md with the others.
+ */
+export function ApiKeyDisplay({ secret, lastFour, prefix = '', revealed = false, onAcknowledge, className = '', ...rest }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
     try { navigator.clipboard.writeText(secret || ''); } catch (e) { /* clipboard unavailable */ }
@@ -11,7 +25,7 @@ export function ApiKeyDisplay({ secret, lastFour, prefix = 'ad_live', revealed =
   if (!revealed) {
     return (
       <span className="ad-mono" style={{ color: 'var(--ink-2)', letterSpacing: '0.04em' }} {...rest}>
-        {prefix}_{'\u2022'.repeat(8)}{lastFour}
+        {prefix}{'\u2022'.repeat(8)}{lastFour}
       </span>
     );
   }

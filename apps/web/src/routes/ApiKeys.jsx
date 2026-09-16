@@ -121,7 +121,7 @@ export default function ApiKeys() {
           ? <Badge tone="accent" mono>{agentName(r.agentId) ?? r.agentId}</Badge>
           : <span style={{ color: 'var(--ink-3)' }}>Workspace</span>
     },
-    { key: 'key', header: 'Key', width: 200, render: r => <ApiKeyDisplay lastFour={r.lastFour} /> },
+    { key: 'key', header: 'Key', width: 200, render: r => <ApiKeyDisplay prefix={r.prefix} lastFour={r.lastFour} /> },
     {
       key: 'scope',
       header: 'Scope',

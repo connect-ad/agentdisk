@@ -229,7 +229,7 @@ export default function AgentDetails() {
 
   const keyColumns = [
     { key: 'name', header: 'Name', primary: true },
-    { key: 'key', header: 'Key', width: 190, render: r => <ApiKeyDisplay lastFour={r.lastFour} /> },
+    { key: 'key', header: 'Key', width: 190, render: r => <ApiKeyDisplay prefix={r.prefix} lastFour={r.lastFour} /> },
     {
       key: 'scope',
       header: 'Scope',

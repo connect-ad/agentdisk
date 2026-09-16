@@ -85,6 +85,7 @@ export default function WorkspaceSwitcher({ workspaces = [], currentId, onSelect
               key={w.id}
               type="button"
               role="menuitemradio"
+              aria-label={w.name}
               aria-checked={w.id === currentId}
               className="wsx__item"
               onClick={() => { setOpen(false); onSelect(w.id); }}

@@ -91,5 +91,16 @@ export const staffApi = {
   forceLogout: (userId, workspaceId) =>
     request(`/v1/staff/users/${userId}/force-logout?workspaceId=${workspaceId}`, { method: 'POST' }),
   revokeUserKeys: userId =>
-    request(`/v1/staff/users/${userId}/revoke-keys`, { method: 'POST' })
+    request(`/v1/staff/users/${userId}/revoke-keys`, { method: 'POST' }),
+
+  /**
+   * Send the customer a password-reset link.
+   *
+   * The link is never in the response and must never be asked for: it is a
+   * bearer credential equal to "own this account", and it goes to the account
+   * holder's address, never to the staff member who started it. The reason is
+   * mandatory server-side; it is sent here so the audit row means something.
+   */
+  forcePasswordReset: (userId, reason) =>
+    request(`/v1/staff/users/${userId}/password-reset`, { method: 'POST', body: { reason } })
 };

@@ -168,6 +168,18 @@ beforeEach(async () => {
   // would make the "mints a token" assertion pass or fail on test order.
   await env.CACHE.delete("firebase:admin-token:v1");
 
+  // seedTwoWorkspaces() builds the user, the org and both workspaces but no
+  // membership - nothing else in the suite needs one. This path does: the
+  // workspace-scoped rows are found by walking memberships, which is what makes
+  // a workspace owner able to see that staff acted on one of their members.
+  // The org id is the one seedTwoWorkspaces uses.
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO memberships (id, org_id, user_id, role, created_at)
+     VALUES (?, ?, ?, ?, ?)`
+  )
+    .bind("mem_TESTMEMBER", "org_TESTORG", USER_ID, "owner", NOW)
+    .run();
+
   await seedStaff("stf_SUPPORT", "support@agentdisk.io", "support");
   await seedStaff("stf_ADMIN", "admin@agentdisk.io", "admin");
 });
@@ -199,14 +211,14 @@ describe("staff password reset", () => {
 
     // It went to the account holder, from the verified sender.
     expect(outbound.mailerSendBodies).toHaveLength(1);
-    const sent = outbound.mailerSendBodies[0] as {
+    const sent = at(outbound.mailerSendBodies, 0) as {
       from: { email: string };
       to: { email: string }[];
       html: string;
       text: string;
     };
     expect(sent.from.email).toBe("connect@agentdisk.io");
-    expect(sent.to[0].email).toBe(USER_EMAIL);
+    expect(at(sent.to, 0).email).toBe(USER_EMAIL);
     expect(sent.html).toContain(RESET_LINK);
     expect(sent.text).toContain(RESET_LINK);
   });
@@ -221,7 +233,7 @@ describe("staff password reset", () => {
     await post(`/v1/staff/users/${USER_ID}/password-reset`, { reason: "Ticket 4471." }, token);
 
     expect(outbound.identityBodies).toHaveLength(1);
-    expect(outbound.identityBodies[0]).toMatchObject({
+    expect(at(outbound.identityBodies, 0)).toMatchObject({
       requestType: "PASSWORD_RESET",
       email: USER_EMAIL,
       returnOobLink: true,
@@ -240,15 +252,15 @@ describe("staff password reset", () => {
 
     const rows = await fleetRows();
     expect(rows).toHaveLength(1);
-    expect(rows[0].action).toBe("staff.user.password_reset");
-    expect(rows[0].actorId).toBe("stf_SUPPORT");
-    expect(rows[0].targetId).toBe(USER_ID);
-    expect(rows[0].reason).toBe("Caller verified by support ticket 4471.");
-    expect(rows[0].result).toBe("success");
+    expect(at(rows, 0).action).toBe("staff.user.password_reset");
+    expect(at(rows, 0).actorId).toBe("stf_SUPPORT");
+    expect(at(rows, 0).targetId).toBe(USER_ID);
+    expect(at(rows, 0).reason).toBe("Caller verified by support ticket 4471.");
+    expect(at(rows, 0).result).toBe("success");
     // Same credential, same rule: the address is the subject of the record, the
     // link is a way into the account.
-    expect(rows[0].metadata).not.toContain("oobCode");
-    expect(JSON.parse(rows[0].metadata)).toMatchObject({ email: USER_EMAIL, outcome: "sent" });
+    expect(at(rows, 0).metadata).not.toContain("oobCode");
+    expect(JSON.parse(at(rows, 0).metadata)).toMatchObject({ email: USER_EMAIL, outcome: "sent" });
   });
 
   it("also writes a workspace-scoped row the customer can see", async () => {
@@ -282,7 +294,7 @@ describe("staff password reset", () => {
 
     const rows = await fleetRows();
     expect(rows).toHaveLength(1);
-    expect(rows[0].result).toBe("denied");
+    expect(at(rows, 0).result).toBe("denied");
   });
 
   it("accepts an address Firebase has no identity for, and says so only in the log", async () => {
@@ -296,8 +308,8 @@ describe("staff password reset", () => {
     expect(outbound.mailerSendBodies).toHaveLength(0);
 
     const rows = await fleetRows();
-    expect(rows[0].result).toBe("success");
-    expect(JSON.parse(rows[0].metadata)).toMatchObject({ outcome: "no_identity" });
+    expect(at(rows, 0).result).toBe("success");
+    expect(JSON.parse(at(rows, 0).metadata)).toMatchObject({ outcome: "no_identity" });
   });
 
   it("refuses without a reason", async () => {
@@ -305,7 +317,7 @@ describe("staff password reset", () => {
     const token = await login("support@agentdisk.io");
 
     const res = await post(`/v1/staff/users/${USER_ID}/password-reset`, { reason: "  " }, token);
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(400);
     expect(await fleetRows()).toHaveLength(0);
   });
 

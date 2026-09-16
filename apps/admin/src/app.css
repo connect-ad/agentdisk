@@ -1,0 +1,96 @@
+/**
+ * Staff console — the overlay ladder, and nothing else.
+ *
+ * This is the console's only stylesheet, and it stays that way on purpose.
+ * Everything else here is inline-styled: the console is one small app for one
+ * small team, and a second place to look for a rule is a cost with no return at
+ * this size.
+ *
+ * The ladder is the exception, because it is the one thing that must agree with
+ * a *different application*. `docs/ui-layering.md` is the agreement; the numbers
+ * below are the same numbers `apps/web/src/app.css` declares, deliberately
+ * duplicated rather than imported.
+ *
+ * **Duplicated, not shared, and that is the design.** `apps/admin` does not
+ * import the design system — looking different from the customer dashboard is
+ * how a support engineer knows which console they are typing into, per
+ * CLAUDE.md and coordination/DEFERRED.md X-02. Sharing a stylesheet to keep
+ * seven integers in step would reintroduce exactly the coupling that separation
+ * exists to prevent. If a rung moves, it moves in ui-layering.md first and in
+ * both apps after.
+ *
+ * The rule, in one line: **a modal always covers a drawer, and a toast always
+ * covers both.** A drawer is a place you browse; a dialog is a question you must
+ * answer before anything else continues. Whatever asks a question wins.
+ */
+
+:root {
+  /* Sticky table header. Lifts the header off scrolling rows, nothing more. */
+  --z-base: 1;
+  /* In-context menus and tabs: sticky chrome that page content scrolls under. */
+  --z-nav: 30;
+  /* The console's top bar. Must cover the nav that sticks beneath it. */
+  --z-topbar: 40;
+  /* Route/loading progress. Must stay visible over all chrome. */
+  --z-progress: 50;
+  /*
+   * Reserved. The console has no drawer yet; doc 32's design does not call for
+   * one. The rung is declared anyway so that whoever adds the first drawer
+   * takes this number rather than inventing one, and so the gap between it and
+   * --z-modal is visible as deliberate.
+   */
+  --z-drawer: 60;
+  /* Scrim and dialog. The most urgent surface: it interrupts a drawer. */
+  --z-modal: 80;
+  /* Confirms the result of the dialog that just closed, so it must clear it. */
+  --z-toast: 90;
+}
+
+/*
+ * Nothing occupies 61-79. That gap is what makes the drawer/modal ordering safe
+ * to reason about: no third party can slip between them by accident.
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+/*
+ * A visible focus ring on everything focusable. Keyboard operation is not a
+ * nicety in a console whose dialogs gate destructive actions - point 4 of the
+ * modal contract exists for the same reason.
+ */
+:focus-visible {
+  outline: 2px solid #1a73e8;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/*
+ * Respect a reduced-motion preference. The console's only animation is the
+ * dialog's entrance; there is nothing here worth overriding a system setting
+ * for.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes adminDialogIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

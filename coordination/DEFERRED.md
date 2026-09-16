@@ -145,3 +145,26 @@ as a snapshot, and re-measure after both tracks merge rather than trusting it.
 - Trigger: in force now, not after merge.
 - Verification: `git log --oneline -- CLAUDE.md` shows Track 0 as the only
   author of new commits touching it from here.
+
+### B-04 · staffApi.forcePasswordReset has no caller yet
+`apps/admin/src/api.js` exports `forcePasswordReset(userId, reason)`. Nothing
+calls it. Kept deliberately rather than removed: it matches a real, tested
+endpoint (`POST /v1/staff/users/:id/password-reset`), it is invisible to users,
+and dropping it only to re-add it with the screen is churn. The no-dead-code
+rule is aimed at user-visible controls that report work that never happened —
+this is not one.
+
+Its intended consumer is the **Users screen, doc 32 Phase 2**. That screen is a
+backend-plus-frontend job and belongs in its own session, because the read half
+does not exist either: **`GET /v1/staff/users` has never been built**. Doc 32
+§2a lists it under "does NOT exist — all genuinely new work", so whoever picks
+this up writes the exact-match email lookup route first, then the screen that
+calls it, and only then wires this method to a button.
+
+- Raised by: Track B
+- Files involved: apps/admin/src/api.js (client method), apps/api/src/routes/staff.ts
+  and routes/staff-router.ts (the missing GET), apps/admin/src/App.jsx (the screen)
+- Why it is blocked: nothing is broken — the consumer simply is not built.
+- Verification: the endpoint it calls is covered by
+  apps/api/test/staff-password-reset.test.ts (11 tests).
+Trigger: whoever takes doc 32 Phase 2 Users.

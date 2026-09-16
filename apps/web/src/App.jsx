@@ -21,6 +21,7 @@ import { Landing, Pricing } from './routes/Marketing.jsx';
 import { Terms, Privacy } from './routes/Legal.jsx';
 import Docs from './routes/Docs.jsx';
 import McpConnection from './routes/McpConnection.jsx';
+import Billing from './routes/Billing.jsx';
 import Webhooks from './routes/Webhooks.jsx';
 import ActivityLog from './routes/ActivityLog.jsx';
 import RequireAuth, { RequireWorkspace } from './lib/RequireAuth.jsx';
@@ -28,6 +29,7 @@ import WorkspaceSwitcher from './components-local/WorkspaceSwitcher.jsx';
 import AccountMenu from './components-local/AccountMenu.jsx';
 import ThemeToggle from './components-local/ThemeToggle.jsx';
 import WorkspaceIdChip from './components-local/WorkspaceIdChip.jsx';
+import AccountAreaBand from './components-local/AccountAreaBand.jsx';
 import WorkspaceStats from './components-local/WorkspaceStats.jsx';
 import { useAuth } from './lib/auth.jsx';
 import { useWorkspace } from './lib/workspace.jsx';
@@ -243,6 +245,24 @@ function WorkspaceLayout() {
     email: user?.email ?? ''
   };
 
+  /*
+   * The profile menu's destinations, in the reference's order. Contact Support
+   * is an ordinary route here and so carries no external-link glyph: the
+   * reference draws one because its support lives elsewhere, and an icon
+   * promising a new tab in front of an in-app navigation is a small lie about
+   * what the click does.
+   *
+   * Account keeps its /profile URL. The label is what the reference calls it
+   * and what people look for; the path is what every existing link and the
+   * standalone /account/profile route already use.
+   */
+  const ACCOUNT_AREA = [
+    { label: 'Account', to: `${wsRoot}/profile`, where: 'Account' },
+    { label: 'Billing', to: `${wsRoot}/billing`, where: 'Billing' },
+    { label: 'Contact Support', to: `${wsRoot}/support`, where: 'Contact Support' },
+  ];
+  const inAccountArea = ACCOUNT_AREA.find(item => pathname.startsWith(item.to));
+
   return (
     <WorkspaceUsageProvider>
     <AppShell
@@ -269,7 +289,7 @@ function WorkspaceLayout() {
         <AccountMenu
           name={USER.name}
           email={USER.email}
-          profileHref={`${wsRoot}/profile`}
+          items={ACCOUNT_AREA}
           onNavigate={to => navigate(to)}
           onSignOut={handleSignOut}
           align="down"
@@ -281,7 +301,14 @@ function WorkspaceLayout() {
         if (item.external) { window.location.assign(item.href); return; }
         navigate(wsRoot + item.path);
       }}
-      infoStrip={<InfoStrip open={open} user={USER} wsRoot={wsRoot} />}
+      /* In the account area the workspace strip would go on announcing a
+         workspace ID and plan beside a page about the person, so the band
+         replaces it rather than sitting under it. */
+      infoStrip={
+        inAccountArea
+          ? <AccountAreaBand label={inAccountArea.where} onBack={() => navigate(wsRoot)} />
+          : <InfoStrip open={open} user={USER} wsRoot={wsRoot} />
+      }
       statsBand={<WorkspaceStats />}
       topbarActions={
         <>
@@ -331,6 +358,7 @@ export default function App() {
         <Route path="activity" element={<ActivityLog />} />
         <Route path="usage" element={<Usage />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="billing" element={<Billing />} />
         <Route path="profile" element={<Profile />} />
         <Route path="support" element={<Support />} />
       </Route>

@@ -362,7 +362,11 @@ describe('AccountMenu', () => {
       <AccountMenu
         name="Kernel V5"
         email="kernelv5@example.com"
-        profileHref="/w/ws_1/profile"
+        items={[
+          { label: 'Account', to: '/w/ws_1/profile' },
+          { label: 'Billing', to: '/w/ws_1/billing' },
+          { label: 'Contact Support', to: '/w/ws_1/support' },
+        ]}
         onNavigate={onNavigate}
         onSignOut={onSignOut}
       />
@@ -384,17 +388,32 @@ describe('AccountMenu', () => {
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('goes to the profile', async () => {
+  it('goes to the account page', async () => {
     const { user, onNavigate } = setup();
     await user.click(screen.getByRole('button', { name: /Kernel V5/ }));
-    await user.click(screen.getByRole('menuitem', { name: 'Profile' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Account' }));
     expect(onNavigate).toHaveBeenCalledWith('/w/ws_1/profile');
+  });
+
+  it('carries the three destinations the reference lists, in its order', async () => {
+    const { user } = setup();
+    await user.click(screen.getByRole('button', { name: /Kernel V5/ }));
+    const labels = screen.getAllByRole('menuitem').map(el => el.textContent.trim());
+    expect(labels).toEqual(['Account', 'Billing', 'Contact Support', 'Sign Out']);
+  });
+
+  it('names who is signed in, which the trigger can only truncate', async () => {
+    const { user } = setup();
+    await user.click(screen.getByRole('button', { name: /Kernel V5/ }));
+    const menu = screen.getByRole('menu');
+    expect(menu.textContent).toContain('Kernel V5');
+    expect(menu.textContent).toContain('kernelv5@example.com');
   });
 
   it('signs out', async () => {
     const { user, onSignOut } = setup();
     await user.click(screen.getByRole('button', { name: /Kernel V5/ }));
-    await user.click(screen.getByRole('menuitem', { name: 'Sign out' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Sign Out' }));
     expect(onSignOut).toHaveBeenCalled();
   });
 

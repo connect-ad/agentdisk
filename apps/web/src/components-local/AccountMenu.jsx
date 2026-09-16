@@ -23,7 +23,7 @@ import { Icon } from '../components/index.js';
  * Actions arrive as props rather than from `useAuth()` so this stays a piece of
  * UI with one job; `App.jsx` decides what signing out means.
  */
-export default function AccountMenu({ name, email, profileHref, onNavigate, onSignOut, align = "up" }) {
+export default function AccountMenu({ name, email, items = [], onNavigate, onSignOut, align = "up" }) {
   const [open, setOpen] = useState(false);
   const root = useRef(null);
   const trigger = useRef(null);
@@ -81,31 +81,43 @@ export default function AccountMenu({ name, email, profileHref, onNavigate, onSi
           <span className="ad-truncate" style={{ display: 'block', fontSize: 13, fontWeight: 500 }}>{label}</span>
           <span className="ad-truncate" style={{ display: 'block', fontSize: 11, color: 'var(--ink-3)' }}>{email}</span>
         </span>
-        <Icon name="chevronUpDown" size={14} />
+        <Icon name="chevronDown" size={12} />
       </button>
 
       {open ? (
         <div className={`wsx__menu ${align === "up" ? "wsx__menu--up" : "wsx__menu--right"}`} role="menu" aria-label="Account">
+          {/* Who you are signed in as, before what you can do about it. The
+              reference opens the menu with this block and a rule under it,
+              which is also the only place the address is legible: the trigger
+              truncates it to fit a top bar. */}
+          <div className="wsx__head">
+            <div className="wsx__headname">{name}</div>
+            <div className="wsx__heademail">{email}</div>
+          </div>
+
+          {items.map(item => (
+            <button
+              type="button"
+              role="menuitem"
+              key={item.label}
+              className="wsx__item"
+              onClick={() => { setOpen(false); onNavigate(item.to); }}
+            >
+              <span className="wsx__label">{item.label}</span>
+            </button>
+          ))}
+
+          {/* Toned as the destructive thing it is, and last, where the
+              reference puts it — not because signing out destroys anything,
+              but because it is the one item that ends the session rather than
+              navigating within it. */}
           <button
             type="button"
             role="menuitem"
-            className="wsx__item"
-            onClick={() => { setOpen(false); onNavigate(profileHref); }}
-          >
-            <span className="wsx__lead" aria-hidden="true"><Icon name="users" size={14} /></span>
-            <span className="wsx__label">Profile</span>
-          </button>
-
-          <div className="wsx__sep" role="separator" />
-
-          <button
-            type="button"
-            role="menuitem"
-            className="wsx__item"
+            className="wsx__item wsx__item--danger"
             onClick={() => { setOpen(false); onSignOut(); }}
           >
-            <span className="wsx__lead" aria-hidden="true"><Icon name="logout" size={14} /></span>
-            <span className="wsx__label">Sign out</span>
+            <span className="wsx__label">Sign Out</span>
           </button>
         </div>
       ) : null}

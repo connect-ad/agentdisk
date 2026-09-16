@@ -36,10 +36,27 @@
   background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r-3);
   box-shadow:var(--sh-3);padding:var(--s-2);max-height:60vh;overflow-y:auto;
   animation:ad-fade var(--d-1) var(--ease)}
+/* 9px padding, 8px radius, 13.5px label — the reference draws both menus in
+   this footer and top bar at those values, the switcher's rows and the account
+   menu's items alike, which is what keeps the two indistinguishable. */
 .wsx__item{display:flex;align-items:center;gap:var(--s-4);width:100%;
-  padding:var(--s-3);border:0;border-radius:var(--r-1);background:transparent;
-  font-size:var(--t-13);color:var(--ink-2);cursor:pointer;text-align:left;
+  padding:0.5625rem;border:0;border-radius:0.5rem;background:transparent;
+  font-size:var(--t-13-5);font-weight:var(--w-med);color:var(--ink-2);
+  cursor:pointer;text-align:left;
   transition:background var(--d-1) var(--ease),color var(--d-1) var(--ease)}
+/* The account menu's rows are the page's own text colour, not the muted tone
+   the switcher uses for workspaces it is offering you. */
+.wsx__head + .wsx__item,.wsx__head ~ .wsx__item{color:var(--ink)}
+.wsx__item--danger{color:var(--danger-ink)}
+.wsx__item--danger:hover{background:var(--danger-soft);color:var(--danger-ink)}
+
+/* Signed-in identity, above the rule. */
+.wsx__head{padding:0.5625rem 0.5625rem 0.6875rem;border-bottom:1px solid var(--line);
+  margin-bottom:0.3125rem}
+.wsx__headname{font-size:var(--t-13-5);font-weight:var(--w-semi);color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wsx__heademail{font-family:var(--font-mono);font-size:var(--t-11);color:var(--ink-3);
+  margin-top:var(--s-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wsx__item:hover{background:var(--surface-2);color:var(--ink)}
 .wsx__item[aria-checked="true"]{color:var(--ink);font-weight:var(--w-med)}
 .wsx__label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -458,6 +475,32 @@
 @media (max-width:875px){ .ds__h2{font-size:var(--t-21)} }
 .ds__sub{font-size:var(--t-13);color:var(--ink-2);max-width:70ch;
   text-wrap:pretty}
+
+/* --- account area (routes/Billing.jsx, Profile.jsx, Support.jsx) ---
+   The reference gives each of these three a measure of its own rather than one
+   shared page width: 680px for Account's row table, 760px for Billing's
+   two-column cards, 640px for Support's form. A form set to the width of a
+   table is a form nobody can scan. */
+.acct{display:flex;flex-direction:column;gap:var(--s-6)}
+.acct--account{max-width:42.5rem}
+.acct--billing{max-width:47.5rem}
+.acct--support{max-width:40rem}
+.acct__sub{margin-top:calc(var(--s-3) * -1)}
+
+/* The band that replaces the workspace strip while you are in the account
+   area. Accent-tinted, because the point of it is that this is not one of your
+   workspaces and nothing you do here belongs to one. */
+.acctband{background:var(--accent-soft);border-bottom:1px solid var(--accent-line);
+  flex:none}
+.acctband__inner{display:flex;align-items:center;gap:var(--s-5);
+  padding:var(--s-4) var(--gutter);min-width:0}
+.acctband__back{display:flex;align-items:center;gap:var(--s-3);background:transparent;
+  border:0;padding:0;cursor:pointer;font-size:var(--t-12-5);font-weight:var(--w-semi);
+  color:var(--accent-ink);font-family:var(--font-sans)}
+.acctband__back:hover{text-decoration:underline}
+.acctband__where{font-family:var(--font-mono);font-size:var(--t-9-5);
+  letter-spacing:var(--tr-caps);color:var(--ink-3);min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
 
 /* quick start
    The card is a <Link>, so the global :where(a):hover underline applies to it

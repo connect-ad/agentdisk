@@ -764,7 +764,7 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
 .shell__wsbtn:hover{background:var(--surface-3);border-color:var(--line-2)}
 .shell__wsmark{width:1.25rem;height:1.25rem;flex:none;border-radius:var(--r-1);background:var(--accent-soft);border:1px solid var(--accent-line);color:var(--accent);display:grid;place-items:center;font-size:var(--t-10);font-weight:var(--w-bold)}
 .shell__wsname{min-width:0;font-size:var(--t-13-5);font-weight:var(--w-semi);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.shell__wsmeta{font-size:var(--t-11);color:var(--ink-3)}
+.shell__wsmeta{font-size:var(--t-11);color:var(--ink-3);text-transform:uppercase}
 .shell__user{display:flex;align-items:center;gap:var(--s-4);width:100%;padding:var(--s-3);border:0;border-radius:var(--r-2);background:transparent;cursor:pointer;text-align:left;transition:background var(--d-1) var(--ease)}
 .shell__user:hover{background:var(--surface-2)}
 

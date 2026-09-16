@@ -36,8 +36,7 @@ export default function WorkspaceSwitcher({ workspaces = [], currentId, onSelect
 
   const current = workspaces.find(w => w.id === currentId) ?? null;
   const name = current?.name ?? 'Workspace';
-  const role = current?.role ? `${current.role[0].toUpperCase()}${current.role.slice(1)}` : '';
-  const type = current?.plan ?? current?.type ?? 'FREE';
+  const role = current?.role ? `${current.role[0].toUpperCase()}${current.role.slice(1).toLowerCase()}` : '';
 
   // Escape closes and hands focus back, which is the one dismissal that owes
   // you the trigger — you never left it. A click elsewhere is a click at
@@ -73,13 +72,14 @@ export default function WorkspaceSwitcher({ workspaces = [], currentId, onSelect
         <span className="shell__wsmark" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>
         <span style={{ minWidth: 0, flex: 1 }}>
           <span className="shell__wsname" style={{ display: 'block' }}>{name}</span>
-          <span className="shell__wsmeta">{type.toUpperCase()} · {role}</span>
+          <span className="shell__wsmeta">{role}</span>
         </span>
         <Icon name="chevronUpDown" size={14} />
       </button>
 
       {open ? (
-        <div className="wsx__menu" role="menu" aria-label="Workspaces">
+        <div className={['wsx__menu', workspaces.length >= 10 ? 'wsx__menu--scroll' : ''].filter(Boolean).join(' ')}
+          role="menu" aria-label="Workspaces">
           {workspaces.map(w => (
             <button
               key={w.id}
@@ -96,8 +96,7 @@ export default function WorkspaceSwitcher({ workspaces = [], currentId, onSelect
                 <span className="wsx__meta">{w.id}</span>
               </span>
               <span className="wsx__tags">
-                <span className="wsx__tag">{(w.plan ?? w.type ?? 'FREE').toUpperCase()}</span>
-                {w.role ? <span className="wsx__role">{w.role.toUpperCase()}</span> : null}
+                {w.role ? <span className="wsx__role">{w.role[0].toUpperCase()}{w.role.slice(1).toLowerCase()}</span> : null}
               </span>
               {w.id === currentId ? (
                 <span className="wsx__check" aria-hidden="true"><Icon name="check" size={14} /></span>

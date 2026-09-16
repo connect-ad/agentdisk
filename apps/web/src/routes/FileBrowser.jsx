@@ -94,6 +94,7 @@ export default function FileBrowser() {
   // inside each modal so that closing one always clears both.
   const [busy, setBusy] = useState(false);
   const [dialogError, setDialogError] = useState(null);
+  const [folderName, setFolderName] = useState('');
 
   const rows = useMemo(() => {
     if (loading || failed) return [];
@@ -145,7 +146,47 @@ export default function FileBrowser() {
   };
 
   /** Close whichever dialog is open, and drop the state that belonged to it. */
-  const closeDialog = () => { setDialog(null); setDialogError(null); setConfirmText(''); };
+  const closeDialog = () => {
+    setDialog(null); setDialogError(null); setConfirmText(''); setFolderName('');
+  };
+
+  /**
+   * Create a folder at the workspace root.
+   *
+   * Root, not "the current folder", because this screen has no folder
+   * navigation yet -- `onRowClick` deliberately does nothing for a folder row.
+   * Building a path from a location the user cannot actually be in would be
+   * inventing state.
+   *
+   * Validation here is only what saves a round trip on an obviously empty name.
+   * Everything else is the API's to judge and its wording is what gets shown:
+   * `normalizePath` already rejects backslashes, control characters, '..' and
+   * over-long segments, and the duplicate check returns CONFLICT. Re-deciding
+   * any of that in the browser would be a second, quietly diverging definition
+   * of a valid path.
+   */
+  const runCreateFolder = async () => {
+    const name = folderName.trim();
+    if (name === '') {
+      setDialogError('Give the folder a name.');
+      return;
+    }
+
+    setBusy(true);
+    setDialogError(null);
+    try {
+      await api.createFolder(workspaceId, `/${name}`);
+      closeDialog();
+      void reload();
+      setToast({ tone: 'ok', title: 'Folder created', body: `/${name}` });
+    } catch (err) {
+      // The dialog stays open holding what was typed, so a duplicate name can
+      // be edited rather than retyped.
+      setDialogError(err?.message ?? 'The folder could not be created.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   /**
    * Which files a delete dialog is pointing at.
@@ -278,7 +319,7 @@ export default function FileBrowser() {
         actions={
           canWrite ? (
             <>
-              <Button variant="secondary" icon={<Icon name="folder" size={14} />} onClick={() => setDialog('new-folder')}>
+              <Button variant="secondary" icon={<Icon name="folder" size={14} />} onClick={() => { setDialogError(null); setFolderName(''); setDialog('new-folder'); }}>
                 New folder
               </Button>
               {/*
@@ -443,19 +484,22 @@ export default function FileBrowser() {
         title="New folder"
         tone="accent"
         mark={<Icon name="folder" size={16} />}
-        onClose={() => setDialog(null)}
+        onClose={closeDialog}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setDialog(null)}>Cancel</Button>
-            <Button onClick={() => setDialog(null)}>Create folder</Button>
+            <Button variant="secondary" onClick={closeDialog}>Cancel</Button>
+            <Button loading={busy} onClick={() => void runCreateFolder()}>Create folder</Button>
           </>
         }
       >
         <Input
           label="Folder name"
           placeholder="market-research"
+          value={folderName}
+          onChange={e => setFolderName(e.target.value)}
           hint="Letters, numbers, dashes and underscores. This becomes part of the path agents use."
         />
+        {dialogError ? <Alert tone="danger" title="Not created">{dialogError}</Alert> : null}
       </Modal>
 
       {/* --- delete: single --- */}

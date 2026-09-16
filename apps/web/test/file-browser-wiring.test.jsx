@@ -125,3 +125,48 @@ describe('File browser → delete', () => {
     expect(body).toMatch(/24 hours/);
   });
 });
+
+describe('File browser → create folder', () => {
+  it('calls the API instead of just closing the dialog', async () => {
+    const user = userEvent.setup();
+    const createFolder = vi.fn(async () => ({ folder: { id: 'fld_1', path: '/research' } }));
+    await mount({ createFolder });
+
+    await user.click(screen.getByRole('button', { name: 'New folder' }));
+    const dialog = await screen.findByRole('dialog', { name: 'New folder' });
+    await user.type(within(dialog).getByLabelText(/Folder name/), 'research');
+    await user.click(within(dialog).getByRole('button', { name: 'Create folder' }));
+
+    await waitFor(() => expect(createFolder).toHaveBeenCalledWith(WS, '/research'));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New folder' })).toBeNull());
+  });
+
+  it("surfaces the API's duplicate-path refusal and keeps what was typed", async () => {
+    const user = userEvent.setup();
+    const createFolder = vi.fn(async () => { throw new Error('A folder already exists at that path.'); });
+    await mount({ createFolder });
+
+    await user.click(screen.getByRole('button', { name: 'New folder' }));
+    const dialog = await screen.findByRole('dialog', { name: 'New folder' });
+    await user.type(within(dialog).getByLabelText(/Folder name/), 'research');
+    await user.click(within(dialog).getByRole('button', { name: 'Create folder' }));
+
+    await screen.findByText('A folder already exists at that path.');
+    // Still open, still holding the name, so it can be edited rather than retyped.
+    expect(within(dialog).getByLabelText(/Folder name/).value).toBe('research');
+    expect(screen.queryByText('Folder created')).toBeNull();
+  });
+
+  it('does not call the API for an empty name', async () => {
+    const user = userEvent.setup();
+    const createFolder = vi.fn();
+    await mount({ createFolder });
+
+    await user.click(screen.getByRole('button', { name: 'New folder' }));
+    const dialog = await screen.findByRole('dialog', { name: 'New folder' });
+    await user.click(within(dialog).getByRole('button', { name: 'Create folder' }));
+
+    await screen.findByText('Give the folder a name.');
+    expect(createFolder).not.toHaveBeenCalled();
+  });
+});

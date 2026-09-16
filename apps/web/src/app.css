@@ -62,12 +62,17 @@
 .wsx__item[aria-checked="true"]{color:var(--ink);font-weight:var(--w-med)}
 .wsx__label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wsx__details{display:flex;flex:1;min-width:0;flex-direction:column;gap:var(--s-1)}
-.wsx__meta{font-family:var(--font-mono);font-size:var(--t-10);font-weight:var(--w-reg);color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wsx__meta{font-family:var(--font-mono);font-size:var(--t-10-5);font-weight:var(--w-reg);color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wsx__tags{display:flex;align-items:flex-end;flex-direction:column;gap:var(--s-1);margin-left:auto}
-.wsx__role{font-size:var(--t-10);font-weight:var(--w-semi);letter-spacing:var(--tr-caps);text-transform:uppercase}
-.wsx__role{color:var(--ink-3)}
-.wsx__item--create{color:var(--ink)}
-.wsx__item--create .wsx__plus{color:var(--ink-2)}
+/* The reference sets the row's tag in mono at 9.5px with no extra tracking, a
+   step below the ID beside it, and in the mid ink rather than the faintest: it
+   is a fact about the workspace, not a section heading. */
+.wsx__role{font-family:var(--font-mono);font-size:var(--t-9-5);font-weight:var(--w-reg);text-transform:uppercase}
+.wsx__role{color:var(--ink-2)}
+/* "New workspace" is the one row the reference draws in the accent, label and
+   glyph alike, because it is an action in a list of facts. */
+.wsx__item--create{color:var(--accent-ink)}
+.wsx__item--create .wsx__plus{color:var(--accent-ink)}
 .wsx__check{flex:none;display:flex;color:var(--accent-ink)}
 .wsx__plus{width:var(--wsx-mark);flex:none;display:grid;place-items:center;
   color:var(--ink-3)}

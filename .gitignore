@@ -40,3 +40,12 @@ crash.*.log
 # Terraform backend config (contains account ID)
 backend.hcl
 !backend.hcl.example
+
+# Generated knowledge graph (graphify) — rebuilt with `graphify update .`
+graphify-out/
+
+# Session working documents (track prompts, plans) — not product artifacts
+Claude outputs/
+
+# Machine-specific hook config: pins an absolute path to a local binary
+.claude/settings.json

@@ -775,7 +775,11 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
    overflows its own parent and the name paints over the controls beside it.
    Capping at 100% as well keeps it inside whatever room the wrapper has. */
 .shell__wsbtn--bar{width:16.25rem;min-width:16.25rem;max-width:calc(100vw - 10rem);height:2.625rem;padding:0 var(--s-4);border-radius:var(--r-2)}
-.shell__wsbtn--bar .shell__wsmeta{display:block;font-size:var(--t-10);font-weight:var(--w-med);letter-spacing:var(--tr-caps)}
+/* The reference carries this line as a bordered mono tag beside the name: 9.5px,
+   0.06em — the same tracking .badge uses, which has no token — and the mid ink.
+   The type is what is matched here; it stays on its own line under the name,
+   because the bar's button is 42px tall and the ref's is 34px. */
+.shell__wsbtn--bar .shell__wsmeta{display:block;font-family:var(--font-mono);font-size:var(--t-9-5);font-weight:var(--w-reg);letter-spacing:0.06em;color:var(--ink-2)}
 
 .shell__page{flex:1;padding:var(--s-8) var(--gutter);min-width:0;display:flex;flex-direction:column;gap:var(--s-7)}
 .shell__page--flush{padding:0}

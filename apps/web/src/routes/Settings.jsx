@@ -316,14 +316,15 @@ export default function Settings() {
         tone="danger"
         mark={<Icon name="alert" size={16} />}
         onClose={() => setDialog(null)}
+        onSubmit={() => { if (confirmText === WORKSPACE_NAME) void deleteWorkspace(); }}
         footer={
           <>
             <Button variant="secondary" onClick={() => setDialog(null)}>Cancel</Button>
             <Button
+              type="submit"
               variant="danger"
               loading={deleting}
               disabled={confirmText !== WORKSPACE_NAME}
-              onClick={deleteWorkspace}
             >
               Delete workspace
             </Button>

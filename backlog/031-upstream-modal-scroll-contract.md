@@ -1,6 +1,7 @@
 # 031 · Upstream the modal scroll contract
 
-**Status:** Open — local divergence in a vendored component, then upstream
+**Status:** Open — points 1–4 implemented locally (`app.css`, `Modal.jsx`,
+`Button.jsx`); the upstream trip to Claude Design remains
 
 `Modal` cannot be completed from the keyboard, and at a short viewport it cannot
 be completed at all. At **684px** tall the Create API key modal's footer falls
@@ -28,6 +29,15 @@ local sheet can carry them without touching the vendored one. **Point 4 cannot
 be done in CSS.** Enter-to-submit needs the dialog's content wrapped in a
 `<form onSubmit>` with the primary action as `type="submit"`, which changes
 `apps/web/src/components/Modal/Modal.jsx` — a vendored component.
+
+**It also changes `Button.jsx`, which the brief did not anticipate.** A
+`<button>` with no `type` inside a `<form>` is a submit button. The moment Modal
+wraps its body and footer in a form, an untyped Cancel or Close submits the
+dialog it exists to dismiss — so "press the button next to Confirm" becomes
+"confirm". `Button` therefore defaults to `type="button"`, and a call site that
+wants the primary action passes `type="submit"`. Nothing relied on the implicit
+behaviour: both forms that existed already passed it explicitly (`Auth.jsx`,
+`Sandbox.jsx`).
 
 That makes this the fourth deliberate divergence in vendored code, after
 [015](015-rename-in-design-system.md), [016](016-upstream-workspace-switcher.md)

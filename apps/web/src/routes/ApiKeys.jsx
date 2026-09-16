@@ -238,10 +238,11 @@ export default function ApiKeys() {
         size="md"
         mark={<Icon name="key" size={16} />}
         onClose={() => setDialog(null)}
+        onSubmit={create}
         footer={
           <>
             <Button variant="secondary" onClick={() => setDialog(null)}>Cancel</Button>
-            <Button onClick={create} loading={busy}>Create key</Button>
+            <Button type="submit" loading={busy}>Create key</Button>
           </>
         }
       >

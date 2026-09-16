@@ -534,10 +534,11 @@ export default function FileBrowser() {
         tone="accent"
         mark={<Icon name="folder" size={16} />}
         onClose={closeDialog}
+        onSubmit={() => void runCreateFolder()}
         footer={
           <>
             <Button variant="secondary" onClick={closeDialog}>Cancel</Button>
-            <Button loading={busy} onClick={() => void runCreateFolder()}>Create folder</Button>
+            <Button type="submit" loading={busy}>Create folder</Button>
           </>
         }
       >
@@ -579,14 +580,15 @@ export default function FileBrowser() {
         tone="danger"
         mark={<Icon name="alert" size={16} />}
         onClose={closeDialog}
+        onSubmit={() => { if (confirmText === 'DELETE') void runDelete(selected); }}
         footer={
           <>
             <Button variant="secondary" onClick={closeDialog}>Cancel</Button>
             <Button
+              type="submit"
               variant="danger"
               loading={busy}
               disabled={confirmText !== 'DELETE'}
-              onClick={() => void runDelete(selected)}
             >
               Delete
             </Button>

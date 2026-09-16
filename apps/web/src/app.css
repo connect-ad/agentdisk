@@ -26,6 +26,26 @@
 }
 .scrim{z-index:var(--z-modal)}
 
+/* --- Modal scroll contract, points 1-3 (docs/ui-layering.md §2) ---
+   Point 1 is already met: .modal declares max-height:100% inside a grid scrim
+   that carries the padding.
+
+   Point 2 is the one that looks solved and is not. .modal__body already has
+   overflow-y:auto, but in a flex column a child's default min-height:auto
+   refuses to shrink below its content, so the body never gets smaller than its
+   contents, overflow-y never engages, and the column grows past its own cap --
+   pushing the footer off screen. min-height:0 is the fix, not overflow-y.
+
+   Point 3: without flex:none the browser resolves the overflow by compressing
+   exactly the head and footer, the two regions that must never move.
+
+   Local rather than vendored, for the same reason as the ladder above:
+   main.jsx imports styles.css first, so these win at equal specificity.
+   Point 4, Enter-to-submit, needs markup and lives in Modal.jsx -- see
+   backlog/031. */
+.modal__body{min-height:0}
+.modal__head,.modal__foot{flex:none}
+
 /* --- Drawer (design-system gap; see components-local/Drawer.jsx) --- */
 .dw{position:fixed;inset:0;z-index:var(--z-drawer);display:flex;justify-content:flex-end}
 .dw__scrim{position:absolute;inset:0;background:var(--scrim);

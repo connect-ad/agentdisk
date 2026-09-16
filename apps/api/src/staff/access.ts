@@ -181,6 +181,53 @@ export class StaffScopedAccess {
       .run();
   }
 
+  /**
+   * Append the fleet-wide row for a staff action, in `staff_actions`.
+   *
+   * `record` above writes the workspace-scoped row a customer can see in their
+   * own activity log. This writes the row that exists regardless of whether a
+   * workspace was involved at all — see migration 0011 for why the two cannot
+   * be one table. An action that touches a live workspace writes both; one that
+   * does not writes only this.
+   *
+   * Awaited, for the same reason `record` is: an action whose record failed was
+   * not performed, as far as anyone reading the log later is concerned.
+   */
+  private async recordFleet(options: {
+    action: string;
+    workspaceId?: string | null;
+    targetType?: string | null;
+    targetId?: string | null;
+    reason?: string | null;
+    result?: "success" | "denied";
+    metadata?: Record<string, string | number | boolean | null>;
+  }): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO staff_actions
+           (id, actor_id, actor_email, actor_role, action, workspace_id,
+            target_type, target_id, reason, result, source_ip, request_id,
+            metadata, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`
+      )
+      .bind(
+        newId("staffAction", this.now),
+        this.staff.id,
+        this.staff.email,
+        this.staff.role,
+        options.action,
+        options.workspaceId ?? null,
+        options.targetType ?? null,
+        options.targetId ?? null,
+        options.reason ?? null,
+        options.result ?? "success",
+        this.requestId,
+        JSON.stringify(options.metadata ?? {}),
+        this.now
+      )
+      .run();
+  }
+
   private requireRole(minimum: StaffRole, action: string): void {
     const rank: Record<StaffRole, number> = { support: 0, admin: 1, super_admin: 2 };
     if (rank[this.staff.role] < rank[minimum]) {
@@ -262,6 +309,91 @@ export class StaffScopedAccess {
     const changed = (result.meta.changes ?? 0) > 0;
     if (changed) await this.record(workspaceId, "staff.user.force_logout", { userId });
     return changed;
+  }
+
+  /**
+   * Start a password reset on a customer's account.
+   *
+   * Delivery is injected rather than performed here, and that shape is the
+   * point. This class is the cross-tenant *data* exception; giving it the
+   * ability to make outbound calls of its own would widen it from "reads
+   * customer rows, recorded" to "reads customer rows and can send things,
+   * recorded". The callback gets an address and nothing else, so the reset link
+   * it mints is never in scope here — it cannot be logged from this file even
+   * by accident, which is the only way to be sure it is not.
+   *
+   * Returns null when no such user row exists. `no_identity` is different: the
+   * row exists but Firebase has no account for the address, which happens when
+   * a user was created before sign-in moved to Firebase, or was removed there
+   * directly. The caller reports both as accepted, because telling staff which
+   * of the two it was tells them nothing they can act on and the distinction
+   * belongs in the log.
+   *
+   * A failed send is recorded as `denied` and then rethrown. An action that did
+   * not happen must not leave a row saying it did, and an action that was
+   * attempted must not leave no row at all.
+   */
+  async forcePasswordReset(
+    userId: string,
+    reason: string,
+    deliver: (email: string) => Promise<"sent" | "no_identity">
+  ): Promise<"sent" | "no_identity" | null> {
+    this.requireRole("support", "reset passwords");
+
+    const user = await this.db
+      // No `deleted_at` filter: the column does not exist yet. Customer
+      // self-service account deletion has not landed, so there is no such thing
+      // as a soft-deleted user to exclude. When it lands, this needs the guard.
+      .prepare(`SELECT id, email FROM users WHERE id = ?`)
+      .bind(userId)
+      .first<{ id: string; email: string }>();
+    if (user === null) return null;
+
+    // Read before the send, so the audit rows can be written whichever way it
+    // goes. Every workspace this person is a member of, through their org.
+    const workspaces = await this.db
+      .prepare(
+        `SELECT DISTINCT w.id AS workspaceId
+           FROM memberships m
+           JOIN workspaces w ON w.org_id = m.org_id
+          WHERE m.user_id = ?`
+      )
+      .bind(userId)
+      .all<{ workspaceId: string }>();
+
+    let outcome: "sent" | "no_identity";
+    try {
+      outcome = await deliver(user.email);
+    } catch (cause) {
+      await this.recordFleet({
+        action: "staff.user.password_reset",
+        targetType: "user",
+        targetId: userId,
+        reason,
+        result: "denied",
+        // The address, never the link. One is what the record is about; the
+        // other is a bearer credential for the account it resets.
+        metadata: { email: user.email, error: String(cause).slice(0, 200) },
+      });
+      throw cause;
+    }
+
+    await this.recordFleet({
+      action: "staff.user.password_reset",
+      targetType: "user",
+      targetId: userId,
+      reason,
+      metadata: { email: user.email, outcome },
+    });
+
+    // And one row per workspace they belong to, so the owner of a workspace
+    // sees that staff acted on one of their members rather than learning it
+    // from us later.
+    for (const row of workspaces.results ?? []) {
+      await this.record(row.workspaceId, "staff.user.password_reset", { userId, outcome });
+    }
+
+    return outcome;
   }
 
   /** Revoke every live key a user created, across every workspace they touched. */

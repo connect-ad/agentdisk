@@ -2,8 +2,32 @@
    Everything here exists because the design system has no equivalent yet;
    the Drawer in particular is a known gap (docs/design/03 §7.2). */
 
+/* --- Overlay ladder (docs/ui-layering.md) ---
+   One ordered scale for everything that floats. Use the token, never a bare
+   number; if no rung fits, add one to the document first.
+
+   .scrim is defined in the vendored styles.css at 60, below the drawer's old
+   80 — which is why a confirmation opened from the file drawer rendered
+   underneath it with its confirm button unclickable. main.jsx imports
+   styles.css before app.css, so the override below is enough and the vendored
+   sheet is left alone. Drawer and scrim simply swap: nothing sits at 61-79, so
+   the exchange cannot disturb a third layer.
+
+   A modal covers a drawer because a drawer is a place you browse and a dialog
+   is a question you must answer first. */
+:root{
+  --z-base:1;       /* sticky table header */
+  --z-nav:30;       /* shell tabs, marketing nav */
+  --z-topbar:40;    /* shell top bar */
+  --z-progress:50;  /* route progress bar */
+  --z-drawer:60;    /* drawer */
+  --z-modal:80;     /* scrim + modal */
+  --z-toast:90;     /* toasts */
+}
+.scrim{z-index:var(--z-modal)}
+
 /* --- Drawer (design-system gap; see components-local/Drawer.jsx) --- */
-.dw{position:fixed;inset:0;z-index:80;display:flex;justify-content:flex-end}
+.dw{position:fixed;inset:0;z-index:var(--z-drawer);display:flex;justify-content:flex-end}
 .dw__scrim{position:absolute;inset:0;background:var(--scrim);
   animation:ad-fade var(--d-2) var(--ease)}
 .dw__panel{position:relative;width:min(26.25rem,100%);background:var(--surface);
@@ -387,7 +411,7 @@
   .mk__nav{border-radius:var(--r-4) var(--r-4) 0 0}
   .mk__foot{border-radius:0 0 var(--r-4) var(--r-4)}
 }
-.mk__nav{position:sticky;top:0;z-index:30;display:flex;align-items:center;
+.mk__nav{position:sticky;top:0;z-index:var(--z-nav);display:flex;align-items:center;
   gap:var(--s-6);height:var(--topbar-h);padding:0 var(--gutter);
   border-bottom:1px solid var(--line);
   background:color-mix(in srgb,var(--surface) 82%,transparent);
@@ -1024,7 +1048,7 @@
    restart the bar every 2.4s and read as a second page load, so it runs once
    and holds. On completion it goes to full width and fades, so the bar always
    ends by finishing. */
-.tprog{position:fixed;top:0;left:0;right:0;height:0.15625rem;z-index:50;
+.tprog{position:fixed;top:0;left:0;right:0;height:0.15625rem;z-index:var(--z-progress);
   pointer-events:none;background:var(--surface-3);overflow:hidden}
 .tprog__fill{height:100%;width:8%;background:var(--accent);
   animation:ad-bargrow 2.4s ease-out forwards}

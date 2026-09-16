@@ -26,9 +26,12 @@ import { handleMcp } from "./mcp/server";
 import { purgeExpiredFiles, reconcileCounters } from "./jobs/purge";
 import { handleDelivery, isWebhookEvent } from "./jobs/webhook-delivery";
 import { listActivity } from "./routes/activity";
+import { readEmailConfig } from "./lib/email";
+import { readFirebaseAdminConfig } from "./auth/firebase-admin";
 import {
   staffCreate,
   staffForceLogout,
+  staffForcePasswordReset,
   staffGetWorkspace,
   staffListWorkspaces,
   staffLogin,
@@ -153,6 +156,24 @@ export interface Env {
    * to run without it, because an unverifiable second factor is not one.
    */
   DATABASE_ENCRYPTION_KEY?: string;
+
+  /**
+   * MailerSend, pushed by CI via `wrangler secret put`. Absent means the routes
+   * that send refuse rather than reporting a delivery that never happened - the
+   * same fail-closed shape as a missing Stripe key.
+   */
+  MAILERSEND_API_TOKEN?: string;
+
+  /**
+   * A Google service-account key, as the raw JSON, for the privileged Identity
+   * Toolkit calls in auth/firebase-admin.ts.
+   *
+   * Separate from FIREBASE_PROJECT_ID next to it, and far more dangerous:
+   * that one is public configuration, this one can mint a password-reset link
+   * for any account in the project. It never touches Terraform, for the same
+   * reason DATABASE_ENCRYPTION_KEY does not - state is unencrypted JSON.
+   */
+  FIREBASE_SERVICE_ACCOUNT_JSON?: string;
 }
 
 export interface HealthReport {
@@ -441,6 +462,13 @@ export default {
           encryptionKey: env.DATABASE_ENCRYPTION_KEY,
           requestId: id,
           now: Date.now(),
+          // Resolved here, once, so the handlers receive a config object rather
+          // than the environment - there is no path from a staff handler to the
+          // raw token. Null means "not configured here", which the handlers
+          // that need it turn into a refusal naming the feature.
+          email: readEmailConfig(env),
+          firebaseAdmin: readFirebaseAdminConfig(env),
+          dashboardUrl: env.DASHBOARD_URL,
         };
 
         const [, , area, resourceId, action] = segments;
@@ -482,6 +510,9 @@ export default {
           }
           if (action === "revoke-keys" && request.method === "POST") {
             return await staffRevokeKeys(request, staffDeps, resourceId);
+          }
+          if (action === "password-reset" && request.method === "POST") {
+            return await staffForcePasswordReset(request, staffDeps, resourceId);
           }
         }
 

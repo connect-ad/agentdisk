@@ -267,6 +267,16 @@ jobs:
           R2_FILES_SECRET_ACCESS_KEY: ${{ secrets.R2_FILES_SECRET_ACCESS_KEY }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          # Email. MAILERSEND_API_TOKEN is a repository-level secret, shared by
+          # both environments, the way the infrastructure credentials above are
+          # - one MailerSend account owns the verified sender for the domain, so
+          # there is nothing per-environment to vary. `secrets: inherit` in the
+          # caller makes repository and environment secrets both readable here.
+          MAILERSEND_API_TOKEN: ${{ secrets.MAILERSEND_API_TOKEN }}
+          # The service-account key that mints password-reset links. This one IS
+          # per-environment: dev and prod are two Firebase projects, and a key
+          # for one must never be able to act on the other.
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: |
           set -euo pipefail
 

@@ -26,22 +26,7 @@ import { handleMcp } from "./mcp/server";
 import { purgeExpiredFiles, reconcileCounters } from "./jobs/purge";
 import { handleDelivery, isWebhookEvent } from "./jobs/webhook-delivery";
 import { listActivity } from "./routes/activity";
-import { readEmailConfig } from "./lib/email";
-import { readFirebaseAdminConfig } from "./auth/firebase-admin";
-import {
-  staffCreate,
-  staffForceLogout,
-  staffForcePasswordReset,
-  staffGetWorkspace,
-  staffListWorkspaces,
-  staffLogin,
-  staffLogout,
-  staffOverview,
-  staffRevokeKeys,
-  staffSetWorkspaceStatus,
-  staffWhoami,
-  staffWorkspaceActivity,
-} from "./routes/staff";
+import { handleStaffRoute } from "./routes/staff-router";
 import {
   createWebhook,
   deleteWebhook,
@@ -456,67 +441,7 @@ export default {
       // a customer credential could be evaluated against staff logic, or the
       // reverse. This is the one place StaffScopedAccess is reachable.
       if (segments[0] === "v1" && segments[1] === "staff") {
-        const staffDeps = {
-          db: env.DB,
-          kv: env.CACHE,
-          encryptionKey: env.DATABASE_ENCRYPTION_KEY,
-          requestId: id,
-          now: Date.now(),
-          // Resolved here, once, so the handlers receive a config object rather
-          // than the environment - there is no path from a staff handler to the
-          // raw token. Null means "not configured here", which the handlers
-          // that need it turn into a refusal naming the feature.
-          email: readEmailConfig(env),
-          firebaseAdmin: readFirebaseAdminConfig(env),
-          dashboardUrl: env.DASHBOARD_URL,
-        };
-
-        const [, , area, resourceId, action] = segments;
-
-        if (area === "login" && request.method === "POST") {
-          return await staffLogin(request, staffDeps);
-        }
-        if (area === "logout" && request.method === "POST") {
-          return await staffLogout(request, staffDeps);
-        }
-        if (area === "whoami" && request.method === "GET") {
-          return await staffWhoami(request, staffDeps);
-        }
-        if (area === "overview" && request.method === "GET") {
-          return await staffOverview(request, staffDeps);
-        }
-        if (area === "users" && request.method === "POST" && resourceId === undefined) {
-          return await staffCreate(request, staffDeps);
-        }
-
-        if (area === "workspaces") {
-          if (resourceId === undefined && request.method === "GET") {
-            return await staffListWorkspaces(request, staffDeps);
-          }
-          if (resourceId !== undefined && action === undefined && request.method === "GET") {
-            return await staffGetWorkspace(request, staffDeps, resourceId);
-          }
-          if (resourceId !== undefined && action === "activity" && request.method === "GET") {
-            return await staffWorkspaceActivity(request, staffDeps, resourceId);
-          }
-          if (resourceId !== undefined && action === "status" && request.method === "POST") {
-            return await staffSetWorkspaceStatus(request, staffDeps, resourceId);
-          }
-        }
-
-        if (area === "users" && resourceId !== undefined) {
-          if (action === "force-logout" && request.method === "POST") {
-            return await staffForceLogout(request, staffDeps, resourceId);
-          }
-          if (action === "revoke-keys" && request.method === "POST") {
-            return await staffRevokeKeys(request, staffDeps, resourceId);
-          }
-          if (action === "password-reset" && request.method === "POST") {
-            return await staffForcePasswordReset(request, staffDeps, resourceId);
-          }
-        }
-
-        throw new ApiError("NOT_FOUND", "No such route.");
+        return await handleStaffRoute(request, env, segments, id);
       }
 
 

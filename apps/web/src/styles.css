@@ -46,7 +46,7 @@
      token NAME is still its px-at-default size: --t-14 is 0.875rem, which is
      14px on a default root and 17.5px on this one. --- */
   --t-10:0.625rem; --t-11:0.6875rem; --t-12:0.75rem; --t-13:0.8125rem; --t-14:0.875rem; --t-16:1rem;
-  --t-18:1.125rem; --t-21:1.3125rem; --t-26:1.625rem; --t-32:2rem; --t-40:2.5rem; --t-52:3.25rem;
+  --t-18:1.125rem; --t-21:1.3125rem; --t-24:1.5rem; --t-26:1.625rem; --t-32:2rem; --t-40:2.5rem; --t-52:3.25rem;
 
   /* --- the reference's half-steps.
      Its scale is not integer-only. The Design System file declares body/md at

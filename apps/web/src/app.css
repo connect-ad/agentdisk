@@ -447,28 +447,47 @@
 .ds__head{display:flex;align-items:flex-end;justify-content:space-between;
   gap:var(--s-6);margin-bottom:var(--s-7);flex-wrap:wrap}
 .ds__headbody{min-width:0}
-.ds__h2{font-family:var(--font-display);font-size:var(--t-21);
+/* The reference draws this at 24px, dropping to 21px only below its 700px
+   mobile breakpoint — 875px here, since the 125% root moved every threshold a
+   quarter out. It was pinned at 21px on every width, so the section headings
+   on Overview and the screens that share them ran three pixels small on
+   desktop. Margin is the reference's 6px, not 4px. */
+.ds__h2{font-family:var(--font-display);font-size:var(--t-24);
   font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink);
-  margin-bottom:var(--s-2)}
+  margin-bottom:var(--s-3)}
+@media (max-width:875px){ .ds__h2{font-size:var(--t-21)} }
 .ds__sub{font-size:var(--t-13);color:var(--ink-2);max-width:70ch;
   text-wrap:pretty}
 
-/* quick start */
+/* quick start
+   The card is a <Link>, so the global :where(a):hover underline applies to it
+   and — because text decoration propagates from the decorating box down through
+   in-flow descendants — underlines all three spans at once. The design draws
+   these as buttons: the hover is the border and the surface lifting, nothing
+   else. Cancelling the decoration on the anchor itself is what stops it, since
+   a descendant cannot remove an ancestor's underline. */
 .ds__quick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
   gap:var(--s-5)}
+/* 9px and 8px are the reference's own values here and land between steps of
+   the 4px space scale and the radius scale — --s-4 is 8 and --r-2 is 9, each a
+   pixel out in opposite directions. Pinned locally with the value they came
+   from, the way .wsx does for its 22px mark, rather than bending two shared
+   scales for one card. */
 .ds__qcard{border:1px solid var(--line);background:var(--surface);
   border-radius:var(--r-3);padding:var(--s-6);text-align:left;cursor:pointer;
-  display:flex;flex-direction:column;gap:var(--s-4);min-width:0;
+  display:flex;flex-direction:column;gap:0.5625rem;min-width:0;
+  text-decoration:none;
   transition:border-color var(--d-1) var(--ease),background var(--d-1) var(--ease)}
-.ds__qcard:hover{border-color:var(--accent-line);background:var(--surface-2)}
-.ds__qnum{width:1.875rem;height:1.875rem;border-radius:var(--r-2);flex:none;
+.ds__qcard:hover{border-color:var(--accent-line);background:var(--surface-2);
+  text-decoration:none}
+.ds__qnum{width:1.875rem;height:1.875rem;border-radius:0.5rem;flex:none;
   background:var(--accent-soft);border:1px solid var(--accent-line);
   display:grid;place-items:center;font-family:var(--font-mono);
   font-size:var(--t-12);font-weight:var(--w-semi);color:var(--accent-ink)}
 .ds__qtitle{font-size:var(--t-14);font-weight:var(--w-semi);color:var(--ink)}
-.ds__qbody{font-size:var(--t-12);line-height:var(--lh-normal);color:var(--ink-2)}
-.ds__qcta{display:flex;align-items:center;gap:var(--s-3);font-size:var(--t-12);
-  font-weight:var(--w-semi);color:var(--accent-ink)}
+.ds__qbody{font-size:var(--t-12-5);line-height:var(--lh-normal);color:var(--ink-2)}
+.ds__qcta{display:flex;align-items:center;gap:var(--s-3);font-size:var(--t-12-5);
+  font-weight:var(--w-semi);color:var(--accent-ink);margin-top:var(--s-1)}
 
 /* two-column split */
 .ds__two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-6)}

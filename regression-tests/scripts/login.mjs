@@ -39,8 +39,18 @@ if (!EMAIL || !PASSWORD) {
   process.exit(1);
 }
 
-/** Input renders the required marker inside the label, so it reads "Email*". */
-const byLabel = (page, field) => page.getByLabel(new RegExp('^' + field + '[*]?$'));
+/**
+ * Input renders the required marker inside the label, so it reads "Email*".
+ *
+ * Tolerant of case and of a qualifying word in front, because this is *setup*,
+ * not an assertion. The auth rebuild renamed the field from "Email" to
+ * "WORK EMAIL", which stopped this script dead and with it every authed spec —
+ * a signed-out suite that reports "0 failures" is the outcome a baseline must
+ * never produce. The specs themselves still assert accessible names exactly;
+ * only getting *in* is forgiving.
+ */
+const byLabel = (page, field) =>
+  page.getByLabel(new RegExp('^(work |full )?' + field + '[*]?$', 'i'));
 
 /** Anywhere that requires a session. */
 const INSIDE = /^\/(w\/|app$|dashboard$|verify-email$)/;

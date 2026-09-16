@@ -109,7 +109,7 @@ export default function WorkspaceSwitcher({ workspaces = [], currentId, onSelect
           <button
             type="button"
             role="menuitem"
-            className="wsx__item"
+            className="wsx__item wsx__item--create"
             onClick={() => { setOpen(false); setCreating(true); }}
           >
             <span className="wsx__plus" aria-hidden="true"><Icon name="plus" size={14} /></span>

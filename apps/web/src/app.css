@@ -35,14 +35,14 @@
 .wsx__menu{position:absolute;top:calc(100% + var(--s-2));left:0;right:0;z-index:30;
   background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r-3);
   box-shadow:var(--sh-3);padding:var(--s-2);
-  width:150%;min-width:18rem;animation:ad-fade var(--d-1) var(--ease)}
+  width:min(22.5rem,90vw);min-width:18rem;animation:ad-fade var(--d-1) var(--ease)}
 .wsx__menu--scroll{max-height:60vh;overflow-y:auto}
 /* 9px padding, 8px radius, 13.5px label — the reference draws both menus in
    this footer and top bar at those values, the switcher's rows and the account
    menu's items alike, which is what keeps the two indistinguishable. */
 .wsx__item{display:flex;align-items:center;gap:var(--s-4);width:100%;
   padding:0.5625rem;border:0;border-radius:0.5rem;background:transparent;
-  font-size:var(--t-13-5);font-weight:var(--w-med);color:var(--ink-2);
+  font-size:var(--t-13-5);font-weight:var(--w-med);color:var(--ink);
   cursor:pointer;text-align:left;
   transition:background var(--d-1) var(--ease),color var(--d-1) var(--ease)}
 /* The account menu's rows are the page's own text colour, not the muted tone
@@ -66,6 +66,8 @@
 .wsx__tags{display:flex;align-items:flex-end;flex-direction:column;gap:var(--s-1);margin-left:auto}
 .wsx__role{font-size:var(--t-10);font-weight:var(--w-semi);letter-spacing:var(--tr-caps);text-transform:uppercase}
 .wsx__role{color:var(--ink-3)}
+.wsx__item--create{color:var(--ink)}
+.wsx__item--create .wsx__plus{color:var(--ink-2)}
 .wsx__check{flex:none;display:flex;color:var(--accent-ink)}
 .wsx__plus{width:var(--wsx-mark);flex:none;display:grid;place-items:center;
   color:var(--ink-3)}

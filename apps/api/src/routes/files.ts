@@ -62,6 +62,14 @@ const CreateSchema = z
     metadata: MetadataSchema,
     tags: TagsSchema,
   })
+  // Unknown fields are refused rather than dropped. The product's own Quick
+  // start sent "contentType" where this schema says `mimeType`; zod's default
+  // is to strip what it does not recognise, so the request succeeded, the field
+  // was silently discarded, and every file created by following the
+  // documentation came out as application/octet-stream. A typo that changes the
+  // stored result should fail loudly at the boundary -- a caller cannot debug a
+  // field the API pretended to accept.
+  .strict()
   .refine((body) => body.content !== undefined || body.sizeBytes !== undefined, {
     message: "either content (inline) or sizeBytes (presigned upload) is required",
   });

@@ -12,7 +12,7 @@ task.
 
 | Path | Holds | Rule |
 |---|---|---|
-| `CLAUDE.md` | This route and the catalog | Source of truth for *where things are*. Not a duplicate of the specs. |
+| `CLAUDE.md` | This route and the catalog | Source of truth for *where things are*. Not a duplicate of the specs. **While parallel tracks are running, this file is owned by Track 0** — route edits through it rather than editing directly, or two sessions clobber the one file everything else trusts. See `coordination/DEFERRED.md` X-06. Treat the test counts in Status as a snapshot; re-measure after a merge. |
 | `docs/design/` | The specification, `NN-<slug>.md` | 20 documents, PART 1–30. The product's design authority — but see the precedence rule below. |
 | `design-system/` | Upstream mirror of the Claude Design project | **Read-only.** Byte-identical to the remote (96/96). Changes go into Claude Design, then re-import — never edit here. |
 | `apps/api/` | The Cloudflare Worker: REST + MCP, one deployable | Both surfaces are built and share one authorization chain. MCP tools call the REST handlers rather than reimplementing them, so the two cannot drift — live testing once disputed this for `pathPrefix`, and retesting confirmed the code: both surfaces refuse a path outside the key's prefix, see [029](backlog/029-mcp-path-scope-contradiction.md). |

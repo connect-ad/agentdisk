@@ -1,29 +1,83 @@
-@import url('https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,300..700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 /* ==========================================================================
-   AgentDrive Design System — tokens
-   Infrastructure-grade: light cool ground, hairline rules, dense type,
-   one indigo accent, mono for every machine-readable string.
+   AgentDisk Design System — tokens
+   Imported from Claude Design (`AgentDisk Design System.dc.html`, v1.0).
+
+   ── Why the token NAMES did not change ───────────────────────────────────
+   The 23 components in `src/components/` are a byte-verified mirror of the
+   Claude Design project and are read-only (CLAUDE.md). They reference colour,
+   space and type only through these custom properties, so redefining the
+   properties re-themes every one of them without editing a single component
+   and without forking the mirror.
+
+   The new design ships its own names (--bg, --surf, --tx, --acc …). Those are
+   defined below too, as aliases, so hand-written code in `src/routes/` and
+   `src/components-local/` can use whichever vocabulary reads better at the
+   call site. They are the same values, not a second palette.
+
+   ── Why hex, and not oklch ───────────────────────────────────────────────
+   The previous palette was authored in oklch. These values arrive from the
+   design as hex, and converting them would introduce rounding drift between
+   the spec and the build for no benefit. The design's own contrast table
+   (WCAG 2.1 AA in both modes) was computed against these exact hex values.
+
+   ── Light is the base; dark follows the reader's system setting ───────────
+   Both palettes come from the design. The prototype's `colourMode` prop
+   defaults to "dark", but that is a canvas preview default in the same family
+   as `frame: Desktop` — it is not a statement that the product ships dark to
+   everyone. Following `prefers-color-scheme` adds no new control to the UI,
+   honours the choice the reader already made in their OS, and uses both
+   palettes exactly as drawn. Forcing dark on everyone is a one-line change
+   here if that is wanted instead.
    ========================================================================== */
 
 :root{
-  /* --- type families --- */
-  --font-sans:'Public Sans','Helvetica Neue',Helvetica,Arial,sans-serif;
-  --font-mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  /* --- type families ---
+     Outfit carries display and headings; IBM Plex Sans the interface; IBM Plex
+     Mono every machine-readable string. --font-display is new: the previous
+     system had one sans for both roles. */
+  --font-display:'Outfit',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-sans:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 
-  /* --- type scale (px, dense UI base of 14) --- */
-  --t-10:10px; --t-11:11px; --t-12:12px; --t-13:13px; --t-14:14px; --t-16:16px;
-  --t-18:18px; --t-21:21px; --t-26:26px; --t-32:32px; --t-40:40px; --t-52:52px;
+  /* --- type scale. Authored in px against a 16px root and emitted in rem, so
+     the 125% root font-size above scales every one of them together. The
+     token NAME is still its px-at-default size: --t-14 is 0.875rem, which is
+     14px on a default root and 17.5px on this one. --- */
+  --t-10:0.625rem; --t-11:0.6875rem; --t-12:0.75rem; --t-13:0.8125rem; --t-14:0.875rem; --t-16:1rem;
+  --t-18:1.125rem; --t-21:1.3125rem; --t-24:1.5rem; --t-26:1.625rem; --t-32:2rem; --t-40:2.5rem; --t-52:3.25rem;
 
-  --lh-tight:1.15; /* @kind font */
-  --lh-snug:1.3; /* @kind font */
+  /* --- the reference's half-steps.
+     Its scale is not integer-only. The Design System file declares body/md at
+     "13.5 / 1.6", label/mono at "9.5 / 0.11em" and stat/figure at "34 / 1 /
+     -3%", and the Dashboard file draws the shell at 16.5 / 13.5 / 12.5 / 11.5
+     / 10.5 / 9.5 / 9. Every one of those had been rounded to the nearest whole
+     pixel here, which is why the live shell read a shade smaller than the
+     design in the places that matter most — the stat figure was 32 against 34,
+     the tab labels and wordmark half a pixel short — while the mono labels
+     were half a pixel over. Small individually; all at once it is visible. --- */
+  --t-9:0.5625rem; --t-9-5:0.59375rem; --t-10-5:0.65625rem; --t-11-5:0.71875rem;
+  --t-12-5:0.78125rem; --t-13-5:0.84375rem; --t-16-5:1.03125rem; --t-34:2.125rem;
+
+  /* --- the four steps the Auth file adds.
+     AgentDisk Auth.dc.html draws its own sizes rather than reusing the
+     Dashboard's: the split sheet's wordmark at 17 (the Dashboard's is 16.5),
+     the form heading at 25, the brand heading at 28 and the submit button at
+     14.5. None of the four rounds onto an existing step without moving by at
+     least half a pixel, so each is named here rather than approximated. --- */
+  --t-14-5:0.90625rem; --t-17:1.0625rem; --t-25:1.5625rem; --t-28:1.75rem;
+
+  --lh-tight:1.04; /* @kind font */
+  --lh-snug:1.25; /* @kind font */
   --lh-normal:1.5; /* @kind font */
   --lh-loose:1.65; /* @kind font */
-  --tr-tight:-0.02em; /* @kind font */
-  --tr-snug:-0.011em; /* @kind font */
+  --tr-tight:-0.035em; /* @kind font */
+  --tr-mid:-0.03em; /* @kind font */
+  --tr-snug:-0.025em; /* @kind font */
   --tr-none:0; /* @kind font */
   --tr-wide:0.02em; /* @kind font */
-  --tr-caps:0.08em; /* @kind font */
+  --tr-caps:0.11em; /* @kind font */
 
   --w-light:300; /* @kind font */
   --w-reg:400; /* @kind font */
@@ -31,59 +85,93 @@
   --w-semi:600; /* @kind font */
   --w-bold:700; /* @kind font */
 
-  /* --- neutrals (cool) --- */
-  --ink:oklch(0.19 0.012 262);
-  --ink-2:oklch(0.43 0.014 262);
-  --ink-3:oklch(0.575 0.012 262);
-  --ink-4:oklch(0.70 0.010 262);
-  --paper:oklch(0.988 0.002 262);
-  --surface:oklch(1 0 0);
-  --surface-2:oklch(0.972 0.003 262);
-  --surface-3:oklch(0.948 0.005 262);
-  --line:oklch(0.912 0.006 262);
-  --line-2:oklch(0.855 0.008 262);
-  --line-3:oklch(0.79 0.010 262);
+  /* ---------------------------------------------------------------- light ---
+     The design's LIGHT palette. Names on the left are the ones the vendored
+     components already use; the design's own names follow further down. */
 
-  /* --- accent: deep indigo --- */
-  --accent:oklch(0.475 0.168 262);
-  --accent-hover:oklch(0.415 0.168 262);
-  --accent-active:oklch(0.365 0.155 262);
-  --accent-ink:oklch(0.40 0.168 262);
-  --accent-soft:oklch(0.962 0.022 262);
-  --accent-soft-2:oklch(0.925 0.042 262);
-  --accent-line:oklch(0.855 0.062 262);
-  --on-accent:oklch(0.995 0.004 262);
+  /* --- neutrals --- */
+  --ink:#111621;        /* design --tx   */
+  --ink-2:#525C6B;      /* design --tx2  */
+  --ink-3:#5F6875;      /* design --tx3  */
+  --ink-4:#8B94A3;      /* derived: one step lighter than --tx3, for disabled text */
+  --paper:#F6F7F9;      /* design --bg    */
+  --surface:#FFFFFF;    /* design --surf  */
+  --surface-2:#F4F6F9;  /* design --surf2 */
+  --surface-3:#EBEEF3;  /* design --surf3 */
+  --line:#E2E6EC;       /* design --bd    */
+  --line-2:#C9D0DA;     /* design --bd2   */
+  --line-3:#B4BDC9;     /* derived: one step darker than --bd2, for hover borders */
+
+  /* --- accent: violet.
+     The Dashboard prototype drifted to an indigo accent (#4F46E5 / #8B98FF).
+     The design-system document is the authority — it states "one palette …
+     applied across the marketing site, the auth pages and the dashboard
+     shell" — and it matches the Site file, so violet is canonical. */
+  --accent:#6D28D9;         /* design --acc     */
+  --accent-hover:#5B21B6;
+  --accent-active:#4C1D95;
+  --accent-ink:#5B21B6;     /* accent as TEXT on a light ground, so it clears AA */
+  --accent-soft:#F3EDFE;    /* design --accSoft */
+  --accent-soft-2:#E7DCFC;  /* derived: between soft and line, for selection */
+  --accent-line:#D7C4FB;    /* design --accBd   */
+  --on-accent:#FFFFFF;      /* design --accInk  */
 
   /* --- semantics --- */
-  --ok:oklch(0.505 0.128 155); --ok-soft:oklch(0.962 0.032 155); --ok-line:oklch(0.865 0.062 155);
-  --warn:oklch(0.585 0.132 68); --warn-soft:oklch(0.968 0.040 68); --warn-line:oklch(0.875 0.075 68);
-  --danger:oklch(0.515 0.192 25); --danger-hover:oklch(0.455 0.192 25);
-  --danger-soft:oklch(0.966 0.026 25); --danger-line:oklch(0.878 0.058 25);
+  --ok:#15803D; --ok-soft:#ECFDF3; --ok-line:#B7E4C7; --ok-ink:#166534;
+  --warn:#B45309; --warn-soft:#FEF6E7; --warn-line:#F0D9A8; --warn-ink:#92400E;
+  --danger:#DC2626; --danger-hover:#B91C1C;
+  --danger-soft:#FEF1F1; --danger-line:#F3C4C4; --danger-ink:#B42318;
 
-  /* --- dark surface (code, MCP config, terminal) --- */
-  --dark:oklch(0.215 0.016 262);
-  --dark-2:oklch(0.275 0.018 262);
-  --dark-line:oklch(0.345 0.018 262);
-  --dark-ink:oklch(0.925 0.006 262);
-  --dark-ink-2:oklch(0.715 0.012 262);
-  --dark-accent:oklch(0.78 0.115 262);
-  --dark-ok:oklch(0.79 0.135 155);
-  --dark-warn:oklch(0.83 0.125 78);
+  /* --- code surface (CodeBlock, MCP config, terminal).
+     In the previous system this was always a dark panel. The new design draws
+     code light in light mode and dark in dark mode, so these follow the mode
+     rather than staying dark unconditionally. */
+  --dark:#F7F8FB;        /* design --code   */
+  --dark-2:#EBEEF3;
+  --dark-line:#E2E6EC;
+  --dark-ink:#1E2530;    /* design --codeTx */
+  --dark-ink-2:#525C6B;
+  --dark-accent:#6D28D9;
+  --dark-ok:#15803D;
+  --dark-warn:#B45309;
+
+  /* --- scrim and shadow, from the design --- */
+  --scrim:rgba(17,22,33,.45);
+  --shadow-tint:rgba(17,22,33,.16);
+
+  /* --- the design's own vocabulary, aliased onto the same values.
+     For hand-written code in src/routes/ and src/components-local/. Aliases,
+     not a second palette: change a value above and both names move. */
+  --bg:var(--paper);
+  --surf:var(--surface); --surf2:var(--surface-2); --surf3:var(--surface-3);
+  --bd:var(--line); --bd2:var(--line-2);
+  --tx:var(--ink); --tx2:var(--ink-2); --tx3:var(--ink-3);
+  --acc:var(--accent); --accSoft:var(--accent-soft); --accBd:var(--accent-line);
+  --accInk:var(--on-accent);
+  --okSoft:var(--ok-soft); --okBd:var(--ok-line); --okTx:var(--ok-ink);
+  --warnSoft:var(--warn-soft); --warnBd:var(--warn-line); --warnTx:var(--warn-ink);
+  --dngr:var(--danger); --dngrSoft:var(--danger-soft);
+  --dngrBd:var(--danger-line); --dngrTx:var(--danger-ink);
+  --code:var(--dark); --codeTx:var(--dark-ink);
 
   /* --- space (4px base) --- */
-  --s-1:2px; --s-2:4px; --s-3:6px; --s-4:8px; --s-5:12px; --s-6:16px;
-  --s-7:20px; --s-8:24px; --s-9:32px; --s-10:40px; --s-11:56px; --s-12:72px; --s-13:96px;
+  --s-1:0.125rem; --s-2:0.25rem; --s-3:0.375rem; --s-4:0.5rem; --s-5:0.75rem; --s-6:1rem;
+  --s-7:1.25rem; --s-8:1.5rem; --s-9:2rem; --s-10:2.5rem; --s-11:3.5rem; --s-12:4.5rem; --s-13:6rem;
 
-  /* --- radius: small = technical --- */
-  --r-1:3px; --r-2:5px; --r-3:8px; --r-4:12px; --r-full:999px;
+  /* --- radius. Straight off the reference's own scale (6 / 9 / 12 / pill):
+     --r-2 is the 9px it draws every control at — buttons, inputs, selects —
+     and --r-3 the 12px it draws cards and panels at. --r-1 stays 5px because
+     that is what the reference badge uses, and --r-4 14px for the sheet and
+     modal. Both middle steps were a notch tight before (8 / 10). --- */
+  --r-1:0.3125rem; --r-2:0.5625rem; --r-3:0.75rem; --r-4:0.875rem; --r-full:99px;
 
   /* --- elevation: sparse, only for things that float --- */
-  --sh-1:0 1px 2px oklch(0.19 0.012 262/0.06);
-  --sh-2:0 2px 4px oklch(0.19 0.012 262/0.06),0 1px 2px oklch(0.19 0.012 262/0.04);
-  --sh-3:0 8px 24px oklch(0.19 0.012 262/0.10),0 2px 6px oklch(0.19 0.012 262/0.06);
-  --sh-4:0 24px 56px oklch(0.19 0.012 262/0.16),0 4px 12px oklch(0.19 0.012 262/0.08);
-  --ring:0 0 0 3px oklch(0.475 0.168 262/0.22);
-  --ring-danger:0 0 0 3px oklch(0.515 0.192 25/0.22);
+  --sh-1:0 1px 0.125rem var(--shadow-tint);
+  --sh-2:0 0.125rem 0.25rem var(--shadow-tint),0 1px 0.125rem var(--shadow-tint);
+  --sh-3:0 0.5rem 1.5rem var(--shadow-tint),0 0.125rem 0.375rem var(--shadow-tint);
+  --sh-4:0 1.5rem 3.5rem var(--shadow-tint),0 0.25rem 0.75rem var(--shadow-tint);
+  --ring:0 0 0 0.1875rem color-mix(in srgb,var(--accent) 22%,transparent);
+  --ring-danger:0 0 0 0.1875rem color-mix(in srgb,var(--danger) 22%,transparent);
 
   /* --- motion: short, functional --- */
   --ease:cubic-bezier(0.2,0,0.15,1); /* @kind other */
@@ -93,38 +181,235 @@
   --d-3:240ms; /* @kind other */
 
   /* --- layout --- */
-  --nav-w:236px; /* @kind spacing */
-  --nav-w-collapsed:56px; /* @kind spacing */
-  --topbar-h:52px; /* @kind spacing */
+  --nav-w:14.75rem; /* @kind spacing */
+  --nav-w-collapsed:3.5rem; /* @kind spacing */
+  --topbar-h:3.625rem; /* @kind spacing */
   --measure:68ch; /* @kind other */
+  /* The shell's bounded column. The reference draws the whole dashboard inside
+     one sheet — `width: 1180px, margin: 0 auto` (AgentDisk Dashboard.dc.html,
+     rootStyle) — and every band inside it shares one wrapper, `wrap()`, whose
+     only side dimension is a pad of 32 / 24 / 16px. So both values below are
+     literal reference numbers, and one gutter token means the bar, strip,
+     stats, tabs and content cannot fall out of alignment with each other. */
+  --shell-w:73.75rem; /* @kind spacing */
+  --gutter:2rem; /* @kind spacing */
+  /* The stage padding the reference sets around the sheet — `stageStyle`,
+     36px on the desktop frame — which is what puts the header on a gap rather
+     than against the top of the window. */
+  --sheet-gap:2.25rem; /* @kind spacing */
+  /* The tab's own side padding — "0 13px" in the reference's tab style, which
+     is off the 4px space scale, so it is named rather than approximated. With
+     the 2px gap between tabs it is what sets the rhythm of the strip. */
+  --tab-pad:0.8125rem; /* @kind spacing */
 }
 
+/* ==========================================================================
+   Dark
+
+   Only the palette is restated. The alias block above resolves through var(),
+   and var() is resolved where it is used, not where it is declared — so
+   --bg, --surf, --acc and the rest follow these values automatically. The
+   space, type, radius, motion and layout scales are mode-independent and are
+   deliberately not repeated.
+
+   Declared three times over so all three states work: the media query for
+   readers who never touched a control, [data-theme="dark"] so an explicit
+   choice can win over a light system setting, and the :not([data-theme="light"])
+   guard so an explicit *light* choice survives a dark system setting.
+   ========================================================================== */
+
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ink:#E9ECF1; --ink-2:#9AA3B2; --ink-3:#909AA8; --ink-4:#6F7889;
+    --paper:#0B0D11; --surface:#12151B; --surface-2:#171B22; --surface-3:#1F242D;
+    --line:#252B35; --line-2:#343C49; --line-3:#434C5B;
+
+    --accent:#B592FF; --accent-hover:#C4A8FF; --accent-active:#D3BEFF;
+    --accent-ink:#B592FF;
+    --accent-soft:#1E1533; --accent-soft-2:#2A1D47; --accent-line:#452F6E;
+    --on-accent:#0B0D11;
+
+    --ok:#34D399; --ok-soft:#0E251C; --ok-line:#1F4D3B; --ok-ink:#4ADE9B;
+    --warn:#FBBF24; --warn-soft:#271E0B; --warn-line:#544015; --warn-ink:#FCD34D;
+    --danger:#F87171; --danger-hover:#FCA5A5;
+    --danger-soft:#2A1315; --danger-line:#5A2A2C; --danger-ink:#FCA5A5;
+
+    --dark:#0E1116; --dark-2:#171B22; --dark-line:#252B35;
+    --dark-ink:#C6CEDB; --dark-ink-2:#9AA3B2;
+    --dark-accent:#B592FF; --dark-ok:#34D399; --dark-warn:#FBBF24;
+
+    --scrim:rgba(5,6,9,.7);
+    --shadow-tint:rgba(0,0,0,.55);
+  }
+}
+
+:root[data-theme="dark"],
+:root:not([data-theme]){
+  --ink:#E9ECF1; --ink-2:#9AA3B2; --ink-3:#909AA8; --ink-4:#6F7889;
+  --paper:#0B0D11; --surface:#12151B; --surface-2:#171B22; --surface-3:#1F242D;
+  --line:#252B35; --line-2:#343C49; --line-3:#434C5B;
+
+  --accent:#B592FF; --accent-hover:#C4A8FF; --accent-active:#D3BEFF;
+  --accent-ink:#B592FF;
+  --accent-soft:#1E1533; --accent-soft-2:#2A1D47; --accent-line:#452F6E;
+  --on-accent:#0B0D11;
+
+  --ok:#34D399; --ok-soft:#0E251C; --ok-line:#1F4D3B; --ok-ink:#4ADE9B;
+  --warn:#FBBF24; --warn-soft:#271E0B; --warn-line:#544015; --warn-ink:#FCD34D;
+  --danger:#F87171; --danger-hover:#FCA5A5;
+  --danger-soft:#2A1315; --danger-line:#5A2A2C; --danger-ink:#FCA5A5;
+
+  --dark:#0E1116; --dark-2:#171B22; --dark-line:#252B35;
+  --dark-ink:#C6CEDB; --dark-ink-2:#9AA3B2;
+  --dark-accent:#B592FF; --dark-ok:#34D399; --dark-warn:#FBBF24;
+
+  --scrim:rgba(5,6,9,.7);
+  --shadow-tint:rgba(0,0,0,.55);
+}
+
+/* ==========================================================================
+   Accent presets
+
+   `AgentDisk Dashboard.dc.html` carries four accents and applies the chosen
+   one over the base palette. Same mechanism as the colour mode: an attribute
+   on <html> redefines three tokens, and everything downstream — --acc,
+   --accSoft, --accBd, the focus ring, the tab underline — follows through
+   var() with no further change.
+
+   Violet is the design's default and what ships when nothing is chosen, so a
+   reader who never touches the control sees exactly what shipped before this.
+   ========================================================================== */
+
+:root[data-accent="indigo"]{
+  --accent:#4F46E5; --accent-hover:#4338CA; --accent-active:#3730A3;
+  --accent-ink:#4338CA; --accent-soft:#EEF0FE; --accent-soft-2:#DDE1FC;
+  --accent-line:#C6CCFA;
+}
+:root[data-accent="teal"]{
+  --accent:#0D7A70; --accent-hover:#0B655D; --accent-active:#09504A;
+  --accent-ink:#0B655D; --accent-soft:#E9F8F6; --accent-soft-2:#CFEFEB;
+  --accent-line:#A9DFD8;
+}
+:root[data-accent="blue"]{
+  --accent:#2563EB; --accent-hover:#1D4ED8; --accent-active:#1E40AF;
+  --accent-ink:#1D4ED8; --accent-soft:#EBF1FE; --accent-soft-2:#D8E4FD;
+  --accent-line:#BBD1FB;
+}
+
+/* Dark variants. Declared for both the media query and the explicit choice,
+   for the same reason the palette is: an explicit light or dark choice has to
+   win over the system setting in both directions. */
+@media (prefers-color-scheme:dark){
+  :root[data-accent="indigo"]:not([data-theme="light"]){
+    --accent:#8B98FF; --accent-hover:#A3ADFF; --accent-active:#BAC2FF;
+    --accent-ink:#8B98FF; --accent-soft:#181C33; --accent-soft-2:#232A4D; --accent-line:#333C6B;
+  }
+  :root[data-accent="teal"]:not([data-theme="light"]){
+    --accent:#5EDBCB; --accent-hover:#7FE4D8; --accent-active:#9FEDE4;
+    --accent-ink:#5EDBCB; --accent-soft:#0C2321; --accent-soft-2:#123834; --accent-line:#1F4F49;
+  }
+  :root[data-accent="blue"]:not([data-theme="light"]){
+    --accent:#7EA8FF; --accent-hover:#9BBCFF; --accent-active:#B8D0FF;
+    --accent-ink:#7EA8FF; --accent-soft:#0F1B33; --accent-soft-2:#1A2A4D; --accent-line:#2A3E6E;
+  }
+}
+:root[data-theme="dark"][data-accent="indigo"],
+:root:not([data-theme])[data-accent="indigo"]{
+  --accent:#8B98FF; --accent-hover:#A3ADFF; --accent-active:#BAC2FF;
+  --accent-ink:#8B98FF; --accent-soft:#181C33; --accent-soft-2:#232A4D; --accent-line:#333C6B;
+}
+:root[data-theme="dark"][data-accent="teal"],
+:root:not([data-theme])[data-accent="teal"]{
+  --accent:#5EDBCB; --accent-hover:#7FE4D8; --accent-active:#9FEDE4;
+  --accent-ink:#5EDBCB; --accent-soft:#0C2321; --accent-soft-2:#123834; --accent-line:#1F4F49;
+}
+:root[data-theme="dark"][data-accent="blue"],
+:root:not([data-theme])[data-accent="blue"]{
+  --accent:#7EA8FF; --accent-hover:#9BBCFF; --accent-active:#B8D0FF;
+  --accent-ink:#7EA8FF; --accent-soft:#0F1B33; --accent-soft-2:#1A2A4D; --accent-line:#2A3E6E;
+}
+
+/* The browser's own widgets — scrollbars, form controls, the canvas behind a
+   short page — need telling too, or they stay light under a dark palette. */
+:root{color-scheme:dark}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark}}
+:root[data-theme="dark"]{color-scheme:dark}
+:root[data-theme="light"]{color-scheme:light}
+
 *,*::before,*::after{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
+/* ── The 25% site-wide scale ──────────────────────────────────────────────
+   Everything below and in app.css is authored in rem against a 16px root, so
+   this one declaration is what makes the whole UI render a quarter larger —
+   the same thing the browser's own 125% zoom does, and for the same reason:
+   one multiplier applied to every length, rather than a filter over a finished
+   picture.
+
+   `125%`, not `20px`. Both compute to 20px for a reader on defaults, but a
+   percentage is 125% of *their* default, so somebody who has set their browser
+   to 20px for legibility still gets their 25% on top instead of having it
+   silently overridden. A hard px root takes that choice away.
+
+   Not `zoom` and not a `transform: scale()` wrapper: zoom is still uneven
+   across engines, and a scaled wrapper resamples raster assets, breaks
+   hit-testing on fixed and absolutely-positioned children, and leaves layout
+   boxes at their old size so nothing below it reflows. This reflows. */
+html{-webkit-text-size-adjust:100%;font-size:125%}
 body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--font-sans);font-size:var(--t-14);line-height:var(--lh-normal);font-weight:var(--w-reg);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 h1,h2,h3,h4,h5,h6,p,figure,blockquote,dl,dd{margin:0}
 ul,ol{margin:0;padding:0}
 button,input,select,textarea{font:inherit;color:inherit}
 img,svg{display:block;max-width:100%}
+
+/* ── Icons scale with the root too ────────────────────────────────────────
+   `Icon` renders its size as SVG `width`/`height` *attributes*
+   (`<svg width="14" height="14">`), and a presentation attribute is a CSS
+   pixel length — it does not follow the root font-size the way a rem does. So
+   without this block every icon in the product would stay at its old size
+   while the type around it grew a quarter, and a 14px glyph beside 17.5px text
+   reads as a mistake.
+
+   Attribute selectors do the conversion from the stylesheet, which is what
+   keeps `components/Icon/Icon.jsx` — a vendored, mirror-tracked file — out of
+   this change entirely. CSS beats a presentation attribute, so each rule wins
+   without !important. These twelve are every size the app actually passes;
+   `grep -rho "size={[0-9]\+}"` is how to re-check that after adding one. An
+   unlisted size is not broken, only unscaled. */
+svg[width="10"]{width:0.625rem;height:0.625rem}
+svg[width="11"]{width:0.6875rem;height:0.6875rem}
+svg[width="12"]{width:0.75rem;height:0.75rem}
+svg[width="13"]{width:0.8125rem;height:0.8125rem}
+svg[width="14"]{width:0.875rem;height:0.875rem}
+svg[width="15"]{width:0.9375rem;height:0.9375rem}
+svg[width="16"]{width:1rem;height:1rem}
+svg[width="17"]{width:1.0625rem;height:1.0625rem}
+svg[width="19"]{width:1.1875rem;height:1.1875rem}
+svg[width="22"]{width:1.375rem;height:1.375rem}
+svg[width="26"]{width:1.625rem;height:1.625rem}
+svg[width="28"]{width:1.75rem;height:1.75rem}
 table{border-collapse:collapse;border-spacing:0}
-:where(a){color:var(--accent-ink);text-decoration:none;text-underline-offset:2px;text-decoration-thickness:1px;transition:color var(--d-1) var(--ease)}
+:where(a){color:var(--accent-ink);text-decoration:none;text-underline-offset:0.125rem;text-decoration-thickness:1px;transition:color var(--d-1) var(--ease)}
 :where(a):hover{color:var(--accent-active);text-decoration:underline}
-:where(a):focus-visible,:where(button):focus-visible,:where(input):focus-visible,:where(select):focus-visible,:where(textarea):focus-visible,:where([tabindex]):focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--r-1)}
+:where(a):focus-visible,:where(button):focus-visible,:where(input):focus-visible,:where(select):focus-visible,:where(textarea):focus-visible,:where([tabindex]):focus-visible{outline:0.125rem solid var(--accent);outline-offset:0.125rem;border-radius:var(--r-1)}
 ::selection{background:var(--accent-soft-2);color:var(--ink)}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 
 /* ==========================================================================
    Typography utilities
    ========================================================================== */
-.ad-display{font-size:var(--t-40);line-height:var(--lh-tight);letter-spacing:var(--tr-tight);font-weight:var(--w-semi)}
-.ad-h1{font-size:var(--t-26);line-height:var(--lh-snug);letter-spacing:var(--tr-snug);font-weight:var(--w-semi)}
-.ad-h2{font-size:var(--t-21);line-height:var(--lh-snug);letter-spacing:var(--tr-snug);font-weight:var(--w-semi)}
-.ad-h3{font-size:var(--t-16);line-height:var(--lh-snug);letter-spacing:var(--tr-snug);font-weight:var(--w-semi)}
+.ad-display{font-family:var(--font-display);font-size:var(--t-40);line-height:var(--lh-tight);letter-spacing:var(--tr-tight);font-weight:var(--w-semi)}
+.ad-h1{font-family:var(--font-display);font-size:var(--t-26);line-height:var(--lh-snug);letter-spacing:var(--tr-snug);font-weight:var(--w-semi)}
+.ad-h2{font-family:var(--font-display);font-size:var(--t-21);line-height:var(--lh-snug);letter-spacing:var(--tr-snug);font-weight:var(--w-semi)}
+.ad-h3{font-family:var(--font-display);font-size:var(--t-16);line-height:var(--lh-snug);letter-spacing:var(--tr-snug);font-weight:var(--w-semi)}
 .ad-h4{font-size:var(--t-14);line-height:var(--lh-snug);font-weight:var(--w-semi)}
 .ad-body{font-size:var(--t-14);line-height:var(--lh-normal)}
 .ad-body-lg{font-size:var(--t-16);line-height:var(--lh-loose)}
 .ad-small{font-size:var(--t-13);line-height:var(--lh-normal);color:var(--ink-2)}
 .ad-meta{font-size:var(--t-12);line-height:var(--lh-normal);color:var(--ink-3)}
+/* Text for assistive technology only. Clipped to a 1px box rather than
+   display:none or visibility:hidden, both of which take it out of the
+   accessibility tree along with the layout. */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
 .ad-label{font-size:var(--t-12);font-weight:var(--w-semi);letter-spacing:var(--tr-caps);text-transform:uppercase;color:var(--ink-3)}
 .ad-mono{font-family:var(--font-mono);font-size:var(--t-13);letter-spacing:var(--tr-none);font-variant-ligatures:none}
 .ad-mono-sm{font-family:var(--font-mono);font-size:var(--t-12);font-variant-ligatures:none}
@@ -135,22 +420,22 @@ table{border-collapse:collapse;border-spacing:0}
 /* ==========================================================================
    Button
    ========================================================================== */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--s-3);border:1px solid transparent;border-radius:var(--r-2);font-family:var(--font-sans);font-weight:var(--w-med);letter-spacing:var(--tr-snug);cursor:pointer;white-space:nowrap;text-decoration:none;transition:background var(--d-1) var(--ease),border-color var(--d-1) var(--ease),color var(--d-1) var(--ease),box-shadow var(--d-1) var(--ease);position:relative}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--s-4);border:1px solid transparent;border-radius:var(--r-2);font-family:var(--font-sans);font-weight:var(--w-semi);letter-spacing:var(--tr-snug);cursor:pointer;white-space:nowrap;text-decoration:none;transition:background var(--d-1) var(--ease),border-color var(--d-1) var(--ease),color var(--d-1) var(--ease),box-shadow var(--d-1) var(--ease);position:relative}
 .btn:disabled,.btn[aria-disabled="true"]{cursor:not-allowed;opacity:.45}
-.btn--sm{height:28px;padding:0 var(--s-4);font-size:var(--t-12)}
-.btn--md{height:34px;padding:0 var(--s-5);font-size:var(--t-13)}
-.btn--lg{height:42px;padding:0 var(--s-7);font-size:var(--t-14)}
+.btn--sm{height:1.75rem;padding:0 var(--s-4);font-size:var(--t-12)}
+.btn--md{height:2.25rem;padding:0 0.875rem;font-size:var(--t-13)}
+.btn--lg{height:2.625rem;padding:0 var(--s-7);font-size:var(--t-14)}
 .btn--full{width:100%}
 .btn--primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
 .btn--primary:hover:not(:disabled){background:var(--accent-hover);border-color:var(--accent-hover)}
 .btn--primary:active:not(:disabled){background:var(--accent-active)}
-.btn--secondary{background:var(--surface);color:var(--ink);border-color:var(--line-2);box-shadow:var(--sh-1)}
+.btn--secondary{background:transparent;color:var(--ink);border-color:var(--line-2)}
 .btn--secondary:hover:not(:disabled){background:var(--surface-2);border-color:var(--line-3)}
 .btn--secondary:active:not(:disabled){background:var(--surface-3)}
 .btn--ghost{background:transparent;color:var(--ink-2)}
 .btn--ghost:hover:not(:disabled){background:var(--surface-3);color:var(--ink)}
-.btn--danger{background:var(--danger);color:var(--on-accent);border-color:var(--danger)}
-.btn--danger:hover:not(:disabled){background:var(--danger-hover);border-color:var(--danger-hover)}
+.btn--danger{background:var(--danger-soft);color:var(--danger-ink);border-color:var(--danger-line)}
+.btn--danger:hover:not(:disabled){background:var(--danger-soft);border-color:var(--danger)}
 .btn--danger-outline{background:var(--surface);color:var(--danger);border-color:var(--danger-line)}
 .btn--danger-outline:hover:not(:disabled){background:var(--danger-soft)}
 .btn--link{background:transparent;color:var(--accent-ink);padding:0;height:auto;border:0}
@@ -159,15 +444,15 @@ table{border-collapse:collapse;border-spacing:0}
 .btn--dark:hover:not(:disabled){background:var(--dark-line)}
 .btn.is-loading .btn__label,.btn.is-loading .btn__ico{opacity:.45}
 .btn__ico{display:inline-flex;flex:none}
-.btn__spin{position:absolute;width:13px;height:13px;border:1.5px solid currentColor;border-right-color:transparent;border-radius:var(--r-full);animation:ad-spin .6s linear infinite}
+.btn__spin{position:absolute;width:0.8125rem;height:0.8125rem;border:1.5px solid currentColor;border-right-color:transparent;border-radius:var(--r-full);animation:ad-spin .6s linear infinite}
 @keyframes ad-spin{to{transform:rotate(360deg)}}
 .btn-group{display:flex;gap:var(--s-4);flex-wrap:wrap;align-items:center}
-.icon-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid transparent;border-radius:var(--r-2);background:transparent;color:var(--ink-3);cursor:pointer;flex:none;transition:background var(--d-1) var(--ease),color var(--d-1) var(--ease)}
+.icon-btn{display:inline-flex;align-items:center;justify-content:center;width:1.75rem;height:1.75rem;border:1px solid transparent;border-radius:var(--r-2);background:transparent;color:var(--ink-3);cursor:pointer;flex:none;transition:background var(--d-1) var(--ease),color var(--d-1) var(--ease)}
 .icon-btn:hover:not(:disabled){background:var(--surface-3);color:var(--ink)}
 .icon-btn--bordered{border-color:var(--line-2);background:var(--surface)}
 .icon-btn--danger:hover:not(:disabled){background:var(--danger-soft);color:var(--danger)}
 .icon-btn:disabled{opacity:.4;cursor:not-allowed}
-.icon-btn--lg{width:34px;height:34px}
+.icon-btn--lg{width:2.125rem;height:2.125rem}
 
 /* ==========================================================================
    Form controls
@@ -177,27 +462,27 @@ table{border-collapse:collapse;border-spacing:0}
 .field__req{color:var(--danger);font-weight:var(--w-reg)}
 .field__opt{color:var(--ink-3);font-weight:var(--w-reg);font-size:var(--t-12)}
 .field__hint{font-size:var(--t-12);color:var(--ink-3);line-height:var(--lh-normal)}
-.field__error{font-size:var(--t-12);color:var(--danger);display:flex;align-items:flex-start;gap:var(--s-2);line-height:var(--lh-normal)}
-.field__wrap{display:flex;align-items:stretch;background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r-2);transition:border-color var(--d-1) var(--ease),box-shadow var(--d-1) var(--ease)}
+.field__error{font-size:var(--t-12);color:var(--danger-ink);display:flex;align-items:flex-start;gap:var(--s-2);line-height:var(--lh-normal)}
+.field__wrap{display:flex;align-items:stretch;background:var(--surface-2);border:1px solid var(--line-2);border-radius:var(--r-2);transition:border-color var(--d-1) var(--ease),box-shadow var(--d-1) var(--ease)}
 .field__wrap:focus-within{border-color:var(--accent);box-shadow:var(--ring)}
 .field.is-error .field__wrap{border-color:var(--danger)}
 .field.is-error .field__wrap:focus-within{box-shadow:var(--ring-danger)}
 .field.is-disabled .field__wrap{background:var(--surface-2);opacity:.7}
-.field__input{flex:1;min-width:0;height:34px;padding:0 var(--s-5);border:0;background:transparent;font-size:var(--t-13);color:var(--ink);outline:0;border-radius:var(--r-2)}
+.field__input{flex:1;min-width:0;height:2.375rem;padding:0 var(--s-5);border:0;background:transparent;font-size:var(--t-13);color:var(--ink);outline:0;border-radius:var(--r-2)}
 .field__input::placeholder{color:var(--ink-4)}
 .field__input--mono{font-family:var(--font-mono);font-size:var(--t-13)}
-.field__input--lg{height:42px;font-size:var(--t-14)}
-textarea.field__input{height:auto;min-height:80px;padding:var(--s-4) var(--s-5);line-height:var(--lh-normal);resize:vertical}
+.field__input--lg{height:2.625rem;font-size:var(--t-14)}
+textarea.field__input{height:auto;min-height:5rem;padding:var(--s-4) var(--s-5);line-height:var(--lh-normal);resize:vertical}
 .field__affix{display:flex;align-items:center;padding:0 var(--s-4);font-size:var(--t-12);color:var(--ink-3);background:var(--surface-2);border-right:1px solid var(--line);font-family:var(--font-mono);flex:none}
 .field__affix--end{border-right:0;border-left:1px solid var(--line);background:transparent}
 .field__ico{display:flex;align-items:center;padding-left:var(--s-4);color:var(--ink-4);flex:none}
 .select{position:relative;display:flex}
-.select__el{appearance:none;flex:1;height:34px;padding:0 var(--s-9) 0 var(--s-5);background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r-2);font-size:var(--t-13);color:var(--ink);cursor:pointer;transition:border-color var(--d-1) var(--ease),box-shadow var(--d-1) var(--ease)}
+.select__el{appearance:none;flex:1;height:2.125rem;padding:0 var(--s-9) 0 var(--s-5);background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r-2);font-size:var(--t-13);color:var(--ink);cursor:pointer;transition:border-color var(--d-1) var(--ease),box-shadow var(--d-1) var(--ease)}
 .select__el:focus{outline:0;border-color:var(--accent);box-shadow:var(--ring)}
 .select__el:disabled{background:var(--surface-2);color:var(--ink-3);cursor:not-allowed}
 .select__chev{position:absolute;right:var(--s-4);top:50%;transform:translateY(-50%);color:var(--ink-3);pointer-events:none}
 .check{display:flex;align-items:flex-start;gap:var(--s-4);cursor:pointer;min-width:0}
-.check__box{width:16px;height:16px;flex:none;margin-top:2px;border:1px solid var(--line-3);border-radius:var(--r-1);background:var(--surface);display:grid;place-items:center;color:var(--on-accent);transition:background var(--d-1) var(--ease),border-color var(--d-1) var(--ease)}
+.check__box{width:1.0625rem;height:1.0625rem;flex:none;margin-top:0.125rem;border:1.5px solid var(--line-2);border-radius:var(--r-1);background:var(--surface);display:grid;place-items:center;color:var(--on-accent);transition:background var(--d-1) var(--ease),border-color var(--d-1) var(--ease)}
 .check__box--radio{border-radius:var(--r-full)}
 .check input{position:absolute;opacity:0;width:0;height:0}
 .check input:checked+.check__box{background:var(--accent);border-color:var(--accent)}
@@ -207,26 +492,27 @@ textarea.field__input{height:auto;min-height:80px;padding:var(--s-4) var(--s-5);
 .check__title{font-size:var(--t-13);font-weight:var(--w-med);color:var(--ink)}
 .check__desc{font-size:var(--t-12);color:var(--ink-3);line-height:var(--lh-normal)}
 .switch{display:inline-flex;align-items:center;gap:var(--s-4);cursor:pointer}
-.switch__track{width:32px;height:18px;flex:none;border-radius:var(--r-full);background:var(--line-3);position:relative;transition:background var(--d-2) var(--ease)}
-.switch__knob{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:var(--r-full);background:var(--surface);box-shadow:var(--sh-1);transition:transform var(--d-2) var(--ease)}
+.switch__track{width:2.25rem;height:1.25rem;flex:none;border-radius:var(--r-full);background:var(--surface-3);border:1px solid var(--line-2);position:relative;transition:background var(--d-2) var(--ease),border-color var(--d-2) var(--ease)}
+.switch__knob{position:absolute;top:0.125rem;left:0.125rem;width:0.875rem;height:0.875rem;border-radius:var(--r-full);background:var(--ink-3);transition:transform var(--d-2) var(--ease),background var(--d-2) var(--ease)}
 .switch input{position:absolute;opacity:0;width:0;height:0}
-.switch input:checked+.switch__track{background:var(--accent)}
-.switch input:checked+.switch__track .switch__knob{transform:translateX(14px)}
+.switch input:checked+.switch__track{background:var(--accent);border-color:var(--accent)}
+.switch input:checked+.switch__track .switch__knob{background:var(--on-accent)}
+.switch input:checked+.switch__track .switch__knob{transform:translateX(1rem)}
 .switch input:focus-visible+.switch__track{box-shadow:var(--ring)}
 .switch input:disabled+.switch__track{opacity:.5}
 
 /* ==========================================================================
    Badge / status
    ========================================================================== */
-.badge{display:inline-flex;align-items:center;gap:var(--s-3);height:20px;padding:0 var(--s-4);border-radius:var(--r-1);border:1px solid var(--line);background:var(--surface-2);color:var(--ink-2);font-size:var(--t-11);font-weight:var(--w-med);letter-spacing:var(--tr-wide);white-space:nowrap;flex:none}
-.badge--mono{font-family:var(--font-mono);letter-spacing:var(--tr-none);text-transform:none}
+.badge{display:inline-flex;align-items:center;gap:var(--s-3);padding:0.1875rem 0.4375rem;border-radius:var(--r-1);border:1px solid var(--line);background:var(--surface-3);color:var(--ink-2);font-family:var(--font-mono);font-size:0.59375rem;font-weight:var(--w-semi);letter-spacing:0.06em;line-height:1.35;white-space:nowrap;flex:none}
+.badge--mono{text-transform:none}
 .badge--accent{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent-ink)}
-.badge--ok{background:var(--ok-soft);border-color:var(--ok-line);color:var(--ok)}
-.badge--warn{background:var(--warn-soft);border-color:var(--warn-line);color:var(--warn)}
-.badge--danger{background:var(--danger-soft);border-color:var(--danger-line);color:var(--danger)}
+.badge--ok{background:var(--ok-soft);border-color:var(--ok-line);color:var(--ok-ink)}
+.badge--warn{background:var(--warn-soft);border-color:var(--warn-line);color:var(--warn-ink)}
+.badge--danger{background:var(--danger-soft);border-color:var(--danger-line);color:var(--danger-ink)}
 .badge--solid{background:var(--ink);border-color:var(--ink);color:var(--paper)}
-.badge--lg{height:24px;font-size:var(--t-12);padding:0 var(--s-5)}
-.badge__dot{width:5px;height:5px;border-radius:var(--r-full);background:currentColor;flex:none}
+.badge--lg{font-size:var(--t-11);padding:0.25rem 0.5625rem}
+.badge__dot{width:0.3125rem;height:0.3125rem;border-radius:var(--r-full);background:currentColor;flex:none}
 .badge__dot--pulse{animation:ad-pulse 1.8s var(--ease) infinite}
 @keyframes ad-pulse{0%,100%{opacity:1}50%{opacity:.35}}
 
@@ -253,15 +539,15 @@ textarea.field__input{height:auto;min-height:80px;padding:var(--s-4) var(--s-5);
    ========================================================================== */
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-3);overflow:hidden}
 .panel--flush{border-radius:0;border-left:0;border-right:0}
-.panel__head{display:flex;align-items:center;gap:var(--s-5);padding:var(--s-5) var(--s-6);border-bottom:1px solid var(--line);min-height:44px}
-.panel__title{font-size:var(--t-13);font-weight:var(--w-semi);color:var(--ink);letter-spacing:var(--tr-snug)}
+.panel__head{display:flex;align-items:center;gap:var(--s-5);padding:var(--s-5) var(--s-6);border-bottom:1px solid var(--line);min-height:2.75rem}
+.panel__title{font-family:var(--font-display);font-size:var(--t-13);font-weight:var(--w-semi);color:var(--ink);letter-spacing:var(--tr-snug)}
 .panel__sub{font-size:var(--t-12);color:var(--ink-3)}
 .panel__actions{margin-left:auto;display:flex;gap:var(--s-4);align-items:center}
 .panel__body{padding:var(--s-6)}
 .panel__body--flush{padding:0}
 .panel__foot{padding:var(--s-5) var(--s-6);border-top:1px solid var(--line);background:var(--surface-2);display:flex;gap:var(--s-4);align-items:center}
 .divider{height:1px;background:var(--line);border:0;margin:0}
-.dl{display:grid;grid-template-columns:minmax(120px,auto) 1fr;gap:var(--s-4) var(--s-7)}
+.dl{display:grid;grid-template-columns:minmax(7.5rem,auto) 1fr;gap:var(--s-4) var(--s-7)}
 .dl dt{font-size:var(--t-12);color:var(--ink-3)}
 .dl dd{font-size:var(--t-13);color:var(--ink);min-width:0}
 
@@ -270,7 +556,7 @@ textarea.field__input{height:auto;min-height:80px;padding:var(--s-4) var(--s-5);
    ========================================================================== */
 .tbl{width:100%;font-size:var(--t-13)}
 .tbl th{text-align:left;font-size:var(--t-11);font-weight:var(--w-semi);letter-spacing:var(--tr-caps);text-transform:uppercase;color:var(--ink-3);padding:var(--s-4) var(--s-6);border-bottom:1px solid var(--line);background:var(--surface-2);white-space:nowrap;position:sticky;top:0;z-index:1}
-.tbl td{padding:0 var(--s-6);height:44px;border-bottom:1px solid var(--line);color:var(--ink-2);vertical-align:middle}
+.tbl td{padding:0 var(--s-6);height:2.75rem;border-bottom:1px solid var(--line);color:var(--ink-2);vertical-align:middle}
 .tbl tbody tr:last-child td{border-bottom:0}
 .tbl tbody tr{transition:background var(--d-1) var(--ease)}
 .tbl--hover tbody tr:hover{background:var(--surface-2)}
@@ -294,7 +580,7 @@ textarea.field__input{height:auto;min-height:80px;padding:var(--s-4) var(--s-5);
 .code--light{background:var(--surface-2);border-color:var(--line);color:var(--ink)}
 .code--light .code__head{background:var(--surface-3);border-color:var(--line)}
 .code--light .code__name{color:var(--ink-3)}
-.code__copy{display:inline-flex;align-items:center;gap:var(--s-3);height:24px;padding:0 var(--s-4);border:1px solid var(--dark-line);border-radius:var(--r-1);background:transparent;color:var(--dark-ink-2);font-size:var(--t-11);cursor:pointer;transition:color var(--d-1) var(--ease),border-color var(--d-1) var(--ease)}
+.code__copy{display:inline-flex;align-items:center;gap:var(--s-3);height:1.5rem;padding:0 var(--s-4);border:1px solid var(--dark-line);border-radius:var(--r-1);background:transparent;color:var(--dark-ink-2);font-size:var(--t-11);cursor:pointer;transition:color var(--d-1) var(--ease),border-color var(--d-1) var(--ease)}
 .code__copy:hover{color:var(--dark-ink);border-color:var(--dark-ink-2)}
 .code--light .code__copy{border-color:var(--line-2);color:var(--ink-3)}
 .code--light .code__copy:hover{color:var(--ink);border-color:var(--line-3)}
@@ -302,64 +588,64 @@ textarea.field__input{height:auto;min-height:80px;padding:var(--s-4) var(--s-5);
 .tok-str{color:var(--dark-ok)}
 .tok-num{color:var(--dark-warn)}
 .tok-dim{color:var(--dark-ink-2)}
-code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surface-3);border:1px solid var(--line);border-radius:var(--r-1);padding:1px 5px;color:var(--ink)}
+code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surface-3);border:1px solid var(--line);border-radius:var(--r-1);padding:1px 0.3125rem;color:var(--ink)}
 
 /* ==========================================================================
    Empty / error / loading
    ========================================================================== */
 .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:var(--s-12) var(--s-7);gap:var(--s-5)}
-.empty__mark{width:40px;height:40px;border-radius:var(--r-3);border:1px solid var(--line-2);background:var(--surface-2);display:grid;place-items:center;color:var(--ink-3)}
+.empty__mark{width:2.5rem;height:2.5rem;border-radius:var(--r-3);border:1px solid var(--line-2);background:var(--surface-2);display:grid;place-items:center;color:var(--ink-3)}
 .empty__mark--danger{border-color:var(--danger-line);background:var(--danger-soft);color:var(--danger)}
-.empty__title{font-size:var(--t-16);font-weight:var(--w-semi);color:var(--ink);letter-spacing:var(--tr-snug)}
+.empty__title{font-family:var(--font-display);font-size:var(--t-16);font-weight:var(--w-semi);color:var(--ink);letter-spacing:var(--tr-snug)}
 .empty__text{font-size:var(--t-13);color:var(--ink-2);max-width:44ch;line-height:var(--lh-loose);text-wrap:pretty}
 .empty__actions{display:flex;gap:var(--s-4);margin-top:var(--s-2);flex-wrap:wrap;justify-content:center}
-.skel{background:linear-gradient(90deg,var(--surface-3) 25%,var(--surface-2) 50%,var(--surface-3) 75%);background-size:200% 100%;animation:ad-shim 1.4s var(--ease) infinite;border-radius:var(--r-1);height:10px}
+.skel{background:linear-gradient(90deg,var(--surface-3) 25%,var(--surface-2) 50%,var(--surface-3) 75%);background-size:200% 100%;animation:ad-shim 1.4s var(--ease) infinite;border-radius:var(--r-1);height:0.625rem}
 @keyframes ad-shim{0%{background-position:200% 0}100%{background-position:-200% 0}}
-.spinner{width:14px;height:14px;border:1.5px solid var(--line-3);border-right-color:var(--accent);border-radius:var(--r-full);animation:ad-spin .6s linear infinite;flex:none}
+.spinner{width:0.875rem;height:0.875rem;border:1.5px solid var(--line-3);border-right-color:var(--accent);border-radius:var(--r-full);animation:ad-spin .6s linear infinite;flex:none}
 
 /* ==========================================================================
    Overlay: modal / drawer / toast / menu
    ========================================================================== */
-.scrim{position:fixed;inset:0;background:oklch(0.19 0.012 262/0.34);display:grid;place-items:center;padding:var(--s-7);z-index:60;animation:ad-fade var(--d-2) var(--ease)}
+.scrim{position:fixed;inset:0;background:var(--scrim);display:grid;place-items:center;padding:var(--s-7);z-index:60;animation:ad-fade var(--d-2) var(--ease)}
 @keyframes ad-fade{from{opacity:0}to{opacity:1}}
-.modal{background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r-4);box-shadow:var(--sh-4);width:100%;max-width:440px;max-height:100%;display:flex;flex-direction:column;animation:ad-rise var(--d-3) var(--ease-out)}
-@keyframes ad-rise{from{opacity:0;transform:translateY(8px) scale(.99)}to{opacity:1;transform:none}}
-.modal--md{max-width:560px}.modal--lg{max-width:720px}
+.modal{background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r-4);box-shadow:var(--sh-4);width:100%;max-width:27.5rem;max-height:100%;display:flex;flex-direction:column;animation:ad-rise var(--d-3) var(--ease-out)}
+@keyframes ad-rise{from{opacity:0;transform:translateY(0.5rem) scale(.99)}to{opacity:1;transform:none}}
+.modal--md{max-width:35rem}.modal--lg{max-width:45rem}
 .modal__head{padding:var(--s-7) var(--s-7) var(--s-5);display:flex;gap:var(--s-5);align-items:flex-start}
-.modal__mark{width:32px;height:32px;flex:none;border-radius:var(--r-2);display:grid;place-items:center;background:var(--surface-2);border:1px solid var(--line);color:var(--ink-2)}
+.modal__mark{width:2rem;height:2rem;flex:none;border-radius:var(--r-2);display:grid;place-items:center;background:var(--surface-2);border:1px solid var(--line);color:var(--ink-2)}
 .modal__mark--danger{background:var(--danger-soft);border-color:var(--danger-line);color:var(--danger)}
 .modal__mark--accent{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent-ink)}
-.modal__title{font-size:var(--t-16);font-weight:var(--w-semi);color:var(--ink);letter-spacing:var(--tr-snug)}
+.modal__title{font-family:var(--font-display);font-size:var(--t-16);font-weight:var(--w-semi);color:var(--ink);letter-spacing:var(--tr-snug)}
 .modal__desc{font-size:var(--t-13);color:var(--ink-2);line-height:var(--lh-loose);margin-top:var(--s-2);text-wrap:pretty}
 .modal__body{padding:0 var(--s-7) var(--s-7);overflow-y:auto;display:flex;flex-direction:column;gap:var(--s-6)}
 .modal__foot{padding:var(--s-5) var(--s-7);border-top:1px solid var(--line);background:var(--surface-2);display:flex;gap:var(--s-4);justify-content:flex-end;align-items:center;border-radius:0 0 var(--r-4) var(--r-4)}
 .modal__x{margin-left:auto}
-.toast{display:flex;gap:var(--s-5);align-items:flex-start;background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r-3);box-shadow:var(--sh-3);padding:var(--s-5);min-width:300px;max-width:400px}
+.toast{display:flex;gap:var(--s-5);align-items:flex-start;background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r-3);box-shadow:var(--sh-3);padding:var(--s-5);min-width:18.75rem;max-width:25rem}
 .toast__ico{flex:none;margin-top:1px}
 .toast--ok .toast__ico{color:var(--ok)}
 .toast--danger .toast__ico{color:var(--danger)}
 .toast--warn .toast__ico{color:var(--warn)}
 .toast__title{font-size:var(--t-13);font-weight:var(--w-med);color:var(--ink)}
 .toast__text{font-size:var(--t-12);color:var(--ink-2);line-height:var(--lh-normal);margin-top:var(--s-1)}
-.menu{background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r-3);box-shadow:var(--sh-3);padding:var(--s-2);min-width:176px}
+.menu{background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r-3);box-shadow:var(--sh-3);padding:var(--s-2);min-width:11rem}
 .menu__item{display:flex;align-items:center;gap:var(--s-4);width:100%;padding:var(--s-3) var(--s-4);border:0;border-radius:var(--r-1);background:transparent;font-size:var(--t-13);color:var(--ink-2);cursor:pointer;text-align:left;transition:background var(--d-1) var(--ease),color var(--d-1) var(--ease)}
 .menu__item:hover{background:var(--surface-2);color:var(--ink)}
-.menu__item--danger{color:var(--danger)}
+.menu__item--danger{color:var(--danger-ink)}
 .menu__item--danger:hover{background:var(--danger-soft);color:var(--danger)}
 .menu__item:disabled{opacity:.4;cursor:not-allowed}
 .menu__kbd{margin-left:auto;font-family:var(--font-mono);font-size:var(--t-11);color:var(--ink-4)}
 .menu__sep{height:1px;background:var(--line);margin:var(--s-2) 0}
 .menu__label{padding:var(--s-3) var(--s-4) var(--s-2);font-size:var(--t-11);font-weight:var(--w-semi);letter-spacing:var(--tr-caps);text-transform:uppercase;color:var(--ink-4)}
-.tip{background:var(--ink);color:var(--paper);font-size:var(--t-12);padding:var(--s-2) var(--s-4);border-radius:var(--r-1);box-shadow:var(--sh-2);max-width:240px;line-height:var(--lh-snug)}
+.tip{background:var(--ink);color:var(--paper);font-size:var(--t-12);padding:var(--s-2) var(--s-4);border-radius:var(--r-1);box-shadow:var(--sh-2);max-width:15rem;line-height:var(--lh-snug)}
 
 /* ==========================================================================
    Tabs / breadcrumb / pagination
    ========================================================================== */
 .tabs{display:flex;gap:var(--s-7);border-bottom:1px solid var(--line);overflow-x:auto}
-.tabs__item{position:relative;padding:var(--s-4) 0 var(--s-5);border:0;background:transparent;font-size:var(--t-13);font-weight:var(--w-med);color:var(--ink-3);cursor:pointer;white-space:nowrap;transition:color var(--d-1) var(--ease)}
+.tabs__item{position:relative;padding:var(--s-4) 0 var(--s-5);border:0;background:transparent;font-size:var(--t-13);font-weight:var(--w-med);color:var(--ink-2);cursor:pointer;white-space:nowrap;transition:color var(--d-1) var(--ease)}
 .tabs__item:hover{color:var(--ink)}
-.tabs__item[aria-selected="true"]{color:var(--ink)}
-.tabs__item[aria-selected="true"]::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--accent)}
+.tabs__item[aria-selected="true"]{color:var(--accent-ink);font-weight:var(--w-semi)}
+.tabs__item[aria-selected="true"]::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:0.125rem;background:var(--accent)}
 .tabs__count{margin-left:var(--s-3);font-family:var(--font-mono);font-size:var(--t-11);color:var(--ink-4)}
 .crumbs{display:flex;align-items:center;gap:var(--s-3);font-size:var(--t-13);min-width:0;flex-wrap:wrap}
 .crumbs__item{color:var(--ink-3);text-decoration:none;white-space:nowrap;transition:color var(--d-1) var(--ease)}
@@ -372,10 +658,10 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
    ========================================================================== */
 .stat{display:flex;flex-direction:column;gap:var(--s-4);padding:var(--s-6);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-3);min-width:0}
 .stat__label{font-size:var(--t-12);color:var(--ink-3);display:flex;align-items:center;gap:var(--s-3)}
-.stat__val{font-size:var(--t-26);font-weight:var(--w-semi);letter-spacing:var(--tr-tight);color:var(--ink);font-variant-numeric:tabular-nums;line-height:1;display:flex;align-items:baseline;gap:var(--s-3)}
+.stat__val{font-family:var(--font-display);font-size:var(--t-26);font-weight:var(--w-semi);letter-spacing:var(--tr-tight);color:var(--ink);font-variant-numeric:tabular-nums;line-height:1;display:flex;align-items:baseline;gap:var(--s-3)}
 .stat__unit{font-size:var(--t-13);font-weight:var(--w-med);color:var(--ink-3);letter-spacing:var(--tr-none)}
 .stat__sub{font-size:var(--t-12);color:var(--ink-3)}
-.meter{height:4px;border-radius:var(--r-full);background:var(--surface-3);overflow:hidden}
+.meter{height:0.25rem;border-radius:var(--r-full);background:var(--surface-3);overflow:hidden}
 .meter__fill{height:100%;border-radius:var(--r-full);background:var(--accent);transition:width var(--d-3) var(--ease)}
 .meter__fill--warn{background:var(--warn)}
 .meter__fill--danger{background:var(--danger)}
@@ -384,69 +670,143 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
 /* ==========================================================================
    App shell
    ========================================================================== */
-.shell{display:grid;grid-template-columns:var(--nav-w) 1fr;min-height:100vh;background:var(--paper)}
-.shell__nav{display:flex;flex-direction:column;background:var(--surface);border-right:1px solid var(--line);position:sticky;top:0;height:100vh;overflow:hidden}
-.shell__brand{display:flex;align-items:center;gap:var(--s-4);height:var(--topbar-h);padding:0 var(--s-6);border-bottom:1px solid var(--line);flex:none}
-.shell__logo{width:20px;height:20px;border-radius:var(--r-1);background:var(--accent);display:grid;place-items:center;color:var(--on-accent);font-family:var(--font-mono);font-size:var(--t-11);font-weight:var(--w-semi);flex:none}
-.shell__wordmark{font-size:var(--t-14);font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink)}
-.shell__ws{position:relative;padding:var(--s-5) var(--s-5) var(--s-4);flex:none}
-.shell__wsbtn{display:flex;align-items:center;gap:var(--s-4);width:100%;padding:var(--s-4);background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-2);cursor:pointer;text-align:left;transition:background var(--d-1) var(--ease),border-color var(--d-1) var(--ease)}
+/* The reference's breakpoints, named in the Design System file: mobile < 700,
+   tablet 700–1079, desktop >= 1080. The gutter is the one thing every band
+   reads, so it changes here and nowhere else. */
+@media (max-width:1350px){ :root{--gutter:1.5rem} }
+@media (max-width:875px){
+  :root{--gutter:1rem}
+  /* The reference hides the Docs link on mobile (`showDocsLink: !mob`). On a
+     390px bar it is the difference between the workspace switcher having room
+     to read and being crushed to 30px while its label spills over the controls
+     beside it. */
+  .shell__docs{display:none}
+  /* The accent picker goes with it. The reference has no such control at all,
+     so nothing here is owed to it; on a 390px bar its 43px is the difference
+     between the workspace name being readable and being squeezed to an
+     ellipsis. Hidden below 875px, not removed. */
+  .shell__accent{display:none}
+}
+
+/* The column. Below desktop the sheet fills its frame, so there is nothing to
+   centre and no edge to draw; from 1080 up the bands stop at 1180px and the
+   page ground shows either side of them, which is the shape the reference has
+   always drawn. The edge is --line — the same token every horizontal rule in
+   the shell already uses, so the column closes with the rules that meet it. */
+.shell{display:flex;flex-direction:column;min-height:100vh;width:100%;max-width:var(--shell-w);margin:0 auto;background:var(--paper)}
+
+@media (min-width:1351px){
+  /* The sheet, as the reference draws it: standing off the page ground with a
+     1px edge all the way round and a 14px corner. --r-4 is already that 14px
+     — the radius comment above calls it "the sheet and modal" — and the gap is
+     the stage padding the reference sets around the sheet (36px; 28px on the
+     narrow frame, which never applies here because below 1080 the sheet fills
+     the frame and there is no stage to stand off).
+
+     min-height gives the gap back, so a short screen does not gain a scrollbar
+     purely from the two margins. */
+  .shell{
+    margin-block:var(--sheet-gap);
+    min-height:calc(100vh - (2 * var(--sheet-gap)));
+    border:1px solid var(--line);
+    border-radius:var(--r-4);
+    box-shadow:var(--sh-4);
+  }
+  /* The corner has to be cut twice. The reference clips it once, with
+     `overflow:hidden` on the sheet — but that also makes the sheet a scroll
+     container, and the top bar and tab strip stick to the viewport, so they
+     would stop sticking. That is behaviour, not presentation, and this pass
+     does not touch behaviour. So the header carries the same curve itself:
+     it is the one child painting its own background (--surface) over the
+     sheet's top corners. Everything below it is transparent and lets the
+     sheet's own --paper and border-radius show through. */
+  .shell__top{border-radius:var(--r-4) var(--r-4) 0 0}
+}
+
+/* --- Layer 0: top bar --- */
+.shell__top{display:flex;align-items:center;gap:var(--s-4);min-height:var(--topbar-h);padding:var(--s-3) var(--gutter);border-bottom:1px solid var(--line);background:var(--surface);position:sticky;top:0;z-index:40;flex:none}
+.shell__brand{display:flex;align-items:center;gap:var(--s-4);flex:none}
+.shell__logo{width:1.75rem;height:1.75rem;border-radius:0.4375rem;background:#FFFFFF;object-fit:contain;padding:0.125rem;box-sizing:border-box;display:block;flex:none}
+.shell__wordmark{font-family:var(--font-display);font-size:var(--t-16-5);font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink)}
+.shell__rule{width:1px;height:1.375rem;background:var(--line);flex:none;margin:0 var(--s-2)}
+.shell__ws{min-width:0;flex:0 1 auto}
+.shell__topactions{margin-left:auto;display:flex;align-items:center;gap:var(--s-3);flex:none}
+
+/* The workspace switcher and account menu both sit in the top bar now, so
+   their panels drop downward. .wsx__menu--up is the sidebar-era placement and
+   is no longer used by either. */
+.shell__wsbtn--bar{width:auto;max-width:min(16.25rem,100%);padding:var(--s-2) var(--s-4);border-radius:var(--r-2)}
+
+/* --- Layer 1: workspace info strip --- */
+.shell__strip{background:var(--surface-2);border-bottom:1px solid var(--line);flex:none}
+.shell__stripinner{display:flex;align-items:center;gap:var(--s-5);padding:var(--s-4) var(--gutter);flex-wrap:wrap;min-width:0}
+.shell__stripitem{display:flex;align-items:center;gap:var(--s-3);min-width:0}
+.shell__striplabel{font-family:var(--font-mono);font-size:var(--t-9-5);letter-spacing:var(--tr-caps);color:var(--ink-3);flex:none}
+.shell__stripsep{width:1px;height:1rem;background:var(--line);flex:none}
+
+/* --- Layer 3: tab bar --- */
+.shell__tabs{background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:var(--topbar-h);z-index:30;flex:none}
+.shell__tablist{display:flex;gap:var(--s-1);padding:0 var(--gutter);overflow-x:auto;scrollbar-width:none}
+.shell__tablist::-webkit-scrollbar{display:none}
+.shell__tab{display:flex;align-items:center;gap:var(--s-3);height:2.625rem;padding:0 var(--tab-pad);font-size:var(--t-13-5);font-weight:var(--w-med);color:var(--ink-2);text-decoration:none;white-space:nowrap;flex:none;box-shadow:inset 0 -0.125rem 0 0 transparent;transition:color var(--d-1) var(--ease),box-shadow var(--d-1) var(--ease)}
+.shell__tab:hover{color:var(--ink);text-decoration:none}
+.shell__tab[aria-current="page"]{color:var(--accent-ink);font-weight:var(--w-semi);box-shadow:inset 0 -0.125rem 0 0 var(--accent)}
+.shell__tabico{flex:none;color:var(--ink-4);display:flex}
+.shell__tab:hover .shell__tabico{color:var(--ink-3)}
+.shell__tab[aria-current="page"] .shell__tabico{color:var(--accent)}
+.shell__badge{font-family:var(--font-mono);font-size:var(--t-11);color:var(--ink-4)}
+
+/* --- controls the two local menus still borrow ---
+   WorkspaceSwitcher and AccountMenu are styled entirely with these classes
+   (app.css says so, deliberately, so the two read as one family). They moved
+   from the sidebar to the top bar; the classes had to come with them. */
+.shell__wsbtn{display:flex;align-items:center;gap:var(--s-4);width:100%;min-width:0;padding:var(--s-4);background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-2);cursor:pointer;text-align:left;transition:background var(--d-1) var(--ease),border-color var(--d-1) var(--ease)}
 .shell__wsbtn:hover{background:var(--surface-3);border-color:var(--line-2)}
-.shell__wsmark{width:22px;height:22px;flex:none;border-radius:var(--r-1);background:var(--ink);color:var(--paper);display:grid;place-items:center;font-size:var(--t-11);font-weight:var(--w-semi)}
-.shell__wsname{font-size:var(--t-13);font-weight:var(--w-med);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell__wsmark{width:1.25rem;height:1.25rem;flex:none;border-radius:var(--r-1);background:var(--accent-soft);border:1px solid var(--accent-line);color:var(--accent);display:grid;place-items:center;font-size:var(--t-10);font-weight:var(--w-bold)}
+.shell__wsname{min-width:0;font-size:var(--t-13-5);font-weight:var(--w-semi);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .shell__wsmeta{font-size:var(--t-11);color:var(--ink-3)}
-.shell__wsmenu{position:absolute;top:calc(100% - var(--s-3));left:var(--s-5);z-index:30;width:150%;min-width:300px;padding:var(--s-3);background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r-3);box-shadow:var(--sh-4)}
-.shell__wsmenu-label{padding:var(--s-3) var(--s-4);font-size:var(--t-10);font-weight:var(--w-semi);letter-spacing:var(--tr-caps);text-transform:uppercase;color:var(--ink-3)}
-.shell__wsitem{display:flex;align-items:center;gap:var(--s-4);width:100%;padding:var(--s-4);border:0;border-radius:var(--r-2);background:transparent;color:var(--ink);cursor:pointer;text-align:left}
-.shell__wsitem:hover,.shell__wsitem.is-selected{background:var(--surface-2)}
-.shell__wsitem-body{display:flex;flex:1;min-width:0;flex-direction:column;gap:var(--s-1)}
-.shell__wsitem-name{font-size:var(--t-13);font-weight:var(--w-semi);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.shell__wsitem-meta{font-family:var(--font-mono);font-size:var(--t-10);color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.shell__wsitem-side{display:flex;align-items:flex-end;flex-direction:column;gap:var(--s-1);margin-left:auto}
-.shell__wstag,.shell__wsrole{font-size:var(--t-10);font-weight:var(--w-semi);letter-spacing:var(--tr-caps)}
-.shell__wstag{color:var(--accent-ink)}
-.shell__wsrole{color:var(--ink-3)}
-.shell__scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:0 var(--s-5) var(--s-6);display:flex;flex-direction:column;gap:var(--s-7)}
-.shell__group{display:flex;flex-direction:column;gap:var(--s-1)}
-.shell__grouplabel{font-size:var(--t-11);font-weight:var(--w-semi);letter-spacing:var(--tr-caps);text-transform:uppercase;color:var(--ink-4);padding:var(--s-3) var(--s-4)}
-.shell__link{display:flex;align-items:center;gap:var(--s-4);padding:var(--s-3) var(--s-4);border-radius:var(--r-2);font-size:var(--t-13);color:var(--ink-2);text-decoration:none;transition:background var(--d-1) var(--ease),color var(--d-1) var(--ease);position:relative}
-.shell__link:hover{background:var(--surface-2);color:var(--ink);text-decoration:none}
-.shell__link[aria-current="page"]{background:var(--accent-soft);color:var(--accent-ink);font-weight:var(--w-med)}
-.shell__link[aria-current="page"] .shell__linkico{color:var(--accent)}
-.shell__linkico{flex:none;color:var(--ink-4);display:flex}
-.shell__link:hover .shell__linkico{color:var(--ink-3)}
-.shell__badge{margin-left:auto;font-family:var(--font-mono);font-size:var(--t-11);color:var(--ink-4)}
-.shell__foot{flex:none;border-top:1px solid var(--line);padding:var(--s-4) var(--s-5)}
 .shell__user{display:flex;align-items:center;gap:var(--s-4);width:100%;padding:var(--s-3);border:0;border-radius:var(--r-2);background:transparent;cursor:pointer;text-align:left;transition:background var(--d-1) var(--ease)}
 .shell__user:hover{background:var(--surface-2)}
-.shell__main{display:flex;flex-direction:column;min-width:0}
-.shell__top{display:flex;align-items:center;gap:var(--s-5);height:var(--topbar-h);padding:0 var(--s-8);border-bottom:1px solid var(--line);background:oklch(1 0 0/0.82);backdrop-filter:blur(8px);position:sticky;top:0;z-index:20;flex:none}
-.shell__topactions{margin-left:auto;display:flex;align-items:center;gap:var(--s-4)}
-.shell__page{flex:1;padding:var(--s-8);min-width:0;display:flex;flex-direction:column;gap:var(--s-7)}
+
+/* In the bar both are inline controls on one line, at the design's 34px. */
+/* min(cap, 100%) rather than the cap alone. `width:auto` makes this button
+   size to its content, so a bare max-width lets it grow past .shell__ws once
+   that wrapper has been squeezed narrower than the cap — the button then
+   overflows its own parent and the name paints over the controls beside it.
+   Capping at 100% as well keeps it inside whatever room the wrapper has. */
+.shell__wsbtn--bar{width:auto;max-width:min(16.25rem,100%);height:2.125rem;padding:0 var(--s-4);border-radius:var(--r-2)}
+/* The role line is the sidebar's second row; a bar control is one line, and
+   the design shows the plan badge in that space rather than the role. */
+.shell__wsbtn--bar .shell__wsmeta{display:none}
+
+.shell__page{flex:1;padding:var(--s-8) var(--gutter);min-width:0;display:flex;flex-direction:column;gap:var(--s-7)}
 .shell__page--flush{padding:0}
 .shell__burger{display:none}
-.avatar{width:24px;height:24px;border-radius:var(--r-full);background:var(--accent-soft-2);color:var(--accent-ink);display:grid;place-items:center;font-size:var(--t-11);font-weight:var(--w-semi);flex:none;border:1px solid var(--accent-line)}
+.avatar{width:1.5rem;height:1.5rem;border-radius:var(--r-full);background:var(--accent-soft-2);color:var(--accent-ink);display:grid;place-items:center;font-size:var(--t-11);font-weight:var(--w-semi);flex:none;border:1px solid var(--accent-line)}
 .avatar--agent{border-radius:var(--r-1);background:var(--surface-3);color:var(--ink-2);border-color:var(--line-2);font-family:var(--font-mono)}
-.avatar--lg{width:32px;height:32px;font-size:var(--t-13)}
+.avatar--lg{width:2rem;height:2rem;font-size:var(--t-13)}
 
 .page-head{display:flex;align-items:flex-start;gap:var(--s-6);flex-wrap:wrap}
 .page-head__body{min-width:0;flex:1;display:flex;flex-direction:column;gap:var(--s-2)}
-.page-head__title{font-size:var(--t-21);font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink)}
+.page-head__title{font-family:var(--font-display);font-size:var(--t-21);font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink)}
 .page-head__sub{font-size:var(--t-13);color:var(--ink-2);max-width:64ch;text-wrap:pretty}
 .page-head__actions{display:flex;gap:var(--s-4);align-items:center;flex-wrap:wrap}
-.grid-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:var(--s-5)}
+.grid-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(11.875rem,1fr));gap:var(--s-5)}
 .row{display:flex;align-items:center;gap:var(--s-4);min-width:0}
 .row--between{justify-content:space-between}
 .stack{display:flex;flex-direction:column;gap:var(--s-5);min-width:0}
 .spacer{flex:1}
 
-@media (max-width:900px){
-  .shell{grid-template-columns:1fr}
-  .shell__nav{position:fixed;inset:0 auto 0 0;width:280px;z-index:70;transform:translateX(-100%);transition:transform var(--d-3) var(--ease-out);box-shadow:var(--sh-4)}
-  .shell.is-open .shell__nav{transform:none}
-  .shell__burger{display:inline-flex}
-  .shell__page{padding:var(--s-6) var(--s-5)}
-  .shell__top{padding:0 var(--s-5)}
-  .btn--md,.btn--lg{min-height:38px}
-  .icon-btn{width:34px;height:34px}
+@media (max-width:1125px){
+  /* No drawer to open: the tab bar scrolls horizontally instead, which is how
+     the design handles narrow widths. */
+  /* Side padding is the gutter's job now, at the reference's own breakpoints —
+     this block used to restate it at 12px from 900px down, which is both a
+     narrower gutter than the reference draws and a fourth breakpoint it does
+     not have. Only the vertical tightening belongs here. */
+  .shell__page{padding:var(--s-6) var(--gutter)}
+  .shell__wordmark{display:none}
+  .shell__wsbtn--bar{max-width:min(11.25rem,100%)}
+  .btn--md,.btn--lg{min-height:2.375rem}
+  .icon-btn{width:2.125rem;height:2.125rem}
 }

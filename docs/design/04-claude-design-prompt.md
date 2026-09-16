@@ -1,4 +1,4 @@
-# Claude Design — Standalone Build Prompt for AgentDrive
+# Claude Design — Standalone Build Prompt for AgentDisk
 ### PART 9 of the AgentStorage-Inspired Platform Design
 
 *This file is meant to be copy-pasted directly into Claude Design as-is. It is self-contained — it does not assume Claude Design has read the other documents in this set, though it is derived from and consistent with `03-ux-architecture-and-screens.md`.*
@@ -7,7 +7,7 @@
 
 ## Prompt
 
-You are designing the complete UI for **AgentDrive**, a serverless file-storage platform built specifically for AI agents. It gives every AI agent a scoped, persistent workspace for files, folders, and structured metadata, accessed over a REST API and an MCP (Model Context Protocol) server. Humans manage it through a web dashboard. Think "S3 meets a developer dashboard, purpose-built for AI agents" — not a consumer file-sharing app, not an enterprise content-management suite.
+You are designing the complete UI for **AgentDisk**, a serverless file-storage platform built specifically for AI agents. It gives every AI agent a scoped, persistent workspace for files, folders, and structured metadata, accessed over a REST API and an MCP (Model Context Protocol) server. Humans manage it through a web dashboard. Think "S3 meets a developer dashboard, purpose-built for AI agents" — not a consumer file-sharing app, not an enterprise content-management suite.
 
 **Audience:** primarily individual AI developers and small technical teams. The product should feel like it was built by and for people who live in terminals and IDEs, but who still want a clean, fast, trustworthy web UI for the 10% of the time they're not in the API.
 
@@ -33,7 +33,7 @@ You are designing the complete UI for **AgentDrive**, a serverless file-storage 
 > **deep indigo**, not forest green, and the sans is **Public Sans**, not Space
 > Grotesk + Inter. The built system is the source of truth.
 
-The AgentDrive design system is a Claude Design design system:
+The AgentDisk design system is a Claude Design design system:
 
 - Project: **`agent-storage-mcp`** — `d311bfd0-9751-4a9b-84f4-b33e7a09378e`
 - 32 components on `window.AgentStorageMcp_d311bf`, 98 CSS tokens, 26 preview cards.
@@ -101,7 +101,7 @@ mobile drawer), `PageHead`, `Panel`, `DataTable`, `StatTile`, `Meter`, `Tabs`,
 
 *Developer* — `CodeBlock`.
 
-*AgentDrive-specific — these carry the product thesis, use them* — `FileCell`,
+*AgentDisk-specific — these carry the product thesis, use them* — `FileCell`,
 `AgentCard`, `ApiKeyDisplay`, `PermissionSelector`, `UploadDropzone`,
 `UploadItem`, `McpToolList`, `ActivityRow`.
 
@@ -160,7 +160,7 @@ For each screen below, produce: the default/populated state, loading state (skel
 
 **14. MCP Connection (`/w/{workspace}/mcp`)** — Status banner reflecting connection state ("No MCP connection yet" → CTA "Create an MCP-scoped key", or "Connected" with last-call timestamp). "Connect your agent" panel with client tabs (Claude Desktop / Claude Code / Cursor / Generic MCP client) each showing a ready-to-paste JSON config in a Code Block; a checkbox "Include my API key in this snippet" (off by default) with adjacent warning text "Your key will be visible in this snippet. Don't paste it anywhere public." toggles between a placeholder `<YOUR_API_KEY>` and the real key. Below: an "Available tools" reference table (Tool, Description, Requires-scope columns) and a "Recent MCP calls" mini-log (empty: "No MCP calls yet. Once your agent connects, you'll see activity here.").
 
-**14a. Webhooks (`/w/{workspace}/webhooks`, MVP-1)** — Toolbar "Add endpoint" → table (URL, subscribed-event chips, status badge "Active"/"Failing", last delivery + result icon, kebab menu: Send test event / Edit / Rotate secret / Delete). Empty: "No webhooks yet" / "Get notified when files change — useful for triggering downstream automation." → "Add endpoint". Create modal: "Add webhook endpoint" / fields "URL" (placeholder "https://your-service.com/webhooks/agentdrive"), "Events" (checklist) → on save, the same reveal-once modal pattern as screen 13's API key ("Your signing secret" / "Copy this now — you won't be able to see it again..." / acknowledgment button "I've copied my secret"). A "Failing" row (3+ consecutive failures) shows an inline "View recent failures" expansion. Delete confirm: "Delete this webhook endpoint? AgentDrive will stop sending events to **{url}**."
+**14a. Webhooks (`/w/{workspace}/webhooks`, MVP-1)** — Toolbar "Add endpoint" → table (URL, subscribed-event chips, status badge "Active"/"Failing", last delivery + result icon, kebab menu: Send test event / Edit / Rotate secret / Delete). Empty: "No webhooks yet" / "Get notified when files change — useful for triggering downstream automation." → "Add endpoint". Create modal: "Add webhook endpoint" / fields "URL" (placeholder "https://your-service.com/webhooks/agentdisk"), "Events" (checklist) → on save, the same reveal-once modal pattern as screen 13's API key ("Your signing secret" / "Copy this now — you won't be able to see it again..." / acknowledgment button "I've copied my secret"). A "Failing" row (3+ consecutive failures) shows an inline "View recent failures" expansion. Delete confirm: "Delete this webhook endpoint? AgentDisk will stop sending events to **{url}**."
 
 **15. Usage (`/w/{workspace}/usage`)** — Plan summary card with "Upgrade" CTA → four quota bars ("Storage — {used} of {limit}", "Assets — {used} of {limit}", "Egress this period — {used} of {limit}", "Requests this period — {used} of {limit}") each with "Resets in {n} days" and default→amber(80%)→red(95%) coloring; at 100%, an explicit banner: "You've reached your {metric} limit for the {plan} plan." → "Upgrade plan". MVP-1 adds a 30-day line chart per metric below the bars.
 
@@ -184,7 +184,7 @@ For each screen below, produce: the default/populated state, loading state (skel
 
 **25. 500** — "Something went wrong on our end." / "We've logged this and we're looking into it. Try again in a moment." → "Retry" (add "Status page ↗" once a status page exists).
 
-**26. Maintenance (MVP-1+)** — "We're doing quick maintenance." / "AgentDrive will be back in a few minutes. Your data isn't affected."
+**26. Maintenance (MVP-1+)** — "We're doing quick maintenance." / "AgentDisk will be back in a few minutes. Your data isn't affected."
 
 ### Explicit Non-Goals for This Design Pass
 Do not design: a standalone "Workspaces" list page (a switcher dropdown in the sidebar covers this until usage data justifies more), in-app documentation pages (docs live on a separate generated docs site), or a multi-step onboarding tour/wizard (the Dashboard's Quick-start panel and File Browser's empty states cover first-run guidance inline).

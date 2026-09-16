@@ -1,4 +1,4 @@
-# Claude Code — Standalone Infra & CI/CD Implementation Prompt for AgentDrive (agentdisk.io)
+# Claude Code — Standalone Infra & CI/CD Implementation Prompt for AgentDisk (agentdisk.io)
 
 *This prompt executes `12-deployment-roadmap-agentdisk-io.md` step by step. It is scoped to infrastructure, environment separation, and CI/CD only — Terraform, GitHub repo/branch/Environment setup, and GitHub Actions pipelines. It does **not** write the application's business logic — that's `11-backend-implementation-prompt.md`'s job, and it can run before, after, or interleaved with this one (Phase G below is exactly where they meet). Copy-paste this into Claude Code as-is. It assumes `12-deployment-roadmap-agentdisk-io.md` and `07-cloudflare-deployment-and-cost.md` are available in the repo (e.g. `docs/design/`) for reference.*
 
@@ -6,7 +6,7 @@
 
 ## Prompt
 
-You are setting up the **infrastructure and deployment pipeline** for **AgentDrive**, under the domain **agentdisk.io**, on **Cloudflare**, provisioned with **Terraform**, deployed via **GitHub Actions**, with `main` as production and `dev` as development. The full plan is already decided in `12-deployment-roadmap-agentdisk-io.md` — your job is to execute it, in order, not redesign it. Read that file in full before doing anything else; it is the source of truth for naming, resource lists, and sequencing. This prompt exists to turn its 29 steps into an autonomous, checkpointed execution.
+You are setting up the **infrastructure and deployment pipeline** for **AgentDisk**, under the domain **agentdisk.io**, on **Cloudflare**, provisioned with **Terraform**, deployed via **GitHub Actions**, with `main` as production and `dev` as development. The full plan is already decided in `12-deployment-roadmap-agentdisk-io.md` — your job is to execute it, in order, not redesign it. Read that file in full before doing anything else; it is the source of truth for naming, resource lists, and sequencing. This prompt exists to turn its 29 steps into an autonomous, checkpointed execution.
 
 ### Read First
 

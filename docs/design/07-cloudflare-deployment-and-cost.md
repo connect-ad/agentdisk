@@ -1,4 +1,4 @@
-# AgentDrive — Cloudflare Deployment & Cost Model
+# AgentDisk — Cloudflare Deployment & Cost Model
 ### PART 18–19 of the AgentStorage-Inspired Platform Design
 
 All content is **PROPOSAL** unless marked otherwise. Cost figures use Cloudflare's published pricing as of this research (Sept 2026) and are clearly labeled as **assumptions** where they depend on usage patterns we can't know in advance.
@@ -7,6 +7,8 @@ All content is **PROPOSAL** unless marked otherwise. Cost figures use Cloudflare
 
 ## PART 18 — Cloudflare Deployment
 
+**Note (Sept 2026, added after `12-deployment-roadmap-agentdisk-io.md`/`13-infra-cicd-implementation-prompt.md` were written):** the real domain is **`agentdisk.io`**, not the `agentdrive.dev` placeholder used when this section was first drafted — fixed below wherever it appears. Two other things `12` supersedes rather than merely updates: (1) it uses **two** environments (Development, Production), not the three-tier Dev/Preview/Production sketch in 18.1 below — a per-PR preview tier was explicitly deferred; (2) it defines the actual resource-naming standard (`agentdisk-<env>-<resource>`, flat `-dev`-suffixed subdomains like `api-dev.agentdisk.io` rather than nested `api.dev.agentdisk.io`, chosen because Cloudflare's free Universal SSL wildcard covers only one subdomain level) — treat `12` as canonical for exact resource/domain names in the real deployment, and this PART 18 as the background reasoning (cost model, observability approach, directory layout) that's still accurate. Also new since this section was drafted: an `apps/admin` deployable and an `admin`/`admin-dev` subdomain — see `14-admin-panel-and-billing-design.md` PART 28.1 — added to 18.4/18.6 below.
+
 ### 18.1 Environments
 
 Three environments, each a fully separate set of Cloudflare resources (not just config flags on shared resources — real isolation, so a preview-environment bug can never touch production data):
@@ -14,29 +16,29 @@ Three environments, each a fully separate set of Cloudflare resources (not just 
 | | Development | Preview | Production |
 |---|---|---|---|
 | Purpose | Local iteration (`wrangler dev`) | Per-PR or staging validation | Live customer traffic |
-| Workers | Local Miniflare simulation, or a `-dev` deployed Worker | `agentdrive-api-preview` | `agentdrive-api` |
-| D1 | Local SQLite file (`wrangler d1` local mode) | `agentdrive-db-preview` | `agentdrive-db` |
-| R2 | Local simulation or a `-dev` bucket with short lifecycle rules | `agentdrive-files-preview` (7-day auto-purge lifecycle rule, so preview cruft never accumulates cost) | `agentdrive-files` |
-| KV | Local simulation | `agentdrive-cache-preview` | `agentdrive-cache` |
-| Queues | Local simulation | `agentdrive-jobs-preview` | `agentdrive-jobs` |
-| Domain | `localhost` | `preview.agentdrive.dev` / per-PR subdomain via Cloudflare Pages preview URLs | `agentdrive.dev`, `app.agentdrive.dev`, `api.agentdrive.dev` |
+| Workers | Local Miniflare simulation, or a `-dev` deployed Worker | `agentdisk-api-preview` | `agentdisk-api` |
+| D1 | Local SQLite file (`wrangler d1` local mode) | `agentdisk-db-preview` | `agentdisk-db` |
+| R2 | Local simulation or a `-dev` bucket with short lifecycle rules | `agentdisk-files-preview` (7-day auto-purge lifecycle rule, so preview cruft never accumulates cost) | `agentdisk-files` |
+| KV | Local simulation | `agentdisk-cache-preview` | `agentdisk-cache` |
+| Queues | Local simulation | `agentdisk-jobs-preview` | `agentdisk-jobs` |
+| Domain | `localhost` | `preview-*.agentdisk.io` / per-PR subdomain via Cloudflare Pages preview URLs (deferred per `12` — see note above) | `agentdisk.io`, `app.agentdisk.io`, `api.agentdisk.io` |
 | Secrets | `.dev.vars` (git-ignored) | `wrangler secret put --env preview` | `wrangler secret put --env production` |
 
 ### 18.2 Wrangler Configuration (`wrangler.toml`, sketch)
 
 ```toml
-name = "agentdrive-api"
+name = "agentdisk-api"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "agentdrive-db"
+database_name = "agentdisk-db"
 database_id = "<prod-id>"
 
 [[r2_buckets]]
 binding = "FILES"
-bucket_name = "agentdrive-files"
+bucket_name = "agentdisk-files"
 
 [[kv_namespaces]]
 binding = "CACHE"
@@ -44,13 +46,13 @@ id = "<prod-id>"
 
 [[queues.producers]]
 binding = "JOBS"
-queue = "agentdrive-jobs"
+queue = "agentdisk-jobs"
 
 [[queues.consumers]]
-queue = "agentdrive-jobs"
+queue = "agentdisk-jobs"
 max_batch_size = 10
 max_retries = 5
-dead_letter_queue = "agentdrive-jobs-dlq"
+dead_letter_queue = "agentdisk-jobs-dlq"
 
 [triggers]
 crons = ["0 * * * *"]   # hourly reconciliation job, PART 10.8
@@ -70,18 +72,18 @@ Secrets (`DATABASE_ENCRYPTION_KEY` — used to application-level-encrypt `webhoo
 1. Install:            npm install
 2. Auth to Cloudflare:  wrangler login   (or CLOUDFLARE_API_TOKEN in CI)
 3. Create resources (first time only, per environment):
-     wrangler d1 create agentdrive-db
-     wrangler r2 bucket create agentdrive-files
+     wrangler d1 create agentdisk-db
+     wrangler r2 bucket create agentdisk-files
      wrangler kv:namespace create CACHE
-     wrangler queues create agentdrive-jobs
-     wrangler queues create agentdrive-jobs-dlq
+     wrangler queues create agentdisk-jobs
+     wrangler queues create agentdisk-jobs-dlq
 4. Configure secrets:   wrangler secret put SESSION_SIGNING_KEY --env production
                          (repeat per secret, per environment)
-5. Run migrations:      wrangler d1 migrations apply agentdrive-db --env production
+5. Run migrations:      wrangler d1 migrations apply agentdisk-db --env production
 6. Deploy Worker:        wrangler deploy --env production
 7. Deploy frontend:      (Cloudflare Pages, connected to the repo — auto-deploys
-                          app.agentdrive.dev on merge to main; PR previews auto-deploy
-                          to *.agentdrive-app.pages.dev)
+                          app.agentdisk.io on merge to main; PR previews auto-deploy
+                          to *.agentdisk-app.pages.dev)
 8. Configure domain:     (one-time DNS setup, 18.4)
 9. Smoke test:           scripted hit against /v1/healthz, a signed-up-test-account
                           login, a small file upload+download round trip (PART 24's
@@ -90,18 +92,19 @@ Secrets (`DATABASE_ENCRYPTION_KEY` — used to application-level-encrypt `webhoo
 
 ### 18.4 Domain / DNS
 
-**One registrable domain is sufficient for MVP** (`agentdrive.dev`), split by subdomain rather than separate domains — simpler DNS, simpler TLS (one wildcard/multi-SAN cert Cloudflare manages automatically), and simpler cookie-scoping (16.6):
+**One registrable domain is sufficient for MVP** (`agentdisk.io`), split by subdomain rather than separate domains — simpler DNS, simpler TLS (one wildcard/multi-SAN cert Cloudflare manages automatically), and simpler cookie-scoping (16.6). Prod subdomains below; `12`'s naming standard adds a flat `-dev` suffix for the dev environment (e.g. `api-dev.agentdisk.io`), not a nested `api.dev.agentdisk.io`, since Cloudflare's free Universal SSL wildcard covers only one subdomain level:
 
 | Subdomain | Serves | Cloudflare product |
 |---|---|---|
-| `agentdrive.dev` | Marketing site / landing / pricing | Cloudflare Pages |
-| `app.agentdrive.dev` | Dashboard (authenticated SPA) | Cloudflare Pages |
-| `api.agentdrive.dev` | REST API | Workers (custom domain route) |
-| `mcp.agentdrive.dev` | MCP server endpoint | Workers (custom domain route) — kept as a distinct hostname from `api.` even though it's the same Worker fleet (PART 14.1), so MCP client configs are unambiguous and future MCP-specific routing/rate-limit rules can attach cleanly |
-| `docs.agentdrive.dev` | Generated API/MCP documentation | Cloudflare Pages, built from the OpenAPI/MCP schema (PART 25) |
-| `files.agentdrive.dev` (V2, optional) | Custom domain for signed download/share links, if customers want branded links | R2 custom domain binding |
+| `agentdisk.io` | Marketing site / landing / pricing | Cloudflare Pages |
+| `app.agentdisk.io` | Dashboard (authenticated SPA) — the customer-facing User panel | Cloudflare Pages |
+| `admin.agentdisk.io` | Staff panel (internal only) — separate deployable, separate origin/cookie scope from `app.` on purpose | Cloudflare Pages — see `14-admin-panel-and-billing-design.md` PART 28.1 |
+| `api.agentdisk.io` | REST API | Workers (custom domain route) |
+| `mcp.agentdisk.io` | MCP server endpoint | Workers (custom domain route) — kept as a distinct hostname from `api.` even though it's the same Worker fleet (PART 14.1), so MCP client configs are unambiguous and future MCP-specific routing/rate-limit rules can attach cleanly |
+| `docs.agentdisk.io` | Generated API/MCP documentation | Cloudflare Pages, built from the OpenAPI/MCP schema (PART 25) |
+| `files.agentdisk.io` (V2, optional) | Custom domain for signed download/share links, if customers want branded links | R2 custom domain binding |
 
-Setup: add the domain to Cloudflare (nameserver delegation), then `wrangler deploy --routes api.agentdrive.dev/*` (and equivalent for `mcp.`) for the Workers-served subdomains, and connect Pages projects to `agentdrive.dev`/`app.agentdrive.dev`/`docs.agentdrive.dev` via the Cloudflare dashboard or `wrangler pages project create`. TLS is automatic (Cloudflare-managed universal SSL).
+Setup: add the domain to Cloudflare (nameserver delegation), then `wrangler deploy --routes api.agentdisk.io/*` (and equivalent for `mcp.`) for the Workers-served subdomains, and connect Pages projects to `agentdisk.io`/`app.agentdisk.io`/`admin.agentdisk.io`/`docs.agentdisk.io` via the Cloudflare dashboard or `wrangler pages project create`. TLS is automatic (Cloudflare-managed universal SSL).
 
 ### 18.5 Observability (Low-Cost, per the Brief's Cost Constraint)
 
@@ -110,7 +113,7 @@ Tracked, without introducing a third-party paid observability platform for MVP-0
 ### 18.6 Project Directory Structure
 
 ```
-agentdrive/
+agentdisk/
 ├── apps/
 │   ├── api/                 # Workers: REST + MCP server (one deployable Worker)
 │   │   ├── src/
@@ -124,11 +127,17 @@ agentdrive/
 │   │   ├── migrations/       # D1 migrations, sequential, never edited post-apply
 │   │   ├── wrangler.toml
 │   │   └── test/
-│   ├── web/                  # Dashboard SPA (Pages)
+│   ├── web/                  # Dashboard SPA (Pages) — customer-facing User panel, PART 8 screens
 │   │   ├── src/
 │   │   │   ├── routes/       # one per screen in PART 8
 │   │   │   ├── components/   # design-system components (PART 7.2)
 │   │   │   └── lib/          # API client, auth state
+│   │   └── test/
+│   ├── admin/                 # Staff panel (Pages), separate deployable & origin — 14-admin-panel-and-billing-design.md PART 28
+│   │   ├── src/
+│   │   │   ├── routes/       # one per screen in 14 PART 28.2 (Login, Overview, Workspaces, Users, Billing, Audit, Staff Accounts)
+│   │   │   ├── components/   # reuses design-system tokens from apps/web, not a second design system
+│   │   │   └── lib/          # API client scoped to /v1/staff/*, staff session state
 │   │   └── test/
 │   └── docs/                 # Generated docs site (Pages), built from openapi.yaml + mcp-tools.json
 ├── packages/
@@ -149,7 +158,7 @@ agentdrive/
 
 ## PART 19 — Cost Model
 
-### 19.0 AgentDrive Plan Limits (the numbers referenced throughout this package)
+### 19.0 AgentDisk Plan Limits (the numbers referenced throughout this package)
 
 **PROPOSAL.** Every other document in this set (`02` PART 6.5, `03` PART 8.2/8.19, `05` PART 12.7) refers forward to "PART 19 for exact numbers" — these are those numbers. Modeled on AgentStorage's own hard-cap-not-metered-overage pricing shape (PART 2.5/4.3, a pattern worth keeping for the trust signal it sends) but re-leveled around R2's zero-egress economics, which lets us be meaningfully more generous on egress specifically than a product built on egress-charging storage would be:
 
@@ -200,7 +209,7 @@ All figures below are **estimates**, not guarantees, and depend on real usage pa
 
 ### 19.4 What Creates Fixed Monthly Cost (vs. What's Purely Usage-Based)
 
-**Fixed, regardless of usage:** the $5/month Workers Paid plan (recommended from day one), the domain registration (~$10–15/year, negligible monthly), and — once adopted — a transactional email provider's base tier if one has a nonzero minimum (many don't below a few thousand emails/month). **Everything else — R2 storage, R2 operations, D1 reads/writes beyond free tier, KV, Queues, Workers requests beyond free tier — is purely usage-based and literally $0 at zero usage.** This is the direct, load-bearing consequence of the "serverless-first, scale-to-zero" architecture choice: an AgentDrive deployment with zero customers costs roughly $5/month, not the $50–200+/month a minimal always-on VPS + managed Postgres + Redis stack would cost sitting idle.
+**Fixed, regardless of usage:** the $5/month Workers Paid plan (recommended from day one), the domain registration (~$10–15/year, negligible monthly), and — once adopted — a transactional email provider's base tier if one has a nonzero minimum (many don't below a few thousand emails/month). **Everything else — R2 storage, R2 operations, D1 reads/writes beyond free tier, KV, Queues, Workers requests beyond free tier — is purely usage-based and literally $0 at zero usage.** This is the direct, load-bearing consequence of the "serverless-first, scale-to-zero" architecture choice: an AgentDisk deployment with zero customers costs roughly $5/month, not the $50–200+/month a minimal always-on VPS + managed Postgres + Redis stack would cost sitting idle.
 
 ### 19.5 Realistic Range for Early-Stage Deployment
 

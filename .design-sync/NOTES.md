@@ -16,7 +16,7 @@
   (searched to depth 5).
 - 2026-09-05 (2nd run): Repo now contains content, but it is a **specification
   package**, not a design system: `Worlflow.md` + `docs/design/00..10-*.md`
-  (AgentDrive — serverless AI-agent storage platform). Still NO `package.json`,
+  (AgentDisk — serverless AI-agent storage platform). Still NO `package.json`,
   no lockfile, no source, no `dist/`, no `.storybook/`, no `*.stories.*`.
 - `/design-sync` therefore cannot run: the converter bundles a repo's compiled
   `dist/`, and nothing here is built. Shape detection remains unrun; `"shape"`
@@ -111,7 +111,7 @@ Backend deliberately untouched, per the user's "finish UI/UX first, sequentially
    the Claude Design system** so the design agent can use it too.
 4. **Tooltip and dark mode stay descoped.** `.tip` gives styling but no behaviour;
    dark mode is deliberately absent ("the app itself is never dark").
-5. **Docs nav is external** (docs.agentdrive.dev) per §8.31 — not an in-app route.
+5. **Docs nav is external** (docs.agentdisk.io) per §8.31 — not an in-app route.
 6. `state` props on screens keep every spec'd state (loading / empty / error /
    quota-warn / lockout / no-results) reachable before the API exists. Delete the
    prop when wiring real data.
@@ -136,3 +136,26 @@ Backend deliberately untouched, per the user's "finish UI/UX first, sequentially
 - No automated tests and no browser-rendered visual verification: the screens are
   build-verified and spec-checked, not screenshot-verified.
 - `.thumbnail` still not imported (binary, not in the requested file list).
+
+## 2026-09-07 — First write back UP to Claude Design
+
+`components/Modal/Modal.jsx` was fixed in the design system and pushed upstream
+via `finalize_plan` + `write_files` (etag `1788566234313045` ->
+`1788779763462064`, 1808 -> 2862 bytes). All three copies are byte-identical
+again: Claude Design, `design-system/`, `apps/web/src/components/`.
+
+- **`write_files` needs a `plan_token` from this transport.** Calling it bare
+  returns "available only through the native Claude Design tool". Declare the
+  paths with `finalize_plan` first; it hands back both the token and the current
+  `base_etags` to pass as `if_match`.
+- **`_ds_bundle.js` was NOT regenerated and is now stale for Modal.** It carries
+  a Babel-compiled copy of every component plus a `sourceHashes` map
+  (`components/Modal/Modal.jsx` -> `49ddc570606a`, computed by Claude Design's
+  build, not reproducible here). Hand-editing it would produce a bundle whose
+  declared hash disagrees with its own contents, which is worse than a stale
+  one. Nothing in `apps/web` reads the bundle — the app imports the .jsx sources
+  through `src/components/index.js` — so only the Claude Design preview surface
+  still runs the old Modal, until the project rebuilds.
+- **Every design-system `.jsx` is pure ASCII.** Verified across all 32 before
+  writing; the fix keeps that, which also sidesteps the entity/escape mangling
+  recorded above. Match it in anything written upstream.

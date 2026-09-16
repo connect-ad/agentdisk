@@ -1,7 +1,7 @@
-# AgentDrive — Research & Product Opportunity
+# AgentDisk — Research & Product Opportunity
 ### PART 1–4 of the AgentStorage-Inspired Platform Design (see `00-INDEX.md` for the full document set)
 
-**Working product name used throughout this document set: "AgentDrive."** It's a placeholder — pick your own before launch — used so every doc can refer to "the product" concretely instead of "the platform."
+**Working product name used throughout this document set: "AgentDisk."** It's a placeholder — pick your own before launch — used so every doc can refer to "the product" concretely instead of "the platform."
 
 **Evidence key used throughout:**
 - **FACT** — directly verified from a live, public, primary source (URL cited).
@@ -16,7 +16,7 @@
 
 The broader competitive landscape (20 products researched across agent memory, agent sandboxes, MCP-native storage, AI workspaces, agent-facing BaaS, and vector/RAG storage) shows a consistent pattern: almost nobody builds a novel storage primitive. Nearly everyone wraps S3/GCS-class object storage, Postgres, or SQLite in an agent-friendly API and monetizes the wrapper — often at a steep markup (Pinecone Assistant: ~$3/GB/month vs. ~$0.023/GB/month for raw S3; Chroma Cloud: $2.50 per logical GiB *written*). The market is fragmented into four solution families an agent builder currently has to stitch together themselves: memory/fact stores (Mem0, Zep, Letta, Supermemory), sandboxes with incidental storage (E2B, Modal, Daytona, Northflank), MCP-native document gateways over existing platforms (Box, Notion, fast.io), and general BaaS retrofitted with AI positioning (Supabase, Convex). Critically, **Anthropic's own official MCP servers repo has archived its storage-adjacent reference servers** (Google Drive, Postgres, Redis, SQLite), leaving no canonical, well-maintained MCP storage backend for the ecosystem to build against. And most sandbox-adjacent storage bills hourly, coupled to compute — nobody offers storage that is genuinely serverless (scale-to-zero, pay only for bytes and requests, zero idle cost) *and* MCP-native *and* general-purpose (files + folders + metadata, not RAG-chunked documents or memory facts only).
 
-**This is the opportunity.** A product that is REST **and** MCP-native from day one (not MCP bolted on later), general-purpose (files, folders, metadata, search — not memory-only or RAG-only), priced close to raw object-storage economics with transparent hard caps, and built on a genuinely serverless architecture (Cloudflare Workers + R2 + D1) with zero fixed monthly cost until real usage arrives. The rest of this document set designs exactly that product — call it **AgentDrive** — from MVP-0 through a production-hardened V2, with complete UX specs, API/MCP specs, a Cloudflare-native architecture, security and privacy design, test plans, and two standalone implementation prompts (one for Claude Design, one for Claude Code).
+**This is the opportunity.** A product that is REST **and** MCP-native from day one (not MCP bolted on later), general-purpose (files, folders, metadata, search — not memory-only or RAG-only), priced close to raw object-storage economics with transparent hard caps, and built on a genuinely serverless architecture (Cloudflare Workers + R2 + D1) with zero fixed monthly cost until real usage arrives. The rest of this document set designs exactly that product — call it **AgentDisk** — from MVP-0 through a production-hardened V2, with complete UX specs, API/MCP specs, a Cloudflare-native architecture, security and privacy design, test plans, and two standalone implementation prompts (one for Claude Design, one for Claude Code).
 
 **What we are explicitly *not* doing:** copying AgentStorage's UI, copying its API route names verbatim, or assuming its homepage represents its whole product (it largely does — the site has almost no depth beyond three routes, which is itself a finding, not an oversight on our part).
 
@@ -162,7 +162,7 @@ Four things are true simultaneously across all 20 products, and no single produc
 3. **Storage is bundled with, and billed alongside, running compute** almost everywhere in the sandbox category (E2B, Daytona, Northflank, Modal) — true zero-idle-cost persistence (pay only for bytes at rest and requests made, nothing for idle hours) exists only in the plain object-storage tier of hyperscalers, not in any agent-branded product researched.
 4. **General-purpose file/folder/metadata storage is rare.** Most products are shaped for one narrow data type: RAG-chunked documents (Pinecone), conversational facts (Mem0/Zep), reactive JSON+vectors (Convex), or existing platform content (Box/Notion/Dash). Nobody offers a clean "files + folders + metadata + full-text/tag search, agent- and human-accessible, at S3-like economics."
 
-**PROPOSAL.** AgentDrive is positioned exactly in this gap: REST + MCP native from the start, general-purpose file/folder/metadata storage (not memory-only, not RAG-only), priced close to Cloudflare R2's raw economics with transparent hard caps (following AgentStorage's honest "you hit a wall, not a surprise bill" model, which is worth keeping), and truly serverless — R2 storage costs nothing when idle, Workers cost nothing when idle, D1 costs nothing when idle. No product researched combines all four properties.
+**PROPOSAL.** AgentDisk is positioned exactly in this gap: REST + MCP native from the start, general-purpose file/folder/metadata storage (not memory-only, not RAG-only), priced close to Cloudflare R2's raw economics with transparent hard caps (following AgentStorage's honest "you hit a wall, not a surprise bill" model, which is worth keeping), and truly serverless — R2 storage costs nothing when idle, Workers cost nothing when idle, D1 costs nothing when idle. No product researched combines all four properties.
 
 ---
 
@@ -190,22 +190,22 @@ Four things are true simultaneously across all 20 products, and no single produc
 4. **Docs written defensively for an LLM reader** (prompt-injection-aware instructions) — a real, exportable insight for our own agent-facing docs and MCP tool descriptions.
 5. **Append-only write primitive** for logs/journals — a genuinely useful primitive for agent memory/transcript use cases that a plain PUT-object API doesn't give you cleanly.
 
-### 4.4 What AgentStorage Got Wrong (and how AgentDrive addresses each)
+### 4.4 What AgentStorage Got Wrong (and how AgentDisk addresses each)
 
-| Gap in AgentStorage | AgentDrive's answer |
+| Gap in AgentStorage | AgentDisk's answer |
 |---|---|
 | No MCP server at all | MCP is a first-class interface from MVP-1, sharing one authorization core with the REST API (PART 14) |
 | No move/rename, no real folders, no path search | Folder is a first-class entity; move/rename/copy are core file operations; search covers name, path, and metadata (PART 3/11 data model) |
 | No versioning | Lightweight file versioning is scoped for V2 with a clear data-model hook left in MVP-1 (PART 6) |
 | No ToS/Privacy Policy | Both drafted in full in PART 17, gated behind signup before any paid capability |
 | No compliance posture | Security model, audit logging, and data-handling claims are honest about what Cloudflare's architecture actually provides — no unsupported "we can never see your data" claims (PART 16/17) |
-| Ambiguous self-host vs. SaaS story | AgentDrive is explicitly a single multi-tenant hosted SaaS; self-hosting is out of scope, stated plainly, not implied and left unresolved |
+| Ambiguous self-host vs. SaaS story | AgentDisk is explicitly a single multi-tenant hosted SaaS; self-hosting is out of scope, stated plainly, not implied and left unresolved |
 | Documentation inconsistencies (pricing/route drift, dead onboarding command) | One source of truth: OpenAPI spec generates both the human docs and the MCP tool schemas (PART 14), CI checks that pricing constants match the billing config (PART 24) |
 | Search limited to caption/tag only | MVP-1 search covers filename/path + metadata; full-text content search is V2 (opt-in, async); semantic/vector search is deferred pending evidence of need (PART 19 §Search) |
 
 ### 4.5 Positioning Statement
 
-**PROPOSAL.** *AgentDrive is serverless, agent-native file storage: a REST and MCP API that gives every AI agent its own scoped, persistent workspace for files, folders, and structured metadata — built on Cloudflare so it costs nothing when idle and scales without a rewrite when it isn't.*
+**PROPOSAL.** *AgentDisk is serverless, agent-native file storage: a REST and MCP API that gives every AI agent its own scoped, persistent workspace for files, folders, and structured metadata — built on Cloudflare so it costs nothing when idle and scales without a rewrite when it isn't.*
 
 Target wedge: individual AI developers and small teams building autonomous or long-running agents (coding agents, browser-automation agents, content pipelines, research agents) who currently either (a) hand an agent a raw, over-privileged cloud storage key, (b) stitch together a memory product + a sandbox + a BaaS product to cover what should be one job, or (c) have outgrown AgentStorage's undocumented, MCP-less, unversioned model but don't want Cloudflare Agents' full platform-assembly complexity.
 

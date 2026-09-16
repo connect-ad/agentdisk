@@ -3,6 +3,10 @@ node_modules/
 
 # Build output
 apps/web/dist/
+apps/admin/dist/
+
+# Wrangler's local dev state and bundle scratch, written by `wrangler dev`.
+.wrangler/
 
 # Logs
 *.log

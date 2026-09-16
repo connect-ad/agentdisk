@@ -1,4 +1,4 @@
-# AgentDrive — Proposed Product & MVP Scope
+# AgentDisk — Proposed Product & MVP Scope
 ### PART 5–6 of the AgentStorage-Inspired Platform Design
 
 All decisions in this document are **PROPOSAL** (our own design choices) unless explicitly marked otherwise. See file `01-research-and-opportunity.md` for the evidence base.

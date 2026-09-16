@@ -3,7 +3,7 @@
 **Status:** Done
 
 The working tree is now a git repository, pushed to
-`https://github.com/connect-ad/agent-drive` (branch `main`, 217 files).
+`https://github.com/connect-ad/agentdisk` (branch `main`, 217 files).
 
 Decisions made while closing this:
 
@@ -23,7 +23,7 @@ tree (`ad_live_…`, `whsec_…`) is mock data in a UI screen for a product with
 backend — there were no real credentials, no `.env`, and no key material.
 
 **The repository is public.** That was its existing setting, not a choice made
-here. `gh repo edit connect-ad/agent-drive --visibility private` flips it.
+here. `gh repo edit connect-ad/agentdisk --visibility private` flips it.
 
 Both [`cpack`](../.claude/commands/cpack.md) and
 [`cpush`](../.claude/commands/cpush.md) are now fully operational — the git

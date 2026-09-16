@@ -1,4 +1,4 @@
-# AgentDrive API Worker.
+# AgentDisk API Worker.
 #
 # Resource IDs below are placeholders. They are NOT secrets — they are
 # Terraform-owned identifiers, injected at deploy time by
@@ -15,10 +15,21 @@ main = "src/index.ts"
 compatibility_date = "2026-08-01"
 compatibility_flags = ["nodejs_compat"]
 
+# The custom domains Terraform creates (api./mcp.) are the only intended entry
+# points. Left unset, Wrangler enables workers.dev and Preview URLs by default,
+# which publishes the Worker on a second, unversioned public hostname that
+# bypasses those domains entirely - and on prod would expose customer data on a
+# URL nobody is watching.
+workers_dev = false
+preview_urls = false
+
 # ---------------------------------------------------------------- dev ---
 [env.dev]
 name = "agentdisk-dev-api"
-vars = { ENVIRONMENT = "dev" }
+# TURNSTILE_ALLOWED_HOSTNAMES pins which hostname a Turnstile challenge may have
+# been solved on. Public configuration, not a secret - the secret half is pushed
+# separately by CI. Left empty the check is skipped.
+vars = { ENVIRONMENT = "dev", TURNSTILE_ALLOWED_HOSTNAMES = "app-dev.agentdisk.io,api-dev.agentdisk.io", R2_ACCOUNT_ID = "TF_OUTPUT_account_id", R2_BUCKET_NAME = "TF_OUTPUT_r2_bucket_name", FIREBASE_PROJECT_ID = "agentdisk-dev", CORS_ALLOWED_ORIGINS = "https://app-dev.agentdisk.io,http://localhost:5173", DASHBOARD_URL = "https://app-dev.agentdisk.io" }
 
 [[env.dev.d1_databases]]
 binding = "DB"
@@ -43,10 +54,17 @@ max_batch_size = 10
 max_retries = 5
 dead_letter_queue = "agentdisk-dev-jobs-dlq"
 
+# Hourly, at :17 rather than :00. Every Worker on the platform scheduled at the
+# hour fires at the same instant; an off-minute avoids that thundering herd for
+# no cost. The purge only acts on files past their 24-hour grace period, so the
+# exact minute is irrelevant to correctness.
+[env.dev.triggers]
+crons = ["17 * * * *"]
+
 # --------------------------------------------------------------- prod ---
 [env.prod]
 name = "agentdisk-prod-api"
-vars = { ENVIRONMENT = "prod" }
+vars = { ENVIRONMENT = "prod", TURNSTILE_ALLOWED_HOSTNAMES = "app.agentdisk.io,api.agentdisk.io", R2_ACCOUNT_ID = "TF_OUTPUT_account_id", R2_BUCKET_NAME = "TF_OUTPUT_r2_bucket_name", FIREBASE_PROJECT_ID = "agentdisk", CORS_ALLOWED_ORIGINS = "https://app.agentdisk.io", DASHBOARD_URL = "https://app.agentdisk.io" }
 
 [[env.prod.d1_databases]]
 binding = "DB"
@@ -70,3 +88,6 @@ queue = "agentdisk-prod-jobs"
 max_batch_size = 10
 max_retries = 5
 dead_letter_queue = "agentdisk-prod-jobs-dlq"
+
+[env.prod.triggers]
+crons = ["17 * * * *"]

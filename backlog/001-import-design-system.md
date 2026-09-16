@@ -2,7 +2,7 @@
 
 **Status:** Done — 2026-09-05
 
-The AgentDrive design system was built inside the Claude Design project
+The AgentDisk design system was built inside the Claude Design project
 `agent-storage-mcp` (`d311bfd0-9751-4a9b-84f4-b33e7a09378e`), not in this repo.
 Pulled it down via the claude_design MCP read tools into `design-system/`.
 

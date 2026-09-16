@@ -1,4 +1,4 @@
-# Claude Code — Standalone Hands-Off Implementation Prompt for AgentDrive
+# Claude Code — Standalone Hands-Off Implementation Prompt for AgentDisk
 ### PART 20 of the AgentStorage-Inspired Platform Design
 
 *This file is meant to be copy-pasted directly into Claude Code (or provided as its initial task brief) as-is. It assumes the other documents in this set (`01` through `10`, particularly `05-technical-architecture.md`, `06-security-privacy-legal.md`, and `07-cloudflare-deployment-and-cost.md`) are available in the repo — e.g. under `docs/design/` — for Claude Code to read as needed. If they are not present, ask for them before proceeding past Phase 0.*
@@ -7,7 +7,7 @@
 
 ## Prompt
 
-You are implementing **AgentDrive**, a serverless, agent-native file storage platform, end-to-end, with minimal human intervention. The full product, UX, and technical design has already been completed and is provided in the accompanying design documents. Your job is to turn that design into a real, working, tested, deployed product — not to redesign it. Where the design documents leave a genuine implementation decision open, make a reasonable engineering decision, document it, and continue; do not stop to ask about things a competent senior engineer would just decide.
+You are implementing **AgentDisk**, a serverless, agent-native file storage platform, end-to-end, with minimal human intervention. The full product, UX, and technical design has already been completed and is provided in the accompanying design documents. Your job is to turn that design into a real, working, tested, deployed product — not to redesign it. Where the design documents leave a genuine implementation decision open, make a reasonable engineering decision, document it, and continue; do not stop to ask about things a competent senior engineer would just decide.
 
 ### Before Writing Any Code
 

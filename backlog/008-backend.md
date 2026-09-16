@@ -1,10 +1,30 @@
 # 008 · Backend — D1, R2, REST API, MCP server
 
-**Status:** Open — blocks any deploy
+**Status:** Done (Sept 2026) — REST storage core and auth are built and deployed to dev;
+MCP and the human-session half remain
 
-Nothing of the backend exists. This is the larger and riskier half of the
-product, and the half that carries the actual differentiator: MCP-native from
-MVP-1, not bolted on.
+Built and live on `api-dev.agentdisk.io`: API keys with the full authorization
+chain, the Turnstile-gated workspace bootstrap, and the file and folder surface
+from doc 05 PART 13 (`POST /v1/files` inline and presigned, `complete`, list,
+get, `download`, `PATCH`, `move`, `copy`, `DELETE`, `restore`, and
+`POST`/`GET`/`DELETE /v1/folders`).
+
+Still to build, and each is its own piece of work rather than a loose end:
+
+- **The MCP server** — the actual differentiator, and still entirely unbuilt.
+  Doc 05 PART 14's ten tools, sharing the REST authorization core.
+- **Human sessions** — login, refresh rotation with `family_id`, CSRF
+  double-submit. The `refresh_tokens` table exists (migration 0004); nothing
+  writes to it. **Argon2id must be measured on Workers, not assumed** (doc 06
+  PART 16.5): it is CPU-bound and Workers caps CPU per request. bcrypt is the
+  documented fallback.
+- **Multipart upload** (12.7), **signed links** (12.4, needs a `signed_links`
+  table), **search** (10.5 level 1), and **the purge queue consumer plus
+  reconciliation** (10.8) — deletes are soft, so R2 objects currently survive
+  their rows.
+
+Detail and the reasoning behind each deferral live in
+[the implementation plan](../docs/IMPLEMENTATION_PLAN.md).
 
 Fully specified already — this is execution, not design:
 

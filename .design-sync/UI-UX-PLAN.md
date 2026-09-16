@@ -1,4 +1,4 @@
-# AgentDrive — remaining UI/UX work (sequential)
+# AgentDisk — remaining UI/UX work (sequential)
 
 **Written:** 2026-09-05 16:25 local (08:25 UTC)
 **Instruction from user:** finish ALL UI/UX work, strictly sequentially, even where

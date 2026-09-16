@@ -1,0 +1,390 @@
+name: Frontend (reusable)
+
+# One static-assets app -> its own hostname. Called once per app per
+# environment: the dashboard (apps/web -> app-<env>.agentdisk.io) and the staff
+# console (apps/admin -> admin-<env>.agentdisk.io).
+#
+# This was two files. deploy-web-dev.yml and deploy-admin-dev.yml were 316 and
+# 280 lines and step-for-step identical, and the comment in each explained that
+# keeping them apart was cheaper than "a conditional everybody reads". That was
+# true at two callers and stopped being true at four: the same edit had to land
+# twice, correctly, every time, and prod would have made it four times.
+#
+# The differences that remain are real and small, and all of them are here:
+#
+#   - which Terraform outputs name the Worker and its URL (`web_*` / `admin_*`)
+#   - which environment variables state those names independently
+#   - the console has no Turnstile key and no Firebase config. Staff
+#     authenticate against /v1/staff/* with a password and a TOTP code and hold
+#     no client credential at all, so its build takes only VITE_API_BASE.
+#
+# It reads Terraform, it does not apply it - see infra.yml for why, and for the
+# race that comes with it.
+
+on:
+  workflow_call:
+    inputs:
+      app:
+        description: Directory under apps/. Also the prefix of the Terraform
+          outputs this app owns (web_url, admin_worker_name, ...).
+        required: true
+        type: string
+      environment:
+        description: Environment name. Doubles as the GitHub Environment AND the
+          Terraform workspace, deliberately the same string (dev/prod).
+        required: true
+        type: string
+      label:
+        description: Human name for logs and the run summary ("Dashboard").
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  deployments: write
+
+env:
+  TERRAFORM_VERSION: "1.16.1"
+  TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.tf-plugin-cache
+
+jobs:
+  # A broken build must never reach real infrastructure - not even dev.
+  #
+  # This job, rather than a required status check on the dev branch, is how that
+  # is enforced. Required status checks on a branch also block direct pushes to
+  # it, which would break the push-to-dev-and-auto-deploy loop the roadmap is
+  # built around. Gating the deploy instead keeps pushes to dev fast while still
+  # refusing to ship a red build - same reasoning as backend.yml.
+  verify:
+    name: Verify ${{ inputs.label }} build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/${{ inputs.app }}/package-lock.json
+
+      # `npm ci`, not `npm install`: it fails when package.json and the lockfile
+      # disagree, which is the check that stops an unreviewed dependency change
+      # from reaching a deploy.
+      - name: Install
+        working-directory: apps/${{ inputs.app }}
+        run: npm ci
+
+      # --if-present rather than a fixed list, because the two apps do not have
+      # the same scripts and the set is still growing (backlog 010). apps/web
+      # has tests and no linter; apps/admin has neither yet. Naming scripts that
+      # do not exist would fail the build; asserting they exist would freeze the
+      # backlog. This runs whatever an app actually has, and starts running new
+      # scripts the day they are added.
+      - name: Lint
+        working-directory: apps/${{ inputs.app }}
+        run: npm run lint --if-present
+
+      - name: Test
+        working-directory: apps/${{ inputs.app }}
+        run: npm run test --if-present
+
+      - name: Build
+        working-directory: apps/${{ inputs.app }}
+        run: npm run build
+
+      # `npm run build` can exit 0 having produced nothing useful. This is the
+      # check that the thing about to be uploaded is actually a site.
+      - name: Assert the build produced a usable bundle
+        working-directory: apps/${{ inputs.app }}
+        run: |
+          set -euo pipefail
+          test -f dist/index.html || { echo "::error::No dist/index.html"; exit 1; }
+          test -d dist/assets    || { echo "::error::No dist/assets"; exit 1; }
+          ls -la dist dist/assets
+
+  deploy:
+    name: Deploy ${{ inputs.label }} to ${{ inputs.environment }}
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_STATE_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.TERRAFORM_CF_ACCESS_TOKEN }}
+
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CF_ACCOUNT_ID }}
+      TF_VAR_account_id: ${{ vars.CF_ACCOUNT_ID }}
+      TF_VAR_zone_id: ${{ vars.CF_ZONE_ID }}
+      TF_VAR_root_domain: ${{ vars.DOMAIN_NAME }}
+      TFSTATE_BUCKET: ${{ vars.TFSTATE_BUCKET }}
+
+      APP: ${{ inputs.app }}
+      LABEL: ${{ inputs.label }}
+      WORKSPACE: ${{ inputs.environment }}
+      ENVIRONMENT_NAME: ${{ inputs.environment }}
+
+      # Both apps' expectations are declared, and the step below picks the pair
+      # that belongs to this app. `vars` is environment-scoped, so these resolve
+      # against the environment this job is pinned to - which is exactly why
+      # they cannot be passed in from the thin caller, whose jobs have no
+      # environment and would read repository scope instead.
+      WEB_DOMAIN: ${{ vars.WEB_DOMAIN }}
+      WEB_WORKER_NAME: ${{ vars.WEB_WORKER_NAME }}
+      ADMIN_DOMAIN: ${{ vars.ADMIN_DOMAIN }}
+      ADMIN_WORKER_NAME: ${{ vars.ADMIN_WORKER_NAME }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/${{ inputs.app }}/package-lock.json
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Prepare provider cache
+        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-plugins-${{ runner.os }}-${{ hashFiles('infra/terraform/.terraform.lock.hcl') }}
+          restore-keys: tf-plugins-${{ runner.os }}-
+
+      # Resolves this app's expectations, and fails naming the variable that is
+      # missing rather than deploying somewhere unasserted. The prod environment
+      # does not yet carry WEB_DOMAIN or WEB_WORKER_NAME, so a prod dashboard
+      # deploy stops here with a message saying precisely that - which is the
+      # correct outcome, and more useful than the workflow not existing.
+      - name: Resolve expected names for this app
+        run: |
+          set -euo pipefail
+          case "$APP" in
+            web)   domain="${WEB_DOMAIN:-}";   worker="${WEB_WORKER_NAME:-}";   dvar=WEB_DOMAIN;   wvar=WEB_WORKER_NAME ;;
+            admin) domain="${ADMIN_DOMAIN:-}"; worker="${ADMIN_WORKER_NAME:-}"; dvar=ADMIN_DOMAIN; wvar=ADMIN_WORKER_NAME ;;
+            *) echo "::error::Unknown app '$APP'. Expected 'web' or 'admin'."; exit 1 ;;
+          esac
+
+          missing=""
+          [ -z "$domain" ] && missing="$missing $dvar"
+          [ -z "$worker" ] && missing="$missing $wvar"
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID TF_VAR_zone_id TF_VAR_root_domain TFSTATE_BUCKET AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            [ -z "${!name:-}" ] && missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secrets or variables for $APP on the $ENVIRONMENT_NAME environment:$missing"
+            exit 1
+          fi
+
+          echo "EXPECTED_DOMAIN=$domain" >> "$GITHUB_ENV"
+          echo "EXPECTED_WORKER=$worker" >> "$GITHUB_ENV"
+          echo "$LABEL on $ENVIRONMENT_NAME expects $worker at $domain."
+
+      - name: Write Terraform backend config
+        working-directory: infra/terraform
+        run: |
+          set -euo pipefail
+          cat > backend.hcl <<EOF
+          bucket = "${TFSTATE_BUCKET}"
+          endpoints = {
+            s3 = "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          }
+          EOF
+          echo "State bucket: $TFSTATE_BUCKET (key: $WORKSPACE/terraform.tfstate)"
+
+      - name: Terraform init
+        working-directory: infra/terraform
+        run: terraform init -backend-config=backend.hcl -input=false
+
+      - name: Select Terraform workspace
+        working-directory: infra/terraform
+        run: terraform workspace select -or-create "$WORKSPACE"
+
+      # Workspace selection is mutable CLI state, and it decides which state
+      # file the outputs below are read from. A stale selection would hand this
+      # job prod's Worker name and let it deploy dev's bundle onto it.
+      - name: Assert workspace
+        working-directory: infra/terraform
+        run: |
+          set -euo pipefail
+          actual="$(terraform workspace show)"
+          if [ "$actual" != "$WORKSPACE" ]; then
+            echo "::error::Workspace is '$actual' but this job deploys '$WORKSPACE'. Refusing to continue."
+            exit 1
+          fi
+          echo "Workspace confirmed: $actual"
+
+      # No `terraform apply`. This job reads state; infra.yml is the only thing
+      # that writes it. A missing output here means the environment has not been
+      # applied yet, and the fix is to run the Infrastructure pipeline.
+      #
+      # Reads named outputs only, never `terraform output -json` - the JSON form
+      # includes sensitive values in full, and nothing a static bundle needs is
+      # secret.
+      - name: Capture Terraform outputs
+        working-directory: infra/terraform
+        run: |
+          set -euo pipefail
+          reported="$(terraform output -raw environment)"
+          if [ "$reported" != "$WORKSPACE" ]; then
+            echo "::error::State reports environment '$reported', expected '$WORKSPACE'."
+            exit 1
+          fi
+
+          app_url="$(terraform output -raw "${APP}_url")"
+          app_worker="$(terraform output -raw "${APP}_worker_name")"
+
+          # Terraform derives these from the workspace; the environment
+          # variables state them independently. Assert they agree rather than
+          # trusting them to - a mismatch means GitHub and the infrastructure
+          # disagree about what is being deployed, and the deploy must stop
+          # rather than guess. This is also the check that catches the race with
+          # infra.yml: outputs from before an apply that renamed something will
+          # not match, and this fails instead of deploying to the old name.
+          if [ "$app_url" != "https://$EXPECTED_DOMAIN" ]; then
+            echo "::error::Terraform routed $LABEL to '$app_url' but the $ENVIRONMENT_NAME environment expects 'https://$EXPECTED_DOMAIN'."
+            exit 1
+          fi
+          if [ "$app_worker" != "$EXPECTED_WORKER" ]; then
+            echo "::error::Terraform built Worker '$app_worker' but the $ENVIRONMENT_NAME environment expects '$EXPECTED_WORKER'."
+            exit 1
+          fi
+          echo "Names agree with the $ENVIRONMENT_NAME environment variables."
+
+          echo "APP_URL=$app_url" >> "$GITHUB_ENV"
+          echo "APP_WORKER=$app_worker" >> "$GITHUB_ENV"
+
+          # The API base comes from `terraform output`, not a literal, so an app
+          # can never be built pointing at an API this stack did not create.
+          echo "VITE_API_BASE=$(terraform output -raw api_url)" >> "$GITHUB_ENV"
+
+          # The Turnstile site key is public by design - it is embedded in the
+          # page HTML, and only the SECRET half ever reaches the Worker. Read
+          # from Terraform so the widget the dashboard renders can never drift
+          # from the widget the API verifies against. The console has no
+          # Turnstile at all, so it is read only where it is used.
+          if [ "$APP" = "web" ]; then
+            echo "VITE_TURNSTILE_SITE_KEY=$(terraform output -raw turnstile_sitekey)" >> "$GITHUB_ENV"
+          fi
+
+      - name: Install ${{ inputs.label }} dependencies
+        working-directory: apps/${{ inputs.app }}
+        run: npm ci
+
+      # Everything here is baked into the bundle, which is correct: a site key,
+      # a hostname and Firebase's web config are all public by design - the
+      # Firebase config identifies the project, it does not authorise anything,
+      # and what stops a stranger using it is the project's authorised-domain
+      # list plus the API's own `aud` check. Nothing secret may be passed here;
+      # a static bundle is readable by every visitor.
+      #
+      # These come from GitHub Environment *variables* rather than secrets, so
+      # they stay readable and reviewable instead of being masked in logs where
+      # a wrong value would be invisible.
+      - name: Build ${{ inputs.label }}
+        working-directory: apps/${{ inputs.app }}
+        env:
+          VITE_API_BASE: ${{ env.VITE_API_BASE }}
+          VITE_TURNSTILE_SITE_KEY: ${{ env.VITE_TURNSTILE_SITE_KEY }}
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+          EXPECTED_FIREBASE_PROJECT: ${{ vars.FIREBASE_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VITE_API_BASE:-}" ]; then
+            echo "::error::No api_url from Terraform; $LABEL would have no API to talk to."
+            exit 1
+          fi
+
+          if [ "$APP" = "web" ]; then
+            if [ -z "${VITE_TURNSTILE_SITE_KEY:-}" ]; then
+              echo "::error::No Turnstile site key from Terraform; /sandbox could not create a workspace."
+              exit 1
+            fi
+
+            # Fatal rather than a warning. The build succeeds without these and
+            # ships a dashboard whose every sign-in button fails at runtime - a
+            # deploy that looks green and is not.
+            missing=""
+            for name in VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_APP_ID; do
+              [ -z "${!name:-}" ] && missing="$missing $name"
+            done
+            if [ -n "$missing" ]; then
+              echo "::error::Missing Firebase build variables on the $ENVIRONMENT_NAME environment:$missing"
+              exit 1
+            fi
+
+            # Guards against the one mistake that would be invisible until a
+            # user tried to sign in: pointing a build at the WRONG environment's
+            # Firebase project. Compared against the environment's own
+            # FIREBASE_PROJECT_ID rather than a literal, so this check works for
+            # prod the day prod exists instead of hardcoding dev's answer.
+            if [ -z "${EXPECTED_FIREBASE_PROJECT:-}" ]; then
+              echo "::error::The $ENVIRONMENT_NAME environment has no FIREBASE_PROJECT_ID, so the dashboard's Firebase project cannot be checked. Set it."
+              exit 1
+            fi
+            if [ "$VITE_FIREBASE_PROJECT_ID" != "$EXPECTED_FIREBASE_PROJECT" ]; then
+              echo "::error::$ENVIRONMENT_NAME must build against Firebase project $EXPECTED_FIREBASE_PROJECT, got $VITE_FIREBASE_PROJECT_ID"
+              exit 1
+            fi
+          fi
+
+          npm run build
+
+      # No apply-tf-outputs.mjs step here, unlike the API: these are static
+      # assets with no D1/R2/KV/Queue binding, so wrangler.toml holds no
+      # resource ID to inject. The one Terraform-owned value it does carry - the
+      # script name - is asserted here.
+      - name: Assert wrangler targets the Terraform-owned Worker name
+        working-directory: apps/${{ inputs.app }}
+        run: |
+          set -euo pipefail
+          if ! grep -q "^name = \"$APP_WORKER\"\$" wrangler.toml; then
+            echo "::error::wrangler.toml has no [env.$WORKSPACE] name matching Terraform's '$APP_WORKER'."
+            grep -n '^name' wrangler.toml || true
+            exit 1
+          fi
+          echo "wrangler.toml declares $APP_WORKER."
+
+      # No `wrangler secret put` step, and that is not an omission: a static
+      # bundle is public by definition, so anything secret here would be
+      # readable by every visitor. Credentials live behind the API.
+      - name: Deploy ${{ inputs.label }}
+        working-directory: apps/${{ inputs.app }}
+        run: npx wrangler deploy --env "$WORKSPACE"
+
+      # Stricter than "the deploy command exited 0". Checks the live hostname
+      # serves the built SPA, that deep links fall back to index.html, and that
+      # no workers.dev hostname bypasses the custom domain.
+      - name: Smoke test
+        working-directory: apps/${{ inputs.app }}
+        run: node scripts/smoke-test.mjs "$APP_URL" "$APP_WORKER"
+
+      - name: Report result
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ "${{ job.status }}" = "success" ]; then
+            {
+              echo "### $LABEL deploy to $WORKSPACE succeeded"
+              echo "- $LABEL: ${APP_URL:-unknown}"
+              echo "- Worker: ${APP_WORKER:-unknown}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### $LABEL deploy to $WORKSPACE FAILED (${{ job.status }})" >> "$GITHUB_STEP_SUMMARY"
+          fi

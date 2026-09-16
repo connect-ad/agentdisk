@@ -1,0 +1,42 @@
+name: Frontend admin dev
+
+# The internal staff console, on its own origin.
+#
+# Its own caller rather than one frontend workflow filtering on which
+# app changed: this way GitHub does the path filtering natively, and an
+# apps/web push cannot redeploy this one. No diff logic to get wrong.
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - "apps/admin/**"
+      - ".github/workflows/frontend.yml"
+      - ".github/workflows/frontend-admin-dev.yml"
+  # Every caller is dispatchable, so any one area can be redeployed on its own
+  # without an empty commit. deploy-all-dev.yml drives all three in order.
+  workflow_dispatch:
+
+# Serialise deploys within an area, and never cancel one mid-flight: an
+# interrupted run can leave Terraform state locked or a deploy half-applied.
+#
+# Each area has its OWN group rather than one shared group. GitHub keeps only
+# one pending run per group, so sharing would let a burst of pushes silently
+# drop a queued deploy - and a deploy that vanishes without failing is the
+# outcome these pipelines exist to prevent.
+concurrency:
+  group: frontend-admin-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  run:
+    uses: ./.github/workflows/frontend.yml
+    with:
+      app: admin
+      environment: dev
+      label: Console
+    secrets: inherit

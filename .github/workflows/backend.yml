@@ -1,0 +1,386 @@
+name: Backend (reusable)
+
+# The API Worker (apps/api) -> api-<env>.agentdisk.io, plus its D1 migrations
+# and its Worker secrets.
+#
+# Dev and prod deploy through THIS one workflow, parameterised only by inputs.
+# That is deliberate: the roadmap calls for prod to be "identical in shape" to
+# dev, and the reliable way to guarantee that is to make it literally the same
+# code path, rather than two files that drift apart over time.
+#
+# It reads Terraform, it does not apply it. `terraform output` needs only
+# `init`; it takes no state lock and changes nothing. The apply this file used
+# to run lives in infra.yml now, so an infrastructure failure can no longer
+# stop an API deploy that needed nothing from it - and the three-way lock
+# contention between the API, dashboard and console pipelines is gone.
+#
+# The trade-off: a push touching both infra/terraform and apps/api races, and
+# this job may read outputs from before the apply. Every name it reads is
+# asserted against the environment's variables below, so the dangerous version
+# fails loudly. Re-run this pipeline after infra.yml lands, or use
+# deploy-all-dev.yml, which orders them.
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Environment name. Doubles as the GitHub Environment AND the
+          Terraform workspace, which are deliberately the same string (dev/prod)
+          so there is no mapping table to get wrong.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  deployments: write
+
+env:
+  TERRAFORM_VERSION: "1.16.1"
+  # A warm cache means `init` does not contact the registry at all. Reading
+  # outputs still requires `init`, so the provider download is still on this
+  # path - the cache is what keeps a registry 504 from being a routine failure.
+  TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.tf-plugin-cache
+
+jobs:
+  # A broken build must never reach real infrastructure - not even dev.
+  #
+  # This job, rather than a required status check on the dev branch, is how that
+  # is enforced. Required status checks on a branch also block direct pushes to
+  # it (a freshly pushed commit has not passed checks yet), which would break the
+  # push-to-dev-and-auto-deploy loop the roadmap is built around. Gating the
+  # deploy instead keeps pushes fast while still refusing to ship a red build.
+  verify:
+    name: Verify API
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  deploy:
+    name: Deploy API to ${{ inputs.environment }}
+    needs: verify
+    runs-on: ubuntu-latest
+    # This is what makes the Production required-reviewer gate actually block:
+    # the job does not start until a reviewer approves.
+    environment: ${{ inputs.environment }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      # Infrastructure credentials are repository-level secrets: one set, shared
+      # by both environments. Application secrets further down are
+      # environment-level, so dev and prod never share a runtime key.
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_STATE_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.TERRAFORM_CF_ACCESS_TOKEN }}
+
+      # Non-secret configuration comes from variables, never secrets: repository
+      # variables for what is identical across environments, environment
+      # variables for what differs.
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CF_ACCOUNT_ID }}
+      TF_VAR_account_id: ${{ vars.CF_ACCOUNT_ID }}
+      TF_VAR_zone_id: ${{ vars.CF_ZONE_ID }}
+      TF_VAR_root_domain: ${{ vars.DOMAIN_NAME }}
+      TFSTATE_BUCKET: ${{ vars.TFSTATE_BUCKET }}
+
+      WORKSPACE: ${{ inputs.environment }}
+      ENVIRONMENT_NAME: ${{ inputs.environment }}
+      EXPECTED_D1_DATABASE: ${{ vars.D1_DATABASE }}
+      EXPECTED_API_DOMAIN: ${{ vars.API_DOMAIN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Prepare provider cache
+        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-plugins-${{ runner.os }}-${{ hashFiles('infra/terraform/.terraform.lock.hcl') }}
+          restore-keys: tf-plugins-${{ runner.os }}-
+
+      - name: Verify required secrets are present
+        run: |
+          set -euo pipefail
+          missing=""
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID TF_VAR_zone_id TF_VAR_root_domain TFSTATE_BUCKET EXPECTED_D1_DATABASE EXPECTED_API_DOMAIN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            if [ -z "${!name:-}" ]; then
+              missing="$missing $name"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secrets or variables for the $ENVIRONMENT_NAME environment:$missing"
+            exit 1
+          fi
+          echo "All required infrastructure secrets and variables are present."
+
+      - name: Write Terraform backend config
+        working-directory: infra/terraform
+        run: |
+          set -euo pipefail
+          cat > backend.hcl <<EOF
+          bucket = "${TFSTATE_BUCKET}"
+          endpoints = {
+            s3 = "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          }
+          EOF
+          echo "State bucket: $TFSTATE_BUCKET (key: $WORKSPACE/terraform.tfstate)"
+
+      - name: Terraform init
+        working-directory: infra/terraform
+        run: terraform init -backend-config=backend.hcl -input=false
+
+      - name: Select Terraform workspace
+        working-directory: infra/terraform
+        run: terraform workspace select -or-create "$WORKSPACE"
+
+      # Workspace selection is mutable CLI state, and it decides which state
+      # file the outputs below are read from. A stale selection here would hand
+      # this job prod's resource IDs and let it deploy dev's code onto them, so
+      # assert it landed where we think before reading anything.
+      - name: Assert workspace
+        working-directory: infra/terraform
+        run: |
+          set -euo pipefail
+          actual="$(terraform workspace show)"
+          if [ "$actual" != "$WORKSPACE" ]; then
+            echo "::error::Workspace is '$actual' but this job deploys '$WORKSPACE'. Refusing to continue."
+            exit 1
+          fi
+          echo "Workspace confirmed: $actual"
+
+      # No `terraform apply`. This job reads state; infra.yml is the only thing
+      # that writes it. If an output below is missing or stale, the answer is to
+      # run infra.yml, not to apply from here.
+      - name: Capture Terraform outputs
+        working-directory: infra/terraform
+        run: |
+          set -euo pipefail
+          # NOTE: `terraform output -json` includes sensitive values in full -
+          # `sensitive` only suppresses them in human-readable output. Since the
+          # stack now produces credentials (see the module's outputs.tf), this
+          # file holds live secrets. It is deleted immediately after injection
+          # below, never uploaded as an artifact, and never echoed.
+          terraform output -json > "$RUNNER_TEMP/tf-outputs.json"
+          reported="$(terraform output -raw environment)"
+          if [ "$reported" != "$WORKSPACE" ]; then
+            echo "::error::State reports environment '$reported', expected '$WORKSPACE'."
+            exit 1
+          fi
+          api_url="$(terraform output -raw api_url)"
+          d1_name="$(terraform output -raw d1_database_name)"
+
+          # Terraform derives resource names from the workspace; the environment
+          # variables above state them independently. Two sources of truth would
+          # normally invite silent drift, so assert they agree rather than
+          # trusting them to. A mismatch means the GitHub environment and the
+          # infrastructure disagree about what is being deployed - stop.
+          if [ "$d1_name" != "$EXPECTED_D1_DATABASE" ]; then
+            echo "::error::Terraform built D1 '$d1_name' but the $ENVIRONMENT_NAME environment expects '$EXPECTED_D1_DATABASE'."
+            exit 1
+          fi
+          if [ "$api_url" != "https://$EXPECTED_API_DOMAIN" ]; then
+            echo "::error::Terraform routed the API to '$api_url' but the $ENVIRONMENT_NAME environment expects 'https://$EXPECTED_API_DOMAIN'."
+            exit 1
+          fi
+          echo "Names agree with the $ENVIRONMENT_NAME environment variables."
+
+          echo "API_URL=$api_url" >> "$GITHUB_ENV"
+          echo "D1_NAME=$d1_name" >> "$GITHUB_ENV"
+
+      - name: Install app dependencies
+        working-directory: apps/api
+        run: npm ci
+
+      - name: Inject Terraform resource IDs into wrangler.toml
+        working-directory: apps/api
+        run: |
+          set -euo pipefail
+          node scripts/apply-tf-outputs.mjs "$WORKSPACE" "$RUNNER_TEMP/tf-outputs.json"
+          # The file has served its purpose and contains credentials. Nothing
+          # after this point reads it, so it should not outlive this step.
+          rm -f "$RUNNER_TEMP/tf-outputs.json"
+
+      # The application secrets, which are still GitHub Environment secrets and
+      # never touch Terraform. That distinction now matters: the stack DOES
+      # create credentials of its own (Turnstile, R2 signing) and those live in
+      # state, but these two - which decrypt stored data and sign sessions -
+      # deliberately do not. Piped via stdin so no value is ever an argument in
+      # a process list or a workflow log.
+      - name: Push Worker secrets
+        working-directory: apps/api
+        env:
+          DATABASE_ENCRYPTION_KEY: ${{ secrets.DATABASE_ENCRYPTION_KEY }}
+          SESSION_SIGNING_KEY: ${{ secrets.SESSION_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          for name in DATABASE_ENCRYPTION_KEY SESSION_SIGNING_KEY; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing application secret $name in the $ENVIRONMENT_NAME environment."
+              exit 1
+            fi
+            printf '%s' "${!name}" | npx wrangler secret put "$name" --env "$WORKSPACE"
+            echo "Set $name"
+          done
+
+      # Turnstile always comes from Terraform. The R2 signing credentials come
+      # from Terraform only when manage_r2_signing_token is on; otherwise they
+      # are GitHub Environment secrets created by hand, because turning that
+      # variable on requires giving the deploy token the right to mint API
+      # tokens. Both paths pipe straight into wrangler's stdin: the value is
+      # never an argument (visible in a process list), never a shell variable
+      # (at risk of being echoed by `set -x`), and never written to disk.
+      - name: Push Turnstile and R2 credentials
+        env:
+          TF_DIR: infra/terraform
+          # R2_FILES_*, not R2_*, so these can never be read as the state
+          # bucket's R2_STATE_* credentials sitting beside them at repo level.
+          # Those two are the most dangerous pair in the system to confuse: one
+          # signs customer file URLs, the other unlocks Terraform state.
+          R2_FILES_ACCESS_KEY_ID: ${{ secrets.R2_FILES_ACCESS_KEY_ID }}
+          R2_FILES_SECRET_ACCESS_KEY: ${{ secrets.R2_FILES_SECRET_ACCESS_KEY }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+        run: |
+          set -euo pipefail
+
+          push_output() {
+            local output_name="$1" secret_name="$2"
+            terraform -chdir="$TF_DIR" output -raw "$output_name" |
+              (cd apps/api && npx wrangler secret put "$secret_name" --env "$WORKSPACE")
+            echo "Set $secret_name from terraform output $output_name"
+          }
+
+          # The GitHub secret and the Worker secret are named separately on
+          # purpose: inside the Worker there is only one bucket, so R2_* is
+          # unambiguous there, while in the repo it would sit next to R2_STATE_*.
+          push_env() {
+            local env_name="$1" secret_name="$2"
+            printf '%s' "${!env_name}" |
+              (cd apps/api && npx wrangler secret put "$secret_name" --env "$WORKSPACE")
+            echo "Set $secret_name from $env_name in the $ENVIRONMENT_NAME environment"
+          }
+
+          # Length only. Capturing the output to compare it would put a live
+          # credential in a shell variable purely to ask whether it is empty.
+          have_output() {
+            [ "$(terraform -chdir="$TF_DIR" output -raw "$1" 2>/dev/null | wc -c)" -gt 0 ]
+          }
+
+          # The Turnstile widget is created unconditionally, so a missing
+          # output here means the apply did not do what it claimed.
+          if ! have_output turnstile_secret_key; then
+            echo "::error::Terraform output turnstile_secret_key is missing or empty. Run the Infrastructure pipeline for $ENVIRONMENT_NAME - this job only reads state."
+            exit 1
+          fi
+          push_output turnstile_secret_key TURNSTILE_SECRET_KEY
+
+          # Two sources, and an empty Terraform output means "not managed
+          # here", never "not needed" - so the GitHub Environment is consulted
+          # before giving up.
+          #
+          # Absent from both is fatal in prod and a warning in dev, which is a
+          # deliberate asymmetry rather than laxness. Prod must never serve a
+          # Worker that looks healthy and then fails on a customer's first
+          # upload. Dev is where this system is still being built, and the
+          # Worker already fails closed without these: readSigningConfig()
+          # returns null when nothing is configured and the presign routes
+          # refuse, exactly as POST /v1/workspaces refuses without a Turnstile
+          # secret. Blocking every dev deploy on a credential no shipped route
+          # uses yet would buy nothing and stop the work.
+          push_r2() {
+            local output_name="$1" secret_name="$2" env_name="$3"
+            if have_output "$output_name"; then
+              push_output "$output_name" "$secret_name"
+            elif [ -n "${!env_name:-}" ]; then
+              push_env "$env_name" "$secret_name"
+            elif [ "$WORKSPACE" = "dev" ]; then
+              echo "::warning::No $env_name for dev. Presigned upload and download URLs will refuse until it exists; everything else deploys."
+              MISSING_R2=1
+            else
+              echo "::error::No $env_name available. Either set manage_r2_signing_token = true in infra/terraform (this grants the deploy token API-token minting rights), or add $env_name to the $ENVIRONMENT_NAME environment from an R2 API token scoped Object Read and Write to this environment's bucket."
+              exit 1
+            fi
+          }
+
+          MISSING_R2=0
+
+          push_r2 r2_access_key_id     R2_ACCESS_KEY_ID     R2_FILES_ACCESS_KEY_ID
+          push_r2 r2_secret_access_key R2_SECRET_ACCESS_KEY R2_FILES_SECRET_ACCESS_KEY
+
+          # Billing needs both or neither. One without the other is the worst
+          # state to deploy: the portal would open and take a card, and the
+          # webhook confirming the payment would be rejected as unsigned.
+          if [ -n "${STRIPE_SECRET_KEY:-}" ] && [ -n "${STRIPE_WEBHOOK_SECRET:-}" ]; then
+            push_env STRIPE_SECRET_KEY STRIPE_SECRET_KEY
+            push_env STRIPE_WEBHOOK_SECRET STRIPE_WEBHOOK_SECRET
+          elif [ -n "${STRIPE_SECRET_KEY:-}" ] || [ -n "${STRIPE_WEBHOOK_SECRET:-}" ]; then
+            echo "::error::Only one of STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET is set on the $ENVIRONMENT_NAME environment. Set both or neither."
+            exit 1
+          elif [ "$WORKSPACE" = "dev" ]; then
+            echo "::warning::No Stripe secrets for dev. Billing routes refuse; everything else deploys."
+          else
+            echo "::error::No Stripe secrets available for prod. Billing would refuse on a live deployment."
+            exit 1
+          fi
+
+          if [ "$MISSING_R2" = "1" ]; then
+            echo "R2_SIGNING_CONFIGURED=false" >> "$GITHUB_ENV"
+          else
+            echo "R2_SIGNING_CONFIGURED=true" >> "$GITHUB_ENV"
+          fi
+
+      # Migrations run BEFORE the code deploy so new code never meets an old
+      # schema. This assumes additive, backward-compatible migrations, which is
+      # the standard the design docs already set.
+      - name: Apply D1 migrations
+        working-directory: apps/api
+        run: npx wrangler d1 migrations apply "$D1_NAME" --remote --env "$WORKSPACE"
+
+      - name: Deploy Worker
+        working-directory: apps/api
+        run: npx wrangler deploy --env "$WORKSPACE"
+
+      - name: Smoke test
+        working-directory: apps/api
+        run: node scripts/smoke-test.mjs "$API_URL" "$WORKSPACE"
+
+      - name: Report result
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "### API deploy to $WORKSPACE succeeded" >> "$GITHUB_STEP_SUMMARY"
+            echo "- API: ${API_URL:-unknown}" >> "$GITHUB_STEP_SUMMARY"
+            if [ "${R2_SIGNING_CONFIGURED:-unknown}" = "false" ]; then
+              echo "- R2 presigning: **not configured** - upload and download URLs will refuse" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          else
+            echo "### API deploy to $WORKSPACE FAILED (${{ job.status }})" >> "$GITHUB_STEP_SUMMARY"
+          fi

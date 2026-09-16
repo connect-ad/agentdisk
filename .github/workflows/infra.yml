@@ -1,0 +1,165 @@
+name: Infrastructure (reusable)
+
+# The ONLY workflow that runs `terraform apply`.
+#
+# It used to be three. deploy.yml, deploy-web-dev.yml and deploy-admin-dev.yml
+# each applied the whole root config before deploying their own app, because
+# each needed `terraform output` to learn its resource names and applying first
+# seemed like the safe way to be sure those names were current. The cost was
+# paid on every push: three appliers contending for one state lock (which is
+# why ci.yml carries a retry loop), and a registry outage or a locked state
+# breaking a CSS change. A 504 fetching the Cloudflare provider is what finally
+# made the case.
+#
+# The split is possible because reading outputs never needed the apply.
+# `terraform output` reads remote state after `init`; it takes no lock and
+# changes nothing. So the app pipelines read, and this one writes.
+#
+# What that costs, stated plainly: a push touching BOTH infra/terraform and an
+# app races - the app pipeline may read outputs from before this apply lands.
+# The app pipelines assert every name they read against their environment's
+# variables, so the dangerous version (deploying to the wrong Worker) fails
+# loudly. For the benign version - a genuinely new output - re-run the app
+# pipeline once this has finished, or use deploy-all-dev.yml, which orders them.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Environment name. Doubles as the GitHub Environment AND the
+          Terraform workspace, which are deliberately the same string (dev/prod)
+          so there is no mapping table to get wrong.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  TERRAFORM_VERSION: "1.16.1"
+  # A warm cache means `init` does not contact the registry at all. This does
+  # not make the download optional - a cold runner still fetches the provider -
+  # but it removes the registry from the common path, which is where the 504s
+  # were coming from.
+  TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.tf-plugin-cache
+
+jobs:
+  apply:
+    name: Apply ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    # This is what makes the Production required-reviewer gate actually block:
+    # the job does not start until a reviewer approves.
+    environment: ${{ inputs.environment }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      # Infrastructure credentials are repository-level secrets: one set, shared
+      # by both environments.
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_STATE_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.TERRAFORM_CF_ACCESS_TOKEN }}
+
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CF_ACCOUNT_ID }}
+      TF_VAR_account_id: ${{ vars.CF_ACCOUNT_ID }}
+      TF_VAR_zone_id: ${{ vars.CF_ZONE_ID }}
+      TF_VAR_root_domain: ${{ vars.DOMAIN_NAME }}
+      TFSTATE_BUCKET: ${{ vars.TFSTATE_BUCKET }}
+
+      WORKSPACE: ${{ inputs.environment }}
+      ENVIRONMENT_NAME: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Prepare provider cache
+        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-plugins-${{ runner.os }}-${{ hashFiles('infra/terraform/.terraform.lock.hcl') }}
+          restore-keys: tf-plugins-${{ runner.os }}-
+
+      - name: Verify required secrets are present
+        run: |
+          set -euo pipefail
+          missing=""
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID TF_VAR_zone_id TF_VAR_root_domain TFSTATE_BUCKET AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            if [ -z "${!name:-}" ]; then
+              missing="$missing $name"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secrets or variables for the $ENVIRONMENT_NAME environment:$missing"
+            exit 1
+          fi
+          echo "All required infrastructure secrets and variables are present."
+
+      - name: Write Terraform backend config
+        working-directory: infra/terraform
+        run: |
+          set -euo pipefail
+          cat > backend.hcl <<EOF
+          bucket = "${TFSTATE_BUCKET}"
+          endpoints = {
+            s3 = "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          }
+          EOF
+          echo "State bucket: $TFSTATE_BUCKET (key: $WORKSPACE/terraform.tfstate)"
+
+      - name: Terraform init
+        working-directory: infra/terraform
+        run: terraform init -backend-config=backend.hcl -input=false
+
+      - name: Select Terraform workspace
+        working-directory: infra/terraform
+        run: terraform workspace select -or-create "$WORKSPACE"
+
+      # Workspace selection is mutable CLI state. Assert it landed where we
+      # think before anything is applied. This is the check that stops a
+      # mis-selected workspace from applying dev intent to prod resources.
+      - name: Assert workspace
+        working-directory: infra/terraform
+        run: |
+          set -euo pipefail
+          actual="$(terraform workspace show)"
+          if [ "$actual" != "$WORKSPACE" ]; then
+            echo "::error::Workspace is '$actual' but this job applies '$WORKSPACE'. Refusing to apply."
+            exit 1
+          fi
+          echo "Workspace confirmed: $actual"
+
+      - name: Terraform apply
+        working-directory: infra/terraform
+        run: terraform apply -auto-approve -input=false -lock-timeout=5m
+
+      # Reads only names, never `terraform output -json`. The JSON form includes
+      # sensitive values in full - `sensitive` merely suppresses them in
+      # human-readable output - and nothing here needs them. The one job that
+      # does (backend.yml, to inject resource IDs) writes it to a temp file and
+      # deletes it in the next step.
+      - name: Confirm what was applied
+        working-directory: infra/terraform
+        run: |
+          set -euo pipefail
+          reported="$(terraform output -raw environment)"
+          if [ "$reported" != "$WORKSPACE" ]; then
+            echo "::error::State reports environment '$reported', expected '$WORKSPACE'."
+            exit 1
+          fi
+          {
+            echo "### Infrastructure applied to $WORKSPACE"
+            echo "- API: $(terraform output -raw api_url)"
+            echo "- Dashboard: $(terraform output -raw web_url)"
+            echo "- Console: $(terraform output -raw admin_url)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report failure
+        if: failure()
+        run: echo "### Infrastructure apply to $WORKSPACE FAILED" >> "$GITHUB_STEP_SUMMARY"

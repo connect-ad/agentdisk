@@ -1,4 +1,4 @@
-# AgentDrive — UX Architecture & Complete Screen Specification
+# AgentDisk — UX Architecture & Complete Screen Specification
 ### PART 7–8 of the AgentStorage-Inspired Platform Design
 
 All content in this document is **PROPOSAL** (original design work, not derived from AgentStorage's visual design — see PART 2 for why: AgentStorage's own UI was not deeply analyzable beyond three routes, and the brief explicitly asks us not to copy it).
@@ -18,106 +18,40 @@ All content in this document is **PROPOSAL** (original design work, not derived 
 
 ### 7.2 Design System
 
-> **Corrected 2026-09-05 to match the system as actually built.** The source of
-> truth is `design-system/styles.css` (98 tokens) and
-> `design-system/_ds_manifest.json` (32 components), imported byte-for-byte from
-> the Claude Design project `agent-storage-mcp`. The original draft of this
-> section specified a deep-forest-green accent with Space Grotesk + Inter; the
-> implemented system uses a **deep indigo** accent with **Public Sans**. The
-> implementation wins: it is built, internally coherent, and verified. Do not
-> restyle the component library to match older prose — correct the prose.
-
 **Typography**
+- Display / headings: **Space Grotesk** (geometric, technical, distinct from AgentStorage's Syne — deliberately different) — weights 500/600/700.
+- Body / UI: **Inter** — weights 400/500/600.
+- Monospace (code, keys, paths, IDs, JSON, logs): **JetBrains Mono** — weight 400/500.
+- Scale: 12 / 13 / 14 (base) / 16 / 18 / 22 / 28 / 36 / 48px, 1.5 line-height for body, 1.2 for headings.
 
-- Sans — everything a *person* wrote: **Public Sans** (`--font-sans`), weights 300/400/500/600/700.
-- Mono — everything a *machine* reads or a user must copy exactly (keys, paths, scopes, endpoints, MIME types, agent slugs, event names): **JetBrains Mono** (`--font-mono`), weights 400/500/600.
-- The sans/mono split is a **rule, not a preference**. `ActivityRow` renders agent actors in mono and human actors in sans; that is the mechanism behind Principle 1 in §7.1.
-- Scale (`--t-*`): 10 / 11 / 12 / 13 / **14 (base)** / 16 / 18 / 21 / 26 / 32 / 40 / 52 px.
-- Line height (`--lh-*`): tight 1.15 · snug 1.3 · normal 1.5 · loose 1.65.
-- Tracking (`--tr-*`): tight −0.02em · snug −0.011em · none 0 · wide 0.02em · caps 0.08em.
-- Weight (`--w-*`): light 300 · reg 400 · med 500 · semi 600 · bold 700.
-
-**Colour**
-
-Authored in `oklch()` so lightness and chroma stay perceptually even across each
-ramp. Cool neutrals at hue 262. Exactly **one** accent.
+**Color — light mode base tokens**
 
 | Token | Value | Use |
 |---|---|---|
-| `--paper` | `oklch(0.988 0.002 262)` | page ground |
-| `--surface` | `oklch(1 0 0)` | panels, table rows |
-| `--surface-2` | `oklch(0.972 0.003 262)` | table head, hover |
-| `--surface-3` | `oklch(0.948 0.005 262)` | pressed, skeleton |
-| `--line` | `oklch(0.912 0.006 262)` | hairline default |
-| `--line-2` | `oklch(0.855 0.008 262)` | input and button edge |
-| `--line-3` | `oklch(0.79 0.010 262)` | strong edge |
-| `--ink` | `oklch(0.19 0.012 262)` | headings, primary text |
-| `--ink-2` | `oklch(0.43 0.014 262)` | body text |
-| `--ink-3` | `oklch(0.575 0.012 262)` | meta, timestamps |
-| `--ink-4` | `oklch(0.70 0.010 262)` | placeholders, disabled |
-| `--accent` | `oklch(0.475 0.168 262)` — deep indigo | primary action, active nav, meter fill |
-| `--accent-hover` | `oklch(0.415 0.168 262)` | hover |
-| `--accent-active` | `oklch(0.365 0.155 262)` | pressed |
-| `--accent-ink` | `oklch(0.40 0.168 262)` | links, tinted text |
-| `--accent-soft` | `oklch(0.962 0.022 262)` | selected nav, agent chip |
-| `--accent-soft-2` | `oklch(0.925 0.042 262)` | avatar, selection |
-| `--accent-line` | `oklch(0.855 0.062 262)` | tinted borders |
-| `--on-accent` | `oklch(0.995 0.004 262)` | text on accent |
-| `--ok` / `--ok-soft` / `--ok-line` | `oklch(0.505 0.128 155)` + tints | active, complete, verified |
-| `--warn` / `--warn-soft` / `--warn-line` | `oklch(0.585 0.132 68)` + tints | expiring, quota ≥80%, show-once |
-| `--danger` / `--danger-hover` / `--danger-soft` / `--danger-line` | `oklch(0.515 0.192 25)` + tints | revoked, denied, destructive |
-| `--dark` … `--dark-warn` | `oklch(0.215 0.016 262)` + ramp | **code and config surfaces only** |
+| `--bg` | `#FAFAF9` | page background |
+| `--surface` | `#FFFFFF` | cards, panels |
+| `--surface-raised` | `#FFFFFF` + shadow-sm | modals, dropdowns |
+| `--border` | `#E4E4E1` | default border |
+| `--border-strong` | `#CFCFCB` | input focus-adjacent, table headers |
+| `--text-primary` | `#16160F` | headings, body |
+| `--text-secondary` | `#5A5A54` | captions, metadata |
+| `--text-tertiary` | `#8B8B84` | placeholders, disabled |
+| `--accent` | `#2F6F4F` (deep forest green) | primary actions, links, focus ring |
+| `--accent-hover` | `#255A40` | |
+| `--accent-subtle` | `#E7F0EA` | selected rows, subtle highlight |
+| `--warning` | `#B8752B` | quota-nearing, expiring |
+| `--danger` | `#B23B3B` | destructive, errors |
+| `--danger-subtle` | `#F7E7E5` | error banners |
+| `--success` | `#2F6F4F` | success toasts |
+| `--radius` | 8px controls, 12px cards, 6px chips | |
+| `--shadow-sm` | `0 1px 2px rgba(0,0,0,.06)` | |
+| `--shadow-md` | `0 4px 16px rgba(0,0,0,.08)` | |
 
-**Indigo carries one meaning:** "the system did this on your behalf" — primary
-actions, the active nav item, and anything an agent touched. It is never
-decorative. Colour never carries meaning alone: every status pairs a tone with a
-word, so `Revoked` reads identically to a colour-blind user and a screen reader.
+Dark mode inverts surfaces to `#131311` / `#1B1B18` / `#242420`, text to `#F2F2EE` / `#B7B7AF` / `#7C7C74`, and shifts accent to a slightly brighter `#48A578` for sufficient contrast on dark surfaces. Accent hue (green) chosen deliberately distinct from AgentStorage's unknown/unverified palette and from generic SaaS-blue — signals "storage/persistence, calm and trustworthy" without copying any researched competitor.
 
-**Space, radius, elevation, motion**
+**Why not AgentStorage's palette:** we could not reliably determine AgentStorage's exact production color values from research (only fonts were confirmed: Syne/IBM Plex Sans/IBM Plex Mono), and were instructed not to copy it regardless — the palette above is original.
 
-- Space (`--s-1` … `--s-13`), 4px base: 2 / 4 / 6 / 8 / 12 / 16 / 20 / 24 / 32 / 40 / 56 / 72 / 96 px.
-- Radius (`--r-*`): 3px chips · 5px controls · 8px panels · 12px modals · `--r-full` 999px. Small on purpose — soft corners read consumer, hairlines and 3–8px corners read infrastructure.
-- Elevation (`--sh-1` … `--sh-4`, `--ring`, `--ring-danger`): only things that genuinely float get a shadow. Panels and tables sit flat and are separated by rules.
-- Motion (`--d-1` 90ms · `--d-2` 150ms · `--d-3` 240ms, `--ease`, `--ease-out`): short and functional. All animation is disabled under `prefers-reduced-motion`.
-- Layout: `--nav-w` 236px · `--nav-w-collapsed` 56px · `--topbar-h` 52px · `--measure` 68ch.
-
-**Components actually built (32)**
-
-*Primitives* — `Icon` (44 single-path stroke glyphs), `Button`, `IconButton`,
-`Input`, `Select`, `Checkbox`, `Switch`, `Badge`, `Skeleton`.
-
-*Structure* — `AppShell` (sidebar nav, workspace switcher, sticky top bar, mobile
-drawer), `PageHead`, `Panel`, `DataTable`, `StatTile`, `Meter`, `Tabs`,
-`Breadcrumb`, `Menu`.
-
-*Feedback* — `Alert`, `Toast`, `Modal`, `ConfirmModal`, `EmptyState`.
-
-*Developer* — `CodeBlock`.
-
-*AgentDrive-specific — these carry the product thesis* — `FileCell` (file
-identity with agent provenance), `AgentCard` (identity, permission, credential
-health), `ApiKeyDisplay` (show-once secret, then permanently masked),
-`PermissionSelector` (scope presets, least privilege first), `UploadDropzone` +
-`UploadItem` (direct-to-storage upload with a real *processing* state),
-`McpToolList` (the ten MVP MCP tools, each with its required scope),
-`ActivityRow` (audit events, agent and human actors visually distinguished).
-
-**Renamed from the original draft** — `Card` → `Panel`; `Progress Bar` → `Meter`;
-`Radio` → `Checkbox` with `radio` prop. Use the built names.
-
-**Specified but NOT built — open gaps**
-
-| Gap | Impact | Status |
-|---|---|---|
-| **Drawer** | §8.10 File Details is specced as a right-side drawer. No `Drawer` component and no `.drawer` CSS exists. | Must be built, or §8.10 becomes a `Modal`. **Blocks §8.10.** |
-| **Tooltip** | A `.tip` CSS class exists (visual style only) but there is no positioning/trigger component. | Style is available; behaviour must be written per-use or added to the library. |
-| **Dark mode** | The original draft required a light/dark toggle plus a "system" default. The built system has **zero** dark-mode support — no `prefers-color-scheme`, no `[data-theme]`. `--dark-*` tokens exist solely for code/config surfaces. | Deliberate: "a single dark surface exists for code and config; the app itself is never dark." Treat the toggle as **descoped** unless explicitly reinstated. |
-
-**On originality:** the palette remains original work. We could not reliably
-determine AgentStorage's production colour values from research (only fonts were
-confirmed: Syne / IBM Plex Sans / IBM Plex Mono), and were instructed not to copy
-it regardless. Indigo at hue 262 is distinct from both that and from generic
-SaaS-blue.
+**Core components** (built once in the design system, reused everywhere): Button (primary/secondary/ghost/danger × sm/md × icon-leading/trailing × loading state), Input (text/number/search, with leading icon slot, inline validation message slot), Select (native-feeling custom dropdown, searchable variant for long lists), Checkbox/Radio/Switch, Table (sticky header, sortable columns, row-hover actions, empty/loading/error slots built in, not bolted on per-screen), Card, Modal (sm/md/lg, focus-trapped), Drawer (right-side, for file details), Toast (top-right stack, 4 variants, auto-dismiss 5s except danger which persists until dismissed), Alert/Banner (inline, 4 variants), Badge/Chip (status, tag), Tabs, Breadcrumb, Tooltip, Skeleton (row/card/text variants matching real layout dimensions, never a generic spinner for list content), Empty State (icon + headline + body + primary action), Code Block (copy button, syntax highlight for JSON/bash/TS/Python), Progress Bar (upload, quota meters — quota meters shift color border→warning→danger at 80%/95%).
 
 ### 7.3 Navigation & Information Architecture
 
@@ -128,7 +62,7 @@ Top-level sidebar nav (persists across all authenticated screens), scoped to the
 ─────────────────────
   Overview
   Files
-  Agents
+  Agent identities
   API Keys
   MCP
   Webhooks           (MVP-1)
@@ -143,6 +77,8 @@ Top-level sidebar nav (persists across all authenticated screens), scoped to the
 ─────────────────────
   Docs ↗ (external)
 ```
+
+**URL scheme.** Every screen header below writes its URL as `/w/{workspaceId}/…`; the dashboard actually addresses a workspace by a **readable slug** derived from its name (`/w/my-workspace/files`), with the raw `ws_…` ID still resolving and redirecting to the slug so older links keep working. The ID is unchanged everywhere it is genuinely needed — API calls, MCP config snippets, the Dashboard ID chip and Settings → Workspace ID — because the slug is an address, not an identifier. `CLAUDE.md` carries the invariants that make the two impossible to confuse. A `/w/{segment}` that names nothing the signed-in person can reach renders the 404 of 8.27 instead of the workspace shell — a workspace that does not exist and one they are not a member of are answered identically, so the URL cannot be used to confirm that somebody else's workspace exists.
 
 **MVP-0 nav** hides Webhooks, Activity, Members, and Billing (features not yet built) — the sidebar renders conditionally on feature flags per plan/build stage, not as dead links. "Docs" links to the public docs site in a new tab. A single account-level menu (avatar, top-right) holds Profile, "Create workspace," and Log out.
 
@@ -195,10 +131,12 @@ WCAG 2.1 AA target: 4.5:1 text contrast minimum (verified for both color modes a
 - Plan card CTAs: Free → "Start free", Pro → "Start free trial", Team → "Talk to us" (until self-serve Team checkout ships) or "Start free trial" (once it does)
 - FAQ entries include at minimum: "What happens if I hit a limit?", "Can I change plans anytime?", "Is there a free tier forever?", "How is storage measured?", "Do you charge for egress?"
 
+**Superseded note on §8.3–8.7 (Sept 2026):** these five screens' visual layout, copy, and states below are unchanged and still the target design, but the *implementation* behind them moved to Firebase Authentication — see `16-firebase-auth-and-final-launch-prompt.md` PART 30. Concretely: Google and GitHub sign-in ship in MVP-0 alongside email (not staged across MVP-0/1/V2 as originally sequenced, since Firebase makes all of them equally cheap), Forgot Password/Reset Password (§8.5/8.6) are Firebase's hosted or SDK-driven flows rather than a first-party `/forgot-password` endpoint, and Email Verification (§8.4) is Firebase's own verification-email flow. The screens are still AgentDisk-branded (Firebase's UI is embedded/styled to match, not a redirect to a generic Firebase-branded page) — only the backend issuing and verifying the credentials changed.
+
 ### 8.3 Signup — MVP-0
 **URL:** `/signup`
 **Layout:** Centered single-column card (max 400px) on a subtly branded background; logo above card.
-**Components:** Input (email), Input (password, show/hide toggle, strength meter), Button (primary, full-width), Divider "or", OAuth buttons (GitHub — MVP-1; shown MVP-0 as disabled with "coming soon" tooltip, or hidden entirely pre-MVP-1 — recommend hidden, not disabled, to avoid a dead-looking control), link to Login.
+**Components:** Input (email), Input (password, show/hide toggle, strength meter), Button (primary, full-width), Divider "or", OAuth buttons for **Google and GitHub** (both ship MVP-0 via Firebase — see the superseded note above), link to Login.
 **Interactions:** Inline email-format validation on blur; password strength meter updates live; submit disables the button and shows an inline spinner; successful submit redirects to Email Verification screen.
 **States:** Default → Validating → Submitting (button spinner, form disabled) → Error (inline banner above form) → Success (redirect).
 **Responsive:** Card remains centered and full-width-minus-margin on mobile; no layout change needed below 400px besides padding.
@@ -258,7 +196,7 @@ WCAG 2.1 AA target: 4.5:1 text contrast minimum (verified for both color modes a
 
 ### 8.7 Login — MVP-0
 **URL:** `/login`
-**Layout:** Mirrors Signup — centered card, email + password, OAuth divider (GitHub added MVP-1), "Forgot password?" link, link to Signup.
+**Layout:** Mirrors Signup — centered card, email + password, OAuth divider (Google + GitHub, both MVP-0 — see the superseded note at §8.3), "Forgot password?" link, link to Signup.
 **Components:** Input×2, Button, link.
 **Interactions:** Failed login shows a generic error (never "wrong password" vs "no such account" — enumeration protection); 5 failed attempts in 15 minutes trigger a temporary lockout with a countdown and a "reset your password" nudge.
 **States:** Default → Submitting → Error (generic) → Locked-out (countdown, distinct message).
@@ -348,7 +286,7 @@ WCAG 2.1 AA target: 4.5:1 text contrast minimum (verified for both color modes a
 
 ### 8.15 Agent Details — MVP-0
 **URL:** `/w/{workspaceId}/agents/{agentId}`
-**Layout:** Header (name, status toggle, edit/delete) → tabs: Overview (recent activity summary, keys list inline) · Keys (full list + create) · Activity (MVP-1, filtered audit log for this agent).
+**Layout:** Header (name, status toggle) → tabs: Overview (recent activity summary, keys list inline, **Danger zone**) · Keys (full list + create) · Activity (MVP-1, filtered audit log for this agent). Delete is a Danger-zone panel at the foot of Overview rather than a header control, matching Settings → General — a destructive action people meet on two screens should not be two different interactions.
 **Components:** Tabs, Table (keys), Toggle (active/disabled), Badge.
 **Interactions:** Disabling an agent immediately invalidates all its keys (with a confirm modal stating this explicitly) rather than leaving them silently non-functional.
 **States:** As 8.13 plus a disabled-agent banner ("This agent is disabled. Its API keys will not authenticate.").
@@ -356,6 +294,7 @@ WCAG 2.1 AA target: 4.5:1 text contrast minimum (verified for both color modes a
 **Accessibility:** Tabs are a proper ARIA tablist with `aria-selected`.
 **Exact copy:**
 - Disable confirm: "Disable **{agentName}**? All of its API keys will stop working immediately." / buttons: "Cancel" / "Disable agent"
+- Delete confirm (type-to-confirm on the agent's exact name): "This will permanently delete **{agentName}** and revoke its {n} live keys. Revoked keys cannot be reactivated." The count is *live* keys only — active plus blocked-while-the-agent-is-disabled — because naming an already-revoked or expired credential in a warning is noise dressed as a warning. `DELETE /v1/agents/:id` cascades the revocation itself and returns `keysRevoked`; the confirmation on the agents list reports **that** number rather than the dialog's estimate, so a key minted between opening the dialog and confirming is accounted for.
 
 ### 8.16 API Keys (workspace-level list) — MVP-0
 **URL:** `/w/{workspaceId}/keys`
@@ -400,11 +339,11 @@ WCAG 2.1 AA target: 4.5:1 text contrast minimum (verified for both color modes a
 **Accessibility:** Status badge pairs color with text; the reveal-once secret modal follows 8.16's accessibility pattern (focus lands on Copy, only dismissible via explicit acknowledgment).
 **Exact copy:**
 - Empty state: "No webhooks yet" / "Get notified when files change — useful for triggering downstream automation." → "Add endpoint"
-- Create modal title: "Add webhook endpoint" / fields: "URL" (placeholder "https://your-service.com/webhooks/agentdrive"), "Events" (checklist)
-- Reveal-once headline: "Your signing secret" / warning: "Copy this now — you won't be able to see it again. Use it to verify that deliveries actually came from AgentDrive." / acknowledgment button: "I've copied my secret"
+- Create modal title: "Add webhook endpoint" / fields: "URL" (placeholder "https://your-service.com/webhooks/agentdisk"), "Events" (checklist)
+- Reveal-once headline: "Your signing secret" / warning: "Copy this now — you won't be able to see it again. Use it to verify that deliveries actually came from AgentDisk." / acknowledgment button: "I've copied my secret"
 - Failing-status inline label: "Failing — last {n} deliveries didn't succeed" → "View recent failures" / "Rotate secret" / "Delete endpoint"
 - Test-event toast: "Test event sent"
-- Delete confirm: "Delete this webhook endpoint? AgentDrive will stop sending events to **{url}**." / buttons: "Cancel" / "Delete"
+- Delete confirm: "Delete this webhook endpoint? AgentDisk will stop sending events to **{url}**." / buttons: "Cancel" / "Delete"
 
 ### 8.19 Usage — MVP-0 (basic numbers) / MVP-1 (full history + charts)
 **URL:** `/w/{workspaceId}/usage`
@@ -445,10 +384,11 @@ WCAG 2.1 AA target: 4.5:1 text contrast minimum (verified for both color modes a
 
 ### 8.22 Settings → Members — MVP-1
 **Layout:** Table (member, role, joined, actions) → "Invite member" (email + role select) → pending invites sub-list.
-**Interactions:** Role change is immediate; removing a member revokes their session; owner role cannot be removed if it's the last owner (blocked with explanation, not silently disabled).
+**Interactions:** Role change is immediate; removing a member revokes their session (Firebase-side "log out everywhere" via `users.session_revoked_after`, `16` PART 30.4); owner role cannot be removed if it's the last owner (blocked with explanation, not silently disabled). **Added Sept 2026 — closes a real gap:** the "Remove member" confirmation additionally shows a checkbox, checked by default, "Also revoke every API key {name} created in this workspace" — the removed member's session dies immediately either way, but an API key they minted keeps working after removal *unless* this box is checked, because keys are workspace assets an agent may depend on continuously (deliberately not an automatic cascade — see `06` PART 16.1/15.3 for why). Leaving it checked is the safer default; an admin who knows a given key is genuinely shared team infrastructure (not personal to the departing member) can uncheck it.
 **Exact copy:**
 - Invite button: "Invite member" / roles: "Owner", "Admin", "Member" with one-line descriptions in the select ("Member: can manage files and agents, can't manage billing or delete the workspace")
 - Last-owner block: "A workspace needs at least one owner. Promote someone else first."
+- Remove-member confirm: "Remove **{name}** from this workspace? They'll immediately lose access." / checkbox (checked by default): "Also revoke every API key {name} created in this workspace ({n} key(s))" / buttons: "Cancel" / "Remove member"
 
 ### 8.23 Settings → Security — MVP-0
 **Layout:** Password change form → active sessions list (device/browser, location approx, last active, "Revoke" per session, "Revoke all other sessions") → (MVP-1) SSO placeholder card, disabled, "Available on Team plan."
@@ -486,9 +426,9 @@ WCAG 2.1 AA target: 4.5:1 text contrast minimum (verified for both color modes a
 **Exact copy:** "Something went wrong on our end." / body: "We've logged this and we're looking into it. Try again in a moment." → "Retry" / "Status page ↗" (link to Cloudflare-hosted status page once it exists, MVP-1; omitted in MVP-0 copy until the status page is live)
 
 ### 8.30 Maintenance — MVP-1 (only needed once there's a real deploy cadence worth signaling around)
-**Exact copy:** "We're doing quick maintenance." / body: "AgentDrive will be back in a few minutes. Your data isn't affected." 
+**Exact copy:** "We're doing quick maintenance." / body: "AgentDisk will be back in a few minutes. Your data isn't affected." 
 
 ### 8.31 Screens Intentionally Not Built (and why)
 - **Standalone "Workspaces" list page:** folded into the sidebar switcher (7.3) — a full page is premature until multi-workspace-per-org usage data justifies it (V2 candidate).
-- **Standalone in-app Documentation pages:** docs are generated from the OpenAPI/MCP schema and served from `docs.agentdrive.dev` (PART 18), not duplicated inside the dashboard shell — avoids the exact "docs drift from reality" failure mode observed in AgentStorage's own inconsistencies (PART 2.10).
+- **Standalone in-app Documentation pages:** docs are generated from the OpenAPI/MCP schema and served from `docs.agentdisk.io` (PART 18), not duplicated inside the dashboard shell — avoids the exact "docs drift from reality" failure mode observed in AgentStorage's own inconsistencies (PART 2.10).
 - **Onboarding wizard / multi-step tour:** the Dashboard's context-aware Quick-start panel (8.8) and File Browser's teaching empty states (8.9) serve this purpose inline, following the "empty states teach" design principle (7.1) instead of a separate modal-tour flow that gets skipped and forgotten.

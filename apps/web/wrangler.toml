@@ -1,0 +1,74 @@
+# AgentDisk dashboard SPA.
+#
+# Served as a Workers static-assets Worker, not a Cloudflare Pages project — see
+# the WEB section of infra/terraform/modules/agentdisk-stack/main.tf for why,
+# and note that this is a deliberate deviation from doc 07 PART 18.4.
+#
+# There are NO TF_OUTPUT_* placeholders in this file, unlike apps/api's, and
+# that is not an oversight: the dashboard is static assets with no D1, R2, KV or
+# Queue binding, so there is no resource ID for Terraform to inject. The only
+# Terraform-owned value here is the script NAME, and CI asserts that against
+# `terraform output -raw web_worker_name` before it deploys. If this app ever
+# gains a binding, add the placeholder here and inject it the same way apps/api
+# does — never paste an ID.
+#
+# No secrets, either. A static bundle is public by definition; anything secret
+# would be readable by every visitor. The API this SPA will eventually talk to
+# holds the credentials, behind api-dev.agentdisk.io.
+
+name = "agentdisk-web"
+compatibility_date = "2026-08-01"
+
+# Assets-only: there is deliberately no `main`. With no Worker entrypoint, every
+# request is answered directly from Cloudflare's asset store, which means no
+# Worker invocation to pay for and no request-path code that could fail. Adding
+# a `main` later (say, to inject headers) is a one-line change; not having it is
+# the cheaper and safer default while the SPA is purely static.
+
+# The custom domains Terraform creates (app.) are the only intended entry
+# points. Left unset, Wrangler enables workers.dev and Preview URLs by default,
+# which publishes the dashboard on a second, unversioned public hostname that
+# bypasses those domains entirely. This repo has already been bitten by exactly
+# that on the API Worker — the same guard belongs here.
+workers_dev = false
+preview_urls = false
+
+[assets]
+directory = "./dist"
+
+# The dashboard is a client-side-routed SPA: /login, /w/:ws/files and friends
+# exist only in the React Router table, not as files on disk. Without this,
+# every deep link and every browser refresh away from / would 404 against the
+# asset store before React ever loaded.
+#
+# "single-page-application" serves dist/index.html with 200 OK for any request
+# that matches no asset. The tradeoff is that a genuinely unknown path also
+# returns 200 rather than 404 — that is correct here, because App.jsx owns the
+# not-found surface (`<Route path="*" element={<NotFound />}>`, doc 03 §8.29).
+not_found_handling = "single-page-application"
+
+# ---------------------------------------------------------------- dev ---
+[env.dev]
+name = "agentdisk-dev-web"
+# Restated per environment rather than relied on by inheritance. These two flags
+# are the difference between one public hostname and two, so they are not worth
+# resolving through a rule about which keys inherit.
+workers_dev = false
+preview_urls = false
+
+[env.dev.assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+
+# --------------------------------------------------------------- prod ---
+# Never applied yet: the prod Terraform workspace is empty and gated behind a PR
+# into main plus required-reviewer approval. Declared so the shape is already
+# right when that day comes, not because anything here deploys it.
+[env.prod]
+name = "agentdisk-prod-web"
+workers_dev = false
+preview_urls = false
+
+[env.prod.assets]
+directory = "./dist"
+not_found_handling = "single-page-application"

@@ -1,4 +1,4 @@
-# AgentDrive infrastructure root — one config, one state bucket, one workspace
+# AgentDisk infrastructure root — one config, one state bucket, one workspace
 # per environment (`dev`, `prod`).
 #
 # The environment is derived from terraform.workspace and NOWHERE else. There is
@@ -44,7 +44,7 @@ resource "terraform_data" "workspace_guard" {
       error_message = <<-MSG
         Refusing to run in the "${terraform.workspace}" workspace.
 
-        AgentDrive provisions only from the "dev" or "prod" workspace. The
+        AgentDisk provisions only from the "dev" or "prod" workspace. The
         "default" workspace is never used, because an unselected workspace must
         not silently create or destroy real infrastructure.
 
@@ -63,6 +63,8 @@ module "stack" {
   account_id  = var.account_id
   zone_id     = var.zone_id
   root_domain = var.root_domain
+
+  manage_r2_signing_token = var.manage_r2_signing_token
 
   # Ordering, not decoration: nothing is created until the guard has passed.
   depends_on = [terraform_data.workspace_guard]

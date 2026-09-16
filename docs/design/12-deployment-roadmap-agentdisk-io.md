@@ -1,4 +1,4 @@
-# AgentDrive → Deployment Roadmap for agentdisk.io
+# AgentDisk → Deployment Roadmap for agentdisk.io
 
 *A concrete, numbered execution plan for taking the design in `01`–`11` and standing up a real, Terraform-managed, GitHub-Actions-deployed system on Cloudflare under the `agentdisk.io` domain. Replaces the placeholder `agentdrive.dev` domain used throughout the earlier design docs. Two environments only (Development, Production) — simpler than the three-tier Dev/Preview/Production model sketched in `07` PART 18.1; a per-PR preview tier can be added later without restructuring anything below.*
 

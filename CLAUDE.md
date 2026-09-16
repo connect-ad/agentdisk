@@ -375,7 +375,7 @@ provenance), `ApiKeyDisplay` (show-once), `PermissionSelector` (least privilege)
 | 020 | [Staff console defects](backlog/020-staff-console-defects.md) | Open — fleet search throws; force-logout 500s after succeeding |
 | 021 | [Audit-trail gaps](backlog/021-audit-trail-gaps.md) | Open — recursive folder delete, move, copy, restore unrecorded |
 | 022 | [Finish webhooks](backlog/022-webhook-gaps.md) | Open — 4 of 6 events never emitted; secret stored in plaintext |
-| 023 | [Non-functional UI controls](backlog/023-non-functional-ui-controls.md) | Open — Tier 2 closed and 3 of 8 false successes fixed; 5 remain |
+| 023 | [Non-functional UI controls](backlog/023-non-functional-ui-controls.md) | Open — Tier 2 closed; the 16 Sept pass wired delete, create-folder, download and rename, removed five dead controls and disabled the two account-data promises. Remaining work is what needs endpoints that do not exist |
 | 024 | [Pricing page drift](backlog/024-pricing-page-drift.md) | Open — every number contradicts `plans.ts`; no purchase path |
 | 025 | [Authorization hardening](backlog/025-authorization-hardening.md) | Open — agent keys can read billing; five smaller items |
 | 026 | [Upstream the account menu](backlog/026-upstream-account-menu.md) | Open — `AppShell.userSlot`; third divergence in the vendored shell |
@@ -399,8 +399,8 @@ live deployment rather than inferred from the code — see
 person can follow.
 
 ```
-apps/api    539 tests across 30 files · typecheck clean · lint clean
-apps/web    114 tests · 123 modules · build clean
+apps/api    558 tests across 31 files · typecheck clean · lint clean
+apps/web    171 tests · 123 modules · build clean
 Worker      226 KiB gzipped, against Cloudflare's 1 MB limit
 ```
 

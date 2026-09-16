@@ -1,6 +1,8 @@
 # 023 · Replace the non-functional UI controls
 
 **Status:** Open — found by the 8 Sept 2026 audit ([summary.md](../summary.md) §4).
+A second pass on **16 Sept 2026** closed most of what remained; see
+"16 Sept 2026 pass" at the foot of this file.
 A 8 Sept pass against
 [18](../docs/design/18-full-ui-audit-and-fix-prompt.md) closed the whole of
 Tier 2 and part of Tier 1; the inventory below is annotated with what remains.
@@ -86,3 +88,41 @@ control from reporting success it cannot verify. Then reopen
 [007](007-browser-verify-screens.md) — walking the 31 screens in a browser would
 have surfaced the whole Tier-1 list in an afternoon, and remains the most
 under-prioritised item in the project.
+
+---
+
+## 16 Sept 2026 pass
+
+Wired, each now calling an endpoint that already existed and had never been
+invoked from the dashboard:
+
+- **Delete file**, single and bulk. Both set a "Deleted" toast and sent no
+  request. Bulk reports partial failure; nothing is removed optimistically.
+- **Create folder.** The confirm button was `onClick={() => setDialog(null)}`.
+- **Download.** Neither button in the detail drawer had a handler, and `api.js`
+  had no download method. One call per click — egress is billed when the URL is
+  issued.
+- **Rename workspace.** Flashed "Saved" and called nothing, because no
+  `PATCH /v1/workspaces/:id` existed. It does now, and the slug does not move.
+- **The empty state's "Upload files"**, to the input the toolbar already used.
+
+Removed, because no endpoint exists and none is planned: the per-row ⋮ menu,
+bulk Move, Download as zip, Copy signed link (`/sign` answers 404) and Activity's
+Export CSV.
+
+Disabled with a stated reason rather than removed, because the privacy policy
+grants them and they will be built: **Export my data** and **Delete my account**.
+Both previously reported success — one promised an email within 24 hours, the
+other said "Account deletion scheduled" — for work with no mechanism behind it.
+
+Also corrected: the delete dialog's "trash for 30 days" (the grace period is 24
+hours and there is no trash screen), the masked key prefix (`ad_live_`, which
+this API has never issued), the Quick-start curl's `contentType`, the Resend
+sub-processor row, and the `EU-CENTRAL-1` residency badge.
+
+**What remains is the work that needs endpoints that do not exist**: a real data
+export, account deletion, and full-text search inside files.
+
+`apps/web/test/file-browser-wiring.test.jsx` and `privacy-tab.test.jsx` pin the
+wired controls by asserting the API was *called* — a test that only checked for
+the toast would have passed against every one of these bugs.

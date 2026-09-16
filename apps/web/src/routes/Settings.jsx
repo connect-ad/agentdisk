@@ -307,7 +307,7 @@ export default function Settings() {
 
       {/* --- 8.22 / 8.24 / 8.25 --- */}
       {tab === 'members' ? <MembersTab /> : null}
-      {tab === 'privacy' ? <PrivacyTab soleOwnerOf={0} /> : null}
+      {tab === 'privacy' ? <PrivacyTab /> : null}
       {tab === 'billing' ? <BillingTab /> : null}
 
       <Modal

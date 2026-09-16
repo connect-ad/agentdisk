@@ -118,9 +118,13 @@ export function Footer() {
         <span className="mk__footbrand">
           <Logo size={22} alt="" />
           <span className="mk__footmark">AgentDisk</span>
-          {/* Static in the design and static here. A live status claim needs a
-              status source, and there isn't one. */}
-          <span className="mk__footmeta">EU-CENTRAL-1</span>
+          {/* The reference design put a region badge here and it read
+              "EU-CENTRAL-1". There is no region concept anywhere in this
+              system: no column, no setting, no API field, and R2 buckets are
+              not created per-region by this stack. It was a data-residency
+              claim with nothing behind it, which is a claim people choose a
+              vendor on -- so it is gone rather than replaced with a different
+              string. */}
         </span>
         <span className="mk__footlinks">
           <Link to="/docs">Docs</Link>

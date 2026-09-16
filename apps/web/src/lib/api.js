@@ -52,27 +52,6 @@ async function toError(response) {
   return new ApiError(response.status, code, message, requestId);
 }
 
-/**
- * What a claim link is worth, before anybody signs in.
- *
- * Outside `createApiClient` because every method there sends a bearer token and
- * throws without one - and this call deliberately has no credential. The token
- * in the URL is the only thing that can name the workspace, which is the same
- * trust model as a signed download link.
- *
- * A person following a claim link has usually never seen this product. Asking
- * them to create an account before telling them what they would be claiming
- * inverts the order of trust.
- */
-export async function previewClaim(claimToken, signal) {
-  const response = await fetch(
-    new URL(`/v1/workspaces/claim/${encodeURIComponent(claimToken)}`, BASE_URL),
-    { signal }
-  );
-  if (!response.ok) throw await toError(response);
-  return response.json();
-}
-
 export function createApiClient(getToken) {
   /**
    * Counted in and out of `pending.js` so the top progress bar can show that
@@ -126,19 +105,6 @@ export function createApiClient(getToken) {
      */
     deleteWorkspace: (workspaceId, name) =>
       request(`/v1/workspaces/${workspaceId}`, { method: 'DELETE', body: { name } }),
-
-    /**
-     * Take ownership of an unclaimed sandbox. `body` is {mode:'new'} or
-     * {mode:'attach', targetWorkspaceId}. No `workspaceId` option: which
-     * workspace this concerns is what the claim token decides, and the target
-     * for an attach is named in the body so the API can authorize it against
-     * the caller's own membership rather than a query parameter.
-     */
-    claimWorkspace: (claimToken, body) =>
-      request(`/v1/workspaces/claim/${encodeURIComponent(claimToken)}`, {
-        method: 'POST',
-        body,
-      }),
 
     listFiles: (workspaceId, params = {}) => {
       const query = new URLSearchParams(params).toString();

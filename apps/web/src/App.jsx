@@ -18,7 +18,6 @@ import {
 import { Sandbox } from './routes/Sandbox.jsx';
 import { Signup, VerifyEmail, ForgotPassword, ResetPassword, Login } from './routes/Auth.jsx';
 import { Landing, Pricing } from './routes/Marketing.jsx';
-import Claim from './routes/Claim.jsx';
 import { Terms, Privacy } from './routes/Legal.jsx';
 import Docs from './routes/Docs.jsx';
 import McpConnection from './routes/McpConnection.jsx';
@@ -309,13 +308,6 @@ export default function App() {
       <Route path="/docs" element={<Docs />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/privacy" element={<Privacy />} />
-      {/* Public on purpose: the preview half of this page works with no
-          account, because the claim token in the URL is the only thing that can
-          name the workspace. The page itself gates the act of claiming behind
-          sign-in, rather than RequireAuth gating the whole screen - which would
-          bounce a first-time visitor to /login before they could see what they
-          were being asked to sign up for. */}
-      <Route path="/claim/:token" element={<Claim />} />
       <Route element={<RequireAuth />}>
         <Route path="/app" element={<CurrentWorkspaceRedirect />} />
         {/* `/dashboard` is the shareable spelling of the same idea: a bookmark,

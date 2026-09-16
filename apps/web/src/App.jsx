@@ -49,7 +49,12 @@ export const NAV = [
   }
 ];
 
-const WORKSPACE = { name: 'acme-research', meta: 'Pro · 3 agents' };
+const WORKSPACES = [
+  { name: 'Kessler Labs', meta: 'ws_8f3ac21d9e4b', type: 'TEAM', role: 'OWNER' },
+  { name: 'Nightshift Research', meta: 'ws_2b71ce40aef18', type: 'PRO', role: 'READER' },
+  { name: 'Personal sandbox', meta: 'ws_5d09fa3b7c62', type: 'FREE', role: 'OWNER' }
+];
+const WORKSPACE = WORKSPACES[0];
 const USER = { name: 'Dana Okafor', email: 'dana@acme.io' };
 
 /** Which nav id is active for the current pathname. */
@@ -77,6 +82,7 @@ function WorkspaceLayout() {
       nav={NAV}
       active={active}
       workspace={WORKSPACE}
+      workspaces={WORKSPACES}
       user={USER}
       onNavigate={id => {
         const item = NAV.flatMap(g => g.items).find(i => i.id === id);

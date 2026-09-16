@@ -3,9 +3,12 @@ import { Icon } from '../Icon/Icon.jsx';
 import { IconButton } from '../Button/IconButton.jsx';
 
 export function AppShell({
-  nav = [], active, workspace, user, topbar, topbarActions, children, flush = false, onNavigate, className = '', ...rest
+  nav = [], active, workspace, workspaces = [], user, topbar, topbarActions, children, flush = false,
+  onNavigate, onWorkspaceChange, className = '', ...rest
 }) {
   const [open, setOpen] = useState(false);
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [selectedWorkspace, setSelectedWorkspace] = useState(workspace || workspaces[0]);
   return (
     <div className={['shell', open ? 'is-open' : '', className].filter(Boolean).join(' ')} {...rest}>
       <nav className="shell__nav" aria-label="Primary">
@@ -13,16 +16,42 @@ export function AppShell({
           <span className="shell__logo" aria-hidden="true">A</span>
           <span className="shell__wordmark">AgentDrive</span>
         </div>
-        {workspace ? (
+        {selectedWorkspace ? (
           <div className="shell__ws">
-            <button type="button" className="shell__wsbtn">
-              <span className="shell__wsmark" aria-hidden="true">{(workspace.name || 'W').slice(0, 1).toUpperCase()}</span>
+            <button type="button" className="shell__wsbtn" aria-expanded={workspaceMenuOpen}
+              aria-haspopup="listbox" onClick={() => setWorkspaceMenuOpen(!workspaceMenuOpen)}>
+              <span className="shell__wsmark" aria-hidden="true">{(selectedWorkspace.name || 'W').slice(0, 1).toUpperCase()}</span>
               <span style={{ minWidth: 0, flex: 1 }}>
-                <span className="shell__wsname" style={{ display: 'block' }}>{workspace.name}</span>
-                <span className="shell__wsmeta">{workspace.meta}</span>
+                <span className="shell__wsname" style={{ display: 'block' }}>{selectedWorkspace.name}</span>
+                <span className="shell__wsmeta">{selectedWorkspace.meta}</span>
               </span>
               <Icon name="chevronUpDown" size={14} />
             </button>
+            {workspaces.length > 0 && workspaceMenuOpen ? (
+              <div className="shell__wsmenu" role="listbox" aria-label="Workspaces">
+                <p className="shell__wsmenu-label">Workspaces</p>
+                {workspaces.map(item => (
+                  <button type="button" role="option" aria-selected={item.name === selectedWorkspace.name}
+                    className={['shell__wsitem', item.name === selectedWorkspace.name ? 'is-selected' : ''].filter(Boolean).join(' ')}
+                    key={item.name} onClick={() => {
+                      setSelectedWorkspace(item);
+                      onWorkspaceChange?.(item);
+                      setWorkspaceMenuOpen(false);
+                    }}>
+                    <span className="shell__wsmark" aria-hidden="true">{(item.name || 'W').slice(0, 1).toUpperCase()}</span>
+                    <span className="shell__wsitem-body">
+                      <span className="shell__wsitem-name">{item.name}</span>
+                      <span className="shell__wsitem-meta">{item.meta}</span>
+                    </span>
+                    <span className="shell__wsitem-side">
+                      <span className="shell__wstag">{item.type}</span>
+                      {item.role ? <span className="shell__wsrole">{item.role}</span> : null}
+                    </span>
+                    {item.name === selectedWorkspace.name ? <Icon name="check" size={14} /> : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : null}
         <div className="shell__scroll">

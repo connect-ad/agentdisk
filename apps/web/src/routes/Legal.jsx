@@ -25,7 +25,7 @@ function LegalShell({ title, updated, children }) {
   return (
     <div className="mk">
       <Nav />
-      <main className="mk__wrap" style={{ maxWidth: '72ch', padding: 'var(--s-9) var(--s-6)' }}>
+      <main className="mk__wrap" style={{ maxWidth: '72ch', padding: 'var(--s-9) var(--gutter)' }}>
         <h1 className="mk__h1" style={{ marginBottom: 'var(--s-3)' }}>{title}</h1>
         <p className="ad-meta" style={{ marginBottom: 'var(--s-7)' }}>{updated}</p>
 

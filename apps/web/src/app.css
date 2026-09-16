@@ -356,9 +356,34 @@
 /* --- marketing (8.1 landing, 8.2 pricing) ---
    Rebuilt to AgentDisk Site.dc.html. Tokens only; the design's literal px and
    hex live in styles.css as token values, not here. */
-.mk{background:var(--paper);min-height:100vh;display:flex;flex-direction:column}
+/* The sheet. Same shape as the dashboard's .shell (styles.css) and gated at
+   the same 1351px: below that there is no ground either side to stand off, so
+   the sheet fills the frame and the edge switches off entirely.
+
+   The two are deliberately separate copies for now — .shell carries sticky
+   children and a corner cut this one solves differently. .auth__sheet is NOT
+   the same thing despite looking like it: it is a card that keeps its edge at
+   every width, so folding it in here would strip its border below 1351px.
+
+   No overflow:hidden. The reference clips the corners that way, but it makes
+   the sheet a scroll container and .mk__nav, .doc__toc and .doc__rail all
+   stick to the viewport rather than the sheet. The corner is cut twice
+   instead, exactly as .shell does it: the two children that paint their own
+   background — the nav and the footer — carry the curve themselves. */
+.mk{background:var(--paper);min-height:100vh;display:flex;flex-direction:column;
+  width:100%;max-width:var(--shell-w);margin:0 auto}
+
+@media (min-width:1351px){
+  /* min-height gives the gap back, so a short page does not gain a scrollbar
+     purely from the two margins. */
+  .mk{margin-block:var(--sheet-gap);
+    min-height:calc(100vh - (2 * var(--sheet-gap)));
+    border:1px solid var(--line);border-radius:var(--r-4);box-shadow:var(--sh-4)}
+  .mk__nav{border-radius:var(--r-4) var(--r-4) 0 0}
+  .mk__foot{border-radius:0 0 var(--r-4) var(--r-4)}
+}
 .mk__nav{position:sticky;top:0;z-index:30;display:flex;align-items:center;
-  gap:var(--s-6);height:var(--topbar-h);padding:0 var(--s-8);
+  gap:var(--s-6);height:var(--topbar-h);padding:0 var(--gutter);
   border-bottom:1px solid var(--line);
   background:color-mix(in srgb,var(--surface) 82%,transparent);
   backdrop-filter:blur(0.5rem)}
@@ -368,7 +393,7 @@
 .mk__wordmark{font-family:var(--font-display);font-size:var(--t-16);
   font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink)}
 .mk__navlinks{display:flex;align-items:center;gap:var(--s-7);margin-left:auto}
-.mk__wrap{max-width:73.75rem;margin:0 auto;padding:0 var(--s-10);width:100%}
+.mk__wrap{margin:0 auto;padding:0 var(--gutter);width:100%}
 
 /* hero */
 .mk__hero{padding:var(--s-11) 0 var(--s-9);display:grid;
@@ -500,12 +525,10 @@
   .mk__hero{grid-template-columns:minmax(0,1fr);padding:var(--s-10) 0 var(--s-8)}
   .mk__grid4{grid-template-columns:repeat(2,minmax(0,1fr))}
   .mk__prices{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .mk__wrap{padding:0 var(--s-8)}
 }
 @media (max-width:875px){
   .mk__h1{font-size:var(--t-32)}
   .mk__grid4,.mk__grid3,.mk__prices{grid-template-columns:minmax(0,1fr)}
-  .mk__wrap{padding:0 var(--s-6)}
   .mk__navlinks{gap:var(--s-5)}
   .mk__panel,.mk__band{padding:var(--s-7)}
 }

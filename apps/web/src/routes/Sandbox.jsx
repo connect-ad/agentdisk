@@ -133,7 +133,7 @@ export function Sandbox() {
 
   if (!SITE_KEY) {
     return (
-      <div className="auth">
+      <div className="auth auth--card">
         <div className="auth__inner">
           <div className="auth__card">
             <Alert tone="warn" title="This build has no Turnstile site key.">
@@ -149,7 +149,7 @@ export function Sandbox() {
   if (result) {
     const base = API_BASE || 'https://api-dev.agentdisk.io';
     return (
-      <div className="auth">
+      <div className="auth auth--card">
         <div className="auth__inner">
           <div className="auth__card" style={{ gap: 'var(--s-6)' }}>
             <div>
@@ -187,7 +187,7 @@ export function Sandbox() {
   }
 
   return (
-    <div className="auth">
+    <div className="auth auth--card">
       <div className="auth__inner">
         <div className="auth__brand">
           <span className="auth__logo" aria-hidden="true">A</span>

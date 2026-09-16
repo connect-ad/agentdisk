@@ -378,7 +378,7 @@ const STATUS_TONE = { active: 'ok', past_due: 'warn', canceled: 'danger' };
 const STATUS_LABEL = { active: 'Active', past_due: 'Payment overdue', canceled: 'Canceled' };
 
 export function BillingTab() {
-  const { api, workspaceId, role } = useWorkspace();
+  const { api, workspaceId, role, workspaceSlug } = useWorkspace();
   const { status, data, error, reload } = useResource(loadBilling);
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState(null);
@@ -432,45 +432,59 @@ export function BillingTab() {
 
       {openError ? <div role="alert"><Alert tone="danger" title={openError} /></div> : null}
 
-      <Panel
-        title="Plan"
-        actions={
-          isOwner ? (
-            <Button variant="secondary" onClick={openPortal} loading={opening}>
-              {billing?.configured ? 'Manage billing' : 'Set up billing'}
-            </Button>
-          ) : null
-        }
-      >
-        <dl className="kv">
-          <dt>Plan</dt>
-          <dd><Badge tone="accent">{billing?.plan ?? '—'}</Badge></dd>
-
-          <dt>Status</dt>
-          <dd>
+      {/* The reference's two-card hero, carrying only what the API actually
+          returns — see the `.plan` block in app.css for what was left out and
+          why. */}
+      <div className="plan">
+        <section className="plan__card plan__card--accent">
+          <h3 className="plan__eyebrow">Current plan</h3>
+          <div className="plan__head">
+            <span className="plan__name">{billing?.plan ?? '—'}</span>
             <Badge tone={STATUS_TONE[billing?.status] ?? undefined} dot>
               {STATUS_LABEL[billing?.status] ?? billing?.status ?? '—'}
             </Badge>
-          </dd>
-
-          <dt>Billing email</dt>
-          <dd>{billing?.ownerEmail ?? '—'}</dd>
-
-          <dt>Payment method</dt>
-          {/* We genuinely do not know - the card lives on Stripe and this
-              product never sees it. Claiming otherwise would be a guess. */}
-          <dd className="ad-meta">
-            {billing?.subscribed ? 'Managed on Stripe' : 'No active subscription'}
-          </dd>
-        </dl>
-
-        {!isOwner ? (
-          <p className="ad-meta" style={{ marginTop: 'var(--s-5)' }}>
-            Only the account owner can change billing. Ask {billing?.ownerEmail ?? 'them'} if
-            something needs updating.
+          </div>
+          {/* The reference prints the plan's allowance here. It is real data,
+              but it is not on this response — `/v1/whoami` carries it, against
+              this workspace's actual usage — so this points at the screen that
+              already has both rather than fetching limits to restate them. */}
+          <p className="plan__note">
+            What this plan allows — storage, files and requests — is on the{' '}
+            <Link to={`/w/${workspaceSlug}/usage`}>Usage page</Link>, measured against
+            what this workspace has used.
           </p>
-        ) : null}
-      </Panel>
+          <div className="plan__foot">
+            {isOwner ? (
+              <Button onClick={openPortal} loading={opening}>
+                {billing?.configured ? 'Manage billing' : 'Set up billing'}
+              </Button>
+            ) : (
+              <p className="ad-meta">
+                Only the account owner can change billing. Ask {billing?.ownerEmail ?? 'them'} if
+                something needs updating.
+              </p>
+            )}
+          </div>
+        </section>
+
+        <section className="plan__card">
+          <h3 className="plan__eyebrow">Billing account</h3>
+          <dl className="plan__rows">
+            <div>
+              <dt>Billing email</dt>
+              <dd>{billing?.ownerEmail ?? '—'}</dd>
+            </div>
+            <div>
+              <dt>Payment method</dt>
+              {/* We genuinely do not know — the card lives on Stripe and this
+                  product never sees it. Claiming otherwise would be a guess. */}
+              <dd className="ad-meta">
+                {billing?.subscribed ? 'Managed on Stripe' : 'No active subscription'}
+              </dd>
+            </div>
+          </dl>
+        </section>
+      </div>
 
       <Panel title="Invoices">
         <EmptyState

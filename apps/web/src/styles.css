@@ -60,6 +60,14 @@
   --t-9:0.5625rem; --t-9-5:0.59375rem; --t-10-5:0.65625rem; --t-11-5:0.71875rem;
   --t-12-5:0.78125rem; --t-13-5:0.84375rem; --t-16-5:1.03125rem; --t-34:2.125rem;
 
+  /* --- the four steps the Auth file adds.
+     AgentDisk Auth.dc.html draws its own sizes rather than reusing the
+     Dashboard's: the split sheet's wordmark at 17 (the Dashboard's is 16.5),
+     the form heading at 25, the brand heading at 28 and the submit button at
+     14.5. None of the four rounds onto an existing step without moving by at
+     least half a pixel, so each is named here rather than approximated. --- */
+  --t-14-5:0.90625rem; --t-17:1.0625rem; --t-25:1.5625rem; --t-28:1.75rem;
+
   --lh-tight:1.04; /* @kind font */
   --lh-snug:1.25; /* @kind font */
   --lh-normal:1.5; /* @kind font */

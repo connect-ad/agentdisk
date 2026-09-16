@@ -128,8 +128,29 @@ export function AuthProvider({ children }) {
         await signInWithEmailAndPassword(auth, email, password);
       },
 
-      async signUpWithPassword(email, password) {
+      /**
+       * `displayName` is optional because Google and GitHub supply one of
+       * their own; the email form is the only path that has to ask. It is set
+       * before the verification mail goes out so the address the person
+       * confirms already belongs to a named account — a members list and an
+       * activity row both read this claim, and an account with only an email
+       * address in them is the thing the signup form exists to avoid.
+       *
+       * A failure to set it is swallowed on purpose: the account exists by
+       * that point, and rejecting the signup over a cosmetic claim would
+       * leave somebody with a working credential and an error message. The
+       * name is editable from Profile either way.
+       */
+      async signUpWithPassword(email, password, displayName) {
         const credential = await createUserWithEmailAndPassword(auth, email, password);
+        const name = displayName?.trim();
+        if (name) {
+          try {
+            await updateProfile(credential.user, { displayName: name });
+          } catch {
+            /* Cosmetic. Profile can set it later. */
+          }
+        }
         // Fired here rather than left to a later screen: an unverified address
         // cannot claim an invitation on the API side, so the sooner it is
         // verified the sooner the account behaves as the person expects.

@@ -18,6 +18,7 @@ import {
 import { Sandbox } from './routes/Sandbox.jsx';
 import { Signup, VerifyEmail, ForgotPassword, ResetPassword, Login } from './routes/Auth.jsx';
 import { Landing, Pricing } from './routes/Marketing.jsx';
+import Claim from './routes/Claim.jsx';
 import { Terms, Privacy } from './routes/Legal.jsx';
 import Docs from './routes/Docs.jsx';
 import McpConnection from './routes/McpConnection.jsx';
@@ -83,13 +84,32 @@ function CurrentWorkspaceRedirect() {
   return workspaceId ? <Navigate to={`/w/${workspaceSlug}`} replace /> : <Navigate to="/login" replace />;
 }
 
-/** Which nav id is active for the current pathname. */
+/**
+ * Which nav id is active for the current pathname, or `null` when none is.
+ *
+ * `null` is not a bug case to paper over with a default — it is the correct
+ * answer whenever the pathname is inside the account area (`/profile`,
+ * `/billing`, `/support`). Those three are top-level routes bolted on beside
+ * the tab bar, not one of its tabs, and the reference (`AgentDisk
+ * Dashboard.dc.html`) computes its own `tabs[].active` the same way: each tab
+ * is `s.tab === k`, and `s.tab` is `"account"`/`"billing"`/`"support"` on
+ * those screens, so every tab — including Overview — comes back `active:
+ * false`. Falling back to `'dash'` here (the previous behaviour) made
+ * `AppShell` mark Overview `aria-current="page"` while sitting on Account or
+ * Billing, which is what actually painted the Overview tab as selected under
+ * the account-area return bar: a workspace tab claiming to be the current
+ * page while the return bar right below it says otherwise. The `'dash'`
+ * fallback still applies, correctly, at the literal workspace root — see the
+ * `rest === ''` check below — since that is the one case the reference's own
+ * `default: "overview"` state prop covers.
+ */
 function activeId(pathname, wsRoot) {
   const rest = pathname.slice(wsRoot.length) || '';
+  if (rest === '' || rest === '/') return 'dash';
   const match = NAV.flatMap(g => g.items)
     .filter(it => it.path && rest.startsWith(it.path))
     .sort((a, b) => b.path.length - a.path.length)[0];
-  return match ? match.id : 'dash';
+  return match ? match.id : null;
 }
 
 /**
@@ -336,6 +356,13 @@ export default function App() {
       <Route path="/docs" element={<Docs />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/privacy" element={<Privacy />} />
+      {/* Public on purpose: the preview half of this page works with no
+          account, because the claim token in the URL is the only thing that can
+          name the workspace. The page itself gates the act of claiming behind
+          sign-in, rather than RequireAuth gating the whole screen - which would
+          bounce a first-time visitor to /login before they could see what they
+          were being asked to sign up for. */}
+      <Route path="/claim/:token" element={<Claim />} />
       <Route element={<RequireAuth />}>
         <Route path="/app" element={<CurrentWorkspaceRedirect />} />
         {/* `/dashboard` is the shareable spelling of the same idea: a bookmark,

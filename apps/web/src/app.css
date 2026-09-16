@@ -83,33 +83,267 @@
 .toolbar{display:flex;align-items:center;gap:var(--s-4);flex-wrap:wrap}
 .toolbar__spacer{flex:1;min-width:var(--s-8)}
 
-/* --- auth: centred card shell (8.3-8.7) ---
-   The design's card: softer radius, more padding, an Outfit heading. The
-   markup is unchanged — AuthShell already rendered this structure — so every
-   handler, field and provider button below is untouched. */
-.auth{min-height:100vh;display:grid;place-items:center;padding:var(--s-9);
-  background:var(--paper)}
-.auth__inner{width:100%;max-width:25rem;display:flex;flex-direction:column;
-  gap:var(--s-6)}
-.auth__brand{display:flex;align-items:center;gap:var(--s-4);
-  justify-content:center;text-decoration:none}
+/* ==========================================================================
+   auth: the split sheet (8.3-8.7)
+
+   AgentDisk Auth.dc.html, which replaces the centred 25rem card this block
+   used to hold. The reference draws one sheet — 1100 wide, 660 tall minimum,
+   a 1px edge and a 14px corner — split `minmax(0,1fr) 480px`: a brand panel
+   on the fluid side and the form in a fixed 480 column. Its Mobile frame
+   (390) drops the brand panel and shows a wordmark above the form instead.
+
+   Every number below is the reference's own px, emitted in rem at /16 so the
+   125% root scales the screen as one piece — the same rule the shell and the
+   Logo mark follow. Where a value is already on the token scale the token is
+   used; the reference's off-scale one-offs (the 11px corner on the footer
+   card, the 34px segment, the 42px control, the 46px submit) are written out
+   with the px they came from named in a comment.
+
+   The reference's own stage padding is 36/24, which is --sheet-gap and
+   --s-8 x 1.5; it is kept as the page's minimum inset rather than as a top
+   margin, because a 660 sheet pinned to the top of a 900 viewport reads
+   bottom-heavy on a real screen where it does not on the canvas.
+   ========================================================================== */
+.auth{min-height:100vh;display:grid;place-items:center;
+  padding:var(--sheet-gap) 1.5rem;background:var(--paper)}
+.auth__sheet{width:100%;max-width:68.75rem;background:var(--paper);
+  border:1px solid var(--line);border-radius:var(--r-4);overflow:hidden;
+  box-shadow:var(--sh-4)}
+.auth__split{display:grid;grid-template-columns:minmax(0,1fr) 30rem;
+  min-height:41.25rem}
+
+/* --- the brand panel --- */
+.auth__brandpanel{background:var(--surf2);border-right:1px solid var(--bd);
+  padding:2.5rem 2.375rem;display:flex;flex-direction:column;
+  justify-content:space-between;gap:var(--sheet-gap)}
+.auth__brand{display:flex;align-items:center;gap:0.625rem;
+  text-decoration:none;flex:none}
 .auth__brand:hover{text-decoration:none}
-.auth__wordmark{font-family:var(--font-display);font-size:var(--t-16);
-  font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink)}
-.auth__card{background:var(--surface);border:1px solid var(--line);
+.auth__wordmark{font-family:var(--font-display);font-size:var(--t-17);
+  font-weight:var(--w-semi);letter-spacing:-0.02em;color:var(--tx)}
+.auth__brandhead{margin:0 0 0.875rem;font-family:var(--font-display);
+  font-size:var(--t-28);font-weight:var(--w-semi);letter-spacing:var(--tr-mid);
+  line-height:1.15;color:var(--tx);text-wrap:balance}
+.auth__brandbody{margin:0 0 1.625rem;font-size:var(--t-14);
+  line-height:var(--lh-loose);color:var(--tx2);max-width:20.625rem;
+  text-wrap:pretty}
+.auth__points{display:flex;flex-direction:column;gap:0.8125rem}
+.auth__point{display:flex;gap:0.6875rem;align-items:flex-start}
+/* The 18px check chip. --r-1 is the reference's own 5px corner. */
+.auth__pointmark{width:1.125rem;height:1.125rem;flex:0 0 1.125rem;
+  border-radius:var(--r-1);background:var(--accSoft);
+  border:1px solid var(--accBd);display:flex;align-items:center;
+  justify-content:center;margin-top:0.0625rem;color:var(--acc)}
+.auth__pointtitle{display:block;font-size:var(--t-13);
+  font-weight:var(--w-semi);color:var(--tx)}
+.auth__pointnote{display:block;font-size:var(--t-12-5);
+  line-height:var(--lh-normal);color:var(--tx2);margin-top:var(--s-1)}
+/* The footer card's corner is 11px in the reference — one notch inside --r-3
+   (12) and outside --r-2 (9), so it is written out rather than rounded. */
+.auth__brandfoot{border:1px solid var(--bd);background:var(--surf);
+  border-radius:0.6875rem;padding:0.875rem}
+.auth__brandfootlabel{font-family:var(--font-mono);font-size:var(--t-9-5);
+  letter-spacing:var(--tr-caps);color:var(--tx3);margin-bottom:0.625rem}
+.auth__brandfootcode{font-family:var(--font-mono);font-size:var(--t-12);
+  line-height:1.7;color:var(--codeTx);white-space:pre;overflow-x:auto}
+
+/* --- the form panel --- */
+.auth__formpanel{display:flex;align-items:center;justify-content:center;
+  padding:2.5rem 2.75rem}
+.auth__form{width:100%;max-width:23.25rem;
+  animation:ad-valuein var(--d-3) var(--ease) both}
+/* Only the Mobile frame shows a wordmark over the form; the desktop split
+   already carries one at the top of the brand panel. */
+.auth__mobilebrand{display:none;margin-bottom:1.625rem}
+
+/* The Sign up / Log in segment. 34px tall, a 7px inner corner inside a 10px
+   outer one, 3px of padding — none of the three on the radius scale. */
+.auth__seg{display:flex;background:var(--surf2);border:1px solid var(--bd);
+  border-radius:0.625rem;padding:0.1875rem;margin-bottom:1.625rem}
+.auth__segbtn{flex:1;height:2.125rem;border:none;border-radius:0.4375rem;
+  cursor:pointer;font-family:var(--font-sans);font-size:var(--t-13);
+  font-weight:var(--w-med);color:var(--tx2);background:transparent;
+  text-decoration:none;display:flex;align-items:center;justify-content:center;
+  transition:background var(--d-1) var(--ease),color var(--d-1) var(--ease)}
+.auth__segbtn:hover{color:var(--tx);text-decoration:none}
+.auth__segbtn.is-on{font-weight:var(--w-semi);color:var(--tx);
+  background:var(--surf3)}
+
+.auth__h1{margin:0 0 0.4375rem;font-family:var(--font-display);
+  font-size:var(--t-25);font-weight:var(--w-semi);letter-spacing:var(--tr-snug);
+  color:var(--tx)}
+.auth__sub{margin:0 0 var(--s-8);font-size:var(--t-13-5);line-height:1.55;
+  color:var(--tx2);text-wrap:pretty}
+
+/* --- the provider buttons --- */
+.auth__ssos{display:flex;flex-direction:column;gap:var(--s-4);
+  margin-bottom:1.125rem}
+/* 42px is the reference's control height, shared with the fields below. */
+.auth__sso{height:2.625rem;border:1px solid var(--bd2);
+  border-radius:var(--r-2);background:var(--surf2);display:flex;
+  align-items:center;gap:0.6875rem;padding:0 0.875rem;cursor:pointer;
+  font-family:var(--font-sans);font-size:var(--t-13-5);
+  font-weight:var(--w-med);color:var(--tx);
+  transition:border-color var(--d-1) var(--ease),background var(--d-1) var(--ease)}
+.auth__sso:hover:not(:disabled){border-color:var(--line-3);background:var(--surf3)}
+.auth__sso:disabled{opacity:.55;cursor:not-allowed}
+.auth__sso svg{flex:0 0 auto}
+
+.auth__divider{display:flex;align-items:center;gap:0.6875rem;
+  margin-bottom:1.25rem}
+.auth__divider::before,.auth__divider::after{content:"";flex:1;height:1px;
+  background:var(--bd)}
+.auth__dividertx{font-family:var(--font-mono);font-size:var(--t-9-5);
+  letter-spacing:0.1em;color:var(--tx3)}
+
+/* --- the fields --- */
+.auth__group{margin-bottom:0.875rem}
+/* The reference gives the password group 10px rather than 14, because
+   something always sits under it — the strength meter on sign up, the
+   remember row on log in. */
+.auth__group--pw{margin-bottom:0.625rem}
+.auth__label{display:block;font-family:var(--font-mono);
+  font-size:var(--t-9-5);letter-spacing:var(--tr-caps);color:var(--tx3);
+  margin-bottom:0.4375rem}
+.auth__labelrow{display:flex;align-items:baseline;
+  justify-content:space-between;gap:var(--s-4);margin-bottom:0.4375rem}
+.auth__labelrow .auth__label{margin-bottom:0}
+.auth__field{height:2.625rem;border:1px solid var(--bd2);
+  border-radius:var(--r-2);background:var(--surf2);display:flex;
+  align-items:center;gap:0.1875rem;padding:0 var(--s-5);
+  transition:border-color var(--d-1) var(--ease),box-shadow var(--d-1) var(--ease)}
+.auth__field:focus-within{border-color:var(--acc);box-shadow:var(--ring)}
+.auth__field.is-bad{border-color:var(--dngrBd)}
+.auth__field.is-bad:focus-within{box-shadow:var(--ring-danger)}
+/* The input carries no chrome of its own — the row above is the control. */
+.auth__input{flex:1;min-width:0;border:none;background:transparent;
+  padding:0;color:var(--tx);font-family:var(--font-sans);
+  font-size:var(--t-13-5);line-height:1}
+.auth__input:focus{outline:none}
+.auth__input::placeholder{color:var(--tx3)}
+/* The reference sets the mask at 14/0.2em, which is what a native password
+   input renders once it is given those two values. */
+.auth__input--pw{font-size:var(--t-14);letter-spacing:0.2em}
+.auth__input--pw::placeholder{letter-spacing:var(--tr-none)}
+.auth__fieldok{margin-left:auto;flex:0 0 auto;color:var(--okTx);display:flex}
+.auth__reveal{flex:0 0 auto;display:flex;align-items:center;border:none;
+  background:transparent;padding:0;cursor:pointer;color:var(--tx3)}
+.auth__reveal:hover{color:var(--tx2)}
+.auth__err{display:flex;align-items:center;gap:0.4375rem;
+  margin-top:0.4375rem;font-size:var(--t-12);color:var(--dngrTx)}
+.auth__err svg{flex:0 0 auto}
+.auth__forgot{background:transparent;border:none;padding:0;
+  font-family:var(--font-sans);font-size:var(--t-12);
+  font-weight:var(--w-med);color:var(--acc);cursor:pointer;flex:none}
+
+/* --- password strength --- */
+.auth__strength{margin-bottom:1.125rem}
+.auth__bars{display:flex;gap:var(--s-2);margin-bottom:var(--s-4)}
+.auth__bar{flex:1;height:0.25rem;border-radius:var(--r-full);display:block;
+  background:var(--surf3);transition:background var(--d-2) var(--ease)}
+.auth__bar.is-on{background:var(--ok)}
+.auth__strengthrow{display:flex;align-items:center;
+  justify-content:space-between;gap:0.625rem}
+.auth__strengthnote{font-size:var(--t-12);color:var(--tx2)}
+/* The reference's tag: 9px mono in a 4px box, which is off the radius scale
+   because --r-1 is the 5px badge corner. */
+.auth__strengthtag{font-family:var(--font-mono);font-size:var(--t-9);
+  font-weight:var(--w-semi);letter-spacing:0.07em;padding:0.125rem 0.375rem;
+  border-radius:0.25rem;flex:0 0 auto;color:var(--okTx);
+  background:var(--okSoft);border:1px solid var(--okBd)}
+.auth__strengthtag--warn{color:var(--warnTx);background:var(--warnSoft);
+  border-color:var(--warnBd)}
+.auth__strengthtag--bad{color:var(--dngrTx);background:var(--dngrSoft);
+  border-color:var(--dngrBd)}
+
+/* --- the consent row --- */
+.auth__consent{position:relative;display:flex;align-items:flex-start;
+  gap:0.625rem;margin-bottom:1.25rem;font-size:var(--t-12-5);
+  line-height:1.55;color:var(--tx2);cursor:pointer}
+/* The native box is taken out of the flow, not hidden: `display:none` would
+   drop it from the tab order and from the label's own click target. The
+   positioning context above is what keeps it from escaping the row. */
+.auth__consent input{position:absolute;opacity:0;width:0;height:0}
+/* 17px, a 5px corner, filled by the accent when on and an empty 1.5px rule
+   when off — the reference draws both states. */
+.auth__check{width:1.0625rem;height:1.0625rem;flex:0 0 1.0625rem;
+  border-radius:var(--r-1);border:0.09375rem solid var(--bd2);
+  background:transparent;display:flex;align-items:center;
+  justify-content:center;margin-top:0.0625rem;color:transparent;
+  transition:background var(--d-1) var(--ease),border-color var(--d-1) var(--ease)}
+.auth__consent input:checked + .auth__check{background:var(--acc);
+  border-color:var(--acc);color:var(--accInk)}
+.auth__consent input:focus-visible + .auth__check{outline:2px solid var(--acc);
+  outline-offset:2px}
+
+/* --- submit and the tail --- */
+.auth__submit{width:100%;height:2.875rem;border:none;border-radius:0.625rem;
+  background:var(--acc);color:var(--accInk);font-family:var(--font-sans);
+  font-size:var(--t-14-5);font-weight:var(--w-semi);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:0.625rem;
+  transition:background var(--d-1) var(--ease)}
+/* Log in has no strength meter and no remember row, so the 20px the
+   reference's remember block contributed above the button is carried here
+   instead — the gap between the password field and the submit stays the
+   reference's 30px without drawing a control that does nothing. */
+.auth__submit--gap{margin-top:1.25rem}
+.auth__submit:hover:not(:disabled){background:var(--accent-hover)}
+.auth__submit:disabled{opacity:.6;cursor:not-allowed}
+.auth__submit[aria-busy="true"]{cursor:wait;opacity:1}
+.auth__spin{width:0.8125rem;height:0.8125rem;flex:0 0 0.8125rem;
+  border-radius:var(--r-full);border:0.125rem solid currentColor;
+  border-top-color:transparent;display:block;
+  animation:ad-spin .7s linear infinite}
+.auth__ghost{width:100%;margin-top:0.625rem;background:transparent;
+  border:none;padding:0;font-family:var(--font-sans);font-size:var(--t-12-5);
+  font-weight:var(--w-med);color:var(--acc);cursor:pointer}
+.auth__ghost:disabled{opacity:.55;cursor:not-allowed}
+.auth__foot{margin:var(--s-6) 0 0;font-size:var(--t-12);line-height:1.6;
+  color:var(--tx3);text-align:center;text-wrap:pretty}
+.auth__alt{border-top:1px solid var(--bd);margin-top:var(--s-8);
+  padding-top:1.125rem;display:flex;align-items:center;
+  justify-content:center;gap:0.4375rem;flex-wrap:wrap}
+.auth__altprompt{font-size:var(--t-12-5);color:var(--tx2)}
+.auth__altlink{background:transparent;border:none;padding:0;
+  font-family:var(--font-sans);font-size:var(--t-12-5);
+  font-weight:var(--w-semi);color:var(--acc);cursor:pointer}
+
+/* --- the centred card the sandbox still uses ---
+   8.9's anonymous Turnstile sandbox has no artboard in AgentDisk Auth.dc.html
+   — it is a different screen, reached without a credential — so it keeps the
+   25rem card this block held before the split sheet landed. Scoped under
+   .auth--card, which Sandbox.jsx sets alongside .auth, so the two shells
+   cannot drift into each other: every element the sandbox shares with the new
+   sheet is restated here at its old value. */
+.auth--card{padding:var(--s-9)}
+.auth--card .auth__inner{width:100%;max-width:25rem;display:flex;
+  flex-direction:column;gap:var(--s-6)}
+.auth--card .auth__brand{justify-content:center}
+.auth--card .auth__wordmark{font-size:var(--t-16);
+  letter-spacing:var(--tr-snug)}
+.auth--card .auth__card{background:var(--surface);border:1px solid var(--line);
   border-radius:var(--r-4);padding:var(--s-8);display:flex;
   flex-direction:column;gap:var(--s-6)}
-.auth__h1{font-family:var(--font-display);font-size:var(--t-21);
-  font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink)}
-.auth__sub{font-size:var(--t-13);color:var(--ink-2);line-height:var(--lh-normal);
-  text-wrap:pretty}
-.auth__foot{font-size:var(--t-13);color:var(--ink-2);text-align:center}
-.auth__legal{font-size:var(--t-12);color:var(--ink-3);text-align:center;
-  line-height:var(--lh-normal);text-wrap:pretty}
-.auth__divider{display:flex;align-items:center;gap:var(--s-4);
-  font-size:var(--t-12);color:var(--ink-4)}
-.auth__divider::before,.auth__divider::after{content:"";flex:1;height:1px;
-  background:var(--line)}
+.auth--card .auth__h1{margin:0;font-size:var(--t-21)}
+.auth--card .auth__sub{margin:0;font-size:var(--t-13);
+  line-height:var(--lh-normal)}
+.auth--card .auth__legal{font-size:var(--t-12);color:var(--ink-3);
+  text-align:center;line-height:var(--lh-normal);text-wrap:pretty}
+
+/* The reference's Mobile frame. Below the width where the brand panel's own
+   330px measure plus the fixed 480 column still fit, the sheet fills the
+   frame — no edge, no corner, nothing to stand off — and the wordmark moves
+   above the form. 1150 is that width in real px: 55.375rem of content at the
+   125% root is 1107, so this is the first step past it. */
+@media (max-width:1150px){
+  .auth{padding:0;place-items:stretch}
+  .auth__sheet{max-width:none;border:none;border-radius:0;box-shadow:none;
+    min-height:100vh;display:flex}
+  .auth__split{grid-template-columns:minmax(0,1fr);min-height:0;flex:1}
+  .auth__brandpanel{display:none}
+  .auth__mobilebrand{display:flex}
+  .auth__formpanel{padding:1.875rem 1.375rem 2.375rem;align-items:flex-start}
+}
 
 /* --- marketing (8.1 landing, 8.2 pricing) ---
    Rebuilt to AgentDisk Site.dc.html. Tokens only; the design's literal px and
@@ -486,6 +720,48 @@
 .acct--billing{max-width:47.5rem}
 .acct--support{max-width:40rem}
 .acct__sub{margin-top:calc(var(--s-3) * -1)}
+
+/* --- billing hero (routes/SettingsTabs.jsx, BillingTab) ---
+   The reference opens Billing on two cards side by side: an accent CURRENT
+   PLAN card and a neutral one beside it. The chrome is what is borrowed, not
+   the contents. The reference fills those cards with a monthly price, a
+   next-invoice estimate and a card's last four digits, and `GET /v1/billing`
+   returns none of the three — Stripe holds them and this product deliberately
+   never reads them back (14 PART 29.1). So the accent card carries the two
+   fields that are real, the plan and the subscription status, and the neutral
+   card carries the other two, the billing email and whether a subscription
+   exists at all. Inventing the rest would put numbers on screen that no
+   invoice would ever match.
+   auto-fit rather than a breakpoint: this renders both at the account area's
+   760px measure and inside the narrower Settings tab, so the column count
+   should follow the container it is handed, not the viewport. */
+.plan{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));
+  gap:var(--s-6)}
+.plan__card{border:1px solid var(--line);background:var(--surface);
+  border-radius:var(--r-3);padding:var(--s-6);min-width:0;
+  display:flex;flex-direction:column;gap:var(--s-5)}
+.plan__card--accent{border-color:var(--accent-line);background:var(--accent-soft)}
+.plan__eyebrow{margin:0;font-family:var(--font-mono);font-size:var(--t-9-5);
+  font-weight:var(--w-reg);letter-spacing:var(--tr-caps);text-transform:uppercase;
+  color:var(--ink-3)}
+.plan__card--accent .plan__eyebrow{color:var(--accent-ink)}
+.plan__head{display:flex;align-items:baseline;gap:var(--s-4);flex-wrap:wrap}
+/* capitalize, because the plan name arrives from the API as the lowercase
+   identifier it is stored as ('free', 'team') and this is the one place it is
+   read as a name rather than as a value. */
+.plan__name{font-family:var(--font-display);font-size:var(--t-32);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-mid);line-height:1;
+  color:var(--ink);text-transform:capitalize}
+.plan__note{margin:0;font-size:var(--t-12-5);line-height:var(--lh-normal);
+  color:var(--ink-2)}
+.plan__rows{margin:0;display:flex;flex-direction:column;gap:var(--s-5)}
+.plan__rows dt{font-size:var(--t-12);color:var(--ink-3)}
+.plan__rows dd{margin:var(--s-2) 0 0;font-size:var(--t-13);color:var(--ink);
+  overflow-wrap:anywhere}
+/* Pinned to the bottom so the two cards' actions line up however much text
+   sits above them. */
+.plan__foot{margin-top:auto;display:flex;align-items:center;gap:var(--s-4);
+  flex-wrap:wrap}
 
 /* The band that replaces the workspace strip while you are in the account
    area. Accent-tinted, because the point of it is that this is not one of your

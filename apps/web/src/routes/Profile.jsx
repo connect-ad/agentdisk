@@ -16,7 +16,10 @@ export default function Profile() {
   // token on the next request. So these edits are the whole change, and there
   // is no endpoint of ours missing behind them.
   const { user, updateDisplayName, requestEmailChange } = useAuth();
-  const { api, workspaceId } = useWorkspace();
+  const { api, workspaceId, role, workspace } = useWorkspace();
+  // 'owner' | 'admin' | 'reader' -> the design's own casing ('Owner').
+  const roleLabel = role ? role.charAt(0).toUpperCase() + role.slice(1) : '';
+  const workspaceName = workspace?.name ?? '';
   const [name, setName] = useState(user?.displayName ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
   const [pendingEmail, setPendingEmail] = useState(null);
@@ -87,7 +90,17 @@ export default function Profile() {
 
   return (
     <>
-      <PageHead title="Profile" subtitle="How you appear in the activity log and to workspace members." />
+      {/*
+        Title matches the profile-menu label and the account-area return bar
+        above it ("ACCOUNT AREA · Account") rather than the older MVP-0 spec's
+        "Profile" (doc 03 §22) — both named this screen at the top of it before
+        the redesign renamed the entry point to "Account" (`AgentDisk
+        Dashboard.dc.html`'s profile menu and its `accountLabel`). Leaving the
+        on-page heading as "Profile" while the bar right above it says
+        "Account" is the same class of self-contradiction as the tab-bar fix
+        in App.jsx: two labels for one screen, visible on screen at once.
+      */}
+      <PageHead title="Account" subtitle="How you appear in the activity log and to workspace members." />
 
       {error ? <div role="alert"><Alert tone="danger" title={error} /></div> : null}
 
@@ -135,6 +148,35 @@ export default function Profile() {
           <Button variant="secondary" size="sm" loading={sending} onClick={sendVerification}>
             Send verification link
           </Button>
+        </div>
+
+        {/*
+          Role, time zone and user ID, from the design's account-rows list
+          (`accountRows` in `AgentDisk Dashboard.dc.html`) — all four besides
+          Display name and Email were missing here entirely, not just styled
+          differently. Role and User ID are rendered static (design marks both
+          `editable: false`) because both already exist on data this screen
+          already has — `role` from the open workspace's membership, `user.uid`
+          from the signed-in Firebase user — so there is no reason to invent
+          them. Time zone is left out on purpose: unlike those two, nothing in
+          apps/api stores or reads a time zone for a user, so rendering it
+          — editable or not — would be a field that silently discards
+          whatever somebody typed into it. Add it once there is an endpoint
+          behind it, not before.
+        */}
+        <div className="row" style={{ gap: 'var(--s-6)', paddingTop: 'var(--s-5)', borderTop: '1px solid var(--line)' }}>
+          <span style={{ width: '104px', flex: '0 0 104px', fontFamily: 'var(--font-mono)', fontSize: 'var(--t-9-5)', letterSpacing: 'var(--tr-caps)', color: 'var(--ink-3)' }}>ROLE</span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--t-13-5)', color: 'var(--ink)' }}>
+            {role ? (workspaceName ? `${roleLabel} · ${workspaceName}` : roleLabel) : 'Open this from inside a workspace'}
+          </span>
+        </div>
+        <div className="row" style={{ gap: 'var(--s-6)', paddingTop: 'var(--s-5)', borderTop: '1px solid var(--line)' }}>
+          <span style={{ width: '104px', flex: '0 0 104px', fontFamily: 'var(--font-mono)', fontSize: 'var(--t-9-5)', letterSpacing: 'var(--tr-caps)', color: 'var(--ink-3)' }}>USER ID</span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--t-13-5)', color: 'var(--ink)', fontFamily: 'var(--font-mono)' }}>{user?.uid ?? '—'}</span>
+        </div>
+        <div className="row" style={{ gap: 'var(--s-6)', paddingTop: 'var(--s-5)', borderTop: '1px solid var(--line)' }}>
+          <span style={{ width: '104px', flex: '0 0 104px', fontFamily: 'var(--font-mono)', fontSize: 'var(--t-9-5)', letterSpacing: 'var(--tr-caps)', color: 'var(--ink-3)' }}>TIME ZONE</span>
+          <span className="ad-meta" style={{ flex: 1, minWidth: 0 }}>Not available yet — not collected by the API</span>
         </div>
       </Panel>
 

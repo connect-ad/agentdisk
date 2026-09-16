@@ -15,7 +15,7 @@ task.
 | `CLAUDE.md` | This route and the catalog | Source of truth for *where things are*. Not a duplicate of the specs. |
 | `docs/design/` | The specification, `NN-<slug>.md` | 20 documents, PART 1–30. The product's design authority — but see the precedence rule below. |
 | `design-system/` | Upstream mirror of the Claude Design project | **Read-only.** Byte-identical to the remote (96/96). Changes go into Claude Design, then re-import — never edit here. |
-| `apps/api/` | The Cloudflare Worker: REST + MCP, one deployable | Both surfaces are built and share one authorization chain. MCP tools call the REST handlers rather than reimplementing them, so the two cannot drift — a claim live testing disputes for `pathPrefix`; unresolved, see [029](backlog/029-mcp-path-scope-contradiction.md). |
+| `apps/api/` | The Cloudflare Worker: REST + MCP, one deployable | Both surfaces are built and share one authorization chain. MCP tools call the REST handlers rather than reimplementing them, so the two cannot drift — live testing once disputed this for `pathPrefix`, and retesting confirmed the code: both surfaces refuse a path outside the key's prefix, see [029](backlog/029-mcp-path-scope-contradiction.md). |
 | `infra/terraform/` | All infrastructure as code | One root config, one module, **one workspace per environment** (`dev`, `prod`). No `environments/` directories — see the workspace note below. |
 | `.github/workflows/` | CI and deployment pipelines | **Three areas, split by what they own: `infra`, `backend`, `frontend`.** Each is one reusable engine plus thin per-environment callers, so prod can never drift from dev. Path filters mean an `apps/web` push moves nothing else. `frontend.yml` is called once per app (dashboard, console). `ci.yml` gates PRs and covers all three apps. `deploy-all-dev.yml` is the ordered manual full deploy. |
 | `apps/admin/` | The internal staff console, at `admin-dev.agentdisk.io` | Its own origin on purpose: 14 PART 27.2 scopes the staff session cookie to it, so a staff and a customer credential cannot reach each other in a browser. Deliberately does not import `design-system/` — looking different from the customer dashboard is how a support engineer knows which one they are in. |
@@ -325,7 +325,7 @@ were not touched. See [002](backlog/002-reconcile-brand-drift.md).
 | 16 | [Firebase auth & launch prompt](docs/design/16-firebase-auth-and-final-launch-prompt.md) | PART 30 — the auth model in force. Read before touching sign-in |
 | 17 | [Dev environment test findings](docs/design/17-dev-environment-live-test-findings.md) | 7 Sept 2026 live pass against `app-dev` |
 | 18 | [Full UI audit & fix prompt](docs/design/18-full-ui-audit-and-fix-prompt.md) | 8–9 Sept 2026 audit, now **Parts 1–10**. Parts 1–6 are closed rounds whose outcomes live in docs 03/06 and the backlog; Parts 7–10 are later live passes and **still carry unresolved findings** — read §9.3–9.5 before assuming a screen works |
-| 19 | [MCP public distribution guide](docs/design/19-mcp-public-distribution-guide.md) | How to publish the MCP server for public install: per-client snippets, the official registry, marketplaces. Names the doc-18 §9.4 path-scope question as a launch blocker — see [029](backlog/029-mcp-path-scope-contradiction.md) |
+| 19 | [MCP public distribution guide](docs/design/19-mcp-public-distribution-guide.md) | How to publish the MCP server for public install: per-client snippets, the official registry, marketplaces. Named the doc-18 §9.4 path-scope question as a launch blocker; that blocker is cleared — see [029](backlog/029-mcp-path-scope-contradiction.md) |
 
 ### Design system — [design-system/](design-system/)
 
@@ -381,7 +381,7 @@ provenance), `ApiKeyDisplay` (show-once), `PermissionSelector` (least privilege)
 | 026 | [Upstream the account menu](backlog/026-upstream-account-menu.md) | Open — `AppShell.userSlot`; third divergence in the vendored shell |
 | 027 | [Files page first paint](backlog/027-files-page-first-paint.md) | Open — three serial round trips before the first file query; measured, not slow |
 | 028 | [Staff console security headers](backlog/028-admin-console-security-headers.md) | Open — `apps/admin` has the gap `apps/web` just closed |
-| 029 | [MCP path-scope contradiction](backlog/029-mcp-path-scope-contradiction.md) | Open — live testing and the code disagree; unresolved, blocks the public MCP launch |
+| 029 | [MCP path-scope contradiction](backlog/029-mcp-path-scope-contradiction.md) | Done — retested live 16 Sept 2026; MCP enforces `pathPrefix` and agrees with REST. No code change; doc 18 §9.4 superseded |
 | 030 | [Enable the sandbox sweep](backlog/030-enable-sandbox-expiry.md) | Open — claiming is built; the unclaimed-workspace sweep ships in log-only mode until a TTL window of candidate logs is reviewed |
 | 031 | [Upstream the modal scroll contract](backlog/031-upstream-modal-scroll-contract.md) | Open — fourth vendored divergence; `Modal.jsx` and `Button.jsx` gain Enter-to-submit. Points 1–3 shipped in `app.css` |
 

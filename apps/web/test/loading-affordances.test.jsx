@@ -113,6 +113,26 @@ describe('workspace stats band', () => {
     expect(screen.getAllByText('Loading')).toHaveLength(4);
   });
 
+  it('draws the reference loading treatment: skeleton figure, sweeping meter, worded caption', () => {
+    usageState = { status: 'loading', data: null, error: null, reload: () => {} };
+    const { container } = render(<WorkspaceStats />);
+
+    // AgentDisk Patterns.dc.html § LOADING. All three on every tile, AGENTS
+    // included: until whoami answers, nothing here knows which tiles carry a
+    // quota, so every one of them draws the meter.
+    expect(container.querySelectorAll('.wstat__skel--figure')).toHaveLength(4);
+    expect(container.querySelectorAll('.wstat__sweep')).toHaveLength(4);
+    expect(container.querySelectorAll('.wstat__skel--limit')).toHaveLength(4);
+    expect(screen.getAllByText('LOADING…')).toHaveLength(4);
+
+    // The caption is the one thing that is true; a percentage would not be.
+    expect(container.textContent).not.toMatch(/\d+%/);
+    // Decoration, and the sr-only "Loading" already says it in words.
+    for (const skel of container.querySelectorAll('.wstat__skel--figure')) {
+      expect(skel.getAttribute('aria-hidden')).toBe('true');
+    }
+  });
+
   it('states no figure it has not been given', () => {
     usageState = { status: 'loading', data: null, error: null, reload: () => {} };
     const { container } = render(<WorkspaceStats />);
@@ -132,7 +152,10 @@ describe('workspace stats band', () => {
 
     expect(container.querySelectorAll('.wstat')).toHaveLength(4);
     expect(container.querySelectorAll('.wstat__value--none')).toHaveLength(4);
-    expect(container.querySelector('.spinner')).toBeNull();
+    // A failure is not a load in progress: nothing shimmers and nothing sweeps.
+    expect(container.querySelector('.wstat__skel')).toBeNull();
+    expect(container.querySelector('.wstat__sweep')).toBeNull();
+    expect(container.textContent).not.toMatch(/LOADING/);
   });
 
   it('shows the real figures once they arrive', () => {
@@ -148,7 +171,8 @@ describe('workspace stats band', () => {
     const { container } = render(<WorkspaceStats />);
 
     expect(container.querySelectorAll('.wstat')).toHaveLength(4);
-    expect(container.querySelector('.spinner')).toBeNull();
+    expect(container.querySelector('.wstat__skel')).toBeNull();
+    expect(container.querySelector('.wstat__sweep')).toBeNull();
     expect(screen.getByText('1 active')).toBeTruthy();
     expect(screen.getAllByText('0% USED')).toHaveLength(3);
   });

@@ -50,18 +50,15 @@ function formatBytes(bytes) {
 }
 
 /**
- * The four tiles' labels and whether each carries a meter — the part of the
- * band that is known before any request is made, and therefore the part that
- * can hold the layout still while one is in flight. It mirrors the order and
- * the shape of `cards` below; the two must stay in step or the tiles will
- * change height when the figures land.
+ * The four tiles' labels — the part of the band that is known before any
+ * request is made, and therefore the part that can hold the layout still while
+ * one is in flight. Order matches `cards` below.
+ *
+ * Every loading tile draws a meter, including AGENTS, which has none when it
+ * arrives: until the answer lands nothing here knows which tiles carry a quota,
+ * and the band's height is set by the tallest tile in the row either way.
  */
-const PLACEHOLDERS = [
-  { label: 'STORAGE', meter: true },
-  { label: 'FILES', meter: true },
-  { label: 'AGENTS', meter: false },
-  { label: 'REQUESTS THIS PERIOD', meter: true },
-];
+const PLACEHOLDERS = ['STORAGE', 'FILES', 'AGENTS', 'REQUESTS THIS PERIOD'];
 
 function formatCount(n, unit) {
   if (!Number.isFinite(n)) return { value: '—', unit: '' };
@@ -82,10 +79,10 @@ export default function WorkspaceStats() {
   if (status !== 'loaded') {
     return (
       <div className="shell__statsinner">
-        {PLACEHOLDERS.map(p => (
-          <div className="wstat wstat--pending" key={p.label} aria-busy={status === 'loading'}>
+        {PLACEHOLDERS.map(label => (
+          <div className="wstat wstat--pending" key={label} aria-busy={status === 'loading'}>
             <div className="wstat__head">
-              <span className="wstat__label">{p.label}</span>
+              <span className="wstat__label">{label}</span>
             </div>
             {/* The struts are how the tile keeps its exact height rather than
                 approximately: a hidden figure and unit in the same classes the
@@ -97,7 +94,7 @@ export default function WorkspaceStats() {
               <span className="wstat__value wstat__strut" aria-hidden="true">0</span>
               {status === 'loading' ? (
                 <>
-                  <span className="spinner wstat__spinner" />
+                  <span className="wstat__skel wstat__skel--figure" aria-hidden="true" />
                   <span className="sr-only">Loading</span>
                 </>
               ) : (
@@ -105,16 +102,25 @@ export default function WorkspaceStats() {
               )}
             </div>
             {/* The meter keeps its box so the tile is the same height either
-                way, but its numbers are the two things that would be invented,
-                so they are held as space rather than printed. */}
-            {p.meter ? (
-              <div className="wstat__meter">
-                <div className="ds__bar" />
-                <div className="wstat__meterfoot" aria-hidden="true"><span>&nbsp;</span></div>
+                way. Loading fills it with the reference's indeterminate
+                treatment — a segment sweeping a --surf3 track — because the one
+                thing that is true is that something is happening; the caption
+                says so in words rather than printing a percentage nothing has
+                measured, and the limit beside it is a skeleton for the same
+                reason. */}
+            <div className="wstat__meter">
+              <div className="ds__bar">
+                {status === 'loading'
+                  ? <span className="wstat__sweep" aria-hidden="true" />
+                  : null}
               </div>
-            ) : (
-              <div className="wstat__delta" aria-hidden="true" />
-            )}
+              <div className="wstat__meterfoot" aria-hidden="true">
+                <span>{status === 'loading' ? 'LOADING…' : ''}</span>
+                {status === 'loading'
+                  ? <span className="wstat__skel wstat__skel--limit" />
+                  : <span />}
+              </div>
+            </div>
           </div>
         ))}
       </div>

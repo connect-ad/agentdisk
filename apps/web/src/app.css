@@ -597,25 +597,25 @@
    purpose is to report movement elsewhere. Two pixels tall — enough to read as
    activity at the edge of vision, not enough to be a component.
 
-   The fill is indeterminate on purpose. Nothing here knows how many bytes are
-   left in a response, so a percentage would be invented; the easing instead
-   decelerates towards the end and never reaches it, which is what makes a
-   slow load look like progress rather than a hang. On completion it goes to
-   full width and fades, so the bar always ends by finishing. */
-.tprog{position:fixed;top:0;left:0;right:0;height:0.125rem;z-index:50;
-  pointer-events:none;overflow:hidden}
-.tprog__fill{height:100%;width:100%;background:var(--accent);
-  transform-origin:0 50%;transform:scaleX(0);
-  animation:tprog-run 8s var(--ease-out) forwards}
-@keyframes tprog-run{
-  0%{transform:scaleX(0)}
-  12%{transform:scaleX(0.35)}
-  35%{transform:scaleX(0.62)}
-  65%{transform:scaleX(0.82)}
-  100%{transform:scaleX(0.94)}
-}
-.tprog--done .tprog__fill{animation:none;transform:scaleX(1);opacity:0;
-  transition:transform var(--d-1) var(--ease-out),opacity var(--d-2) var(--ease) var(--d-1)}
+   Height, track, fill and keyframes are the reference's, from AgentDisk
+   Patterns.dc.html § LOADING, "PAGE REFRESH · TOP PROGRESS BAR": 2.5px over a
+   --surf3 track, and `barGrow` easing out to 96% without arriving, because
+   nothing here knows how far along a response is and a percentage would be
+   invented. `ease-out` is the literal keyword the reference uses, not the
+   product's --ease-out token, which is a different curve.
+
+   One deliberate departure: the reference loops the animation, because its
+   card is a showcase that has to keep moving. Looping in the product would
+   restart the bar every 2.4s and read as a second page load, so it runs once
+   and holds. On completion it goes to full width and fades, so the bar always
+   ends by finishing. */
+.tprog{position:fixed;top:0;left:0;right:0;height:0.15625rem;z-index:50;
+  pointer-events:none;background:var(--surface-3);overflow:hidden}
+.tprog__fill{height:100%;width:8%;background:var(--accent);
+  animation:ad-bargrow 2.4s ease-out forwards}
+@keyframes ad-bargrow{0%{width:8%}45%{width:62%}80%{width:86%}100%{width:96%}}
+.tprog--done .tprog__fill{animation:none;width:100%;opacity:0;
+  transition:width var(--d-1) ease-out,opacity var(--d-2) var(--ease) var(--d-1)}
 
 /* --- Layer 2: the workspace stats band (components-local/WorkspaceStats.jsx)
    Sits between the info strip and the tab bar, so it is on every screen. */
@@ -666,11 +666,32 @@
    the height of its caption line while printing neither number. */
 .wstat--pending .wstat__figure{position:relative}
 .wstat__strut{visibility:hidden}
-.wstat--pending .wstat__spinner,
 .wstat--pending .wstat__value--none{position:absolute;left:0;top:50%;
   transform:translateY(-50%)}
-.wstat__spinner{width:1.125rem;height:1.125rem;border-width:0.125rem}
 .wstat__value--none{color:var(--ink-3);line-height:1}
+
+/* The reference's own loading treatment, from AgentDisk Patterns.dc.html
+   § LOADING: a shimmering skeleton where the figure will be, and the
+   indeterminate meter — a 32% segment sweeping a --surf3 track — where the
+   quota will be. Its stated rule is that "skeletons mirror the layout they
+   replace so nothing jumps on arrival", which is why the figure skeleton takes
+   its height from the row rather than the 22px the catalogue card uses: the
+   card is demonstrating the pattern on a smaller tile than this one. The
+   staggered delays are the reference's, and they are what stops four tiles
+   pulsing in unison like a fault light. */
+@keyframes ad-shimmer{0%,100%{opacity:.4}50%{opacity:.95}}
+@keyframes ad-sweep{0%{transform:translateX(-100%)}100%{transform:translateX(320%)}}
+.wstat__skel{display:block;background:var(--surface-3);
+  animation:ad-shimmer 1.3s ease-in-out infinite}
+.wstat__skel--figure{position:absolute;left:0;top:0;bottom:0;width:70%;
+  border-radius:0.375rem;animation-delay:.12s}
+.wstat__skel--limit{width:3.375rem;height:0.625rem;border-radius:var(--r-full);
+  animation-delay:.24s}
+.wstat__sweep{position:absolute;top:0;bottom:0;width:32%;
+  border-radius:var(--r-full);background:var(--accent);
+  animation:ad-sweep 1.5s ease-in-out infinite}
+.wstat--pending .ds__bar{position:relative}
+.wstat--pending .wstat__meterfoot{align-items:center}
 
 @media (max-width:1350px){
   /* Only the grid changes. The padding used to collapse to 12px on all four

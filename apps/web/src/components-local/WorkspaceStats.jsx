@@ -50,15 +50,25 @@ function formatBytes(bytes) {
 }
 
 /**
- * The four tiles' labels — the part of the band that is known before any
- * request is made, and therefore the part that can hold the layout still while
- * one is in flight. Order matches `cards` below.
+ * The four tiles' labels, and the width of the skeleton that stands in for
+ * each figure — the part of the band that is known before any request is made,
+ * and therefore the part that can hold the layout still while one is in
+ * flight. Order matches `cards` below.
+ *
+ * The seeds are the reference's own (62 / 78 / 38 / 70 %). They are not
+ * decoration: four skeletons of one width read as a repeated bar, which looks
+ * like a rendering fault rather than four different numbers on their way.
  *
  * Every loading tile draws a meter, including AGENTS, which has none when it
  * arrives: until the answer lands nothing here knows which tiles carry a quota,
  * and the band's height is set by the tallest tile in the row either way.
  */
-const PLACEHOLDERS = ['STORAGE', 'FILES', 'AGENTS', 'REQUESTS THIS PERIOD'];
+const PLACEHOLDERS = [
+  { label: 'STORAGE', seed: '62%' },
+  { label: 'FILES', seed: '78%' },
+  { label: 'AGENTS', seed: '38%' },
+  { label: 'REQUESTS THIS PERIOD', seed: '70%' },
+];
 
 function formatCount(n, unit) {
   if (!Number.isFinite(n)) return { value: '—', unit: '' };
@@ -79,7 +89,7 @@ export default function WorkspaceStats() {
   if (status !== 'loaded') {
     return (
       <div className="shell__statsinner">
-        {PLACEHOLDERS.map(label => (
+        {PLACEHOLDERS.map(({ label, seed }) => (
           <div className="wstat wstat--pending" key={label} aria-busy={status === 'loading'}>
             <div className="wstat__head">
               <span className="wstat__label">{label}</span>
@@ -94,7 +104,11 @@ export default function WorkspaceStats() {
               <span className="wstat__value wstat__strut" aria-hidden="true">0</span>
               {status === 'loading' ? (
                 <>
-                  <span className="wstat__skel wstat__skel--figure" aria-hidden="true" />
+                      <span
+                    className="wstat__skel wstat__skel--figure"
+                    style={{ width: seed }}
+                    aria-hidden="true"
+                  />
                   <span className="sr-only">Loading</span>
                 </>
               ) : (

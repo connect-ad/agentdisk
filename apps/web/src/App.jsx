@@ -301,13 +301,14 @@ function WorkspaceLayout() {
         if (item.external) { window.location.assign(item.href); return; }
         navigate(wsRoot + item.path);
       }}
-      /* In the account area the workspace strip would go on announcing a
-         workspace ID and plan beside a page about the person, so the band
-         replaces it rather than sitting under it. */
-      infoStrip={
+      infoStrip={<InfoStrip open={open} user={USER} wsRoot={wsRoot} />}
+      /* An extra bar under the tab bar, not a replacement for anything above
+         it — the reference keeps the strip, the stats and the tabs on screen
+         throughout, because you have not left the workspace. */
+      accountBand={
         inAccountArea
           ? <AccountAreaBand label={inAccountArea.where} onBack={() => navigate(wsRoot)} />
-          : <InfoStrip open={open} user={USER} wsRoot={wsRoot} />
+          : null
       }
       statsBand={<WorkspaceStats />}
       topbarActions={

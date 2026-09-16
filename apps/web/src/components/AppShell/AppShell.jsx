@@ -34,7 +34,7 @@ function isModifiedClick(e) {
 }
 
 export function AppShell({
-  nav = [], active, workspaceSlot, userSlot, infoStrip, statsBand, topbarActions,
+  nav = [], active, workspaceSlot, userSlot, infoStrip, statsBand, accountBand, topbarActions,
   children, flush = false, onNavigate, className = '', ...rest
 }) {
   // The old shell grouped nav into three labelled sections down a sidebar. A
@@ -99,6 +99,18 @@ export function AppShell({
           ))}
         </div>
       </nav>
+
+      {/*
+        The account-area return bar, which the reference places here — after
+        the tab bar, before the content — and NOT in place of any layer above
+        it. The workspace strip, the stats and the tabs all stay: you have not
+        left the workspace, you have stepped sideways into the account that
+        owns it, and the way back is this bar rather than a browser Back.
+
+        Fourth deliberate divergence from the design-system mirror, alongside
+        workspaceSlot, userSlot and the info strip.
+      */}
+      {accountBand ? accountBand : null}
 
       <main className={['shell__page', flush ? 'shell__page--flush' : ''].filter(Boolean).join(' ')}>
         {children}

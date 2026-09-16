@@ -722,19 +722,33 @@
    card is demonstrating the pattern on a smaller tile than this one. The
    staggered delays are the reference's, and they are what stops four tiles
    pulsing in unison like a fault light. */
-@keyframes ad-shimmer{0%,100%{opacity:.4}50%{opacity:.95}}
-@keyframes ad-sweep{0%{transform:translateX(-100%)}100%{transform:translateX(320%)}}
+@keyframes ad-shimmer{0%{opacity:.45}50%{opacity:.9}100%{opacity:.45}}
+@keyframes ad-sweep{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
+@keyframes ad-valuein{from{opacity:0;transform:translateY(0.1875rem)}
+  to{opacity:1;transform:none}}
 .wstat__skel{display:block;background:var(--surface-3);
   animation:ad-shimmer 1.3s ease-in-out infinite}
-.wstat__skel--figure{position:absolute;left:0;top:0;bottom:0;width:70%;
-  border-radius:0.375rem;animation-delay:.12s}
-.wstat__skel--limit{width:3.375rem;height:0.625rem;border-radius:var(--r-full);
-  animation-delay:.24s}
-.wstat__sweep{position:absolute;top:0;bottom:0;width:32%;
+/* Height is the numeral's own 34px — the skeleton stands exactly where the
+   figure will, which is what the strut holds open. Width is per tile and set
+   inline: the reference seeds each one differently (62 / 78 / 38 / 70 %) so
+   four tiles do not read as one repeated bar. */
+.wstat__skel--figure{position:absolute;left:0;top:0;bottom:0;
+  border-radius:0.4375rem}
+.wstat__skel--limit{width:2.75rem;height:0.5625rem;border-radius:var(--r-full);
+  animation-delay:.15s}
+.wstat__sweep{position:absolute;top:0;bottom:0;width:30%;
   border-radius:var(--r-full);background:var(--accent);
-  animation:ad-sweep 1.5s ease-in-out infinite}
+  animation:ad-sweep 1.25s ease-in-out infinite}
+/* The stat tile's meter is 5px, a pixel finer than the 6px bar the overview
+   panels draw. Scoped to the tile rather than changed on .ds__bar, which the
+   other meters share. */
+.wstat .ds__bar{height:0.3125rem}
 .wstat--pending .ds__bar{position:relative}
 .wstat--pending .wstat__meterfoot{align-items:center}
+/* The figure does not appear, it arrives: the reference animates the loaded
+   value in over .22s, so the swap from skeleton to number is a movement rather
+   than a jump cut. */
+.wstat:not(.wstat--pending) .wstat__figure{animation:ad-valuein .22s ease both}
 
 @media (max-width:1350px){
   /* Only the grid changes. The padding used to collapse to 12px on all four

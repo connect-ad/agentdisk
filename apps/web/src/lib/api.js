@@ -153,6 +153,17 @@ export function createApiClient(getToken) {
     getFile: (workspaceId, fileId) => request(`/v1/files/${fileId}`, { workspaceId }),
     deleteFile: (workspaceId, fileId) =>
       request(`/v1/files/${fileId}`, { method: 'DELETE', workspaceId }),
+    /**
+     * Resolves to { url, method, expiresAt, sizeBytes } - a short-lived
+     * presigned GET, not the bytes.
+     *
+     * **Call it once per download.** The API accounts egress when it *issues*
+     * the URL, because R2 does not call back on a GET, so a second call for the
+     * same click bills the file twice. Fetching the returned URL costs nothing
+     * further.
+     */
+    downloadFile: (workspaceId, fileId) =>
+      request(`/v1/files/${fileId}/download`, { workspaceId }),
 
     listAgents: workspaceId => request('/v1/agents', { workspaceId }),
     getAgent: (workspaceId, agentId) => request(`/v1/agents/${agentId}`, { workspaceId }),

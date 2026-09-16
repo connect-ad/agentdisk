@@ -95,6 +95,9 @@ export default function FileBrowser() {
   const [busy, setBusy] = useState(false);
   const [dialogError, setDialogError] = useState(null);
   const [folderName, setFolderName] = useState('');
+  // The id of the file whose download link is being fetched, so only that one
+  // button shows a spinner rather than every Download on the screen.
+  const [downloading, setDownloading] = useState(null);
 
   const rows = useMemo(() => {
     if (loading || failed) return [];
@@ -196,6 +199,43 @@ export default function FileBrowser() {
    * title the dialog already renders.
    */
   const deleteTargets = detail ? [detail.id] : selected;
+
+  /**
+   * Fetch a presigned URL for one file and hand it to the browser.
+   *
+   * **Exactly one call per click.** The API accounts egress when it issues the
+   * URL rather than when the bytes move, because R2 does not call back on a
+   * GET -- so asking twice for one download bills the file twice. Fetching the
+   * URL afterwards costs nothing further, which is why this opens it directly
+   * instead of streaming through the app.
+   *
+   * The anchor carries `download`, which cross-origin responses are free to
+   * ignore; whether the file saves or opens is then R2's Content-Disposition to
+   * decide, not ours. `noopener` because the URL is a bearer credential for the
+   * object and the opened document has no business reaching back.
+   */
+  const runDownload = async file => {
+    setDownloading(file.id);
+    try {
+      const { url } = await api.downloadFile(workspaceId, file.id);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name;
+      a.rel = 'noopener';
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err) {
+      setToast({
+        tone: 'danger',
+        title: 'Download failed',
+        body: err?.message ?? 'The link could not be created.'
+      });
+    } finally {
+      setDownloading(null);
+    }
+  };
 
   /**
    * Delete files, then let the server decide what the list now holds.
@@ -443,7 +483,14 @@ export default function FileBrowser() {
         onClose={() => setDetail(null)}
         footer={
           <>
-            <Button size="sm" icon={<Icon name="download" size={13} />}>Download</Button>
+            <Button
+              size="sm"
+              icon={<Icon name="download" size={13} />}
+              loading={downloading === detail?.id}
+              onClick={() => void runDownload(detail)}
+            >
+              Download
+            </Button>
             <Button size="sm" variant="secondary" icon={<Icon name="link" size={13} />}>Copy signed link</Button>
             <Button size="sm" variant="ghost">Rename</Button>
             <Button size="sm" variant="danger-outline" onClick={() => setDialog('delete')}>Delete</Button>
@@ -456,7 +503,16 @@ export default function FileBrowser() {
               compact
               icon={<Icon name="file" size={19} />}
               title="Preview not available for this file type"
-              actions={<Button size="sm" variant="secondary">Download</Button>}
+              actions={
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  loading={downloading === detail.id}
+                  onClick={() => void runDownload(detail)}
+                >
+                  Download
+                </Button>
+              }
             />
             <dl className="dl">
               <dt>Path</dt><dd className="ad-mono-sm">{detail.path || '—'}</dd>

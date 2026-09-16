@@ -170,3 +170,44 @@ describe('File browser → create folder', () => {
     expect(createFolder).not.toHaveBeenCalled();
   });
 });
+
+describe('File browser → download', () => {
+  it('asks the API for a link and opens it, exactly once per click', async () => {
+    const user = userEvent.setup();
+    const downloadFile = vi.fn(async () => ({
+      url: 'https://r2.example/fil_A?sig=abc', method: 'GET', sizeBytes: 2048
+    }));
+    await mount({ downloadFile });
+
+    const clicked = [];
+    const realClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function () { clicked.push(this.href); };
+
+    try {
+      const drawer = await openDrawer(user, 'notes.md');
+      // The drawer offers Download twice -- in the footer and in the
+      // preview-unavailable placeholder. Both are wired to the same handler;
+      // this presses one of them.
+      await user.click(within(drawer).getAllByRole('button', { name: 'Download' })[0]);
+
+      await waitFor(() => expect(downloadFile).toHaveBeenCalledWith(WS, 'fil_A'));
+      // Egress is billed when the URL is issued, so a second call per click
+      // would charge the file twice.
+      expect(downloadFile).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(clicked).toEqual(['https://r2.example/fil_A?sig=abc']));
+    } finally {
+      HTMLAnchorElement.prototype.click = realClick;
+    }
+  });
+
+  it('reports a refusal rather than silently doing nothing', async () => {
+    const user = userEvent.setup();
+    const downloadFile = vi.fn(async () => { throw new Error('This file is deleted and has no bytes to download.'); });
+    await mount({ downloadFile });
+
+    const drawer = await openDrawer(user, 'notes.md');
+    await user.click(within(drawer).getAllByRole('button', { name: 'Download' })[0]);
+
+    await screen.findByText('This file is deleted and has no bytes to download.');
+  });
+});

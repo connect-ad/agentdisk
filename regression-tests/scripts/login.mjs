@@ -97,7 +97,8 @@ async function main() {
   await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded' });
   await byLabel(page, 'Email').fill(EMAIL);
   await byLabel(page, 'Password').fill(PASSWORD);
-  await page.getByRole('button', { name: /^sign in$/i }).click();
+  // "Sign in" became "Log in" in the auth rebuild; accept either.
+  await page.getByRole('button', { name: /^(sign in|log in)$/i }).click();
 
   // Sign-in is a network round trip to Firebase and then a client-side
   // redirect. Give it room rather than racing an alert against it.

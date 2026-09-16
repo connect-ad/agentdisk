@@ -5,6 +5,17 @@
  *   GET    /v1/workspaces       the ones they can reach, for the switcher
  *   POST   /v1/workspaces       create another under their billing account
  *   DELETE /v1/workspaces/:id   destroy one, and everything inside it
+ *   PATCH  /v1/workspaces/:id   rename one
+ *
+ * PATCH is the exception to everything the next paragraph says, and the reason
+ * is worth stating. The other three act on the *set* of workspaces, so making
+ * them name one would be circular. A rename acts inside a workspace that
+ * already exists and is already named in the URL - so it goes through `withAuth`
+ * like every ordinary route, which is what gives it a membership check, a role,
+ * and an `audit()` that a deletion cannot have (see `deleteWorkspaceForUser`:
+ * `audit_events` is workspace-scoped by foreign key, so the row describing a
+ * workspace's destruction is the one row it cannot hold - a rename leaves the
+ * workspace standing, so its own record survives with it).
  *
  * Both sit outside `withAuth` deliberately, and it is worth being precise about
  * why rather than treating it as an exception. `withAuth` resolves a workspace
@@ -25,6 +36,9 @@
 
 import { z } from "zod";
 import { ApiError, forbidden, validationError } from "../lib/errors";
+import { assertCanAdminister, isMemberRole } from "../auth/roles";
+import { audit } from "../lib/audit";
+import type { AuthContext } from "../middleware/auth";
 import { newId } from "../lib/ids";
 import { isSlugConflict, uniqueWorkspaceSlug } from "../lib/slug";
 import { listWorkspacesForUser } from "../db/user-lookup";
@@ -244,4 +258,67 @@ export async function deleteWorkspaceForUser(
   );
 
   return json({ id: workspaceId, deleted: true, files: objectsDeleted });
+}
+
+const renameSchema = z.object({
+  // Same shape as creation, so a name that could be created can be set.
+  name: z.string().trim().min(1, "A workspace needs a name.").max(60),
+});
+
+/**
+ * PATCH /v1/workspaces/:id - rename, and nothing else.
+ *
+ * Owner or admin, via `assertCanAdminister`, whose own comment already scopes it
+ * as "workspace settings short of deletion". A reader is refused: they can see
+ * the workspace, not re-label it for everybody else in it.
+ *
+ * Refused for an API key. An agent's credential renaming the workspace would
+ * change what every person in the dashboard sees, driven by something with no
+ * person behind it - the same reasoning that keeps an API key away from the
+ * member roster.
+ *
+ * The name is the only field. A slug is not derivable from it here and must not
+ * be: see `WorkspaceScopedSettings.rename`.
+ */
+export async function renameWorkspace(
+  ctx: AuthContext,
+  request: Request,
+  workspaceId: string
+): Promise<Response> {
+  // `withAuth` resolved the credential against ?workspaceId=; the URL names the
+  // subject. A mismatch is refused rather than silently preferring one, because
+  // a caller that believes it is renaming a different workspace must be told it
+  // is not - the same rule withAuth applies to an API key that names one.
+  if (workspaceId !== ctx.workspaceId) {
+    throw forbidden("The workspace named in the path is not the one this request is scoped to.");
+  }
+
+  if (ctx.identity.kind !== "firebase_user") {
+    throw forbidden("Only a signed-in user can rename a workspace.");
+  }
+  if (!isMemberRole(ctx.identity.role)) throw forbidden("Unknown role.");
+  assertCanAdminister(ctx.identity.role);
+
+  let parsed;
+  try {
+    parsed = renameSchema.parse(await request.json());
+  } catch {
+    throw validationError("Send a JSON body with the workspace's new name.");
+  }
+
+  const previous = ctx.workspace.name;
+  if (parsed.name === previous) {
+    // Nothing to write, and nothing worth an audit row either.
+    return json({ workspace: { id: workspaceId, name: previous, slug: ctx.workspace.slug } });
+  }
+
+  await ctx.db.settings.rename(parsed.name, ctx.now);
+
+  audit(ctx, request, "workspace.renamed", {
+    resourceType: "workspace",
+    resourceId: workspaceId,
+    metadata: { from: previous, to: parsed.name },
+  });
+
+  return json({ workspace: { id: workspaceId, name: parsed.name, slug: ctx.workspace.slug } });
 }

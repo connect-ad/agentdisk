@@ -117,6 +117,25 @@ export function WorkspaceProvider({ children }) {
     [api, select]
   );
 
+  /**
+   * Rename a workspace and update the list in place.
+   *
+   * In place rather than a refresh(): the name appears in the top bar, the
+   * switcher and Settings' danger zone, all three read it from this list, and a
+   * second round trip to learn something the response already told us would
+   * leave them briefly disagreeing with each other.
+   */
+  const rename = useCallback(
+    async (id, name) => {
+      const { workspace } = await api.renameWorkspace(id, name);
+      setWorkspaces(previous =>
+        previous.map(w => (w.id === id ? { ...w, name: workspace.name } : w))
+      );
+      return workspace;
+    },
+    [api]
+  );
+
   const value = useMemo(
     () => ({
       api,
@@ -137,9 +156,10 @@ export function WorkspaceProvider({ children }) {
       select,
       create,
       refresh,
+      rename,
       resolveWorkspace
     }),
-    [api, workspaces, currentId, loading, error, select, create, refresh, resolveWorkspace]
+    [api, workspaces, currentId, loading, error, select, create, rename, refresh, resolveWorkspace]
   );
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;

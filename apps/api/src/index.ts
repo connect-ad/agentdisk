@@ -18,6 +18,7 @@ import { createWorkspace } from "./routes/create-workspace";
 import {
   createWorkspaceForUser,
   deleteWorkspaceForUser,
+  renameWorkspace,
   listWorkspaces,
 } from "./routes/workspaces";
 import { createAgent, deleteAgent, getAgent, listAgents, patchAgent } from "./routes/agents";
@@ -375,6 +376,21 @@ export default {
             },
             user,
             token
+          );
+        }
+      }
+
+      // PATCH /v1/workspaces/:id - rename. Unlike its DELETE neighbour below
+      // this goes through the ordinary `authed()` chain: the workspace already
+      // exists and is named in the URL, so resolving it from the credential is
+      // not circular, and the chain is what supplies the membership check, the
+      // role and an audit row. The handler asserts the two agree.
+      {
+        const match = /^\/v1\/workspaces\/([^/]+)$/.exec(url.pathname);
+        if (match !== null && request.method === "PATCH") {
+          const target = decodeURIComponent(match[1] as string);
+          return await authed({ op: null }, (context, req) =>
+            renameWorkspace(context, req, target)
           );
         }
       }

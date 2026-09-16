@@ -124,3 +124,78 @@ describe('Privacy → statements of fact', () => {
     expect(document.body.textContent).not.toMatch(/region you chose/i);
   });
 });
+
+/**
+ * Settings → General, the workspace rename (P1-8).
+ *
+ * The Save changes button was `setSaved(true)` and a timeout: it flashed "Saved"
+ * and called nothing, because no PATCH /v1/workspaces/:id existed to call. The
+ * endpoint exists now, and "Saved" appears only once it has answered.
+ */
+const Settings = (await import('../src/routes/Settings.jsx')).default;
+
+describe('Settings → rename the workspace', () => {
+  const WORKSPACE = { id: WS, name: 'My Workspace', slug: 'my-workspace', role: 'owner' };
+
+  function mountSettings(overrides = {}) {
+    globalThis.__ws = {
+      api: {
+        listMembers: async () => ({ members: [] }),
+        listWorkspaces: async () => ({ workspaces: [WORKSPACE] }),
+        ...overrides.api
+      },
+      workspace: WORKSPACE,
+      workspaceId: WS,
+      workspaces: [WORKSPACE],
+      role: 'owner',
+      canWrite: true,
+      refresh: async () => {},
+      rename: overrides.rename ?? (async () => ({ ...WORKSPACE, name: 'Renamed' })),
+      ...overrides.context
+    };
+    render(<MemoryRouter><Settings /></MemoryRouter>);
+  }
+
+  it('calls the API and only then reports success', async () => {
+    const user = userEvent.setup();
+    const rename = vi.fn(async (id, name) => ({ id, name, slug: 'my-workspace' }));
+    mountSettings({ rename });
+
+    const field = await screen.findByLabelText(/Workspace name/);
+    await user.clear(field);
+    await user.type(field, 'Renamed');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(rename).toHaveBeenCalledWith(WS, 'Renamed'));
+    await screen.findByText('Saved');
+  });
+
+  it('says why it failed, and does not claim it saved', async () => {
+    const user = userEvent.setup();
+    const rename = vi.fn(async () => { throw new Error('This action needs the admin or owner role.'); });
+    mountSettings({ rename });
+
+    const field = await screen.findByLabelText(/Workspace name/);
+    await user.clear(field);
+    await user.type(field, 'Nope');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await screen.findByText(/This action needs the admin or owner role/);
+    expect(screen.queryByText('Saved')).toBeNull();
+  });
+
+  it('will not send an unchanged or empty name', async () => {
+    const user = userEvent.setup();
+    const rename = vi.fn();
+    mountSettings({ rename });
+
+    // Unchanged: the button is inert rather than firing a pointless PATCH.
+    const save = await screen.findByRole('button', { name: 'Save changes' });
+    expect(save.disabled).toBe(true);
+
+    const field = screen.getByLabelText(/Workspace name/);
+    await user.clear(field);
+    expect(screen.getByRole('button', { name: 'Save changes' }).disabled).toBe(true);
+    expect(rename).not.toHaveBeenCalled();
+  });
+});

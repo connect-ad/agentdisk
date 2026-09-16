@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   PageHead, Panel, DataTable, FileCell, Button, IconButton, Icon, Input, Select,
-  Badge, Modal, ConfirmModal, Toast, EmptyState, UploadItem, Checkbox, CodeBlock
+  Badge, Modal, ConfirmModal, Toast, EmptyState, UploadItem, Checkbox, CodeBlock, Alert
 } from '../components/index.js';
 import { Drawer } from '../components-local/Drawer.jsx';
 import { useResource } from '../lib/useResource.js';
@@ -90,6 +90,10 @@ export default function FileBrowser() {
   const [confirmText, setConfirmText] = useState('');
   const [dragging, setDragging] = useState(false);
   const [toast, setToast] = useState(null);
+  // A dialog's in-flight and failed states. Kept next to `dialog` rather than
+  // inside each modal so that closing one always clears both.
+  const [busy, setBusy] = useState(false);
+  const [dialogError, setDialogError] = useState(null);
 
   const rows = useMemo(() => {
     if (loading || failed) return [];
@@ -138,6 +142,68 @@ export default function FileBrowser() {
 
   const uploadMany = files => {
     for (const file of Array.from(files)) void startUpload(file);
+  };
+
+  /** Close whichever dialog is open, and drop the state that belonged to it. */
+  const closeDialog = () => { setDialog(null); setDialogError(null); setConfirmText(''); };
+
+  /**
+   * Which files a delete dialog is pointing at.
+   *
+   * The drawer's Delete concerns the one file the drawer is showing; the bulk
+   * bar's concerns the selection. `detail` wins when both are set, matching the
+   * title the dialog already renders.
+   */
+  const deleteTargets = detail ? [detail.id] : selected;
+
+  /**
+   * Delete files, then let the server decide what the list now holds.
+   *
+   * **Nothing is removed optimistically.** `reload()` re-reads the listing, so a
+   * file whose DELETE failed is simply still there afterwards — the honest
+   * outcome, reached without a rollback path that could itself be wrong. This
+   * screen used to set a "Deleted" toast and call no API at all, which left the
+   * file in place and the person believing it was gone.
+   *
+   * `allSettled` rather than `all`: in a bulk delete one rejection must not
+   * hide the files that did go, and the tally of each is what the toast reports.
+   */
+  const runDelete = async targetIds => {
+    if (targetIds.length === 0) return;
+    setBusy(true);
+    setDialogError(null);
+
+    const results = await Promise.allSettled(
+      targetIds.map(id => api.deleteFile(workspaceId, id))
+    );
+    const failed = results.filter(r => r.status === 'rejected');
+    const firstError = failed[0]?.reason?.message ?? 'The server did not say why.';
+    setBusy(false);
+
+    // Total failure keeps the dialog open: the rows are all still there, so
+    // closing it would look like the work was done.
+    if (failed.length === targetIds.length) {
+      setDialogError(firstError);
+      return;
+    }
+
+    closeDialog();
+    setSelected([]);
+    setDetail(null);
+    void reload();
+
+    setToast(
+      failed.length > 0
+        ? {
+            tone: 'warn',
+            title: `Deleted ${targetIds.length - failed.length} of ${targetIds.length}`,
+            body: `${failed.length} could not be deleted. ${firstError}`
+          }
+        : {
+            tone: 'ok',
+            title: targetIds.length === 1 ? 'File deleted' : `${targetIds.length} files deleted`
+          }
+    );
   };
 
   const allSelected = rows.length > 0 && selected.length === rows.length;
@@ -393,14 +459,25 @@ export default function FileBrowser() {
       </Modal>
 
       {/* --- delete: single --- */}
+      {/*
+        The description says what actually happens. It used to promise "trash for
+        30 days" in the same breath as "can't be undone" — self-contradictory,
+        and wrong in both halves: the grace period is PURGE_GRACE_MS, 24 hours,
+        and no trash screen exists to restore from. The API's POST
+        /v1/files/:id/restore is the only route back, so the copy names the
+        window without implying the dashboard can use it.
+      */}
       <ConfirmModal
         open={dialog === 'delete'}
         title={`Delete ${detail ? detail.name : `${selected.length} item(s)`}?`}
-        description="This can't be undone. Deleted files are recoverable from trash for 30 days."
+        description="Deleted files stop being listed at once and are removed permanently 24 hours later. The dashboard cannot restore one."
         confirmLabel="Delete"
-        onClose={() => setDialog(null)}
-        onConfirm={() => { setDialog(null); setSelected([]); setDetail(null); setToast({ tone: 'ok', title: 'Deleted' }); }}
-      />
+        loading={busy}
+        onClose={closeDialog}
+        onConfirm={() => void runDelete(deleteTargets)}
+      >
+        {dialogError ? <Alert tone="danger" title="Not deleted">{dialogError}</Alert> : null}
+      </ConfirmModal>
 
       {/* --- delete: bulk (>5) requires typing DELETE --- */}
       <Modal
@@ -408,14 +485,15 @@ export default function FileBrowser() {
         title={`Delete ${selected.length} items?`}
         tone="danger"
         mark={<Icon name="alert" size={16} />}
-        onClose={() => setDialog(null)}
+        onClose={closeDialog}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setDialog(null)}>Cancel</Button>
+            <Button variant="secondary" onClick={closeDialog}>Cancel</Button>
             <Button
               variant="danger"
+              loading={busy}
               disabled={confirmText !== 'DELETE'}
-              onClick={() => { setDialog(null); setSelected([]); setToast({ tone: 'ok', title: 'Deleted' }); }}
+              onClick={() => void runDelete(selected)}
             >
               Delete
             </Button>
@@ -428,6 +506,7 @@ export default function FileBrowser() {
           mono
           onChange={e => setConfirmText(e.target.value)}
         />
+        {dialogError ? <Alert tone="danger" title="Not deleted">{dialogError}</Alert> : null}
       </Modal>
 
       {toast ? (

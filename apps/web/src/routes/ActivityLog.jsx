@@ -86,7 +86,6 @@ export default function ActivityLog() {
       <PageHead
         title="Activity"
         subtitle="Every action taken in this workspace, by a person or an agent."
-        actions={<Button variant="secondary" icon={<Icon name="download" size={14} />}>Export CSV</Button>}
       />
 
       <div className="toolbar">

@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import {
-  PageHead, Panel, DataTable, FileCell, Button, IconButton, Icon, Input, Select,
-  Badge, Modal, ConfirmModal, Toast, EmptyState, UploadItem, Checkbox, CodeBlock, Alert
+  PageHead, Panel, DataTable, FileCell, Button, Icon, Input, Select,
+  Badge, Modal, ConfirmModal, Toast, EmptyState, UploadItem, Checkbox, Alert
 } from '../components/index.js';
 import { Drawer } from '../components-local/Drawer.jsx';
 import { useResource } from '../lib/useResource.js';
@@ -320,17 +320,7 @@ export default function FileBrowser() {
           ? <Badge tone="accent" mono>{r.by}</Badge>
           : <span style={{ color: 'var(--ink-2)' }}>{r.by}</span>
     },
-    { key: 'modified', header: 'Modified', width: 150, render: r => <span style={{ color: 'var(--ink-3)' }}>{r.modified}</span> },
-    {
-      key: 'act',
-      header: '',
-      width: 44,
-      render: () => (
-        <span onClick={e => e.stopPropagation()}>
-          <IconButton icon={<Icon name="more" size={14} />} label="Row actions" />
-        </span>
-      )
-    }
+    { key: 'modified', header: 'Modified', width: 150, render: r => <span style={{ color: 'var(--ink-3)' }}>{r.modified}</span> }
   ];
 
   const emptyState = query.trim() ? (
@@ -345,7 +335,13 @@ export default function FileBrowser() {
     <EmptyState
       icon={<Icon name="folder" size={19} />}
       title="This folder is empty"
-      actions={<Button size="sm" icon={<Icon name="upload" size={13} />}>Upload files</Button>}
+      actions={
+        canWrite ? (
+          <Button size="sm" icon={<Icon name="upload" size={13} />} onClick={() => fileInput.current?.click()}>
+            Upload files
+          </Button>
+        ) : null
+      }
     >
       Drag files here, or upload them.
     </EmptyState>
@@ -412,8 +408,6 @@ export default function FileBrowser() {
             {selected.length} selected
           </span>
           <span className="toolbar__spacer" />
-          <Button size="sm" variant="secondary" icon={<Icon name="folder" size={13} />}>Move</Button>
-          <Button size="sm" variant="secondary" icon={<Icon name="download" size={13} />}>Download as zip</Button>
           <Button
             size="sm"
             variant="danger"
@@ -491,7 +485,6 @@ export default function FileBrowser() {
             >
               Download
             </Button>
-            <Button size="sm" variant="secondary" icon={<Icon name="link" size={13} />}>Copy signed link</Button>
             <Button size="sm" variant="ghost">Rename</Button>
             <Button size="sm" variant="danger-outline" onClick={() => setDialog('delete')}>Delete</Button>
           </>

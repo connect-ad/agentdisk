@@ -211,3 +211,51 @@ describe('File browser → download', () => {
     await screen.findByText('This file is deleted and has no bytes to download.');
   });
 });
+
+describe('File browser → controls that promised what does not exist', () => {
+  it('offers no multi-file Move or zip, and no row-actions menu', async () => {
+    const user = userEvent.setup();
+    await mount({});
+
+    // Select a row so the bulk bar is on screen.
+    await user.click(screen.getAllByRole('checkbox')[1]);
+    await screen.findByText('1 selected');
+
+    // There are no multi-file endpoints behind either of these.
+    expect(screen.queryByRole('button', { name: 'Move' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Download as zip' })).toBeNull();
+    // The per-row menu had no onClick and sat in a span that swallowed the
+    // click, so the row could not open either.
+    expect(screen.queryByRole('button', { name: 'Row actions' })).toBeNull();
+  });
+
+  it('does not offer a signed link, which the API answers with 404', async () => {
+    const user = userEvent.setup();
+    await mount({});
+
+    const drawer = await openDrawer(user, 'notes.md');
+    expect(within(drawer).queryByRole('button', { name: 'Copy signed link' })).toBeNull();
+  });
+
+  it('wires the empty-state upload button to the same input as the toolbar', async () => {
+    const user = userEvent.setup();
+    globalThis.__ws = {
+      api: { listFiles: vi.fn(async () => ({ files: [] })) },
+      workspaceId: WS,
+      canWrite: true
+    };
+    render(
+      <MemoryRouter initialEntries={[`/w/${WS}/files`]}>
+        <Routes><Route path="/w/:ws/files" element={<FileBrowser />} /></Routes>
+      </MemoryRouter>
+    );
+
+    const button = await screen.findByRole('button', { name: 'Upload files' });
+    const input = document.querySelector('input[type="file"]');
+    let opened = 0;
+    input.click = () => { opened += 1; };
+
+    await user.click(button);
+    expect(opened).toBe(1);
+  });
+});

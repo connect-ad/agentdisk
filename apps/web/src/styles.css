@@ -774,7 +774,7 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
    that wrapper has been squeezed narrower than the cap — the button then
    overflows its own parent and the name paints over the controls beside it.
    Capping at 100% as well keeps it inside whatever room the wrapper has. */
-.shell__wsbtn--bar{width:auto;min-width:12rem;max-width:min(18rem,100%);height:2.625rem;padding:0 var(--s-4);border-radius:var(--r-2)}
+.shell__wsbtn--bar{width:16.25rem;min-width:16.25rem;max-width:calc(100vw - 10rem);height:2.625rem;padding:0 var(--s-4);border-radius:var(--r-2)}
 .shell__wsbtn--bar .shell__wsmeta{display:block;font-size:var(--t-10);font-weight:var(--w-med);letter-spacing:var(--tr-caps)}
 
 .shell__page{flex:1;padding:var(--s-8) var(--gutter);min-width:0;display:flex;flex-direction:column;gap:var(--s-7)}
@@ -804,7 +804,7 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
      not have. Only the vertical tightening belongs here. */
   .shell__page{padding:var(--s-6) var(--gutter)}
   .shell__wordmark{display:none}
-  .shell__wsbtn--bar{max-width:min(11.25rem,100%)}
+  .shell__wsbtn--bar{width:12rem;min-width:12rem;max-width:calc(100vw - 7rem)}
   .btn--md,.btn--lg{min-height:2.375rem}
   .icon-btn{width:2.125rem;height:2.125rem}
 }

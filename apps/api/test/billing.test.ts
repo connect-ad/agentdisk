@@ -93,6 +93,132 @@ beforeEach(async () => {
   ).bind(NOW, NOW).run();
 });
 
+function checkoutEvent(overrides: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    id: "evt_checkout",
+    object: "event",
+    type: "checkout.session.completed",
+    data: {
+      object: {
+        id: "cs_test",
+        object: "checkout.session",
+        mode: "subscription",
+        customer: "cus_test",
+        client_reference_id: ORG_ID,
+        subscription: "sub_new",
+        ...overrides,
+      },
+    },
+  });
+}
+
+function refundEvent(): string {
+  return JSON.stringify({
+    id: "evt_refund",
+    object: "event",
+    type: "charge.refunded",
+    data: {
+      object: {
+        id: "ch_test",
+        object: "charge",
+        customer: "cus_test",
+        amount_refunded: 2000,
+        currency: "usd",
+        refunded: true,
+      },
+    },
+  });
+}
+
+async function orgState(): Promise<{
+  plan: string;
+  billing_status: string;
+  stripe_subscription_id: string | null;
+}> {
+  const row = await env.DB.prepare(
+    `SELECT plan, billing_status, stripe_subscription_id FROM organizations WHERE id = ?`
+  )
+    .bind(ORG_ID)
+    .first<{ plan: string; billing_status: string; stripe_subscription_id: string | null }>();
+  if (row === null) throw new Error("organization missing");
+  return row;
+}
+
+async function signedPost(payload: string): Promise<Response> {
+  return post(payload, await stripeSignature(payload, Math.floor(Date.now() / 1000)));
+}
+
+describe("checkout.session.completed", () => {
+  it("records which subscription belongs to this organization", async () => {
+    const res = await signedPost(checkoutEvent());
+    expect(res.status).toBe(200);
+
+    const org = await orgState();
+    expect(org.stripe_subscription_id).toBe("sub_new");
+    expect(org.billing_status).toBe("active");
+  });
+
+  it("leaves the plan to the subscription events, which carry the price", async () => {
+    // Deliberately thin. Retrieving the subscription here to learn a price that
+    // customer.subscription.created is about to hand us would be a second API
+    // call for the same fact, and would make the two deliveries order-dependent.
+    await env.DB.prepare(`UPDATE organizations SET plan = 'free' WHERE id = ?`).bind(ORG_ID).run();
+
+    await signedPost(checkoutEvent());
+    expect((await orgState()).plan).toBe("free");
+  });
+
+  it("resolves the organization by customer when there is no client_reference_id", async () => {
+    // A session created outside our checkout endpoint - from a payment link,
+    // say - carries no reference of ours.
+    const res = await signedPost(checkoutEvent({ client_reference_id: null }));
+    expect(res.status).toBe(200);
+    expect((await orgState()).stripe_subscription_id).toBe("sub_new");
+  });
+
+  it("ignores a one-off payment session", async () => {
+    // mode: "payment" is not a subscription and must not be recorded as one.
+    const res = await signedPost(checkoutEvent({ mode: "payment", subscription: null }));
+    expect(res.status).toBe(200);
+    expect((await res.json() as { handled: boolean }).handled).toBe(false);
+    expect((await orgState()).stripe_subscription_id).toBeNull();
+  });
+
+  it("ignores a client_reference_id naming an organization that is gone", async () => {
+    const res = await signedPost(checkoutEvent({ client_reference_id: "org_DELETED", customer: null }));
+    expect(res.status).toBe(200);
+    expect((await orgState()).stripe_subscription_id).toBeNull();
+  });
+});
+
+describe("charge.refunded", () => {
+  beforeEach(async () => {
+    await env.DB.prepare(
+      `UPDATE organizations SET plan = 'pro', billing_status = 'active',
+              stripe_subscription_id = 'sub_live' WHERE id = ?`
+    )
+      .bind(ORG_ID)
+      .run();
+  });
+
+  it("does not touch entitlements", async () => {
+    // The whole point of handling it separately. Refunding an invoice does not
+    // end a subscription - Stripe sends customer.subscription.deleted if one
+    // actually ends. Revoking access here would cut off somebody refunded a
+    // single month as a goodwill gesture who is still a paying customer.
+    const before = await orgState();
+    const res = await signedPost(refundEvent());
+    expect(res.status).toBe(200);
+
+    expect(await orgState()).toEqual(before);
+  });
+
+  it("is acknowledged rather than ignored, so it is recorded", async () => {
+    const res = await signedPost(refundEvent());
+    expect((await res.json() as { handled: boolean }).handled).toBe(true);
+  });
+});
+
 describe("webhook signature", () => {
   it("refuses a payload with no signature at all", async () => {
     const res = await post(subscriptionEvent("customer.subscription.updated", "active", "cus_test"), null);

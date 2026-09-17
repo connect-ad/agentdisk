@@ -21,6 +21,25 @@
  * **A handler that throws returns non-2xx on purpose.** That is the only way to
  * ask Stripe to redeliver, and redelivery is the entire recovery story for a
  * transient D1 failure here — there is no queue behind this.
+ *
+ * ── The ten events this endpoint is subscribed to ───────────────────────────
+ * Recorded here because the subscription list lives in the Stripe dashboard,
+ * where nothing in this repository can assert it. If the two fall out of step
+ * the failure is silent in the worst direction: an event we handle but no
+ * longer receive looks exactly like an event that never fired.
+ *
+ *   checkout.session.completed      a subscription was paid for
+ *   customer.subscription.created    *   customer.subscription.updated    | lifecycle: plan, status, renewal
+ *   customer.subscription.deleted   /
+ *   invoice.payment_failed          card trouble -> writes stop, reads do not
+ *   invoice.payment_succeeded       lifts past_due, and nothing else
+ *   product.created                  *   product.updated                  | the catalogue, mirrored into D1
+ *   product.deleted                 /
+ *   charge.refunded                 recorded, entitlements deliberately untouched
+ *
+ * The subscription events own the plan; checkout.session.completed only records
+ * which subscription belongs to which organization. charge.refunded owns
+ * nothing — see its case for why a refund must not move entitlements.
  */
 
 import { ApiError } from "../lib/errors";
@@ -31,6 +50,7 @@ import {
   findPlanByPriceId,
   type BillingStatus,
 } from "../billing/organizations";
+import { retirePlanForProduct, syncProductToPlan } from "../billing/plan-sync";
 
 export interface WebhookDeps {
   db: D1Database;
@@ -85,6 +105,33 @@ function statusFrom(subscription: Stripe.Subscription): BillingStatus {
 function customerIdOf(value: string | { id: string } | null | undefined): string | null {
   if (value === null || value === undefined) return null;
   return typeof value === "string" ? value : value.id;
+}
+
+/** The organization behind a Stripe customer, for any event that names one. */
+async function orgFromCustomer(
+  db: D1Database,
+  customer: string | { id: string } | null | undefined
+): Promise<{ id: string; plan: string } | null> {
+  const customerId = customerIdOf(customer);
+  if (customerId === null) return null;
+  return findOrgByCustomerId(db, customerId);
+}
+
+/**
+ * An organization by its own id, for `client_reference_id`.
+ *
+ * Checked against the table rather than trusted: the value arrives inside a
+ * signed event, so it is not forgeable, but it is still a string we put into
+ * Stripe months ago and an organization can have been deleted since.
+ */
+async function findOrgById(
+  db: D1Database,
+  orgId: string
+): Promise<{ id: string; plan: string } | null> {
+  return db
+    .prepare(`SELECT id, plan FROM organizations WHERE id = ?`)
+    .bind(orgId)
+    .first<{ id: string; plan: string }>();
 }
 
 export async function handleStripeWebhook(
@@ -167,6 +214,100 @@ async function apply(event: Stripe.Event, deps: WebhookDeps): Promise<boolean> {
         deps.now
       );
       return true;
+    }
+
+    case "checkout.session.completed": {
+      // The moment a subscription is actually paid for. Thin on purpose: it
+      // records WHICH subscription belongs to this organization and that the
+      // account is in good standing, and leaves the plan to the
+      // customer.subscription.* events, which carry the price and are
+      // guaranteed to fire for a subscription checkout.
+      //
+      // Splitting it that way avoids retrieving the subscription here just to
+      // learn a price another event is about to hand us, and it means the two
+      // deliveries can arrive in either order without disagreeing - both writes
+      // are idempotent and neither depends on the other having happened.
+      const session = event.data.object as Stripe.Checkout.Session;
+      if (session.mode !== "subscription") return false;
+
+      // client_reference_id first: it is ours, we set it at checkout, and it
+      // survives a customer object being merged or replaced on Stripe's side.
+      // The customer id is the fallback for a session created elsewhere.
+      const org =
+        (session.client_reference_id !== null
+          ? await findOrgById(deps.db, session.client_reference_id)
+          : null) ??
+        (await orgFromCustomer(deps.db, session.customer));
+      if (org === null) return false;
+
+      const subscriptionId =
+        typeof session.subscription === "string"
+          ? session.subscription
+          : (session.subscription?.id ?? null);
+      if (subscriptionId === null) return false;
+
+      await applySubscriptionState(
+        deps.db,
+        org.id,
+        { billingStatus: "active", subscriptionId },
+        deps.now
+      );
+      return true;
+    }
+
+    case "product.created":
+    case "product.updated": {
+      // The catalogue, mirrored. Entitlements live in Product.metadata because
+      // Stripe has no concept of "50 GB"; see billing/plan-sync.ts for why the
+      // price is fetched rather than read off the product, and why a
+      // product.created delivery often lands before its price exists.
+      const product = event.data.object as Stripe.Product;
+      if (deps.secretKey === undefined) return false;
+      const result = await syncProductToPlan(
+        deps.db,
+        stripeClient(deps.secretKey),
+        product,
+        deps.now
+      );
+      return result !== null;
+    }
+
+    case "product.deleted": {
+      // Retired, never removed. The row is what resolves a subscription's price
+      // back to entitlements, so deleting it would drop everybody still on that
+      // plan to the default - the opposite of what retiring a plan means.
+      const product = event.data.object as Stripe.Product;
+      return (await retirePlanForProduct(deps.db, product, deps.now)) !== null;
+    }
+
+    case "charge.refunded": {
+      // Acknowledged and recorded, deliberately WITHOUT touching entitlements.
+      //
+      // A refund is a money event, not a subscription lifecycle event. Refunding
+      // an invoice does not end a subscription, and Stripe will send
+      // customer.subscription.deleted separately if one actually ends. Changing
+      // the plan or the billing status here would either double-apply that
+      // cancellation or, worse, revoke access from somebody who was refunded a
+      // single month as a goodwill gesture and is still a paying customer.
+      //
+      // It is logged rather than dropped because a refund is exactly the kind
+      // of thing support needs to see when somebody asks why their access
+      // changed - and the answer, usually, is that it did not.
+      const charge = event.data.object as Stripe.Charge;
+      const org = await orgFromCustomer(deps.db, charge.customer);
+      console.log(
+        JSON.stringify({
+          level: "info",
+          message: "stripe charge refunded",
+          orgId: org?.id ?? null,
+          chargeId: charge.id,
+          amountRefunded: charge.amount_refunded,
+          currency: charge.currency,
+          fullyRefunded: charge.refunded,
+          note: "entitlements deliberately unchanged; subscription events own that",
+        })
+      );
+      return org !== null;
     }
 
     case "invoice.payment_failed": {

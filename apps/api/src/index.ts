@@ -34,12 +34,7 @@ import {
   listWebhooks,
   patchWebhook,
 } from "./routes/webhooks";
-import {
-  createCheckoutSession,
-  createPortalSession,
-  getBilling,
-  listPlans,
-} from "./routes/billing";
+import { createCheckoutSession, createPortalSession, getBilling } from "./routes/billing";
 import { handleStripeWebhook } from "./routes/stripe-webhook";
 import {
   changeMemberRole,
@@ -536,19 +531,6 @@ export default {
         returnUrl: `${dashboardUrl}/app`,
         dashboardUrl,
       };
-
-      // The public plan catalogue. Deliberately outside `withAuth`: it is the
-      // pricing page's data and carries nothing belonging to any account, and
-      // a pricing page behind a login is not a pricing page.
-      //
-      // It is one of the very few genuinely public routes, so it is worth being
-      // explicit that this is intended rather than an oversight - the rule in
-      // CLAUDE.md is that an absent credential is an authentication failure,
-      // not a missing route, and that rule is about routes that serve customer
-      // data. This one serves the price list.
-      if (route === "GET /v1/plans") {
-        return await listPlans(billingDeps, Date.now());
-      }
 
       if (segments[0] === "v1" && segments[1] === "billing") {
         if (segments[2] === undefined && request.method === "GET") {

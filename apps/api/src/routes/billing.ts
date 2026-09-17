@@ -16,7 +16,7 @@ import {
   findOrgForWorkspace,
   type OrgBilling,
 } from "../billing/organizations";
-import { loadCatalogue, type Catalogue, type PlanRow } from "../billing/catalogue";
+import { loadCatalogue, type Catalogue } from "../billing/catalogue";
 import type { AuthContext } from "../middleware/auth";
 
 function json(body: unknown, status = 200): Response {
@@ -36,64 +36,28 @@ export interface BillingDeps {
 }
 
 /**
- * The catalogue as a client may see it.
+ * Which plans this account could actually buy right now.
  *
- * Deliberately not the raw row. `stripe_product_id` and `stripe_price_id` are
- * infrastructure identifiers that no client needs in order to choose a plan -
- * checkout takes OUR plan id and resolves the price server-side, so exposing
- * the price would only invite somebody to pass one. Nothing is exploitable
- * either way, because the resolution happens here; it is simply not the
- * client's business.
+ * Ids only, and that is the whole point of it being here rather than a table of
+ * names and prices. Every number a customer reads - price, storage, agent
+ * count - is hardcoded in the dashboard and on the marketing page, so the
+ * server has no business restating it.
+ *
+ * The one thing the front end genuinely cannot know is this: whether a plan has
+ * a Stripe price in THIS environment. Migration 0012 seeds the catalogue with
+ * `stripe_price_id = NULL`, because the products do not exist in Stripe at
+ * migration time, and they stay NULL until the catalogue sync has run. A
+ * dashboard that assumed otherwise would render an upgrade button whose only
+ * outcome is a 500.
+ *
+ * Free is excluded because it is the absence of a subscription rather than a
+ * thing to buy.
  */
-function toPlanResource(row: PlanRow) {
-  return {
-    id: row.id,
-    name: row.name,
-    description: row.description,
-    amountCents: row.amount_cents,
-    currency: row.currency,
-    interval: row.interval,
-    isDefault: row.is_default === 1,
-    /** False for Free, which has no Stripe price and therefore no checkout. */
-    purchasable: row.amount_cents > 0 && row.stripe_price_id !== null,
-    sortOrder: row.sort_order,
-    limits: {
-      storageBytes: row.storage_bytes,
-      fileCount: row.file_count,
-      egressBytesPerPeriod: row.egress_bytes_period,
-      requestsPerPeriod: row.requests_period,
-      maxFileBytes: row.max_file_bytes,
-      agents: row.agents,
-      members: row.members,
-      workspaces: row.workspaces,
-      apiKeys: row.api_keys,
-    },
-    prioritySupport: row.priority_support === 1,
-  };
-}
-
-function publicPlans(catalogue: Catalogue) {
+function purchasablePlanIds(catalogue: Catalogue): string[] {
   return [...catalogue.values()]
-    .filter((row) => row.is_public === 1)
+    .filter((row) => row.is_public === 1 && row.amount_cents > 0 && row.stripe_price_id !== null)
     .sort((a, b) => a.sort_order - b.sort_order)
-    .map(toPlanResource);
-}
-
-/**
- * GET /v1/plans — the public catalogue.
- *
- * Unauthenticated on purpose: it is the pricing page's data, and a pricing page
- * behind a login is not a pricing page. It carries no customer information at
- * all — only what is already printed on the marketing site.
- *
- * This exists so the marketing page and the enforced limits cannot disagree.
- * backlog/024 is the record of what happens when they are maintained
- * separately: every number on the pricing page contradicted `plans.ts`, and two
- * of them oversold the product.
- */
-export async function listPlans(deps: BillingDeps, now: number): Promise<Response> {
-  const catalogue = await loadCatalogue(deps.db, now);
-  return json({ plans: publicPlans(catalogue) });
+    .map((row) => row.id);
 }
 
 /** What the Billing screen renders. Safe for any member to read. */
@@ -104,10 +68,10 @@ export async function getBilling(ctx: AuthContext, deps: BillingDeps): Promise<R
   const catalogue = await loadCatalogue(deps.db, ctx.now);
 
   return json({
-    // The plans this account could move to, from the same catalogue the quota
-    // check reads - so the upgrade button and the limit that prompted it can
-    // never describe different products.
-    plans: publicPlans(catalogue),
+    // Ids, not a plan table. See purchasablePlanIds: the numbers are hardcoded
+    // client-side, and the only thing the dashboard cannot work out for itself
+    // is which plans have a synced Stripe price in this environment.
+    purchasable: purchasablePlanIds(catalogue),
     billing: {
       plan: org.plan,
       status: org.billingStatus,

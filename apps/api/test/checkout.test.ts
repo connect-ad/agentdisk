@@ -5,7 +5,8 @@
  * the billing API offered only the Stripe portal, which manages a subscription
  * that already exists and cannot create one (backlog/024).
  *
- * Every test here is a refusal, and that is deliberate rather than lazy. The
+ * Every checkout test here is a refusal, and that is deliberate rather than
+ * lazy. The
  * happy path ends in an outbound Stripe call, which this suite does not make;
  * but each guard below runs *before* that call, and each one protects something
  * that fails silently when it is wrong — a second subscription on the same
@@ -13,9 +14,9 @@
  * or a client naming a Stripe price directly and buying an archived one.
  */
 
-import { SELF, env } from "cloudflare:test";
+import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createCheckoutSession } from "../src/routes/billing";
+import { createCheckoutSession, getBilling } from "../src/routes/billing";
 import { invalidateCatalogue } from "../src/billing/catalogue";
 import { ApiError } from "../src/lib/errors";
 import type { AuthContext } from "../src/middleware/auth";
@@ -84,46 +85,46 @@ beforeEach(async () => {
 });
 
 /**
- * Note on the two styles below.
+ * `purchasable` is the ONLY plan data the server sends a client.
  *
- * The `/v1/plans` tests go through SELF, which runs in the Worker isolate — so
- * the `invalidateCatalogue()` in `beforeEach` clears the TEST module's cache,
- * not the Worker's. That is fine here because these three assert against the
- * seeded catalogue, which no test changes before they run. A future test that
- * edits `plans` and then reads them back through SELF would see stale data and
- * should drive the sync endpoint instead of expecting the cache to clear.
- *
- * The checkout tests call the handler directly, in this isolate, where the
- * invalidation does apply.
+ * Every number a customer reads - price, storage, agent count - is hardcoded in
+ * the dashboard and on the marketing page. The one thing the front end cannot
+ * work out for itself is whether a plan has a Stripe price in this particular
+ * environment, because migration 0012 seeds the catalogue with NULL price ids
+ * and they stay NULL until the sync runs. Without this list the dashboard would
+ * render an upgrade button whose only possible outcome is a 500.
  */
-describe("GET /v1/plans", () => {
-  it("answers without any credential at all", async () => {
-    // A pricing page behind a login is not a pricing page. This is one of the
-    // very few deliberately public routes.
-    const res = await SELF.fetch("https://api.test/v1/plans");
-    expect(res.status).toBe(200);
+describe("GET /v1/billing — purchasable", () => {
+  async function billing(): Promise<{ purchasable: string[] }> {
+    const res = await getBilling(owner(), deps);
+    return (await res.json()) as { purchasable: string[] };
+  }
 
-    const payload = (await res.json()) as { plans: { id: string; sortOrder: number }[] };
-    expect(payload.plans.map((p) => p.id)).toEqual(["free", "basic", "pro", "team"]);
+  it("lists the paid plans that have a synced price, in display order", async () => {
+    expect((await billing()).purchasable).toEqual(["basic", "pro", "team"]);
   });
 
-  it("carries the limits the quota check enforces", async () => {
-    // The point of the endpoint: the marketing page and the enforced limits
-    // read the same row, so backlog/024 cannot recur by their drifting apart.
-    const res = await SELF.fetch("https://api.test/v1/plans");
-    const payload = (await res.json()) as {
-      plans: { id: string; amountCents: number; limits: { storageBytes: number } }[];
-    };
-    const basic = payload.plans.find((p) => p.id === "basic");
-    expect(basic?.amountCents).toBe(900);
-    expect(basic?.limits.storageBytes).toBe(5 * 1024 ** 3);
+  it("excludes free, which is the absence of a subscription", async () => {
+    expect((await billing()).purchasable).not.toContain("free");
   });
 
-  it("never exposes a Stripe identifier", async () => {
-    // Checkout takes OUR plan id and resolves the price server-side. A client
-    // that could name a price could name an archived one.
-    const res = await SELF.fetch("https://api.test/v1/plans");
-    expect(await res.text()).not.toMatch(/price_|prod_/);
+  it("excludes a plan whose price has not been synced from Stripe", async () => {
+    // The exact state a freshly migrated environment is in before the
+    // catalogue sync has ever run.
+    await env.DB.prepare(`UPDATE plans SET stripe_price_id = NULL WHERE id = 'pro'`).run();
+    invalidateCatalogue();
+
+    const { purchasable } = await billing();
+    expect(purchasable).toEqual(["basic", "team"]);
+  });
+
+  it("sends ids only, never a Stripe identifier or a restated price", async () => {
+    const res = await getBilling(owner(), deps);
+    const text = await res.text();
+    expect(text).not.toMatch(/price_|prod_/);
+    // The numbers are the client's business, hardcoded there. If this starts
+    // failing, the server has begun restating the pricing table.
+    expect(text).not.toMatch(/storageBytes|amountCents/);
   });
 });
 

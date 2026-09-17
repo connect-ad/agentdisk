@@ -88,7 +88,7 @@ from `claimed_at`, not a plan, and nothing here makes it selectable.
 ## Architecture
 
 ```
-  infra/terraform/stripe.tf
+  infra/stripe-catalogue/catalogue.tf      (its own root, its own pipeline)
         │  stripe_product  (entitlements in metadata)
         │  stripe_price    (one per paid plan)
         ▼
@@ -107,6 +107,10 @@ from `claimed_at`, not a plan, and nothing here makes it selectable.
 ```
 
 ### Where truth lives
+
+No price ID is injected into `wrangler.toml`. The Worker discovers the
+catalogue from Stripe by `metadata.package_id` and mirrors it into D1, so there
+is one definition rather than a copy in configuration that can drift from it.
 
 | Object | Authoritative | D1 mirror |
 |---|---|---|
@@ -166,11 +170,39 @@ rebuild:
 Provider: `stripe/stripe` v0.3.0 — published from `github.com/stripe/terraform-provider-stripe`,
 which is Stripe's own GitHub organization. Community tier in the registry, but
 it is the first-party one and it carries `stripe_product` and `stripe_price`.
+Its artifacts are self-signed, so the lock file pins checksums for all three
+platforms rather than letting CI re-resolve from the registry each run.
 
-`STRIPE_SECRET_KEY` needs no new secret: `infra.yml` already runs its apply job
-with `environment: ${{ inputs.environment }}`, so the existing `dev` environment
-secret resolves there. **Prod has no `STRIPE_SECRET_KEY`** — that is a prod
-prerequisite, not a dev blocker.
+### A separate root, and a pipeline meant to be deleted
+
+The catalogue is **not** part of `infra/terraform`. It is its own Terraform root
+at `infra/stripe-catalogue/`, applied by its own manual workflow, sharing the
+state bucket under a different key (`<workspace>/stripe-catalogue.tfstate`).
+
+Three reasons, and the first is what forced it:
+
+- **`ci.yml`'s `terraform-plan` job cannot hold the credential.** That job is
+  deliberately unscoped to a GitHub Environment so plans run from feature
+  branches on repository-level secrets. `STRIPE_SECRET_KEY` is per-environment,
+  because dev must use a test-mode key and prod a live-mode one. Stripe
+  resources in the main stack would have left that job permanently red the
+  moment the first apply wrote them into state.
+- **The blast radius is unlike anything else's.** Separate state means a
+  `destroy` of one cannot reach the other.
+- **It is temporary.** Once the staff console can edit plans (14 PART 29.6),
+  this directory and `.github/workflows/stripe-catalogue.yml` are deleted and
+  plans are managed from the admin surface. Nothing else imports from here, so
+  deletion is one `git rm -r` plus one file.
+
+The workflow is `workflow_dispatch` only, defaults to `plan` rather than
+`apply`, asserts the key's Stripe mode matches the workspace (a live key in the
+dev environment is refused), and reads the plan JSON to **refuse any destroy or
+replacement** before anything reaches Stripe — an outer guard in front of
+`prevent_destroy`, which would otherwise only fire mid-apply.
+
+`STRIPE_SECRET_KEY` needs no new secret; the existing `dev` environment secret
+resolves in a job scoped to that environment. **Prod has no `STRIPE_SECRET_KEY`**
+— a prod prerequisite, not a dev blocker.
 
 ### Counting across an organization
 
@@ -204,8 +236,8 @@ Dependency-ordered. Each is committed separately.
 
 | # | Task | Touches |
 |---|---|---|
-| 1 | `stripe.tf`: 4 Products + 3 Prices, entitlements in `metadata`, `prevent_destroy`, price IDs as outputs | `infra/terraform/` |
-| 2 | CI injects `STRIPE_PRICE_*` into `wrangler.toml` from `terraform output`; `TF_VAR_stripe_secret_key` | `.github/workflows/`, `wrangler.toml` |
+| 1 | Standalone `infra/stripe-catalogue/` root: 4 Products + 3 Prices, entitlements in `metadata`, `prevent_destroy` | `infra/stripe-catalogue/` |
+| 2 | `stripe-catalogue.yml`: manual plan/apply, Stripe-mode assertion, destroy guard | `.github/workflows/` |
 | 3 | Migration `0012`: extend `plans` (agents, members, workspaces, api_keys, max_file_bytes, package_id, is_default), seed 4 rows, one-default index | `apps/api/migrations/` |
 | 4 | `lib/plans.ts`: add `basic`, apply the table, unlimited egress/requests/files, add `workspaces` | `apps/api/src/lib/` |
 | 5 | `billing/catalogue.ts`: D1-over-floor resolution, per-isolate cache, per-field fallback | new file |

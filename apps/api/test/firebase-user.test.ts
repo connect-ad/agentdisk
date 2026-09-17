@@ -11,6 +11,7 @@
 import { env } from "cloudflare:test";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { withAuth, type WithAuthDeps } from "../src/middleware/auth";
+import { resolveVerifiedUser } from "../src/auth/authenticate";
 import { toErrorResponse } from "../src/lib/errors";
 import type { JwksCache } from "../src/auth/firebase";
 import { NOW, WORKSPACE_A, WORKSPACE_B, seedTwoWorkspaces } from "./helpers";
@@ -519,5 +520,124 @@ describe("the workspace a signup lands in", () => {
     const body = (await res.json()) as { workspaceId: string; ops: string[] };
     expect(body.workspaceId).toBe(own?.id);
     expect(body.ops).toContain("write");
+  });
+});
+
+/**
+ * Staff-initiated removal, enforced as our own fact.
+ *
+ * The property under test is the one 32 PART 7a.2 calls non-negotiable: a token
+ * that is cryptographically perfect, unexpired, and issued BEFORE the deletion
+ * must stop working immediately after it — without Firebase being consulted,
+ * and without waiting for the token's own hour to run out.
+ *
+ * `deps()` here points at a stub JWKS and a real verifier, so nothing in this
+ * file can reach Firebase even if the implementation tried to. That is the
+ * point: if these pass, the refusal came from our database alone.
+ */
+describe("a deleted or disabled account", () => {
+  it("refuses a still-valid token minted before the deletion", async () => {
+    // Minted a minute ago and good for another 59: the SDK would happily keep
+    // using this one, and Firebase would keep saying it is valid.
+    const liveToken = await mint({ iatOffset: -60 });
+    expect((await run(liveToken)).status).toBe(200);
+
+    await env.DB.prepare(`UPDATE users SET deleted_at = ? WHERE id = ?`)
+      .bind(NOW, MEMBER_USER)
+      .run();
+
+    expect((await run(liveToken)).status).toBe(401);
+  });
+
+  it("refuses a freshly minted token too, so re-login is not a way back in", async () => {
+    // The difference from `session_revoked_after`, and the reason deletion
+    // needed its own column rather than reusing that one: a later `iat` is the
+    // documented way to recover from revocation, and it must NOT recover from
+    // this.
+    await env.DB.prepare(`UPDATE users SET deleted_at = ? WHERE id = ?`)
+      .bind(NOW, MEMBER_USER)
+      .run();
+
+    expect((await run(await mint({ iatOffset: 600 }))).status).toBe(401);
+  });
+
+  it("refuses a disabled account, and lets a restore put them back", async () => {
+    await env.DB.prepare(`UPDATE users SET disabled_at = ? WHERE id = ?`)
+      .bind(NOW, MEMBER_USER)
+      .run();
+    expect((await run(await mint())).status).toBe(401);
+
+    // Disablement is reversible with no window, so clearing the column is the
+    // whole of the re-enable. If this stops passing, "disable" has quietly
+    // become "delete".
+    await env.DB.prepare(`UPDATE users SET disabled_at = NULL WHERE id = ?`)
+      .bind(MEMBER_USER)
+      .run();
+    expect((await run(await mint())).status).toBe(200);
+  });
+
+  it("refuses on the routes that carry no workspace, not just the scoped ones", async () => {
+    // Creating a workspace and listing them are the two routes with no
+    // workspace to be scoped to, so they call `resolveVerifiedUser` directly
+    // rather than going through `withAuth`. The check lives in that shared
+    // function for exactly this reason - placed one level lower, in the
+    // membership branch, it would leave a deleted account still able to create
+    // itself a new workspace.
+    //
+    // Called directly here because `withAuth` refuses a request naming no
+    // workspace with a 400 long before it authenticates anyone, so routing this
+    // assertion through it would prove nothing about deletion.
+    await env.DB.prepare(`UPDATE users SET deleted_at = ? WHERE id = ?`)
+      .bind(NOW, MEMBER_USER)
+      .run();
+
+    await expect(
+      resolveVerifiedUser(await mint(), {
+        db: env.DB,
+        cache: cache(),
+        projectId: PROJECT_ID,
+        now: NOW,
+      })
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("does not touch anybody else", async () => {
+    await seedUser("usr_BYSTANDER", "bystander@example.com", "firebase-uid-bystander");
+    await seedMembership("mem_BYSTANDER", "usr_BYSTANDER", "admin", WORKSPACE_A);
+
+    await env.DB.prepare(`UPDATE users SET deleted_at = ? WHERE id = ?`)
+      .bind(NOW, MEMBER_USER)
+      .run();
+
+    expect((await run(await mint())).status).toBe(401);
+    expect(
+      (
+        await run(
+          await mint({ uid: "firebase-uid-bystander", email: "bystander@example.com" })
+        )
+      ).status
+    ).toBe(200);
+  });
+
+  it("answers exactly as every other authentication failure does", async () => {
+    // A deleted account must not be distinguishable from a forged credential.
+    // A different body here would confirm to whoever holds the token that the
+    // account existed and was removed - which is the one fact this refusal
+    // exists to withhold.
+    //
+    // Compared against a wrong-project token rather than an unknown uid: an
+    // unknown uid is *provisioned* on sight and then fails the membership
+    // check, which is a FORBIDDEN about a workspace, not an authentication
+    // failure at all.
+    const forged = await run(await mint({ projectId: OTHER_PROJECT_ID }));
+
+    await env.DB.prepare(`UPDATE users SET deleted_at = ? WHERE id = ?`)
+      .bind(NOW, MEMBER_USER)
+      .run();
+    const deleted = await run(await mint());
+
+    expect(deleted.status).toBe(401);
+    expect(forged.status).toBe(401);
+    expect(await deleted.clone().text()).toBe(await forged.clone().text());
   });
 });

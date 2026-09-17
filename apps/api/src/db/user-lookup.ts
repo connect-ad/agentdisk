@@ -32,6 +32,15 @@ export interface UserRow {
   email_verified_at: number | null;
   /** Unix ms. Tokens issued at or before this are refused (30.4). */
   session_revoked_after: number;
+  /**
+   * Staff-initiated account removal, inside its 30-day restore window.
+   * Carried on the row - rather than asked of Firebase - so that the auth
+   * chain can refuse a deleted account without depending on a third party's
+   * side effect having succeeded. See migration 0013.
+   */
+  deleted_at: number | null;
+  /** Staff-initiated for-cause block. Reversible, with no window. */
+  disabled_at: number | null;
 }
 
 export interface MembershipRow {
@@ -45,7 +54,8 @@ export async function findUserByFirebaseUid(
 ): Promise<UserRow | null> {
   return db
     .prepare(
-      `SELECT id, email, firebase_uid, is_provisional, email_verified_at, session_revoked_after
+      `SELECT id, email, firebase_uid, is_provisional, email_verified_at,
+              session_revoked_after, deleted_at, disabled_at
          FROM users WHERE firebase_uid = ?`
     )
     .bind(firebaseUid)
@@ -69,8 +79,12 @@ export async function linkFirebaseUidToEmail(
 ): Promise<UserRow | null> {
   const result = await db
     .prepare(
+      // `deleted_at IS NULL` alongside the uid guard: a row that staff have
+      // removed must not be claimable by signing up with its address again.
+      // Without it, deletion of an invited-but-never-signed-in account would be
+      // undone by the next person to type that email into the signup form.
       `UPDATE users SET firebase_uid = ?, is_provisional = 0, updated_at = ?
-        WHERE email = ? AND firebase_uid IS NULL`
+        WHERE email = ? AND firebase_uid IS NULL AND deleted_at IS NULL`
     )
     .bind(firebaseUid, now, email)
     .run();
@@ -241,6 +255,8 @@ export async function provisionUser(
     is_provisional: 0,
     email_verified_at: claims.emailVerified ? now : null,
     session_revoked_after: 0,
+    deleted_at: null,
+    disabled_at: null,
   };
 }
 

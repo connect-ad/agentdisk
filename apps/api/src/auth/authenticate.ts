@@ -188,6 +188,28 @@ export async function resolveVerifiedUser(
     throw unauthorized(`token predates session_revoked_after for user ${user.id}`);
   }
 
+  // Staff-initiated removal and for-cause disablement, checked as OUR OWN fact
+  // rather than Firebase's (32 PART 7a.2).
+  //
+  // The staff endpoints also disable the Firebase identity, but that call can
+  // fail, and an ID token already in the caller's hands stays valid for up to
+  // its remaining hour regardless. If this check were not here, deletion would
+  // silently depend on a third party's side effect having succeeded - and a
+  // failed `disableUser` would leave a live identity refreshing tokens
+  // indefinitely while this database said the account was gone.
+  //
+  // Deliberately after the revocation check and before any membership lookup,
+  // so it applies to every human-authenticated route without exception,
+  // including the two that carry no workspace. Both answer with the same
+  // unauthorized body as every other authentication failure: the reason goes to
+  // the log, never to the caller.
+  if (user.deleted_at !== null) {
+    throw unauthorized(`user ${user.id} is deleted (at ${user.deleted_at})`);
+  }
+  if (user.disabled_at !== null) {
+    throw unauthorized(`user ${user.id} is disabled (at ${user.disabled_at})`);
+  }
+
   return { user, claims };
 }
 

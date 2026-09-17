@@ -135,7 +135,7 @@ Points 1–3 of the modal contract are CSS and can be handled the same way, from
 `apps/web/src/components/Modal/Modal.jsx` — a vendored component. That is a
 deliberate divergence, recorded in `CLAUDE.md` beside the `AppShell.jsx`
 precedent and tracked for the upstream trip as
-[backlog/031](../backlog/031-upstream-modal-scroll-contract.md).
+`backlog/031` (removed 18 Sept 2026; at tag `pre-billing-module`).
 
 `apps/admin` **does not import the design system, by design** — its separate look
 is how a support engineer knows which console they are in. Track B therefore

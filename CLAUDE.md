@@ -15,17 +15,17 @@ task.
 | `CLAUDE.md` | This route and the catalog | Source of truth for *where things are*. Not a duplicate of the specs. **While parallel tracks are running, this file is owned by Track 0** — route edits through it rather than editing directly, or two sessions clobber the one file everything else trusts. See `coordination/DEFERRED.md` X-06. Treat the test counts in Status as a snapshot; re-measure after a merge. |
 | `docs/design/` | The specification, `NN-<slug>.md` | 20 documents, PART 1–30. The product's design authority — but see the precedence rule below. |
 | `design-system/` | Upstream mirror of the Claude Design project | **Read-only.** Byte-identical to the remote (96/96). Changes go into Claude Design, then re-import — never edit here. |
-| `apps/api/` | The Cloudflare Worker: REST + MCP, one deployable | Both surfaces are built and share one authorization chain. MCP tools call the REST handlers rather than reimplementing them, so the two cannot drift — live testing once disputed this for `pathPrefix`, and retesting confirmed the code: both surfaces refuse a path outside the key's prefix, see [029](backlog/029-mcp-path-scope-contradiction.md). |
+| `apps/api/` | The Cloudflare Worker: REST + MCP, one deployable | Both surfaces are built and share one authorization chain. MCP tools call the REST handlers rather than reimplementing them, so the two cannot drift — live testing once disputed this for `pathPrefix`, and retesting confirmed the code: both surfaces refuse a path outside the key's prefix, see `backlog/029`. |
 | `infra/terraform/` | All infrastructure as code | One root config, one module, **one workspace per environment** (`dev`, `prod`). No `environments/` directories — see the workspace note below. |
 | `.github/workflows/` | CI and deployment pipelines | **Three areas, split by what they own: `infra`, `backend`, `frontend`.** Each is one reusable engine plus thin per-environment callers, so prod can never drift from dev. Path filters mean an `apps/web` push moves nothing else. `frontend.yml` is called once per app (dashboard, console). `ci.yml` gates PRs and covers all three apps. `deploy-all-dev.yml` is the ordered manual full deploy. |
 | `apps/admin/` | The internal staff console, at `admin-dev.agentdisk.io` | Its own origin on purpose: 14 PART 27.2 scopes the staff session cookie to it, so a staff and a customer credential cannot reach each other in a browser. Deliberately does not import `design-system/` — looking different from the customer dashboard is how a support engineer knows which one they are in. |
-| `apps/web/` | The dashboard SPA, live at `app-dev.agentdisk.io` | `src/components/` is vendored from `design-system/`; `src/components/index.js` is generated. Hand-written code lives in `src/routes/` and `src/components-local/`. Two vendored files deliberately diverge, all awaiting the same upstream trip: `src/components/AppShell.jsx` for three reasons — [015](backlog/015-rename-in-design-system.md), [016](backlog/016-upstream-workspace-switcher.md) and [026](backlog/026-upstream-account-menu.md) — `src/components/Modal/Modal.jsx` plus `src/components/Button/Button.jsx`, which together gain Enter-to-submit, the one part of the modal contract that cannot be done from `app.css` — `Button` has to default to `type="button"` or an untyped Cancel inside the new `<form>` submits the dialog it exists to dismiss ([031](backlog/031-upstream-modal-scroll-contract.md)); and `src/components/ApiKeyDisplay/ApiKeyDisplay.jsx`, whose `prefix` defaulted to `ad_live` — a prefix this API has never issued. Deployed as a Workers static-assets Worker, not Pages — see [013](backlog/013-deploy-dashboard.md). |
+| `apps/web/` | The dashboard SPA, live at `app-dev.agentdisk.io` | `src/components/` is vendored from `design-system/`; `src/components/index.js` is generated. Hand-written code lives in `src/routes/` and `src/components-local/`. Two vendored files deliberately diverge, all awaiting the same upstream trip: `src/components/AppShell.jsx` for three reasons — `backlog/015`, `backlog/016` and `backlog/026` — `src/components/Modal/Modal.jsx` plus `src/components/Button/Button.jsx`, which together gain Enter-to-submit, the one part of the modal contract that cannot be done from `app.css` — `Button` has to default to `type="button"` or an untyped Cancel inside the new `<form>` submits the dialog it exists to dismiss (`backlog/031`); and `src/components/ApiKeyDisplay/ApiKeyDisplay.jsx`, whose `prefix` defaulted to `ad_live` — a prefix this API has never issued. Deployed as a Workers static-assets Worker, not Pages — see `backlog/013`. |
 | `Skill/` | Reusable how-to knowledge, `<N> <Name>.md` | Procedures, commands and their calibration. Not the specification — that is `docs/design/`. |
-| `backlog/` | Outstanding tasks, `NNN-<slug>.md` | Status lives in the file; a finished item stays as a record. |
+| `backlog/` | Outstanding tasks, `NNN-<slug>.md` | **One item: the billing module, and it is the priority.** The previous 31 were deleted 18 Sept 2026 and live at the tag `pre-billing-module`. Status lives in the file. |
 | `docs/superpowers/specs/` | The design rebuild's specs, `YYYY-MM-DD-<slug>.md` | Replaced `.design-sync/`, which described the old vendored mirror and lost its subject when that mirror went. The `.dc.html` artboards in `design-system/` are hand-exported from Claude Design; when a design file has no local copy, record its numbers in a spec here and ask for the export — never reconstruct one from a transcript. |
 | `.claude/commands/` | Custom slash commands, `<name>.md` | [`cpack`](.claude/commands/cpack.md) persists session knowledge into the docs below; [`cpush`](.claude/commands/cpush.md) commits and tags. Both are auto-discovered by Claude Code; no registration step. |
-| `summary.md` | External code audit, 8 Sept 2026 | Read-only record of one review, with file:line evidence for every claim. Its open work is tracked as [017](backlog/017-enforce-declared-limits.md)–[025](backlog/025-authorization-hardening.md); the backlog is where that work lives, not here. |
-| `Worlflow.md` | The handoff diagram | Filename typo is known — see [011](backlog/011-rename-workflow-file.md). |
+| `summary.md` | External code audit, 8 Sept 2026 | Read-only record of one review, with file:line evidence for every claim. Its open work is tracked as `backlog/017`–`backlog/025`; the backlog is where that work lives, not here. |
+| `Worlflow.md` | The handoff diagram | Filename typo is known — see `backlog/011`. |
 
 This page is the only index — no folder carries its own `README.md`. The root
 `README.md` is a symlink to this file, so GitHub renders it; never write to it
@@ -37,7 +37,7 @@ directly.
 gets corrected.** This already happened once: the spec called for a forest-green
 accent with Space Grotesk + Inter; the built system uses deep indigo with Public
 Sans. Docs 03 and 04 were rewritten to match. The 96 verified design-system files
-were not touched. See [002](backlog/002-reconcile-brand-drift.md).
+were not touched. See `backlog/002`.
 
 ### Rules that bite
 
@@ -270,7 +270,7 @@ were not touched. See [002](backlog/002-reconcile-brand-drift.md).
   `SANDBOX_EXPIRY_ENABLED = "true"` turns on real deletion. Dev holds weeks of
   expired-by-definition sandboxes, and the delete is a cascade with no undo, so a
   delete-by-default deploy would empty the environment on its first cron tick.
-  See [030](backlog/030-enable-sandbox-expiry.md).
+  See `backlog/030`.
 - **One sanctioned cross-tenant storage operation exists, and its signature is
   the safety property.** `transferObject(source, id, destination, id)` takes two
   already-bound `WorkspaceScopedStorage` instances and **no workspace ID**, so a
@@ -325,7 +325,7 @@ were not touched. See [002](backlog/002-reconcile-brand-drift.md).
 | 16 | [Firebase auth & launch prompt](docs/design/16-firebase-auth-and-final-launch-prompt.md) | PART 30 — the auth model in force. Read before touching sign-in |
 | 17 | [Dev environment test findings](docs/design/17-dev-environment-live-test-findings.md) | 7 Sept 2026 live pass against `app-dev` |
 | 18 | [Full UI audit & fix prompt](docs/design/18-full-ui-audit-and-fix-prompt.md) | 8–9 Sept 2026 audit, now **Parts 1–10**. Parts 1–6 are closed rounds whose outcomes live in docs 03/06 and the backlog; Parts 7–10 are later live passes and **still carry unresolved findings** — read §9.3–9.5 before assuming a screen works |
-| 19 | [MCP public distribution guide](docs/design/19-mcp-public-distribution-guide.md) | How to publish the MCP server for public install: per-client snippets, the official registry, marketplaces. Named the doc-18 §9.4 path-scope question as a launch blocker; that blocker is cleared — see [029](backlog/029-mcp-path-scope-contradiction.md) |
+| 19 | [MCP public distribution guide](docs/design/19-mcp-public-distribution-guide.md) | How to publish the MCP server for public install: per-client snippets, the official registry, marketplaces. Named the doc-18 §9.4 path-scope question as a launch blocker; that blocker is cleared — see `backlog/029` |
 
 ### Design system — [design-system/](design-system/)
 
@@ -351,39 +351,25 @@ provenance), `ApiKeyDisplay` (show-once), `PermissionSelector` (least privilege)
 
 ### Backlog — [backlog/](backlog/)
 
+One item, and it is the priority.
+
 | # | Item | Status |
 |---|---|---|
-| 001 | [Import the design system](backlog/001-import-design-system.md) | Done |
-| 002 | [Reconcile brand drift](backlog/002-reconcile-brand-drift.md) | Done |
-| 003 | [Scaffold `apps/web`](backlog/003-scaffold-web-app.md) | Done |
-| 004 | [MVP-0 screens](backlog/004-mvp0-screens.md) | Done |
-| 005 | [MVP-1 screens](backlog/005-mvp1-screens.md) | Done |
-| 006 | [Upstream the Drawer](backlog/006-upstream-drawer.md) | Open — design-system gap |
-| 007 | [Browser-verify the screens](backlog/007-browser-verify-screens.md) | Open — 4 of 31 rendered, no state variants |
-| 008 | [Backend: D1, R2, REST, MCP](backlog/008-backend.md) | Done — REST, MCP and Firebase auth all shipped |
-| 009 | [Wire screens to the API](backlog/009-wire-screens-to-api.md) | Reopened — fixture data remains; see [023](backlog/023-non-functional-ui-controls.md). Scope-name conflict decided: the API's bare names win |
-| 010 | [Test suite](backlog/010-test-suite.md) | Open — 519 API tests, 105 web tests, route components covered and mutation-checked; e2e still uncovered |
-| 011 | [Rename `Worlflow.md`](backlog/011-rename-workflow-file.md) | Open — trivial |
-| 012 | [Put the project under git](backlog/012-initialise-git.md) | Done |
-| 013 | [Deploy the dashboard](backlog/013-deploy-dashboard.md) | Done — `app-dev.agentdisk.io` |
-| 014 | [R2 signing credential](backlog/014-r2-signing-credential.md) | Done — `R2_FILES_*` set on the `dev` environment |
-| 015 | [Rename in the design system](backlog/015-rename-in-design-system.md) | Open — upstream change, then re-import |
-| 016 | [Upstream the workspace switcher](backlog/016-upstream-workspace-switcher.md) | Open — `AppShell.workspaceSlot` and a selection menu |
-| 017 | [Enforce the declared limits](backlog/017-enforce-declared-limits.md) | Open — billing block, period reset, request count and plan sub-limits all unenforced |
-| 018 | [Reclaim abandoned uploads](backlog/018-reclaim-abandoned-uploads.md) | Open — `pending` rows and their objects are never swept |
-| 019 | [Rate-limit the authenticated surface](backlog/019-rate-limit-authenticated-surface.md) | Open — only the sandbox route is limited |
-| 020 | [Staff console defects](backlog/020-staff-console-defects.md) | Open — fleet search throws; force-logout 500s after succeeding |
-| 021 | [Audit-trail gaps](backlog/021-audit-trail-gaps.md) | Open — recursive folder delete, move, copy, restore unrecorded |
-| 022 | [Finish webhooks](backlog/022-webhook-gaps.md) | Open — 4 of 6 events never emitted; secret stored in plaintext |
-| 023 | [Non-functional UI controls](backlog/023-non-functional-ui-controls.md) | Open — Tier 2 closed; the 16 Sept pass wired delete, create-folder, download and rename, removed five dead controls and disabled the two account-data promises. Remaining work is what needs endpoints that do not exist |
-| 024 | [Pricing page drift](backlog/024-pricing-page-drift.md) | Open — every number contradicts `plans.ts`; no purchase path |
-| 025 | [Authorization hardening](backlog/025-authorization-hardening.md) | Open — agent keys can read billing; five smaller items |
-| 026 | [Upstream the account menu](backlog/026-upstream-account-menu.md) | Open — `AppShell.userSlot`; third divergence in the vendored shell |
-| 027 | [Files page first paint](backlog/027-files-page-first-paint.md) | Open — three serial round trips before the first file query; measured, not slow |
-| 028 | [Staff console security headers](backlog/028-admin-console-security-headers.md) | Open — `apps/admin` has the gap `apps/web` just closed |
-| 029 | [MCP path-scope contradiction](backlog/029-mcp-path-scope-contradiction.md) | Done — retested live 16 Sept 2026; MCP enforces `pathPrefix` and agrees with REST. No code change; doc 18 §9.4 superseded |
-| 030 | [Enable the sandbox sweep](backlog/030-enable-sandbox-expiry.md) | Open — claiming is built; the unclaimed-workspace sweep ships in log-only mode until a TTL window of candidate logs is reviewed |
-| 031 | [Upstream the modal scroll contract](backlog/031-upstream-modal-scroll-contract.md) | Open — fourth vendored divergence; `Modal.jsx` and `Button.jsx` gain Enter-to-submit. Points 1–3 shipped in `app.css` |
+| 001 | [Billing module](backlog/001-billing-module.md) | **TOP** — 7 of 12 tasks shipped; Stripe catalogue, checkout and the ten webhook events are in, enforcement and the UI are not |
+
+**Items 001–031 were deleted on 18 September 2026**, deliberately, so that the
+billing module is the whole backlog. They are recoverable in full from git at
+the tag `pre-billing-module` — for example
+`git show pre-billing-module:backlog/025-authorization-hardening.md`. Six of them
+were open security or correctness work (025 authorization hardening, 019
+rate-limiting the authenticated surface, 028 staff-console security headers, 021
+audit-trail gaps, 022 webhook gaps, 018 abandoned uploads); they are not fixed,
+merely no longer tracked here.
+
+Source comments across `apps/` still cite those numbers — `backlog/017`,
+`backlog/023`, `backlog/024` and others. Those citations stay accurate against
+the tag, and the reasoning they point at is the reason the comment exists, so
+they have been left alone rather than scrubbed.
 
 ---
 
@@ -438,7 +424,7 @@ already administer and deleting the sandbox. A merge repoints the agent's
 *existing* key row rather than reissuing, so the agent's next call lands in the
 new workspace with no re-authentication. Unclaimed workspaces are held to a
 tighter `SANDBOX_LIMITS` allowance and are swept after 7 days — that sweep is
-live but in log-only mode, see [030](backlog/030-enable-sandbox-expiry.md).
+live but in log-only mode, see `backlog/030`.
 The MCP server exposes ten tools at `/mcp` in the same Worker — each one calls
 the REST handler that already does the work, so the two surfaces are literally
 the same code and cannot drift in what they allow.
@@ -461,7 +447,7 @@ things that *appear* built and are not connected. Several declared limits are
 never enforced — the `past_due` write block above all — and a set of dashboard
 controls report success for work that never happened. The isolation and
 authentication core is sound; the wiring around it is not finished. See
-[017](backlog/017-enforce-declared-limits.md)–[025](backlog/025-authorization-hardening.md).
+`backlog/017`–`backlog/025`.
 
 ### Faults found only by running it
 

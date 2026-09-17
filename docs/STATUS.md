@@ -39,7 +39,7 @@ no MCP layer, no human authentication, and no audit trail. All four are done.
 | 0 of 10 MCP tools | All 10, filtered by the calling key's scope |
 | No `scheduled` handler; deleted objects never purged | Hourly purge and counter reconciliation |
 | Presigned round-trip blocked on a credential | Proven: 2 MB in and out, SHA-256 identical |
-| 19 arrays of fixture data in the dashboard | Most replaced. **Corrected 8 Sept 2026:** fixture data and mock handlers remain across six route files — [backlog/023](../backlog/023-non-functional-ui-controls.md) |
+| 19 arrays of fixture data in the dashboard | Most replaced. **Corrected 8 Sept 2026:** fixture data and mock handlers remain across six route files — `backlog/023` (removed 18 Sept 2026; at tag `pre-billing-module`) |
 
 ---
 
@@ -73,7 +73,7 @@ against the raw body before any field is read. **Corrected 8 Sept 2026:** the
 so the middleware always evaluates against a hardcoded `"active"`. Reads and
 writes both continue on an unpaid account, while the API reports
 `writesBlocked: true` and the dashboard says uploads are paused.
-See [backlog/017](../backlog/017-enforce-declared-limits.md).
+See `backlog/017` — removed 18 Sept 2026, readable at the tag `pre-billing-module`. Items 2 and 3 of it are now moot: egress and requests are unlimited on every plan. Item 1 (the past-due write block) and item 4 (agent/key/member counts) are tasks 9 and 10 of [backlog/001](../backlog/001-billing-module.md).
 
 ---
 

@@ -243,8 +243,8 @@ same element every character; delivering to whatever currently has focus is what
 makes a stolen focus show up as `expected 'r' to be 'research-bot'`.
 
 The screens have still never been rendered in a browser beyond four spot checks
-([backlog 007](../backlog/007-browser-verify-screens.md),
-[backlog 010](../backlog/010-test-suite.md)).
+(`backlog 007`,
+`backlog 010`).
 
 ---
 

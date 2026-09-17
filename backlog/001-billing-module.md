@@ -1,6 +1,6 @@
 # 001 · Billing module
 
-**Status:** In progress — 7 of 12 tasks shipped
+**Status:** In progress — 8 of 12 tasks shipped
 **Priority: TOP.** This is the only item in the backlog.
 **Design:** [docs/superpowers/specs/2026-09-17-billing-module-design.md](../docs/superpowers/specs/2026-09-17-billing-module-design.md)
 **Branch:** `dev` · rollback tag `pre-billing-module` (c0bbc1c)
@@ -63,21 +63,15 @@ workspaces are all account-wide totals.
 | 5 | D1-over-floor resolver, per field, wired into `withAuth` | `apps/api/src/billing/catalogue.ts` |
 | 6 | `POST /v1/billing/checkout-session`; `purchasable` on `GET /v1/billing` | `apps/api/src/routes/billing.ts` |
 | 7 | Ten Stripe events, and the shared product→plan upsert | `apps/api/src/billing/plan-sync.ts` |
+| 8 | `GET /v1/staff/plans`, `POST /v1/staff/plans/sync`, and the full editor | `apps/api/src/staff/plans-access.ts` |
 
-617 API tests pass. Tasks 4, 5 and 7 were mutation-checked: the transposed
+673 API tests pass. Tasks 4, 5 and 7 were mutation-checked: the transposed
 plan-table digit, the amardrive fail-wide fallback, and a refund that revokes
 access each turn the suite red.
 
 ## Remaining
 
-### Task 8 — the catalogue sync · *next*
-
-`GET /v1/staff/plans` and `POST /v1/staff/plans/sync`, replaying the same
-`syncProductToPlan` the webhook uses. It is what makes the first `terraform
-apply` useful: Terraform creates the product before its price, so
-`product.created` lands with a NULL price and the sync is what fills it in.
-
-### Verification against real Stripe · *before tasks 9–12*
+### Verification against real Stripe · *next, and it blocks tasks 9–12*
 
 Tasks 9–12 all rest on an assumption nothing has tested: that the metadata keys
 in `catalogue.tf` round-trip into D1 and produce a working checkout. Everything

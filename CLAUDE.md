@@ -18,10 +18,10 @@ task.
 | `apps/api/` | The Cloudflare Worker: REST + MCP, one deployable | Both surfaces are built and share one authorization chain. MCP tools call the REST handlers rather than reimplementing them, so the two cannot drift — live testing once disputed this for `pathPrefix`, and retesting confirmed the code: both surfaces refuse a path outside the key's prefix, see `backlog/029`. |
 | `infra/terraform/` | All infrastructure as code | One root config, one module, **one workspace per environment** (`dev`, `prod`). No `environments/` directories — see the workspace note below. |
 | `.github/workflows/` | CI and deployment pipelines | **Three areas, split by what they own: `infra`, `backend`, `frontend`.** Each is one reusable engine plus thin per-environment callers, so prod can never drift from dev. Path filters mean an `apps/web` push moves nothing else. `frontend.yml` is called once per app (dashboard, console). `ci.yml` gates PRs and covers all three apps. `deploy-all-dev.yml` is the ordered manual full deploy. |
-| `apps/admin/` | The internal staff console, at `admin-dev.agentdisk.io` | Its own origin on purpose: 14 PART 27.2 scopes the staff session cookie to it, so a staff and a customer credential cannot reach each other in a browser. Deliberately does not import `design-system/` — looking different from the customer dashboard is how a support engineer knows which one they are in. |
+| `apps/admin/` | The internal staff console, at `admin-dev.agentdisk.io` | Its own origin on purpose: 14 PART 27.2 scopes the staff session cookie to it, so a staff and a customer credential cannot reach each other in a browser. Deliberately does not import `design-system/` — looking different from the customer dashboard is how a support engineer knows which one they are in; it carries its own palette in `src/app.css`, from the AgentDisk Admin design file, and those tokens must not be reconciled with the dashboard's. Nine screens under `src/screens/`, one shell, routing by the History API rather than a router library. |
 | `apps/web/` | The dashboard SPA, live at `app-dev.agentdisk.io` | `src/components/` is vendored from `design-system/`; `src/components/index.js` is generated. Hand-written code lives in `src/routes/` and `src/components-local/`. Two vendored files deliberately diverge, all awaiting the same upstream trip: `src/components/AppShell.jsx` for three reasons — `backlog/015`, `backlog/016` and `backlog/026` — `src/components/Modal/Modal.jsx` plus `src/components/Button/Button.jsx`, which together gain Enter-to-submit, the one part of the modal contract that cannot be done from `app.css` — `Button` has to default to `type="button"` or an untyped Cancel inside the new `<form>` submits the dialog it exists to dismiss (`backlog/031`); and `src/components/ApiKeyDisplay/ApiKeyDisplay.jsx`, whose `prefix` defaulted to `ad_live` — a prefix this API has never issued. Deployed as a Workers static-assets Worker, not Pages — see `backlog/013`. |
 | `Skill/` | Reusable how-to knowledge, `<N> <Name>.md` | Procedures, commands and their calibration. Not the specification — that is `docs/design/`. |
-| `backlog/` | Outstanding tasks, `NNN-<slug>.md` | **One item: the billing module, and it is the priority.** The previous 31 were deleted 18 Sept 2026 and live at the tag `pre-billing-module`. Status lives in the file. |
+| `backlog/` | Outstanding tasks, `NNN-<slug>.md` | **Two items: the billing module, and the staff admin panel built on top of it.** The previous 31 were deleted 18 Sept 2026 and live at the tag `pre-billing-module`. Status lives in each file. |
 | `docs/superpowers/specs/` | The design rebuild's specs, `YYYY-MM-DD-<slug>.md` | Replaced `.design-sync/`, which described the old vendored mirror and lost its subject when that mirror went. The `.dc.html` artboards in `design-system/` are hand-exported from Claude Design; when a design file has no local copy, record its numbers in a spec here and ask for the export — never reconstruct one from a transcript. |
 | `.claude/commands/` | Custom slash commands, `<name>.md` | [`cpack`](.claude/commands/cpack.md) persists session knowledge into the docs below; [`cpush`](.claude/commands/cpush.md) commits and tags. Both are auto-discovered by Claude Code; no registration step. |
 | `summary.md` | External code audit, 8 Sept 2026 | Read-only record of one review, with file:line evidence for every claim. Its open work is tracked as `backlog/017`–`backlog/025`; the backlog is where that work lives, not here. |
@@ -291,6 +291,62 @@ were not touched. See `backlog/002`.
   claiming one; pass `destructive={false}` there. Dressing additive actions in the
   danger treatment is how people learn to click through the red dialogs that
   matter.
+- **Staff audit discipline is inherited, never repeated.** `AuditedStaffAccess`
+  holds `record`, `recordFleet` and `requireRole` as protected members and every
+  staff area class extends it, so no area can perform an action without the
+  machinery that writes it down. The class was split out of `StaffScopedAccess`
+  when the console grew six areas: one class holding all of them would have run
+  past a thousand lines, which is the point at which nobody reads the audit
+  methods again to check they are still unconditional. **A refusal is recorded
+  too** — `requireRole` writes a `staff.denied` row before throwing, because a
+  log of only successful actions cannot show somebody repeatedly attempting what
+  their role forbids.
+- **A deleted account is our own fact, checked before Firebase's.** Disabling a
+  Firebase identity does not invalidate an ID token already issued; it stays
+  valid for up to its remaining hour. So `users.deleted_at` and
+  `users.disabled_at` are refused in `resolveVerifiedUser`, beside the
+  `session_revoked_after` check and before any membership lookup — otherwise
+  deletion would depend on a third party's side effect having succeeded, and a
+  failed `disableUser` would leave a live identity refreshing tokens while the
+  database said the account was gone. **Unlike revocation, a later `iat` is not
+  a way back in**, which is why this needed its own column.
+- **Staff deletion sets a timestamp and stops.** Both delete endpoints are soft
+  with a 30-day window; the cascade belongs to `purgeStaffDeleted`, which
+  **defaults to reporting** and needs `STAFF_PURGE_ENABLED = "true"` to delete
+  anything — the same shape as the sandbox sweep, for the same reason. A
+  workspace must already be *suspended* before it can be deleted: suspension is
+  instant and reversible, so it is the right first move in every scenario ending
+  in deletion, and it gives the customer a chance to notice. A user row is
+  scrubbed, never removed — it is what an `audit_events` actor id resolves to.
+- **A staff plan edit writes Stripe first and D1 second.** If the push throws,
+  the local row is never touched. A local-only save produces a pricing table
+  that says one thing while Stripe charges another, and nothing surfaces the
+  disagreement until somebody is billed wrongly. The residual risk runs the
+  other way and is already covered twice, by the `product.updated` webhook our
+  own push triggers and by the on-demand sync. **Pulling from Stripe is always a
+  diff the operator confirms field by field** — a one-click pull can bill real
+  customers the wrong amount, and `id`, `package_id` and `stripe_product_id` are
+  unsyncable because they are identity, not content.
+- **`metadataForPlan` lives beside the decoder it must round-trip with.**
+  Separating the two directions of one translation is how they drift, and the
+  drift would show as an edit that appears to work and then quietly changes the
+  entitlement it just set, via the webhook it triggered.
+- **Literal route segments are matched before `:id` patterns.**
+  `workspaces/needs-attention` was swallowed by the `:id` GET above it and
+  answered 404, which reads like a data problem rather than the routing one it
+  is. Same for `plans/stripe-diff` and `plans/sync-from-stripe`.
+  `staff-console.test.ts` pins all three.
+- **The console renders nothing it cannot source.** No regions, no card brand or
+  last-4 (we are deliberately outside PCI scope), no overage row (pricing is
+  hard-capped), no per-workspace MRR (billing is org-scoped, so that is the
+  wrong unit rather than a missing field), and webhook delivery history says
+  *not tracked yet* because nothing records delivery attempts. `null` and `-1`
+  stay distinguishable on screen as well as in the database: one is a gap that
+  defers to the `lib/plans.ts` floor, the other is a decision.
+- **The role gate is checked twice and only the server's counts.** The console
+  hides what a role cannot do; every staff method re-checks. Billing and Plans
+  are **support-readable**, correcting the design — support is exactly who needs
+  to see why a customer's writes are blocked.
 - **Settings → Privacy is a summary of `routes/Legal.jsx`, which is the
   authoritative text.** The tab restated the policy instead of pointing at it,
   and went on describing a hashed password and Resend-sent password resets for
@@ -351,11 +407,12 @@ provenance), `ApiKeyDisplay` (show-once), `PermissionSelector` (least privilege)
 
 ### Backlog — [backlog/](backlog/)
 
-One item, and it is the priority.
+Two items. The second is built on the first and cannot be finished before it.
 
 | # | Item | Status |
 |---|---|---|
-| 001 | [Billing module](backlog/001-billing-module.md) | **TOP** — 7 of 12 tasks shipped; Stripe catalogue, checkout and the ten webhook events are in, enforcement and the UI are not |
+| 001 | [Billing module](backlog/001-billing-module.md) | **TOP** — 8 of 12 tasks shipped; Stripe catalogue, checkout, the ten webhook events and the plan editor are in. Enforcement and the pricing page are not, and **nothing has touched real Stripe yet** |
+| 002 | [Staff admin panel](backlog/002-admin-panel.md) | **HIGH** — built end to end, not yet proven against live dev. Start with the bootstrap pipeline; the plan editor is untestable until 001's catalogue is applied |
 
 **Items 001–031 were deleted on 18 September 2026**, deliberately, so that the
 billing module is the whole backlog. They are recoverable in full from git at
@@ -385,8 +442,9 @@ live deployment rather than inferred from the code — see
 person can follow.
 
 ```
-apps/api    558 tests across 31 files · typecheck clean · lint clean
-apps/web    171 tests · 123 modules · build clean
+apps/api    673 tests across 37 files · typecheck clean
+apps/web    172 tests · build clean
+apps/admin   27 tests · build clean · 70 KiB gzipped
 Worker      226 KiB gzipped, against Cloudflare's 1 MB limit
 ```
 

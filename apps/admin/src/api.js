@@ -10,18 +10,27 @@
  * four hours and the single highest-value credential in the system; closing the
  * tab should end it, and it should not sit on disk waiting for the next person
  * to use that machine.
+ *
+ * ── The 401 subscription ───────────────────────────────────────────────────
+ * A four-hour session with no refresh rotation means staff WILL hit expiry
+ * mid-task. Every 401 from a call that carried a token is published to
+ * `onSessionLost`, so the shell can raise a re-authentication prompt that keeps
+ * the current route rather than redirecting and losing the operator's place.
+ * Handled here rather than at each call site because there are sixty call sites
+ * and one of them would be forgotten.
  */
 
 const BASE = import.meta.env.VITE_API_BASE ?? 'https://api-dev.agentdisk.io';
 const TOKEN_KEY = 'agentdisk.staff.token';
 
 export class StaffApiError extends Error {
-  constructor(status, code, message, requestId) {
+  constructor(status, code, message, requestId, details) {
     super(message);
     this.name = 'StaffApiError';
     this.status = status;
     this.code = code;
     this.requestId = requestId ?? null;
+    this.details = details ?? null;
   }
 }
 
@@ -42,7 +51,15 @@ export function storeToken(token) {
   }
 }
 
-async function request(path, { method = 'GET', body, token } = {}) {
+const sessionLostListeners = new Set();
+
+/** Subscribe to "the session we were using stopped being accepted". */
+export function onSessionLost(listener) {
+  sessionLostListeners.add(listener);
+  return () => sessionLostListeners.delete(listener);
+}
+
+async function request(path, { method = 'GET', body, token, raw = false } = {}) {
   const auth = token ?? storedToken();
 
   const res = await fetch(new URL(path, BASE), {
@@ -58,40 +75,86 @@ async function request(path, { method = 'GET', body, token } = {}) {
     let code = 'UNKNOWN';
     let message = `Request failed with ${res.status}.`;
     let requestId = null;
+    let details = null;
     try {
       const parsed = await res.json();
       if (parsed?.error) {
         code = parsed.error.code ?? code;
         message = parsed.error.message ?? message;
         requestId = parsed.error.requestId ?? null;
+        details = parsed.error.details ?? null;
       }
     } catch {
       /* Non-JSON error. The status is all there is. */
     }
-    throw new StaffApiError(res.status, code, message, requestId);
+
+    // Only when we actually presented a credential. A 401 on the login call
+    // itself is a wrong password, not an expired session, and raising the
+    // re-authentication prompt there would be nonsense.
+    if (res.status === 401 && auth) {
+      for (const listener of sessionLostListeners) listener();
+    }
+
+    throw new StaffApiError(res.status, code, message, requestId, details);
   }
 
+  if (raw) return res;
   return res.status === 204 ? null : res.json();
 }
 
+const query = params => {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== null && value !== undefined && value !== '') search.set(key, String(value));
+  }
+  const text = search.toString();
+  return text ? `?${text}` : '';
+};
+
 export const staffApi = {
+  /* ------------------------------- session ------------------------------- */
   login: (email, password, totp) =>
     request('/v1/staff/login', { method: 'POST', body: { email, password, totp } }),
   logout: () => request('/v1/staff/logout', { method: 'POST' }),
   whoami: () => request('/v1/staff/whoami'),
 
+  /* ------------------------------- overview ------------------------------ */
   overview: () => request('/v1/staff/overview'),
-  listWorkspaces: q =>
-    request(`/v1/staff/workspaces${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  needsAttention: () => request('/v1/staff/workspaces/needs-attention'),
+
+  /* ------------------------------ workspaces ----------------------------- */
+  listWorkspaces: q => request(`/v1/staff/workspaces${query({ q })}`),
   getWorkspace: id => request(`/v1/staff/workspaces/${id}`),
   workspaceActivity: id => request(`/v1/staff/workspaces/${id}/activity`),
+  workspaceBlastRadius: id => request(`/v1/staff/workspaces/${id}/blast-radius`),
   setWorkspaceStatus: (id, status, reason) =>
     request(`/v1/staff/workspaces/${id}/status`, { method: 'POST', body: { status, reason } }),
+  setPlanOverride: (id, planId, reason) =>
+    request(`/v1/staff/workspaces/${id}/plan-override`, {
+      method: 'PATCH',
+      body: { planId, reason }
+    }),
+  deleteWorkspace: (id, confirmName, reason) =>
+    request(`/v1/staff/workspaces/${id}`, { method: 'DELETE', body: { confirmName, reason } }),
+  restoreWorkspace: (id, reason) =>
+    request(`/v1/staff/workspaces/${id}/restore`, { method: 'POST', body: { reason } }),
 
+  /* --------------------------------- users ------------------------------- */
+  findUser: email => request(`/v1/staff/users${query({ email })}`),
+  getUser: id => request(`/v1/staff/users/${id}`),
+  setUserDisabled: (id, disabled, reason) =>
+    request(`/v1/staff/users/${id}/disable`, { method: 'PATCH', body: { disabled, reason } }),
+  deletionCheck: id => request(`/v1/staff/users/${id}/deletion-check`),
+  deleteUser: (id, confirmEmail, reason, revokeKeys) =>
+    request(`/v1/staff/users/${id}`, {
+      method: 'DELETE',
+      body: { confirmEmail, reason, revokeKeys }
+    }),
+  restoreUser: (id, reason) =>
+    request(`/v1/staff/users/${id}/restore`, { method: 'POST', body: { reason } }),
   forceLogout: (userId, workspaceId) =>
-    request(`/v1/staff/users/${userId}/force-logout?workspaceId=${workspaceId}`, { method: 'POST' }),
-  revokeUserKeys: userId =>
-    request(`/v1/staff/users/${userId}/revoke-keys`, { method: 'POST' }),
+    request(`/v1/staff/users/${userId}/force-logout${query({ workspaceId })}`, { method: 'POST' }),
+  revokeUserKeys: userId => request(`/v1/staff/users/${userId}/revoke-keys`, { method: 'POST' }),
 
   /**
    * Send the customer a password-reset link.
@@ -102,5 +165,53 @@ export const staffApi = {
    * mandatory server-side; it is sent here so the audit row means something.
    */
   forcePasswordReset: (userId, reason) =>
-    request(`/v1/staff/users/${userId}/password-reset`, { method: 'POST', body: { reason } })
+    request(`/v1/staff/users/${userId}/password-reset`, { method: 'POST', body: { reason } }),
+
+  transferOwner: (orgId, userId, reason) =>
+    request(`/v1/staff/orgs/${orgId}/owner`, { method: 'PATCH', body: { userId, reason } }),
+
+  /* --------------------------- agents and keys --------------------------- */
+  setAgentDisabled: (id, disabled, reason) =>
+    request(`/v1/staff/agents/${id}`, { method: 'PATCH', body: { disabled, reason } }),
+  revokeKey: (id, reason) =>
+    request(`/v1/staff/keys/${id}`, { method: 'DELETE', body: { reason } }),
+
+  /* -------------------------------- billing ------------------------------ */
+  billing: filter => request(`/v1/staff/billing${query({ filter })}`),
+
+  /* --------------------------------- plans ------------------------------- */
+  listPlans: () => request('/v1/staff/plans'),
+  updatePlan: (id, patch) => request(`/v1/staff/plans/${id}`, { method: 'PATCH', body: patch }),
+  createPlan: input => request('/v1/staff/plans', { method: 'POST', body: input }),
+  retirePlan: (id, reason) =>
+    request(`/v1/staff/plans/${id}/retire`, { method: 'POST', body: { reason } }),
+  stripeDiff: () => request('/v1/staff/plans/stripe-diff'),
+  syncFromStripe: (selections, reason) =>
+    request('/v1/staff/plans/sync-from-stripe', { method: 'POST', body: { selections, reason } }),
+  syncCatalogue: reason => request('/v1/staff/plans/sync', { method: 'POST', body: { reason } }),
+
+  /* --------------------------------- audit ------------------------------- */
+  audit: filter => request(`/v1/staff/audit${query(filter ?? {})}`),
+  auditFilters: () => request('/v1/staff/audit/filters'),
+  auditExportUrl: filter => new URL(`/v1/staff/audit/export${query(filter ?? {})}`, BASE).toString(),
+  /**
+   * The CSV, fetched rather than linked.
+   *
+   * A plain <a href> cannot carry the Authorization header, and the export is a
+   * bulk pull of the accountability log - it is not going to be made reachable
+   * without one. So it is fetched and handed to the browser as a blob.
+   */
+  auditExport: async filter => {
+    const res = await request(`/v1/staff/audit/export${query(filter ?? {})}`, { raw: true });
+    return res.text();
+  },
+
+  /* ---------------------------- staff accounts --------------------------- */
+  listAccounts: () => request('/v1/staff/accounts'),
+  createAccount: (email, role, reason) =>
+    request('/v1/staff/accounts', { method: 'POST', body: { email, role, reason } }),
+  setAccountRole: (id, role, reason) =>
+    request(`/v1/staff/accounts/${id}`, { method: 'PATCH', body: { role, reason } }),
+  setAccountDisabled: (id, disabled, reason) =>
+    request(`/v1/staff/accounts/${id}/disable`, { method: 'PATCH', body: { disabled, reason } })
 };

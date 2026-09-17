@@ -94,3 +94,142 @@ body {
     transform: translateY(0);
   }
 }
+
+/* -------------------------------------------------------------------------
+ * The palette, from the AgentDisk Admin design file.
+ *
+ * An exception to the "inline styles only" note at the top, and a deliberate
+ * one: these are the *same* values referenced from dozens of inline styles, and
+ * a theme toggle has to be able to swap them all at once. A CSS custom property
+ * is the only mechanism that does that without threading a theme object through
+ * every component in the app.
+ *
+ * Dark is the default rather than a preference, because this console is used in
+ * long sittings beside a customer's own screen and the design was drawn that
+ * way. `data-theme="light"` on <html> swaps it; the choice persists in
+ * localStorage, which is a per-viewer convenience and nothing that matters.
+ *
+ * These are NOT the customer dashboard's tokens and must not be reconciled with
+ * them. Looking different from apps/web is how a support engineer knows which
+ * application they are typing into.
+ * ------------------------------------------------------------------------- */
+
+:root {
+  --bg: #0b0d11;
+  --surf: #12151b;
+  --surf2: #171b22;
+  --surf3: #1f242d;
+  --bd: #252b35;
+  --bd2: #343c49;
+  --tx: #e9ecf1;
+  --tx2: #9aa3b2;
+  --tx3: #909aa8;
+  --acc: #b592ff;
+  --accSoft: #1e1533;
+  --accBd: #452f6e;
+  --accInk: #0b0d11;
+  --ok: #34d399;
+  --okSoft: #0e251c;
+  --okBd: #1f4d3b;
+  --okTx: #4ade9b;
+  --warn: #fbbf24;
+  --warnSoft: #271e0b;
+  --warnBd: #544015;
+  --warnTx: #fcd34d;
+  --dngr: #f87171;
+  --dngrSoft: #2a1315;
+  --dngrBd: #5a2a2c;
+  --dngrTx: #fca5a5;
+  --code: #0e1116;
+  --codeTx: #c6cedb;
+  --shadow: rgba(0, 0, 0, 0.55);
+
+  --font: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --fontHead: 'Outfit', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+:root[data-theme='light'] {
+  --bg: #f6f7f9;
+  --surf: #ffffff;
+  --surf2: #f4f6f9;
+  --surf3: #ebeef3;
+  --bd: #e2e6ec;
+  --bd2: #c9d0da;
+  --tx: #111621;
+  --tx2: #525c6b;
+  --tx3: #5f6875;
+  --acc: #6d28d9;
+  --accSoft: #f3edfe;
+  --accBd: #d7c4fb;
+  --accInk: #ffffff;
+  --ok: #15803d;
+  --okSoft: #ecfdf3;
+  --okBd: #b7e4c7;
+  --okTx: #166534;
+  --warn: #b45309;
+  --warnSoft: #fef6e7;
+  --warnBd: #f0d9a8;
+  --warnTx: #92400e;
+  --dngr: #dc2626;
+  --dngrSoft: #fef1f1;
+  --dngrBd: #f3c4c4;
+  --dngrTx: #b42318;
+  --code: #f7f8fb;
+  --codeTx: #1e2530;
+  --shadow: rgba(17, 22, 33, 0.16);
+}
+
+body {
+  background: var(--bg);
+  color: var(--tx);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The focus ring uses the accent, so it stays visible in both themes. */
+:focus-visible {
+  outline-color: var(--acc);
+}
+
+a {
+  color: var(--acc);
+  text-underline-offset: 2px;
+}
+
+@keyframes adminSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes adminShimmer {
+  0%,
+  100% {
+    opacity: 0.42;
+  }
+  50% {
+    opacity: 0.92;
+  }
+}
+
+@keyframes adminPaneIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bd2);
+  border-radius: 99px;
+}

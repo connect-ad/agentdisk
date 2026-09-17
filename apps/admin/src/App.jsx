@@ -1,459 +1,313 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { staffApi, storeToken, storedToken } from './api.js';
-import { ConfirmModal, ToastDock } from './components/Overlay.jsx';
+import { onSessionLost, staffApi, storeToken, storedToken } from './api.js';
+import { Shell, holds } from './components/Shell.jsx';
+import { SessionExpired } from './components/States.jsx';
+import { ToastDock } from './components/Overlay.jsx';
+import { Login } from './screens/Login.jsx';
+import { Overview } from './screens/Overview.jsx';
+import { WorkspaceDetail, WorkspaceList } from './screens/Workspaces.jsx';
+import { Users } from './screens/Users.jsx';
+import { Billing } from './screens/Billing.jsx';
+import { Plans, SyncHistory } from './screens/Plans.jsx';
+import { Audit } from './screens/Audit.jsx';
+import { StaffAccounts } from './screens/StaffAccounts.jsx';
+import { freshnessLabel } from './lib/useResource.js';
 
 /**
- * The staff console — 14 PART 28.
+ * The console shell and its routing.
  *
- * Deliberately plain. This is internal tooling for a small team, and it does
- * not import the customer design system: that package is vendored from a
- * byte-verified mirror and its components carry the product's brand, which is
- * the wrong thing to put in front of somebody about to suspend a customer.
- * Looking obviously different from the customer dashboard is a feature — it is
- * how a support engineer knows which one they are typing into.
+ * ── Routing is the History API and one `useState`, not a router library ────
+ * Nine routes, all inside one authenticated shell, none of them nested more
+ * than one level. `react-router-dom` is in package.json and is not used here:
+ * for this shape it buys a dependency and a mental model in exchange for
+ * matching nine strings. Deep links work, Back works, and no route reloads the
+ * page — which is the whole of what the design asks for.
  *
- * There is no impersonation and there never will be (14 PART 28.3). Every
- * action here is *on* a workspace, never *as* the customer.
+ * ── An expired session keeps your place ────────────────────────────────────
+ * A four-hour session with no rotation means staff will hit expiry mid-task.
+ * Every 401 raises a re-authentication prompt over the current route rather
+ * than a redirect, so signing back in puts the operator exactly where they
+ * were — the design has no such state and this is the commonest thing that
+ * will happen to a real user of it.
+ *
+ * ── Role gating happens here AND on the server ─────────────────────────────
+ * A route the session's role cannot reach renders a refusal rather than a blank
+ * screen, and the endpoints behind every screen re-check independently. This
+ * gate is a convenience; the server's is the control.
  */
 
-const styles = {
-  page: { font: '14px/1.5 system-ui, sans-serif', color: '#111', background: '#f7f7f8', minHeight: '100vh' },
-  bar: {
-    display: 'flex', alignItems: 'center', gap: 16, padding: '12px 20px',
-    // The ladder's top-bar rung, not a bare number. docs/ui-layering.md asks
-    // both apps to stop writing raw z-indexes; the token is declared in app.css
-    // with the same value apps/web uses.
-    background: '#111', color: '#fff', position: 'sticky', top: 0, zIndex: 'var(--z-topbar)'
-  },
-  main: { maxWidth: 1100, margin: '0 auto', padding: 20 },
-  card: { background: '#fff', border: '1px solid #e3e3e6', borderRadius: 8, padding: 16, marginBottom: 16 },
-  input: { padding: '8px 10px', border: '1px solid #ccc', borderRadius: 6, font: 'inherit', width: '100%' },
-  button: {
-    padding: '8px 14px', border: 0, borderRadius: 6, background: '#111', color: '#fff',
-    font: 'inherit', cursor: 'pointer'
-  },
-  danger: { background: '#a11', color: '#fff' },
-  muted: { color: '#666', fontSize: 13 },
-  table: { width: '100%', borderCollapse: 'collapse', fontSize: 13 },
-  th: { textAlign: 'left', padding: '8px 10px', borderBottom: '2px solid #e3e3e6', color: '#555' },
-  td: { padding: '8px 10px', borderBottom: '1px solid #f0f0f2' },
-  error: { background: '#fdeaea', border: '1px solid #f5c2c2', color: '#8a1f1f', padding: 12, borderRadius: 6, marginBottom: 12 },
-  mono: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12 }
-};
+function usePath() {
+  const [path, setPath] = useState(() => window.location.pathname || '/');
 
-function formatBytes(bytes) {
-  if (!Number.isFinite(bytes)) return '—';
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ['KB', 'MB', 'GB', 'TB'];
-  let value = bytes / 1024;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit += 1; }
-  return `${value >= 10 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
-}
-
-function ErrorNote({ error }) {
-  if (!error) return null;
-  return (
-    <div style={styles.error} role="alert">
-      {error.message}
-      {error.requestId ? <div style={styles.mono}>request {error.requestId}</div> : null}
-    </div>
-  );
-}
-
-/* --------------------------------- login --------------------------------- */
-
-function Login({ onSignedIn }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [totp, setTotp] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-
-  const submit = async e => {
-    e.preventDefault();
-    setBusy(true); setError(null);
-    try {
-      const result = await staffApi.login(email.trim(), password, totp.trim());
-      storeToken(result.token);
-      onSignedIn(result.staff);
-    } catch (err) {
-      setError(err);
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div style={{ ...styles.page, display: 'grid', placeItems: 'center' }}>
-      <form onSubmit={submit} style={{ ...styles.card, width: 360 }}>
-        <h1 style={{ font: '600 18px/1.3 system-ui', margin: '0 0 4px' }}>AgentDisk staff</h1>
-        <p style={{ ...styles.muted, marginTop: 0 }}>
-          Internal console. Every action you take here is recorded against the workspace it
-          touches, including the ones that only read.
-        </p>
-
-        <ErrorNote error={error} />
-
-        <label style={{ display: 'block', marginBottom: 10 }}>
-          Email
-          <input style={styles.input} type="email" required value={email} onChange={e => setEmail(e.target.value)} />
-        </label>
-        <label style={{ display: 'block', marginBottom: 10 }}>
-          Password
-          <input style={styles.input} type="password" required value={password} onChange={e => setPassword(e.target.value)} />
-        </label>
-        <label style={{ display: 'block', marginBottom: 14 }}>
-          Authenticator code
-          {/* Required, always. There is no path through this form without one. */}
-          <input
-            style={styles.input}
-            required
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]{6}"
-            maxLength={6}
-            value={totp}
-            onChange={e => setTotp(e.target.value)}
-          />
-        </label>
-        <button style={styles.button} disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
-      </form>
-    </div>
-  );
-}
-
-/* ------------------------------- workspaces ------------------------------ */
-
-function WorkspaceDetail({ id, onBack, role }) {
-  const [data, setData] = useState(null);
-  const [events, setEvents] = useState([]);
-  const [error, setError] = useState(null);
-  const [busy, setBusy] = useState(false);
-  /**
-   * Which confirmation is open, or null. One piece of state rather than a
-   * boolean per action: two dialogs can then never be open at once, which is a
-   * thing to make impossible rather than to remember.
-   */
-  const [pending, setPending] = useState(null);
-  const [toasts, setToasts] = useState([]);
-
-  const toast = useCallback((message, tone = 'ok') => {
-    const id = `${Date.now()}-${Math.random()}`;
-    setToasts(current => [...current, { id, message, tone }]);
+  useEffect(() => {
+    const onPop = () => setPath(window.location.pathname || '/');
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
   }, []);
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const [w, a] = await Promise.all([staffApi.getWorkspace(id), staffApi.workspaceActivity(id)]);
-      setData(w.workspace);
-      setEvents(a.events ?? []);
-    } catch (err) {
-      setError(err);
-    }
-  }, [id]);
-
-  useEffect(() => { void load(); }, [load]);
-
-  /**
-   * Run a confirmed action.
-   *
-   * The dialog closes only after the call resolves, so a failure leaves the
-   * reason the operator typed on screen rather than discarding it and asking
-   * them to write it again. Nothing reports success before the server confirms
-   * it — doc 32 §8's "no optimistic mutations", which this product has already
-   * got wrong once.
-   */
-  const run = async (action, successMessage) => {
-    setBusy(true); setError(null);
-    try {
-      await action();
-      setPending(null);
-      toast(successMessage);
-      await load();
-    } catch (err) {
-      setError(err);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const canAct = role === 'admin' || role === 'super_admin';
-
-  return (
-    <>
-      <button style={{ ...styles.button, background: '#555', marginBottom: 12 }} onClick={onBack}>
-        ← All workspaces
-      </button>
-      <ErrorNote error={error} />
-
-      {data ? (
-        <>
-          <div style={styles.card}>
-            <h2 style={{ margin: '0 0 8px', font: '600 16px/1.3 system-ui' }}>{data.name}</h2>
-            <div style={styles.mono}>{data.id}</div>
-            <table style={{ ...styles.table, marginTop: 12 }}>
-              <tbody>
-                <tr><td style={styles.td}>Account</td><td style={styles.td}>{data.orgName}</td></tr>
-                <tr><td style={styles.td}>Status</td><td style={styles.td}><strong>{data.status}</strong></td></tr>
-                <tr><td style={styles.td}>Plan</td><td style={styles.td}>{data.plan}</td></tr>
-                <tr><td style={styles.td}>Billing</td><td style={styles.td}>{data.billingStatus}</td></tr>
-                <tr><td style={styles.td}>Storage</td><td style={styles.td}>{formatBytes(data.storageBytesUsed)}</td></tr>
-                <tr><td style={styles.td}>Files</td><td style={styles.td}>{data.fileCount}</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div style={styles.card}>
-            <h3 style={{ margin: '0 0 8px', font: '600 15px/1.3 system-ui' }}>Status</h3>
-            {canAct ? (
-              <>
-                <p style={styles.muted}>
-                  Suspending stops every API key in this workspace on its next call. The keys
-                  themselves are untouched, so reinstating needs no re-minting.
-                </p>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {data.status === 'active' ? (
-                    <button
-                      style={{ ...styles.button, ...styles.danger }}
-                      disabled={busy}
-                      onClick={() => setPending('suspend')}
-                    >
-                      Suspend
-                    </button>
-                  ) : (
-                    <button style={styles.button} disabled={busy} onClick={() => setPending('reinstate')}>
-                      Reinstate
-                    </button>
-                  )}
-                </div>
-              </>
-            ) : (
-              /* Absent, not disabled. A disabled control implies the action is
-                 available somewhere; for support it is not available at all. */
-              <p style={styles.muted}>The support role cannot change a workspace's status.</p>
-            )}
-          </div>
-
-          <div style={styles.card}>
-            <h3 style={{ margin: '0 0 8px', font: '600 15px/1.3 system-ui' }}>Activity</h3>
-            <p style={styles.muted}>
-              The customer's own audit trail, including anything staff have done here.
-            </p>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>When</th>
-                  <th style={styles.th}>Action</th>
-                  <th style={styles.th}>Actor</th>
-                  <th style={styles.th}>Result</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.map(e => (
-                  <tr key={e.id}>
-                    <td style={styles.td}>{new Date(e.createdAt).toLocaleString()}</td>
-                    <td style={{ ...styles.td, ...styles.mono }}>{e.action}</td>
-                    <td style={styles.td}>{e.actorType} · <span style={styles.mono}>{e.actorId}</span></td>
-                    <td style={styles.td}>{e.result}</td>
-                  </tr>
-                ))}
-                {events.length === 0 ? (
-                  <tr><td style={styles.td} colSpan={4}>Nothing recorded yet.</td></tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-          {/*
-            Siblings of the content, never children of it. ui-layering.md's
-            stacking-context trap: an overlay rendered inside another surface's
-            subtree cannot escape it by out-numbering it — it would need a
-            portal. Keeping dialogs as siblings is what makes the ladder work.
-          */}
-          <ConfirmModal
-            open={pending === 'suspend'}
-            title={`Suspend ${data.name}?`}
-            description="The customer is not notified. Reinstating is immediate and needs no re-minting."
-            blastRadius={
-              <>
-                Every API key in this workspace stops authenticating on its next call —{' '}
-                <strong>{data.fileCount} files</strong> and{' '}
-                <strong>{formatBytes(data.storageBytesUsed)}</strong> become unreachable to the
-                customer's agents until it is reinstated.
-              </>
-            }
-            requireReason
-            confirmLabel="Suspend"
-            busy={busy}
-            onCancel={() => setPending(null)}
-            onConfirm={reason =>
-              run(() => staffApi.setWorkspaceStatus(id, 'suspended', reason), 'Workspace suspended.')
-            }
-          />
-
-          <ConfirmModal
-            open={pending === 'reinstate'}
-            title={`Reinstate ${data.name}?`}
-            description="Existing keys resume working on their next call."
-            // Additive, so not dressed in red. Putting the danger treatment on
-            // everything is how people learn to click through the red dialogs
-            // that matter.
-            destructive={false}
-            requireReason
-            confirmLabel="Reinstate"
-            busy={busy}
-            onCancel={() => setPending(null)}
-            onConfirm={reason =>
-              run(() => staffApi.setWorkspaceStatus(id, 'active', reason), 'Workspace reinstated.')
-            }
-          />
-        </>
-      ) : (
-        <p style={styles.muted}>Loading…</p>
-      )}
-
-      <ToastDock toasts={toasts} onDismiss={dropped => setToasts(current => current.filter(t => t.id !== dropped))} />
-    </>
-  );
-}
-
-function Fleet({ role }) {
-  const [summary, setSummary] = useState(null);
-  const [workspaces, setWorkspaces] = useState([]);
-  const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState(null);
-  const [error, setError] = useState(null);
-
-  const load = useCallback(async search => {
-    setError(null);
-    try {
-      const [o, w] = await Promise.all([staffApi.overview(), staffApi.listWorkspaces(search)]);
-      setSummary(o.summary);
-      setWorkspaces(w.workspaces ?? []);
-    } catch (err) {
-      setError(err);
-    }
+  const navigate = useCallback(next => {
+    if (next === window.location.pathname) return;
+    window.history.pushState({}, '', next);
+    setPath(next);
   }, []);
 
-  useEffect(() => { void load(''); }, [load]);
+  return [path, navigate];
+}
 
-  if (selected) {
-    return <WorkspaceDetail id={selected} role={role} onBack={() => { setSelected(null); void load(query); }} />;
+/** What each route is called, so the shell header does not have to guess. */
+function describe(path) {
+  if (path === '/' || path === '') {
+    return { key: 'overview', title: 'Fleet overview', subtitle: 'Refreshed on activation, not polled.' };
   }
-
-  return (
-    <>
-      <ErrorNote error={error} />
-
-      {summary ? (
-        <div style={{ ...styles.card, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12 }}>
-          {[
-            ['Workspaces', summary.workspaces],
-            ['Suspended', summary.suspended],
-            ['Users', summary.users],
-            ['Active agents', summary.agents],
-            ['Live keys', summary.activeKeys],
-            ['Storage', formatBytes(summary.storageBytes)],
-            ['Billing problems', summary.billingProblems]
-          ].map(([label, value]) => (
-            <div key={label}>
-              <div style={styles.muted}>{label}</div>
-              <div style={{ font: '600 20px/1.2 system-ui' }}>{value ?? '—'}</div>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      <div style={styles.card}>
-        <form
-          onSubmit={e => { e.preventDefault(); void load(query); }}
-          style={{ display: 'flex', gap: 8, marginBottom: 12 }}
-        >
-          <input
-            style={styles.input}
-            placeholder="Search workspaces or accounts"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-          />
-          <button style={styles.button}>Search</button>
-        </form>
-
-        <table style={styles.table}>
-          <thead>
-            <tr>
-              <th style={styles.th}>Workspace</th>
-              <th style={styles.th}>Account</th>
-              <th style={styles.th}>Plan</th>
-              <th style={styles.th}>Status</th>
-              <th style={styles.th}>Storage</th>
-              <th style={styles.th}>Files</th>
-            </tr>
-          </thead>
-          <tbody>
-            {workspaces.map(w => (
-              <tr key={w.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(w.id)}>
-                <td style={styles.td}>
-                  {w.name}
-                  <div style={{ ...styles.mono, color: '#888' }}>{w.id}</div>
-                </td>
-                <td style={styles.td}>{w.orgName}</td>
-                <td style={styles.td}>{w.plan}</td>
-                <td style={{ ...styles.td, color: w.status === 'active' ? '#127' : '#a11' }}>{w.status}</td>
-                <td style={styles.td}>{formatBytes(w.storageBytesUsed)}</td>
-                <td style={styles.td}>{w.fileCount}</td>
-              </tr>
-            ))}
-            {workspaces.length === 0 ? (
-              <tr><td style={styles.td} colSpan={6}>No workspaces match.</td></tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
-    </>
-  );
+  if (path === '/workspaces') {
+    return {
+      key: 'workspaces',
+      title: 'All workspaces',
+      subtitle: 'Search by name, workspace ID or owner email.'
+    };
+  }
+  if (path === '/workspaces/needs-attention') {
+    return {
+      key: 'workspaces',
+      title: 'Needs attention',
+      subtitle: 'Above 95% of a quota, or an organization that is not billing-active.'
+    };
+  }
+  if (path === '/workspaces/suspended') {
+    return { key: 'workspaces', title: 'Suspended', subtitle: 'Suspended by staff action.' };
+  }
+  if (path.startsWith('/workspaces/')) {
+    return { key: 'workspaces', title: 'Workspace', subtitle: null };
+  }
+  if (path === '/users') {
+    return {
+      key: 'users',
+      title: 'Users',
+      subtitle: 'Exact-match lookup by email. Returns the account and its memberships.'
+    };
+  }
+  if (path === '/billing') {
+    return {
+      key: 'billing',
+      title: 'Billing — all organizations',
+      subtitle: 'Subscription state, per billing account. Read-only here.'
+    };
+  }
+  if (path === '/billing/past-due') {
+    return { key: 'billing', title: 'Billing — past due', subtitle: 'One or more failed charges.' };
+  }
+  if (path === '/billing/canceled') {
+    return { key: 'billing', title: 'Billing — canceled', subtitle: 'Subscription ended.' };
+  }
+  if (path === '/plans') {
+    return {
+      key: 'plans',
+      title: 'Plans',
+      subtitle: 'Plan definitions and their Stripe mapping.'
+    };
+  }
+  if (path === '/plans/sync-history') {
+    return {
+      key: 'plans',
+      title: 'Sync history',
+      subtitle: 'Every plan change, from the staff audit log.'
+    };
+  }
+  if (path === '/audit') {
+    return { key: 'audit', title: 'Audit log', subtitle: 'Every staff action across the fleet.' };
+  }
+  if (path === '/staff') {
+    return { key: 'staff', title: 'Staff accounts', subtitle: 'Internal accounts and their roles.' };
+  }
+  return { key: 'overview', title: 'Not found', subtitle: null };
 }
 
-/* ---------------------------------- app ---------------------------------- */
+/** The minimum role a route needs, mirrored from the server's own gates. */
+const ROUTE_ROLE = { staff: 'super_admin' };
 
 export default function App() {
   const [staff, setStaff] = useState(null);
   const [checking, setChecking] = useState(Boolean(storedToken()));
+  const [expired, setExpired] = useState(false);
+  const [toasts, setToasts] = useState([]);
+  const [counts, setCounts] = useState({});
+  const [attention, setAttention] = useState(0);
+  const [path, navigate] = usePath();
 
-  useEffect(() => {
-    if (!storedToken()) return;
-    staffApi
-      .whoami()
-      .then(r => setStaff(r.staff))
-      .catch(() => storeToken(null))
-      .finally(() => setChecking(false));
+  const toast = useCallback(message => {
+    const id = `${Date.now()}-${Math.random()}`;
+    setToasts(current => [...current, { id, message }]);
+    window.setTimeout(() => setToasts(current => current.filter(item => item.id !== id)), 6000);
   }, []);
 
+  // Resume a session that survived a reload.
+  useEffect(() => {
+    if (!storedToken()) return;
+    let alive = true;
+    (async () => {
+      try {
+        const result = await staffApi.whoami();
+        if (alive) setStaff(result.staff);
+      } catch {
+        storeToken(null);
+      } finally {
+        if (alive) setChecking(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // One subscription for every 401 in the app.
+  useEffect(
+    () =>
+      onSessionLost(() => {
+        if (staff) setExpired(true);
+      }),
+    [staff]
+  );
+
   if (checking) {
-    return <div style={{ ...styles.page, padding: 40 }}>Checking your session…</div>;
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          background: 'var(--bg)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'var(--tx2)',
+          fontFamily: 'var(--font)',
+          fontSize: '13px'
+        }}
+      >
+        Restoring your session…
+      </div>
+    );
   }
 
-  if (!staff) return <Login onSignedIn={setStaff} />;
+  if (!staff) {
+    return (
+      <Login
+        onSignedIn={signedIn => {
+          setStaff(signedIn);
+          setExpired(false);
+        }}
+      />
+    );
+  }
 
-  return (
-    <div style={styles.page}>
-      <div style={styles.bar}>
-        <strong>AgentDisk staff</strong>
-        <span style={{ opacity: 0.7, fontSize: 13 }}>{staff.email} · {staff.role}</span>
-        <span style={{ flex: 1 }} />
-        <button
-          style={{ ...styles.button, background: '#333' }}
-          onClick={async () => {
-            await staffApi.logout().catch(() => undefined);
-            storeToken(null);
-            setStaff(null);
+  const route = describe(path);
+  const needed = ROUTE_ROLE[route.key];
+  const permitted = !needed || holds(staff.role, needed);
+
+  async function signOut() {
+    try {
+      await staffApi.logout();
+    } catch {
+      /* The session is ending either way. */
+    }
+    storeToken(null);
+    setStaff(null);
+    navigate('/');
+  }
+
+  function screen() {
+    if (!permitted) {
+      return (
+        <div
+          style={{
+            border: '1px solid var(--warnBd)',
+            background: 'var(--warnSoft)',
+            borderRadius: '11px',
+            padding: '20px'
           }}
         >
-          Sign out
-        </button>
+          <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--warnTx)', marginBottom: '6px' }}>
+            Your role cannot open this screen
+          </div>
+          <div style={{ fontSize: '12.5px', lineHeight: 1.6, color: 'var(--warnTx)' }}>
+            This needs {needed}. You are signed in as {staff.role}. The endpoints behind it refuse
+            independently, so this is not the only thing stopping you.
+          </div>
+        </div>
+      );
+    }
+
+    if (path === '/' || path === '') {
+      return (
+        <Overview
+          onNavigate={navigate}
+          onData={data => {
+            setAttention(data.attention);
+            setCounts(current => ({ ...current, workspaces: data.workspaces }));
+          }}
+        />
+      );
+    }
+    if (path === '/workspaces') return <WorkspaceList view="all" onNavigate={navigate} />;
+    if (path === '/workspaces/needs-attention') {
+      return <WorkspaceList view="needs-attention" onNavigate={navigate} />;
+    }
+    if (path === '/workspaces/suspended') {
+      return <WorkspaceList view="suspended" onNavigate={navigate} />;
+    }
+    if (path.startsWith('/workspaces/')) {
+      return (
+        <WorkspaceDetail
+          workspaceId={path.slice('/workspaces/'.length)}
+          role={staff.role}
+          onNavigate={navigate}
+          onToast={toast}
+        />
+      );
+    }
+    if (path === '/users') return <Users role={staff.role} onNavigate={navigate} onToast={toast} />;
+    if (path === '/billing') return <Billing filter="all" />;
+    if (path === '/billing/past-due') return <Billing filter="past_due" />;
+    if (path === '/billing/canceled') return <Billing filter="canceled" />;
+    if (path === '/plans') return <Plans role={staff.role} onToast={toast} />;
+    if (path === '/plans/sync-history') return <SyncHistory />;
+    if (path === '/audit') return <Audit onToast={toast} />;
+    if (path === '/staff') return <StaffAccounts currentStaffId={staff.id} onToast={toast} />;
+
+    return (
+      <div style={{ color: 'var(--tx2)', fontSize: '13px' }}>
+        No such screen. <button type="button" onClick={() => navigate('/')}>Back to the overview</button>
       </div>
-      <div style={styles.main}>
-        <Fleet role={staff.role} />
-      </div>
-    </div>
+    );
+  }
+
+  return (
+    <>
+      <Shell
+        staff={staff}
+        path={path}
+        counts={counts}
+        attention={attention}
+        onNavigate={navigate}
+        onSignOut={signOut}
+        title={route.title}
+        subtitle={route.subtitle}
+      >
+        {screen()}
+      </Shell>
+
+      {expired && (
+        <SessionExpired
+          onReauthenticate={() => {
+            // The path is untouched, so signing in returns to this same screen.
+            storeToken(null);
+            setStaff(null);
+            setExpired(false);
+          }}
+        />
+      )}
+
+      <ToastDock toasts={toasts} onDismiss={id => setToasts(c => c.filter(t => t.id !== id))} />
+    </>
   );
 }
+
+export { freshnessLabel };

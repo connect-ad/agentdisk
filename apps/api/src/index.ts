@@ -34,7 +34,12 @@ import {
   listWebhooks,
   patchWebhook,
 } from "./routes/webhooks";
-import { createPortalSession, getBilling } from "./routes/billing";
+import {
+  createCheckoutSession,
+  createPortalSession,
+  getBilling,
+  listPlans,
+} from "./routes/billing";
 import { handleStripeWebhook } from "./routes/stripe-webhook";
 import {
   changeMemberRole,
@@ -524,18 +529,39 @@ export default {
         return await authed({ op: "list" }, listActivity);
       }
 
+      const dashboardUrl = env.DASHBOARD_URL ?? "https://app-dev.agentdisk.io";
+      const billingDeps = {
+        db: env.DB,
+        secretKey: env.STRIPE_SECRET_KEY,
+        returnUrl: `${dashboardUrl}/app`,
+        dashboardUrl,
+      };
+
+      // The public plan catalogue. Deliberately outside `withAuth`: it is the
+      // pricing page's data and carries nothing belonging to any account, and
+      // a pricing page behind a login is not a pricing page.
+      //
+      // It is one of the very few genuinely public routes, so it is worth being
+      // explicit that this is intended rather than an oversight - the rule in
+      // CLAUDE.md is that an absent credential is an authentication failure,
+      // not a missing route, and that rule is about routes that serve customer
+      // data. This one serves the price list.
+      if (route === "GET /v1/plans") {
+        return await listPlans(billingDeps, Date.now());
+      }
+
       if (segments[0] === "v1" && segments[1] === "billing") {
-        const billingDeps = {
-          db: env.DB,
-          secretKey: env.STRIPE_SECRET_KEY,
-          returnUrl: `${env.DASHBOARD_URL ?? "https://app-dev.agentdisk.io"}/app`,
-        };
         if (segments[2] === undefined && request.method === "GET") {
           return await authed({ op: null }, (authCtx) => getBilling(authCtx, billingDeps));
         }
         if (segments[2] === "portal-session" && request.method === "POST") {
           return await authed({ op: null }, (authCtx) =>
             createPortalSession(authCtx, billingDeps)
+          );
+        }
+        if (segments[2] === "checkout-session" && request.method === "POST") {
+          return await authed({ op: null }, (authCtx, req) =>
+            createCheckoutSession(authCtx, req, billingDeps)
           );
         }
         throw new ApiError("NOT_FOUND", "No such route.");

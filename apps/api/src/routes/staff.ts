@@ -63,6 +63,14 @@ export interface StaffDeps {
   firebaseAdmin: FirebaseAdminConfig | null;
   /** Where a reset link returns the customer once they are done. */
   dashboardUrl?: string;
+  /**
+   * The caller's address, for the audit screen's Source IP column. Resolved at
+   * the dispatch site from `cf-connecting-ip` - the one header Cloudflare sets
+   * itself and a client cannot forge. Null when absent, rather than falling
+   * back to a client-settable header: a forgeable value in an accountability
+   * log is worse than an honest blank.
+   */
+  sourceIp?: string | null;
 }
 
 /** Failed logins per email per window, before the account is refused outright. */
@@ -191,7 +199,7 @@ async function requireStaff(request: Request, deps: StaffDeps): Promise<StaffUse
 }
 
 function access(staff: StaffUser, deps: StaffDeps): StaffScopedAccess {
-  return new StaffScopedAccess(deps.db, staff, deps.requestId, deps.now);
+  return new StaffScopedAccess(deps.db, staff, deps.requestId, deps.now, deps.sourceIp ?? null);
 }
 
 export async function staffWhoami(request: Request, deps: StaffDeps): Promise<Response> {

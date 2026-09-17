@@ -23,6 +23,7 @@
 
 import { newId } from "../lib/ids";
 import { ApiError, forbidden } from "../lib/errors";
+import { AuditedStaffAccess } from "./audited";
 
 export type StaffRole = "support" | "admin" | "super_admin";
 
@@ -138,103 +139,7 @@ export interface FleetWorkspace {
  * imports this file, and that is the property worth preserving: one import site
  * is auditable by reading, a dozen is not.
  */
-export class StaffScopedAccess {
-  constructor(
-    private readonly db: D1Database,
-    private readonly staff: StaffUser,
-    private readonly requestId: string,
-    private readonly now: number
-  ) {}
-
-  /**
-   * Append the audit row for a staff action.
-   *
-   * Awaited rather than fired into `waitUntil`, unlike the customer-facing
-   * audit helper. The asymmetry is deliberate: a customer's upload should not
-   * wait on a log write, but a staff action that could not be recorded should
-   * not be reported as having happened.
-   */
-  private async record(
-    workspaceId: string,
-    action: string,
-    metadata: Record<string, string | number | boolean | null> = {},
-    result: "success" | "denied" = "success"
-  ): Promise<void> {
-    await this.db
-      .prepare(
-        `INSERT INTO audit_events
-           (id, workspace_id, actor_type, actor_id, action, resource_type, resource_id,
-            result, ip, client, request_id, metadata, created_at)
-         VALUES (?, ?, 'staff', ?, ?, 'workspace', ?, ?, NULL, NULL, ?, ?, ?)`
-      )
-      .bind(
-        newId("auditEvent", this.now),
-        workspaceId,
-        this.staff.id,
-        action,
-        workspaceId,
-        result,
-        this.requestId,
-        JSON.stringify({ ...metadata, staffEmail: this.staff.email, staffRole: this.staff.role }),
-        this.now
-      )
-      .run();
-  }
-
-  /**
-   * Append the fleet-wide row for a staff action, in `staff_actions`.
-   *
-   * `record` above writes the workspace-scoped row a customer can see in their
-   * own activity log. This writes the row that exists regardless of whether a
-   * workspace was involved at all — see migration 0011 for why the two cannot
-   * be one table. An action that touches a live workspace writes both; one that
-   * does not writes only this.
-   *
-   * Awaited, for the same reason `record` is: an action whose record failed was
-   * not performed, as far as anyone reading the log later is concerned.
-   */
-  private async recordFleet(options: {
-    action: string;
-    workspaceId?: string | null;
-    targetType?: string | null;
-    targetId?: string | null;
-    reason?: string | null;
-    result?: "success" | "denied";
-    metadata?: Record<string, string | number | boolean | null>;
-  }): Promise<void> {
-    await this.db
-      .prepare(
-        `INSERT INTO staff_actions
-           (id, actor_id, actor_email, actor_role, action, workspace_id,
-            target_type, target_id, reason, result, source_ip, request_id,
-            metadata, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`
-      )
-      .bind(
-        newId("staffAction", this.now),
-        this.staff.id,
-        this.staff.email,
-        this.staff.role,
-        options.action,
-        options.workspaceId ?? null,
-        options.targetType ?? null,
-        options.targetId ?? null,
-        options.reason ?? null,
-        options.result ?? "success",
-        this.requestId,
-        JSON.stringify(options.metadata ?? {}),
-        this.now
-      )
-      .run();
-  }
-
-  private requireRole(minimum: StaffRole, action: string): void {
-    const rank: Record<StaffRole, number> = { support: 0, admin: 1, super_admin: 2 };
-    if (rank[this.staff.role] < rank[minimum]) {
-      throw forbidden(`The ${this.staff.role} role cannot ${action}.`);
-    }
-  }
-
+export class StaffScopedAccess extends AuditedStaffAccess {
   /** Every workspace on the platform, newest first. */
   async listFleet(limit = 50, search: string | null = null): Promise<FleetWorkspace[]> {
     const like = search === null ? null : `%${search.replace(/[%_\\]/g, c => `\\${c}`)}%`;
@@ -276,7 +181,7 @@ export class StaffScopedAccess {
     status: "active" | "suspended" | "deleted",
     reason: string
   ): Promise<boolean> {
-    this.requireRole("admin", `${status === "active" ? "reinstate" : status} workspaces`);
+    await this.requireRole("admin", `${status === "active" ? "reinstate" : status} workspaces`);
 
     const result = await this.db
       .prepare(`UPDATE workspaces SET status = ?, updated_at = ? WHERE id = ?`)
@@ -300,7 +205,7 @@ export class StaffScopedAccess {
    * 30.4), which is the same mechanism a user's own "log out everywhere" uses.
    */
   async forceLogout(userId: string, workspaceId: string): Promise<boolean> {
-    this.requireRole("support", "force logout");
+    await this.requireRole("support", "force logout");
     const result = await this.db
       .prepare(`UPDATE users SET session_revoked_after = ?, updated_at = ? WHERE id = ?`)
       .bind(this.now, this.now, userId)
@@ -338,7 +243,7 @@ export class StaffScopedAccess {
     reason: string,
     deliver: (email: string) => Promise<"sent" | "no_identity">
   ): Promise<"sent" | "no_identity" | null> {
-    this.requireRole("support", "reset passwords");
+    await this.requireRole("support", "reset passwords");
 
     const user = await this.db
       // No `deleted_at` filter: the column does not exist yet. Customer
@@ -398,7 +303,7 @@ export class StaffScopedAccess {
 
   /** Revoke every live key a user created, across every workspace they touched. */
   async revokeUserKeys(userId: string): Promise<number> {
-    this.requireRole("admin", "revoke keys");
+    await this.requireRole("admin", "revoke keys");
 
     const affected = await this.db
       .prepare(

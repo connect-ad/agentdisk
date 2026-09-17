@@ -234,3 +234,90 @@ export async function retirePlanForProduct(
   invalidateCatalogue();
   return planId;
 }
+
+/* ------------------------- the other direction --------------------------- */
+
+/**
+ * A plan row rendered back into Stripe product metadata.
+ *
+ * Deliberately in this file, beside `entitlement` and `flag`, because the two
+ * directions are one translation and separating them is how they drift. The
+ * property that has to hold is a round trip: metadata written here must be read
+ * back by `syncProductToPlan` into the same column values, or an admin edit
+ * followed by the webhook it triggers would silently change the entitlement it
+ * just set.
+ *
+ * The three column states map back exactly as they came:
+ *
+ *   null -> the key is OMITTED, not written as "" or "0". Absent is what the
+ *           decoder turns into "this row did not say", which defers to the
+ *           lib/plans.ts floor. Writing "0" would set a real limit of zero.
+ *   -1   -> "unlimited"
+ *   n    -> "n"
+ */
+export function metadataForPlan(row: {
+  id: string;
+  package_id: string | null;
+  storage_bytes: number | null;
+  file_count: number | null;
+  egress_bytes_period: number | null;
+  requests_period: number | null;
+  max_file_bytes: number | null;
+  agents: number | null;
+  members: number | null;
+  workspaces: number | null;
+  api_keys: number | null;
+  priority_support: number;
+  is_default: number;
+  sort_order: number;
+}): Record<string, string> {
+  const metadata: Record<string, string> = {
+    package_id: row.package_id ?? `agentdisk-${row.id}`,
+    plan_id: row.id,
+    priority_support: row.priority_support === 1 ? "1" : "0",
+    is_default: row.is_default === 1 ? "1" : "0",
+    sort_order: String(row.sort_order),
+  };
+
+  const numeric: [string, number | null][] = [
+    ["storage_bytes", row.storage_bytes],
+    ["file_count", row.file_count],
+    ["egress_bytes_period", row.egress_bytes_period],
+    ["requests_period", row.requests_period],
+    ["max_file_bytes", row.max_file_bytes],
+    ["agents", row.agents],
+    ["members", row.members],
+    ["workspaces", row.workspaces],
+    ["api_keys", row.api_keys],
+  ];
+
+  for (const [key, value] of numeric) {
+    if (value === null) continue;
+    metadata[key] = value === UNLIMITED_COLUMN ? "unlimited" : String(value);
+  }
+
+  return metadata;
+}
+
+/** The entitlement columns, in the order every screen and diff presents them. */
+export const ENTITLEMENT_COLUMNS = [
+  "storage_bytes",
+  "max_file_bytes",
+  "agents",
+  "members",
+  "workspaces",
+  "api_keys",
+  "file_count",
+  "egress_bytes_period",
+  "requests_period",
+] as const;
+
+export type EntitlementColumn = (typeof ENTITLEMENT_COLUMNS)[number];
+
+/** Read one entitlement out of metadata, for callers outside this module. */
+export function entitlementFromMetadata(
+  metadata: Stripe.Metadata,
+  key: string
+): number | null {
+  return entitlement(metadata, key);
+}

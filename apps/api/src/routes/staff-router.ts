@@ -59,6 +59,9 @@ export async function handleStaffRoute(
     email: readEmailConfig(env),
     firebaseAdmin: readFirebaseAdminConfig(env),
     dashboardUrl: env.DASHBOARD_URL,
+    // Cloudflare sets this itself and a client cannot forge it. Read once here
+    // so no handler has to remember to.
+    sourceIp: request.headers.get("cf-connecting-ip"),
   };
 
   const [, , area, resourceId, action] = segments;

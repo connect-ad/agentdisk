@@ -1,5 +1,6 @@
 import { SELF, env } from "cloudflare:test";
 import { withAuth } from "../src/middleware/auth";
+import { PLAN_LIMITS } from "../src/lib/plans";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   NOW,
@@ -275,9 +276,14 @@ describe("the chain's authorize step", () => {
 
   it("refuses a quota-relevant request that would exceed the plan's storage", async () => {
     const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
-    // Free plan is 2 GB (07 PART 19.0).
+    // Read from PLAN_LIMITS rather than restated. This test pinned the literal
+    // 2 GB and broke the day the free tier moved to 1 GB - which it caught,
+    // correctly, but by failing on the number rather than on the behaviour it
+    // is actually about: that the check is against the plan, whatever the plan
+    // currently says.
+    const freeStorage = PLAN_LIMITS.free.storageBytes;
     await env.DB.prepare(`UPDATE workspaces SET storage_bytes_used = ? WHERE id = ?`)
-      .bind(2 * 1024 ** 3 - 10, WORKSPACE_A)
+      .bind(freeStorage - 10, WORKSPACE_A)
       .run();
 
     await expect(

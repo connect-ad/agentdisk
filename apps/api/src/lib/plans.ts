@@ -1,17 +1,39 @@
 /**
- * Plan limits - 07 PART 19.0, which is the canonical table every other document
- * forward-references.
+ * The plan limits floor - 17 Sept 2026 canonical table.
  *
- * (05 PART 13's example error text says "Free plan (1 GB)". That is illustrative
- * prose inside a sample response; 19.0 is the numbers document and says 2 GB.
- * The table below follows 19.0.)
+ * ── What this file is, now that billing exists ──────────────────────────────
+ * It used to say "billing never reaches this file". That was true and is not
+ * any more, but the inversion is smaller than it sounds.
  *
- * Billing never reaches this file. 02 PART 6.6 requires that storage/API/MCP
- * code paths only ever read plan limits, so that adding Stripe later touches
- * the plan lookup and nothing else.
+ * Entitlements are now driven by the D1 `plans` table, which mirrors Stripe
+ * product metadata, so a price or an allowance changes without a deploy
+ * (14 PART 29.6). The numbers below are what the resolver falls back to, **per
+ * field**, whenever D1 cannot supply one: no row, a row written by a half-
+ * finished sync, a column added in a later migration, a value that does not
+ * parse. See `billing/catalogue.ts`.
+ *
+ * That makes this the floor, and the direction of the fallback is the whole
+ * point. amardrive - the reference implementation this borrows from - falls
+ * back to a hardcoded 15 GB for a user with no subscription row, against a free
+ * tier of 5 GB, so its failure mode silently grants three times the quota
+ * somebody paid for. Falling back to the tier's own hardcoded value can only
+ * ever match or tighten.
+ *
+ * Nothing here is authoritative about *price*. Stripe is.
+ *
+ * ── Unlimited ───────────────────────────────────────────────────────────────
+ * Egress, requests and file count are unlimited on every plan. R2 egress costs
+ * nothing, so it is free to promise, and storage already bounds file count -
+ * a second aggregate cap is a second number that can contradict the first.
+ *
+ * The checks were deliberately NOT deleted. `assertWithinQuota` still compares
+ * against these fields, and they still ride on every response that reports
+ * usage. Keeping the machinery and widening the value means re-introducing a
+ * cap later is a data change; deleting it would mean rebuilding the counters,
+ * the checks and the Usage screen's meters from nothing.
  */
 
-export const PLAN_NAMES = ["free", "pro", "team"] as const;
+export const PLAN_NAMES = ["free", "basic", "pro", "team"] as const;
 export type PlanName = (typeof PLAN_NAMES)[number];
 
 export interface PlanLimits {
@@ -23,41 +45,77 @@ export interface PlanLimits {
   agents: number;
   apiKeys: number;
   members: number;
+  /**
+   * Workspaces the billing account may own.
+   *
+   * New in the billing module, and the only limit here counted against the
+   * ORGANIZATION rather than a single workspace - as are `agents`, `apiKeys`
+   * and `members` since 17 Sept 2026. A workspace-scoped count would make
+   * "50 workspaces, 50 agent identities" mean 2,500 agents on Team, which is
+   * not what the plan is selling.
+   */
+  workspaces: number;
 }
+
+/**
+ * No ceiling. Written as a named constant rather than Infinity because these
+ * values are compared, serialized to JSON and mirrored into an INTEGER column,
+ * and `Infinity` survives none of those three intact - `JSON.stringify` turns
+ * it into `null`, which reads back as "unspecified" and would fall through to
+ * the floor.
+ *
+ * In D1 the same idea is the literal -1, because a column also has to
+ * distinguish "unlimited" from "not specified". See migration 0012.
+ */
+export const UNLIMITED = Number.MAX_SAFE_INTEGER;
 
 const GB = 1024 ** 3;
 const MB = 1024 ** 2;
 
 export const PLAN_LIMITS: Record<PlanName, PlanLimits> = {
   free: {
-    storageBytes: 2 * GB,
-    fileCount: 5_000,
-    egressBytesPerPeriod: 10 * GB,
-    requestsPerPeriod: 100_000,
+    storageBytes: 1 * GB,
+    fileCount: UNLIMITED,
+    egressBytesPerPeriod: UNLIMITED,
+    requestsPerPeriod: UNLIMITED,
     maxFileBytes: 100 * MB,
-    agents: 3,
-    apiKeys: 10,
+    agents: 1,
+    apiKeys: 2,
     members: 1,
+    workspaces: 1,
+  },
+  basic: {
+    storageBytes: 5 * GB,
+    fileCount: UNLIMITED,
+    egressBytesPerPeriod: UNLIMITED,
+    requestsPerPeriod: UNLIMITED,
+    maxFileBytes: 500 * MB,
+    agents: 5,
+    apiKeys: 6,
+    members: 2,
+    workspaces: 3,
   },
   pro: {
     storageBytes: 50 * GB,
-    fileCount: 100_000,
-    egressBytesPerPeriod: 200 * GB,
-    requestsPerPeriod: 2_000_000,
+    fileCount: UNLIMITED,
+    egressBytesPerPeriod: UNLIMITED,
+    requestsPerPeriod: UNLIMITED,
     maxFileBytes: 1 * GB,
-    agents: 20,
-    apiKeys: 50,
+    agents: 10,
+    apiKeys: 20,
     members: 5,
+    workspaces: 10,
   },
   team: {
     storageBytes: 500 * GB,
-    fileCount: 1_000_000,
-    egressBytesPerPeriod: 2048 * GB,
-    requestsPerPeriod: 20_000_000,
+    fileCount: UNLIMITED,
+    egressBytesPerPeriod: UNLIMITED,
+    requestsPerPeriod: UNLIMITED,
     maxFileBytes: 5 * GB,
-    agents: 100,
-    apiKeys: 500,
+    agents: 50,
+    apiKeys: 100,
     members: 25,
+    workspaces: 50,
   },
 };
 
@@ -96,8 +154,13 @@ export function limitsFor(planOverride: string | null, orgPlan: string): PlanLim
  *
  * The numbers are tighter than free for one reason: before this existed, an
  * anonymous caller could mint unlimited unclaimed workspaces - bounded only by
- * 10/hour/IP - each able to hold 2 GB forever, with nothing that ever reclaimed
- * them. A sandbox is a trial, so it gets trial-sized room.
+ * 10/hour/IP - each able to hold a full free tier forever, with nothing that
+ * ever reclaimed them. A sandbox is a trial, so it gets trial-sized room.
+ *
+ * Note that the aggregate caps here are NOT unlimited, where every real plan's
+ * now are. That is the point: the reason egress and requests can be unlimited
+ * on a paid plan is that somebody's card is attached to the account. Nobody's
+ * is attached to an anonymous sandbox.
  *
  * `maxFileBytes` deliberately does **not** shrink. It is a per-file ceiling, not
  * an allowance, and lowering it would make the sandbox fail on exactly the file
@@ -113,6 +176,10 @@ export const SANDBOX_LIMITS: PlanLimits = {
   agents: 1,
   apiKeys: 1,
   members: 1,
+  // A sandbox is exactly one workspace and belongs to no organization, so
+  // there is nothing for it to own a second of. Present because PlanLimits
+  // requires it, not because it is a quota anything checks.
+  workspaces: 1,
 };
 
 /** The claim-state fields limits resolution needs. A subset, so tests can pass a literal. */

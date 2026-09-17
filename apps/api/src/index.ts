@@ -66,6 +66,7 @@ import {
 import { readSigningConfig, type R2SigningConfig } from "./storage/presign";
 import { preflightResponse, withCorsHeaders } from "./lib/cors";
 import { expireUnclaimedWorkspaces } from "./jobs/sandbox-expiry";
+import { purgeStaffDeleted } from "./jobs/staff-purge";
 
 export interface Env {
   DB: D1Database;
@@ -136,6 +137,12 @@ export interface Env {
    * candidates` log lines first, then set this.
    */
   SANDBOX_EXPIRY_ENABLED?: string;
+  /**
+   * Real deletion for the staff 30-day sweep. Absent or anything but "true"
+   * means report-only, which is the deployed default until a full window of
+   * candidate logs has been read. See jobs/staff-purge.ts.
+   */
+  STAFF_PURGE_ENABLED?: string;
 
   /**
    * Encrypts staff TOTP secrets at rest (06 PART 16.16a). Staff login refuses
@@ -765,6 +772,32 @@ export default {
             JSON.stringify({
               level: "error",
               message: "sandbox expiry run failed",
+              reason: err instanceof Error ? err.message : String(err),
+            })
+          );
+        }
+
+        // The fourth sweep: staff-initiated deletions past their 30-day window.
+        //
+        // Its own try/catch, like the three above, so one job failing cannot
+        // stop the others. **Defaults to reporting**, for the same reason the
+        // sandbox sweep does - see STAFF_PURGE_ENABLED on Env. Dev holds weeks
+        // of test data and a first tick with deletion on would take all of it.
+        try {
+          const staffPurge = await purgeStaffDeleted(
+            env.DB,
+            env.FILES,
+            now,
+            env.STAFF_PURGE_ENABLED !== "true"
+          );
+          console.log(
+            JSON.stringify({ level: "info", message: "staff purge run", ...staffPurge })
+          );
+        } catch (err) {
+          console.log(
+            JSON.stringify({
+              level: "error",
+              message: "staff purge run failed",
               reason: err instanceof Error ? err.message : String(err),
             })
           );

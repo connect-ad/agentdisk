@@ -189,10 +189,15 @@ Three reasons, and the first is what forced it:
   moment the first apply wrote them into state.
 - **The blast radius is unlike anything else's.** Separate state means a
   `destroy` of one cannot reach the other.
-- **It is temporary.** Once the staff console can edit plans (14 PART 29.6),
-  this directory and `.github/workflows/stripe-catalogue.yml` are deleted and
-  plans are managed from the admin surface. Nothing else imports from here, so
-  deletion is one `git rm -r` plus one file.
+- **It is temporary, and the handover is a rule rather than a habit.** Once the
+  staff console can edit plans (14 PART 29.6), this directory and
+  `.github/workflows/stripe-catalogue.yml` are deleted. Until then:
+  **Terraform owns the catalogue and the admin panel must not edit plans.**
+  A manual trigger reduces the chance of an accidental overwrite but does not
+  remove it - an `apply` run after an admin-panel edit reverts that edit, because
+  Terraform's whole job is to make Stripe match the `.tf`. There is no way to
+  have both owners at once, so the ownership transfers in one step: delete this
+  root, then enable editing.
 
 The workflow is `workflow_dispatch` only, defaults to `plan` rather than
 `apply`, asserts the key's Stripe mode matches the workspace (a live key in the
@@ -203,6 +208,42 @@ replacement** before anything reaches Stripe — an outer guard in front of
 `STRIPE_SECRET_KEY` needs no new secret; the existing `dev` environment secret
 resolves in a job scoped to that environment. **Prod has no `STRIPE_SECRET_KEY`**
 — a prod prerequisite, not a dev blocker.
+
+### A dormant fail-wide that task 9 wakes up
+
+`findOrgForWorkspace` inner-joins `users` to fetch `ownerEmail`, and both
+callers read a missing row as `"active"`:
+
+```
+auth.ts:285   (await findOrgForWorkspace(...))?.billingStatus ?? "active"
+claim.ts:556  billing?.billingStatus ?? "active"
+```
+
+Verified against the real schema: delete the owner's `users` row and a
+`past_due` organization vanishes from that query while still sitting in the
+table marked `past_due` — and the absence reads as paid up. That is amardrive's
+bug exactly: **could not read the data, so granted the permissive answer.**
+
+It is not live today, for two reasons that both stop being true or stop being
+relevant shortly:
+
+- Nothing consults `billingStatus` on a write path at all, because
+  `assertQuotaAndWarn` drops the argument. **Task 9 is precisely the change that
+  makes this fallback load-bearing**, which is why the fix belongs in that task
+  and not after it.
+- The only `DELETE FROM users` (`workspace-cascade.ts:133`) is guarded by
+  `NOT EXISTS (SELECT 1 FROM organizations WHERE owner_user_id = ?)` and runs
+  after the org is deleted. There is no foreign key behind that guard — it is
+  one careful query — but it is careful.
+
+The fix is to stop asking a question that needs `users`. `ownerEmail` exists to
+create a Stripe Customer; a quota decision does not need it. Task 9 adds a
+narrow `billingStatusForWorkspace(db, workspaceId)` joining only
+`organizations → workspaces`, leaving `findOrgForWorkspace` for the billing
+screen and the portal, which genuinely do want the email.
+
+Sandbox workspaces do have an organization row (`bootstrap.ts:123`, owned by a
+provisional user), so this query has an answer for every workspace.
 
 ### Counting across an organization
 
@@ -244,7 +285,7 @@ Dependency-ordered. Each is committed separately.
 | 6 | `POST /v1/billing/checkout-session`, owner-only | `routes/billing.ts` |
 | 7 | Webhook: `checkout.session.completed` + `product.*` → one shared upsert | `routes/stripe-webhook.ts` |
 | 8 | `GET` / `POST /v1/staff/plans[/sync]` reconciler, replaying that same upsert | `routes/staff*.ts` |
-| 9 | Thread the real `billingStatus` into `assertQuotaAndWarn` — closes `backlog/017` #1 | `middleware/auth.ts` |
+| 9 | Thread the real `billingStatus` into `assertQuotaAndWarn`, **and fix the fail-wide lookup below** — closes `backlog/017` #1 | `middleware/auth.ts`, `billing/organizations.ts` |
 | 10 | Four count-before-insert gates: agent identities, API keys, members, workspaces | `routes/agents.ts`, `keys.ts`, `members.ts`, `create-workspace.ts` |
 | 11 | Pricing page: 4 columns, feature matrix, egress row, live CTAs → checkout | `lib/pricing.js`, `Marketing.jsx` |
 | 12 | Dashboard upgrade path; tests; `CLAUDE.md`; close backlog 017/024 | `SettingsTabs.jsx`, `test/`, docs |

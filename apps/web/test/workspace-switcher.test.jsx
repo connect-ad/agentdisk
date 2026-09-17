@@ -184,6 +184,26 @@ describe('WorkspaceSwitcher creation', () => {
     expect(onCreate).toHaveBeenCalledWith('Client A');
   });
 
+  // The switcher shows the name in a fixed 20-character column, so the field
+  // declines to take more than it can display. Asserted through typing rather
+  // than by reading the attribute, because maxLength is only worth anything if
+  // it actually stops the keystrokes.
+  it('takes no more than 20 characters, however many are typed', async () => {
+    const user = userEvent.setup();
+    const { onCreate } = renderSwitcher();
+
+    await user.click(screen.getByRole('button', { name: /Abc/ }));
+    await user.click(screen.getByRole('menuitem', { name: /New workspace/ }));
+
+    const field = screen.getByRole('textbox', { name: 'Name' });
+    await user.type(field, 'qa-1609-throwaway-far-too-long');
+    expect(field.value).toBe('qa-1609-throwaway-fa');
+    expect(field.value).toHaveLength(20);
+
+    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
+    expect(onCreate).toHaveBeenCalledWith('qa-1609-throwaway-fa');
+  });
+
   it('refuses an empty name without calling the caller', async () => {
     const user = userEvent.setup();
     const { onCreate } = renderSwitcher();

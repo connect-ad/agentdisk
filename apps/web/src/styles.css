@@ -771,12 +771,25 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
    The button sizes to its content, as the reference does — a fixed width left a
    wide gap between a short name and the chevron, which read as a broken layout
    rather than as a control.
-   min(cap, 100%) rather than the cap alone: `width:auto` means a bare max-width
-   lets it grow past .shell__ws once that wrapper has been squeezed narrower than
-   the cap — the button then overflows its own parent and the name paints over
-   the controls beside it. Capping at 100% as well keeps it inside whatever room
-   the wrapper has. */
-.shell__wsbtn--bar{width:auto;max-width:min(16.25rem,100%);height:2.125rem;padding:0 var(--s-4);border-radius:var(--r-2)}
+   The width is constant because the name column is (see .shell__wsname below),
+   not because a number is pinned here: the control is then exactly as wide as
+   its contents need and never a pixel of dead space, and one edit to the column
+   moves the whole control. max-width:100% is the safety rail — the button must
+   stay inside whatever room .shell__ws has rather than painting its name over
+   the controls beside it. */
+.shell__wsbtn--bar{width:auto;max-width:100%;height:2.125rem;padding:0 var(--s-4);border-radius:var(--r-2)}
+/* A fixed 20-character column, so the control does not resize as you switch
+   between "TkO" and "qa-1609-throwaway" — a chrome element that changes width
+   with its contents reads as the page reflowing, not as a label.
+   `ch` is the width of "0" in this element's own font, so the column tracks the
+   type: restyle the name and the box follows, where a pinned rem would quietly
+   stop holding 20 characters. Plex Sans is proportional, so 20ch is 20
+   characters' worth of average width rather than a guarantee for 20 of any
+   letter — "MMMMMMMMMMMMMMMMMMMM" still ellipsises, and that is the right
+   trade for a name nobody types.
+   flex-shrink stays 1: below 1125px there is genuinely not room for the column,
+   and a rigid 0 would push the chevron out of the bar instead of truncating. */
+.shell__wsbtn--bar .shell__wsname{flex:0 1 20ch;width:20ch}
 /* The icon is the one child that must never absorb the squeeze: the name is what
    ellipsises. */
 .shell__wsbtn--bar>svg{flex:none}
@@ -814,7 +827,11 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
      not have. Only the vertical tightening belongs here. */
   .shell__page{padding:var(--s-6) var(--gutter)}
   .shell__wordmark{display:none}
-  .shell__wsbtn--bar{width:12rem;min-width:12rem;max-width:calc(100vw - 7rem)}
+  /* The wordmark is gone by here, but a 20ch column plus the tag still does not
+     fit beside the top bar's actions. The cap does the truncating; the column
+     keeps its basis, so the name reclaims its full width the moment there is
+     room again. */
+  .shell__wsbtn--bar{max-width:calc(100vw - 7rem)}
   .btn--md,.btn--lg{min-height:2.375rem}
   .icon-btn{width:2.125rem;height:2.125rem}
 }

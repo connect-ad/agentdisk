@@ -16,6 +16,13 @@ import { Button, Icon, Input, Modal, Alert } from '../components/index.js';
  * busy state, and putting the failure where the person who caused it is
  * looking.
  */
+/**
+ * Matches the switcher's fixed name column, which is 20ch wide — see
+ * `.shell__wsbtn--bar .shell__wsname`. The two numbers are the same number and
+ * should move together.
+ */
+const NAME_LIMIT = 20;
+
 export default function NewWorkspace({ open, onClose, onCreate }) {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -61,11 +68,20 @@ export default function NewWorkspace({ open, onClose, onCreate }) {
       {/* <Alert tone="danger"> is role="alert" already; wrapping it in another
           made the failure announce twice. */}
       {error ? <Alert tone="danger" title={error} /> : null}
+      {/* The switcher's name column is a fixed 20 characters, so a longer name
+          could only ever be shown truncated. Capping the field is the honest
+          version of that: you find out while you are choosing the name, rather
+          than afterwards from an ellipsis. maxLength also blocks a paste, which
+          is the way a too-long name actually arrives.
+          The API still accepts 64 (create) and 60 (rename) — this is the
+          dashboard declining to mint what it cannot display, not a new rule
+          about what a workspace name may be. */}
       <Input
         label="Name"
         required
         placeholder="Client A"
-        hint="Files, agents and keys are kept entirely separate between workspaces. Billing is not — every workspace you own is on the same account."
+        maxLength={NAME_LIMIT}
+        hint={`Up to ${NAME_LIMIT} characters. Files, agents and keys are kept entirely separate between workspaces. Billing is not — every workspace you own is on the same account.`}
         value={name}
         onChange={e => setName(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') submit(); }}

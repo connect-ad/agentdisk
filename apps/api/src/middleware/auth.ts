@@ -16,7 +16,8 @@
  */
 
 import { ApiError, forbidden, unauthorized, validationError } from "../lib/errors";
-import { isSandboxWorkspace, limitsForWorkspace, type PlanLimits } from "../lib/plans";
+import { isSandboxWorkspace, type PlanLimits } from "../lib/plans";
+import { resolveWorkspaceLimits } from "../billing/catalogue";
 import {
   UNCLAIMED_TTL_MS,
   sandboxQuotaWarning,
@@ -275,8 +276,11 @@ export async function withAuth(
   // row is only read for a request that intends to write - a read-only call
   // must not pay for a join it cannot be refused by.
   // Claim state, not just plan. An unclaimed sandbox is held to the tighter
-  // SANDBOX_LIMITS; everything else resolves exactly as before.
-  const limits = limitsForWorkspace(workspace);
+  // SANDBOX_LIMITS; everything else now resolves through the D1 catalogue, so
+  // an admin's plan edit reaches the request path without a deploy. The
+  // hardcoded table in lib/plans.ts survives underneath as the per-field floor
+  // - see billing/catalogue.ts for why the fallback direction matters.
+  const limits = await resolveWorkspaceLimits(deps.db, workspace, now);
   const demand = requirement.demand ?? {};
   const intendsWrite =
     (demand.bytes !== undefined && demand.bytes > 0) ||

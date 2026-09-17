@@ -206,17 +206,3 @@ export interface ClaimState {
 export function isSandboxWorkspace(workspace: ClaimState): boolean {
   return workspace.claimed_at === null && workspace.claim_token_hash !== null;
 }
-
-/**
- * The limits actually enforced for a workspace, claim state included.
- *
- * This is what the authorization chain calls. `limitsFor` remains the pure
- * plan-only lookup beneath it, because the staff console and the billing code
- * genuinely do want "what does this plan grant" without the sandbox overlay.
- */
-export function limitsForWorkspace(
-  workspace: ClaimState & { plan_override: string | null; org_plan: string }
-): PlanLimits {
-  if (isSandboxWorkspace(workspace)) return SANDBOX_LIMITS;
-  return limitsFor(workspace.plan_override, workspace.org_plan);
-}

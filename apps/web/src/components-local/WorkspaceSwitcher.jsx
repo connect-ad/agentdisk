@@ -3,6 +3,18 @@ import { Icon } from '../components/index.js';
 import NewWorkspace from './NewWorkspace.jsx';
 
 /**
+ * The reference draws two letters in the mark — "Kessler Labs" is "KL" — which a
+ * single-word name cannot supply, so it falls back to the one it has. Taken from
+ * the words rather than the first two characters: "Kessler Labs" must not read
+ * "KE", and the whole point of the second letter is that it names the second
+ * word.
+ */
+function initials(name) {
+  const words = String(name).trim().split(/\s+/).filter(Boolean);
+  return words.slice(0, 2).map(word => word[0].toUpperCase()).join('');
+}
+
+/**
  * The one place the product talks about which workspace you are in.
  *
  * It replaced three: an inert card in the sidebar that had a chevron and did
@@ -69,12 +81,10 @@ export default function WorkspaceSwitcher({ workspaces = [], currentId, onSelect
         aria-expanded={open}
         onClick={() => setOpen(o => !o)}
       >
-        <span className="shell__wsmark" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>
-        <span style={{ minWidth: 0, flex: 1 }}>
-          <span className="shell__wsname" style={{ display: 'block' }}>{name}</span>
-          <span className="shell__wsmeta">{role}</span>
-        </span>
-        <Icon name="chevronUpDown" size={14} />
+        <span className="shell__wsmark" aria-hidden="true">{initials(name)}</span>
+        <span className="shell__wsname">{name}</span>
+        {role ? <span className="shell__wsmeta">{role}</span> : null}
+        <Icon name="chevronDown" size={13} />
       </button>
 
       {open ? (
@@ -90,7 +100,7 @@ export default function WorkspaceSwitcher({ workspaces = [], currentId, onSelect
               className="wsx__item"
               onClick={() => { setOpen(false); onSelect(w.id); }}
             >
-              <span className="shell__wsmark" aria-hidden="true">{w.name.slice(0, 1).toUpperCase()}</span>
+              <span className="shell__wsmark" aria-hidden="true">{initials(w.name)}</span>
               <span className="wsx__details">
                 <span className="wsx__label">{w.name}</span>
                 <span className="wsx__meta">{w.id}</span>

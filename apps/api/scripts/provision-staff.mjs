@@ -206,13 +206,21 @@ const sqlSafeEmail = email.replace(/'/g, "''");
 const sql = `-- Staff account for ${sqlSafeEmail} (${role}), generated ${new Date(now).toISOString()}.
 -- Contains a password hash and an ENCRYPTED TOTP secret; neither is usable on
 -- its own. Delete this file once applied.
-INSERT INTO staff_users (id, email, password_hash, totp_secret, role, created_at)
+--
+-- totp_confirmed_at is set, not left NULL. Migration 0013 made "invited but
+-- never enrolled" a real state that cannot authenticate, and an account created
+-- here is enrolled by definition: this script prints the enrolment URI to the
+-- operator at creation and there is no second step. Leaving it NULL would
+-- produce an account that can never log in and - because POST /v1/staff/users
+-- returns 501 - could not be repaired through the API either.
+INSERT INTO staff_users (id, email, password_hash, totp_secret, role, created_at, totp_confirmed_at)
 VALUES (
   '${id}',
   '${sqlSafeEmail}',
   '${passwordHash}',
   '${encryptedTotp}',
   '${role}',
+  ${now},
   ${now}
 );
 `;

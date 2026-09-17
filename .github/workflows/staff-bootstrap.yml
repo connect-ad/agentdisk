@@ -1,0 +1,189 @@
+name: Staff bootstrap (temporary)
+
+# Create a staff console account, from CI, because the credential cannot be
+# created anywhere else.
+#
+# ── Why this exists ─────────────────────────────────────────────────────────
+# `POST /v1/staff/users` returns 501 on purpose: an endpoint that mints a
+# working staff credential is an endpoint that can be tricked into minting one.
+# That leaves a chicken-and-egg problem — creating a staff account requires
+# already being a staff super_admin — and `apps/api/scripts/provision-staff.mjs`
+# is the documented way out of it.
+#
+# Running that script needs DATABASE_ENCRYPTION_KEY, because the TOTP secret is
+# encrypted at rest with the same key the Worker decrypts it with. That key is a
+# GitHub Environment secret and deliberately never leaves CI, which is why this
+# is a pipeline rather than something run on a laptop.
+#
+# ── This file is meant to be deleted ────────────────────────────────────────
+# Once the first super_admin exists, every subsequent staff account is created
+# through the console itself (Staff Accounts -> Invite staff, super_admin only),
+# which shows the TOTP enrolment QR exactly once and writes an audit record
+# naming who created whom. This workflow does neither. Delete it at launch.
+#
+# ── Read this before you dispatch it ────────────────────────────────────────
+# The provisioning script GENERATES the password rather than accepting one, on
+# the reasoning that a staff password typed by a human at provisioning time is a
+# password that gets reused. That is the right call, and it has a consequence
+# here that is worth stating plainly rather than burying:
+#
+#   **The run log will contain both authentication factors.** The generated
+#   password and the TOTP enrolment secret are printed, because there is no
+#   other channel back to you. Anyone who can read this run's logs can log in as
+#   the account it created.
+#
+# So: enrol immediately, then DELETE THE WORKFLOW RUN. The final step prints the
+# direct link. Nothing else in this repository prints a usable credential to CI,
+# and nothing else should.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Which environment's database to write to.
+        required: true
+        type: choice
+        options: [dev, prod]
+        default: dev
+      email:
+        description: Staff email address.
+        required: true
+        type: string
+      role:
+        description: Staff role. super_admin is the only one that can create others.
+        required: true
+        type: choice
+        options: [support, admin, super_admin]
+        default: super_admin
+      confirm_environment:
+        description: Retype the environment name exactly, to confirm.
+        required: true
+        type: string
+
+# One at a time. Two concurrent runs would each generate an account and the
+# second would fail on the UNIQUE index over email, after having already printed
+# a credential that was never applied.
+concurrency:
+  group: staff-bootstrap-${{ inputs.environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  provision:
+    name: Provision ${{ inputs.role }} on ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    # Doubles as the GitHub Environment, which is where DATABASE_ENCRYPTION_KEY
+    # lives. dev and prod hold different keys and different databases; a staff
+    # row written with the wrong one produces an account whose TOTP cannot be
+    # decrypted at login.
+    environment: ${{ inputs.environment }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.TERRAFORM_CF_ACCESS_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CF_ACCOUNT_ID }}
+      D1_NAME: ${{ vars.EXPECTED_D1_DATABASE }}
+      ENVIRONMENT_NAME: ${{ inputs.environment }}
+
+    steps:
+      - name: Confirm the environment
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.confirm_environment }}" != "$ENVIRONMENT_NAME" ]; then
+            echo "::error::Typed '${{ inputs.confirm_environment }}' but selected '$ENVIRONMENT_NAME'. Nothing was created."
+            exit 1
+          fi
+          echo "Confirmed: $ENVIRONMENT_NAME"
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+
+      - name: Verify required secrets are present
+        env:
+          DATABASE_ENCRYPTION_KEY: ${{ secrets.DATABASE_ENCRYPTION_KEY }}
+        run: |
+          set -euo pipefail
+          missing=""
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID D1_NAME DATABASE_ENCRYPTION_KEY; do
+            if [ -z "${!name:-}" ]; then
+              missing="$missing $name"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secrets or variables for the $ENVIRONMENT_NAME environment:$missing"
+            exit 1
+          fi
+          echo "All required secrets and variables are present."
+
+      - name: Install dependencies
+        working-directory: apps/api
+        run: npm ci
+
+      # Refuses before generating anything if the address is already taken. The
+      # INSERT would fail on the UNIQUE index anyway, but only AFTER the script
+      # had printed a password for an account that will not exist - which reads
+      # exactly like a successful run to anyone skimming the log.
+      - name: Check the address is free
+        run: |
+          set -euo pipefail
+          existing="$(npx wrangler d1 execute "$D1_NAME" --remote --env "$ENVIRONMENT_NAME" --json \
+            --command "SELECT COUNT(*) AS n FROM staff_users WHERE email = '$(echo "${{ inputs.email }}" | tr '[:upper:]' '[:lower:]' | sed "s/'/''/g")'" \
+            | tr -d '[:space:]')"
+          echo "$existing"
+          if ! echo "$existing" | grep -q '"n":0'; then
+            echo "::error::A staff account already exists for that address on $ENVIRONMENT_NAME. Nothing was created."
+            exit 1
+          fi
+
+      - name: Generate the account
+        working-directory: apps/api
+        env:
+          DATABASE_ENCRYPTION_KEY: ${{ secrets.DATABASE_ENCRYPTION_KEY }}
+        run: |
+          set -euo pipefail
+          node scripts/provision-staff.mjs \
+            --email "${{ inputs.email }}" \
+            --role "${{ inputs.role }}" \
+            --env "$ENVIRONMENT_NAME" \
+            | tee provision-output.txt
+          sql="$(ls staff-"$ENVIRONMENT_NAME"-*.sql | head -1)"
+          echo "STAFF_SQL=$sql" >> "$GITHUB_ENV"
+
+      - name: Apply it
+        working-directory: apps/api
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute "$D1_NAME" --remote --env "$ENVIRONMENT_NAME" --file "$STAFF_SQL"
+          # The file holds a hash and an encrypted secret, neither usable alone -
+          # but it is still a fact about a credential, and it must not survive
+          # into an artifact or a cache.
+          rm -f "$STAFF_SQL"
+
+      - name: Confirm it landed
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute "$D1_NAME" --remote --env "$ENVIRONMENT_NAME" \
+            --command "SELECT id, email, role, disabled_at, totp_confirmed_at FROM staff_users ORDER BY created_at DESC LIMIT 5"
+
+      - name: Credential, shown once
+        if: always()
+        working-directory: apps/api
+        run: |
+          set -euo pipefail
+          echo "::warning::This log contains a working staff password AND its TOTP secret. Enrol now, then delete this run."
+          cat provision-output.txt || echo "No output captured - the generate step did not complete."
+          rm -f provision-output.txt
+          echo ""
+          echo "Delete this run once you have enrolled:"
+          echo "  ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo ""
+          echo "Then sign in at the console for this environment and change nothing else here -"
+          echo "every further staff account is created from Staff Accounts inside the panel."

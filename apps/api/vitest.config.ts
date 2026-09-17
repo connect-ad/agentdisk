@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from "node:crypto";
 import { defineConfig } from "vitest/config";
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
 
@@ -13,6 +14,18 @@ import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-worker
  */
 export default defineConfig(async () => {
   const migrations = await readD1Migrations("./migrations");
+
+  // A throwaway RSA key, generated fresh every run, so the staff password-reset
+  // path can exercise the real assertion signing in auth/firebase-admin.ts
+  // rather than a stub of it. Generated rather than committed: a PEM in the
+  // repo is a PEM somebody eventually reuses, and a scanner cannot tell a test
+  // key from a live one.
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const serviceAccountJson = JSON.stringify({
+    client_email: "test-admin@agentdisk-dev.iam.gserviceaccount.com",
+    private_key: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    project_id: "agentdisk-dev",
+  });
 
   return {
     plugins: [
@@ -40,6 +53,12 @@ export default defineConfig(async () => {
             // upload and download routes would go untested.
             R2_ACCESS_KEY_ID: "test-access-key-id",
             R2_SECRET_ACCESS_KEY: "test-secret-access-key",
+            // Staff password reset refuses without both, so every test of it
+            // would assert the refusal and none would reach the send. The
+            // outbound calls are stubbed per-test; these only have to be
+            // present and well-formed.
+            MAILERSEND_API_TOKEN: "test-mailersend-token",
+            FIREBASE_SERVICE_ACCOUNT_JSON: serviceAccountJson,
           },
         },
       }),

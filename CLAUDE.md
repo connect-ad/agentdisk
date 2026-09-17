@@ -12,17 +12,17 @@ task.
 
 | Path | Holds | Rule |
 |---|---|---|
-| `CLAUDE.md` | This route and the catalog | Source of truth for *where things are*. Not a duplicate of the specs. |
+| `CLAUDE.md` | This route and the catalog | Source of truth for *where things are*. Not a duplicate of the specs. **While parallel tracks are running, this file is owned by Track 0** — route edits through it rather than editing directly, or two sessions clobber the one file everything else trusts. See `coordination/DEFERRED.md` X-06. Treat the test counts in Status as a snapshot; re-measure after a merge. |
 | `docs/design/` | The specification, `NN-<slug>.md` | 20 documents, PART 1–30. The product's design authority — but see the precedence rule below. |
 | `design-system/` | Upstream mirror of the Claude Design project | **Read-only.** Byte-identical to the remote (96/96). Changes go into Claude Design, then re-import — never edit here. |
-| `apps/api/` | The Cloudflare Worker: REST + MCP, one deployable | Both surfaces are built and share one authorization chain. MCP tools call the REST handlers rather than reimplementing them, so the two cannot drift — a claim live testing disputes for `pathPrefix`; unresolved, see [029](backlog/029-mcp-path-scope-contradiction.md). |
+| `apps/api/` | The Cloudflare Worker: REST + MCP, one deployable | Both surfaces are built and share one authorization chain. MCP tools call the REST handlers rather than reimplementing them, so the two cannot drift — live testing once disputed this for `pathPrefix`, and retesting confirmed the code: both surfaces refuse a path outside the key's prefix, see [029](backlog/029-mcp-path-scope-contradiction.md). |
 | `infra/terraform/` | All infrastructure as code | One root config, one module, **one workspace per environment** (`dev`, `prod`). No `environments/` directories — see the workspace note below. |
 | `.github/workflows/` | CI and deployment pipelines | **Three areas, split by what they own: `infra`, `backend`, `frontend`.** Each is one reusable engine plus thin per-environment callers, so prod can never drift from dev. Path filters mean an `apps/web` push moves nothing else. `frontend.yml` is called once per app (dashboard, console). `ci.yml` gates PRs and covers all three apps. `deploy-all-dev.yml` is the ordered manual full deploy. |
 | `apps/admin/` | The internal staff console, at `admin-dev.agentdisk.io` | Its own origin on purpose: 14 PART 27.2 scopes the staff session cookie to it, so a staff and a customer credential cannot reach each other in a browser. Deliberately does not import `design-system/` — looking different from the customer dashboard is how a support engineer knows which one they are in. |
-| `apps/web/` | The dashboard SPA, live at `app-dev.agentdisk.io` | `src/components/` is vendored from `design-system/`; `src/components/index.js` is generated. Hand-written code lives in `src/routes/` and `src/components-local/`. `src/components/AppShell.jsx` is the one vendored file that deliberately diverges from the mirror, for three reasons awaiting the same upstream trip — [015](backlog/015-rename-in-design-system.md), [016](backlog/016-upstream-workspace-switcher.md) and [026](backlog/026-upstream-account-menu.md). Deployed as a Workers static-assets Worker, not Pages — see [013](backlog/013-deploy-dashboard.md). |
+| `apps/web/` | The dashboard SPA, live at `app-dev.agentdisk.io` | `src/components/` is vendored from `design-system/`; `src/components/index.js` is generated. Hand-written code lives in `src/routes/` and `src/components-local/`. Two vendored files deliberately diverge, all awaiting the same upstream trip: `src/components/AppShell.jsx` for three reasons — [015](backlog/015-rename-in-design-system.md), [016](backlog/016-upstream-workspace-switcher.md) and [026](backlog/026-upstream-account-menu.md) — `src/components/Modal/Modal.jsx` plus `src/components/Button/Button.jsx`, which together gain Enter-to-submit, the one part of the modal contract that cannot be done from `app.css` — `Button` has to default to `type="button"` or an untyped Cancel inside the new `<form>` submits the dialog it exists to dismiss ([031](backlog/031-upstream-modal-scroll-contract.md)); and `src/components/ApiKeyDisplay/ApiKeyDisplay.jsx`, whose `prefix` defaulted to `ad_live` — a prefix this API has never issued. Deployed as a Workers static-assets Worker, not Pages — see [013](backlog/013-deploy-dashboard.md). |
 | `Skill/` | Reusable how-to knowledge, `<N> <Name>.md` | Procedures, commands and their calibration. Not the specification — that is `docs/design/`. |
 | `backlog/` | Outstanding tasks, `NNN-<slug>.md` | Status lives in the file; a finished item stays as a record. |
-| `.design-sync/` | Sync state and hard-won process notes | `config.json` pins the Claude Design project. `NOTES.md` holds gotchas that cost real time — read it before any file transfer. |
+| `docs/superpowers/specs/` | The design rebuild's specs, `YYYY-MM-DD-<slug>.md` | Replaced `.design-sync/`, which described the old vendored mirror and lost its subject when that mirror went. The `.dc.html` artboards in `design-system/` are hand-exported from Claude Design; when a design file has no local copy, record its numbers in a spec here and ask for the export — never reconstruct one from a transcript. |
 | `.claude/commands/` | Custom slash commands, `<name>.md` | [`cpack`](.claude/commands/cpack.md) persists session knowledge into the docs below; [`cpush`](.claude/commands/cpush.md) commits and tags. Both are auto-discovered by Claude Code; no registration step. |
 | `summary.md` | External code audit, 8 Sept 2026 | Read-only record of one review, with file:line evidence for every claim. Its open work is tracked as [017](backlog/017-enforce-declared-limits.md)–[025](backlog/025-authorization-hardening.md); the backlog is where that work lives, not here. |
 | `Worlflow.md` | The handoff diagram | Filename typo is known — see [011](backlog/011-rename-workflow-file.md). |
@@ -43,9 +43,15 @@ were not touched. See [002](backlog/002-reconcile-brand-drift.md).
 
 - **`design-system/` is read-only.** It is a byte-verified mirror. Editing it
   silently forks you from the Claude Design project.
-- **Import components from `src/components/index.js` only.**
-  `_adherence.oxlintrc.json` forbids reaching into component internals.
-- **No raw hex, no hardcoded px.** Style with `var(--*)` tokens. Same lint config.
+- **Import components from `src/components/index.js` only**, and **no raw hex, no
+  hardcoded px** — style with `var(--*)` tokens. **Both rules are conventions
+  that nothing enforces, and were folklore before `_adherence.oxlintrc.json` was
+  deleted.** `apps/web` has no `lint` script, CI runs `npm run lint --if-present`
+  and so skips it silently, and oxlint 1.81 refused to load that config at all
+  (`unknown field \`x-omelette\``). Even had it loaded, its rules match JS/JSX
+  string literals, so **CSS was never linted** — a raw hex in `app.css` has
+  always been review-only. `Skill/1 Build.md` carries the greps that approximate
+  it; run them, because nothing else will.
 - **Colour never carries meaning alone** — every status pairs a tone with a word.
 - Regenerate the barrel from `_ds_manifest.json`; never hand-edit it.
 - **Terraform selects a workspace; it never runs in `default`.** Environments are
@@ -156,6 +162,17 @@ were not touched. See [002](backlog/002-reconcile-brand-drift.md).
   cannot log in and — because the endpoint is 501 — cannot be repaired through
   the API either. `test/staff-crypto.test.ts` pins the script's literal output
   against the Worker's verifiers so that divergence fails a build instead.
+- **One overlay ladder, and a dialog always outranks a drawer.**
+  `docs/ui-layering.md` owns the scale; `app.css` defines it as `--z-*` tokens.
+  The drawer was `80` and the modal scrim `60`, so a confirmation opened from
+  the file drawer painted *underneath* it and its confirm button could not be
+  clicked. The two swap — nothing sits at 61–79, so the exchange disturbs no
+  third layer. **The whole change lives in the local `app.css`**, because
+  `main.jsx` imports `styles.css` first and the local sheet wins; the vendored
+  sheet is untouched. And a `z-index` only ranks siblings within the nearest
+  stacking context — `.wsx__menu` sits inside `.shell__top`, so its number is
+  capped by that ancestor and raising it does nothing. Modals must stay
+  *siblings* of the drawer, never children.
 - **A dialog moves focus once, when it opens.** `Modal` and `Drawer` had
   `onClose` in the dependency array of the effect that focuses a field. Every
   call site passes an inline arrow, and the parent re-renders on each keystroke
@@ -217,6 +234,63 @@ were not touched. See [002](backlog/002-reconcile-brand-drift.md).
   `write` / `delete` / `list`, which is the vocabulary the API and the Create-key
   modal both use. The `files:*` spelling exists only in the design-system's
   `mcpTools` fixture and matches nothing in this product.
+- **An unclaimed sandbox is a claim state, never a plan.** `SANDBOX_LIMITS`
+  exists in `lib/plans.ts` but is deliberately absent from `PLAN_NAMES`, because
+  that union gates `workspaces.plan_override` and `organizations.plan` — the
+  columns a human can set. "sandbox" is derived fresh from `claimed_at` on every
+  request; making it selectable would let somebody be *placed* on it, and the
+  unclaimed sweep would then become eligible to delete their workspace.
+- **The sandbox limit is gated on the claim token, not just on `claimed_at`.**
+  `isSandboxWorkspace` requires `claimed_at IS NULL` **and**
+  `claim_token_hash IS NOT NULL`, and the second half is the rollout guard rather
+  than a redundant check: only workspaces provisioned after claiming shipped were
+  ever issued a token, so the tighter allowance cannot apply retroactively to the
+  weeks of unclaimed sandboxes already sitting in dev — any of them over 50 MB
+  would otherwise have started failing *every* write the instant it deployed. It
+  needs no cutoff timestamp to configure, get wrong, or forget to move between
+  environments.
+- **A claim link is a bearer secret equal to "own this workspace", so only its
+  SHA-256 is stored.** That has a consequence the design brief did not anticipate:
+  the sandbox quota warning cannot carry the tokenised `claimUrl` it asks for,
+  because a token rebuildable on an arbitrary request is a token kept in
+  cleartext. The tokenised link exists only in the provisioning response; the
+  warning carries the untokenised claim page and the workspace ID. See
+  `lib/claim.ts`'s header.
+- **The hard quota block and the soft sandbox warning are one call.** Every write
+  path calls `assertQuotaAndWarn`, never `assertWithinQuota` directly, so there
+  is no way to perform the block without also computing the warning — from the
+  same row, the same limits and the same demand. `backlog/017` is why: this
+  product already shipped an 80%/95% warning that lived only in the dashboard's
+  arithmetic, was never wired to the request path, and lied. Note that **no route
+  declares `requirement.demand`**, so the middleware cannot compute this before
+  the handler runs; the warning is set on the context by the handler and
+  serialized onto the response once, centrally, by `withAuth`.
+- **The unclaimed sweep defaults to reporting, not deleting.**
+  `expireUnclaimedWorkspaces` takes `dryRun` and defaults it to `true`; only
+  `SANDBOX_EXPIRY_ENABLED = "true"` turns on real deletion. Dev holds weeks of
+  expired-by-definition sandboxes, and the delete is a cascade with no undo, so a
+  delete-by-default deploy would empty the environment on its first cron tick.
+  See [030](backlog/030-enable-sandbox-expiry.md).
+- **One sanctioned cross-tenant storage operation exists, and its signature is
+  the safety property.** `transferObject(source, id, destination, id)` takes two
+  already-bound `WorkspaceScopedStorage` instances and **no workspace ID**, so a
+  caller can only reach across a boundary it has already legitimately opened both
+  sides of. The merge needed two tenants; the alternative was relaxing the
+  constructor binding for every other caller in the product to serve one.
+- **Copy before delete when relocating; delete before row when discarding.** The
+  claim merge writes the destination object *and* row before removing the source,
+  which is the opposite of `jobs/purge.ts`. Deliberate: purge is discarding data,
+  where a briefly-orphaned object is harmless, while a merge is relocating it,
+  where the destination must exist before the source stops existing.
+- **A merge is all-or-nothing.** The whole sandbox is checked against the target's
+  quota before a byte moves. Merging whatever fits and reporting success would be
+  a `backlog/023` false success, and a uniquely bad one — the files it dropped
+  were about to be deleted from the only other place they existed.
+- **`ConfirmModal` defaults `destructive` to true.** A red dialog with an alert
+  mark is right for deleting a workspace and wrong for an additive act like
+  claiming one; pass `destructive={false}` there. Dressing additive actions in the
+  danger treatment is how people learn to click through the red dialogs that
+  matter.
 - **Settings → Privacy is a summary of `routes/Legal.jsx`, which is the
   authoritative text.** The tab restated the policy instead of pointing at it,
   and went on describing a hashed password and Resend-sent password resets for
@@ -251,7 +325,7 @@ were not touched. See [002](backlog/002-reconcile-brand-drift.md).
 | 16 | [Firebase auth & launch prompt](docs/design/16-firebase-auth-and-final-launch-prompt.md) | PART 30 — the auth model in force. Read before touching sign-in |
 | 17 | [Dev environment test findings](docs/design/17-dev-environment-live-test-findings.md) | 7 Sept 2026 live pass against `app-dev` |
 | 18 | [Full UI audit & fix prompt](docs/design/18-full-ui-audit-and-fix-prompt.md) | 8–9 Sept 2026 audit, now **Parts 1–10**. Parts 1–6 are closed rounds whose outcomes live in docs 03/06 and the backlog; Parts 7–10 are later live passes and **still carry unresolved findings** — read §9.3–9.5 before assuming a screen works |
-| 19 | [MCP public distribution guide](docs/design/19-mcp-public-distribution-guide.md) | How to publish the MCP server for public install: per-client snippets, the official registry, marketplaces. Names the doc-18 §9.4 path-scope question as a launch blocker — see [029](backlog/029-mcp-path-scope-contradiction.md) |
+| 19 | [MCP public distribution guide](docs/design/19-mcp-public-distribution-guide.md) | How to publish the MCP server for public install: per-client snippets, the official registry, marketplaces. Named the doc-18 §9.4 path-scope question as a launch blocker; that blocker is cleared — see [029](backlog/029-mcp-path-scope-contradiction.md) |
 
 ### Design system — [design-system/](design-system/)
 
@@ -263,7 +337,7 @@ Claude Design project `agent-storage-mcp` · `d311bfd0-9751-4a9b-84f4-b33e7a0937
 | 98 tokens | `styles.css` — colour, type, 4px space scale, radius, elevation, motion |
 | 26 preview cards | `card.html` per component; these stay upstream, not vendored |
 | Runtime bundle | `_ds_bundle.js` — 2083 lines, exposes `window.AgentStorageMcp_d311bf` |
-| Lint contract | `_adherence.oxlintrc.json` — prop validation, token enforcement |
+| Lint contract | **Gone with the mirror.** The rules survive as the convention above and the greps in `Skill/1 Build.md`; no tool checks them. |
 
 The AgentDisk-specific components carry the product thesis: `FileCell` (agent
 provenance), `ApiKeyDisplay` (show-once), `PermissionSelector` (least privilege),
@@ -301,13 +375,15 @@ provenance), `ApiKeyDisplay` (show-once), `PermissionSelector` (least privilege)
 | 020 | [Staff console defects](backlog/020-staff-console-defects.md) | Open — fleet search throws; force-logout 500s after succeeding |
 | 021 | [Audit-trail gaps](backlog/021-audit-trail-gaps.md) | Open — recursive folder delete, move, copy, restore unrecorded |
 | 022 | [Finish webhooks](backlog/022-webhook-gaps.md) | Open — 4 of 6 events never emitted; secret stored in plaintext |
-| 023 | [Non-functional UI controls](backlog/023-non-functional-ui-controls.md) | Open — Tier 2 closed and 3 of 8 false successes fixed; 5 remain |
+| 023 | [Non-functional UI controls](backlog/023-non-functional-ui-controls.md) | Open — Tier 2 closed; the 16 Sept pass wired delete, create-folder, download and rename, removed five dead controls and disabled the two account-data promises. Remaining work is what needs endpoints that do not exist |
 | 024 | [Pricing page drift](backlog/024-pricing-page-drift.md) | Open — every number contradicts `plans.ts`; no purchase path |
 | 025 | [Authorization hardening](backlog/025-authorization-hardening.md) | Open — agent keys can read billing; five smaller items |
 | 026 | [Upstream the account menu](backlog/026-upstream-account-menu.md) | Open — `AppShell.userSlot`; third divergence in the vendored shell |
 | 027 | [Files page first paint](backlog/027-files-page-first-paint.md) | Open — three serial round trips before the first file query; measured, not slow |
 | 028 | [Staff console security headers](backlog/028-admin-console-security-headers.md) | Open — `apps/admin` has the gap `apps/web` just closed |
-| 029 | [MCP path-scope contradiction](backlog/029-mcp-path-scope-contradiction.md) | Open — live testing and the code disagree; unresolved, blocks the public MCP launch |
+| 029 | [MCP path-scope contradiction](backlog/029-mcp-path-scope-contradiction.md) | Done — retested live 16 Sept 2026; MCP enforces `pathPrefix` and agrees with REST. No code change; doc 18 §9.4 superseded |
+| 030 | [Enable the sandbox sweep](backlog/030-enable-sandbox-expiry.md) | Open — claiming is built; the unclaimed-workspace sweep ships in log-only mode until a TTL window of candidate logs is reviewed |
+| 031 | [Upstream the modal scroll contract](backlog/031-upstream-modal-scroll-contract.md) | Open — fourth vendored divergence; `Modal.jsx` and `Button.jsx` gain Enter-to-submit. Points 1–3 shipped in `app.css` |
 
 ---
 
@@ -323,8 +399,8 @@ live deployment rather than inferred from the code — see
 person can follow.
 
 ```
-apps/api    519 tests across 29 files · typecheck clean · lint clean
-apps/web    105 tests · 114 modules · build clean
+apps/api    558 tests across 31 files · typecheck clean · lint clean
+apps/web    171 tests · 123 modules · build clean
 Worker      226 KiB gzipped, against Cloudflare's 1 MB limit
 ```
 
@@ -352,6 +428,17 @@ The REST surface covers files (both upload paths, move, copy, soft delete,
 restore), folders, search, agents, keys, members, webhooks, activity, billing,
 and workspaces — including `DELETE /v1/workspaces/:id`, which destroys one and
 everything in it.
+
+**Agent-provisioned workspaces can now be claimed.** `POST /v1/workspaces`
+returns a one-time claim link beside the one-time API key;
+`GET /v1/workspaces/claim/:token` previews it with no credential at all, and
+`POST` to the same path takes ownership — either keeping it as its own workspace
+under the caller's billing account, or merging its files into a workspace they
+already administer and deleting the sandbox. A merge repoints the agent's
+*existing* key row rather than reissuing, so the agent's next call lands in the
+new workspace with no re-authentication. Unclaimed workspaces are held to a
+tighter `SANDBOX_LIMITS` allowance and are swept after 7 days — that sweep is
+live but in log-only mode, see [030](backlog/030-enable-sandbox-expiry.md).
 The MCP server exposes ten tools at `/mcp` in the same Worker — each one calls
 the REST handler that already does the work, so the two surfaces are literally
 the same code and cannot drift in what they allow.
@@ -397,3 +484,13 @@ holds a Secret Access Key.
 
 Every security-critical behaviour in the storage core was mutation-tested: 22
 deliberate breaks across two rounds, each confirmed to turn the suite red.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

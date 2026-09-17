@@ -1,0 +1,516 @@
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+
+/**
+ * The staff console's own dialog primitives.
+ *
+ * Written here rather than imported from `apps/web`, per docs/ui-layering.md §3
+ * and coordination/DEFERRED.md X-02: the console does not take the customer
+ * design system, because looking different is how a support engineer knows
+ * which app they are in. The *ladder* and the *contract* are shared; the
+ * components are not.
+ *
+ * Three known bugs from the customer app are fixed here by construction rather
+ * than avoided by care, because "be careful" is not a mechanism:
+ *
+ * **1. The footer must never fall below the fold.** At 684px tall the customer
+ * app's Create API key modal puts its footer off-screen with no internal scroll
+ * and no keyboard submit, which makes creating a key impossible — step 1 of the
+ * product's own Quick start. The fix is not `overflow-y`, which was already
+ * there. In a flex column a child's default `min-height: auto` refuses to
+ * shrink below its content, so the body never gets smaller than its contents,
+ * `overflow-y` never engages, and the column grows past its cap instead —
+ * pushing the footer out. **`minHeight: 0` on the scrollable child is the fix**,
+ * paired with `flex: none` on the head and foot so the browser cannot resolve
+ * the overflow by compressing the two parts that must never move.
+ *
+ * **2. Focus moves once, when the dialog opens.** `Modal` and `Drawer` in the
+ * customer app had `onClose` in the dependency array of the effect that focuses
+ * a field. Every call site passes an inline arrow and the parent re-renders on
+ * each keystroke, so the effect re-ran per character and re-focused the first
+ * focusable element — the header's close button. Typing one character into any
+ * dialog threw focus onto Close and the next character went nowhere. The
+ * handler lives in a ref here; it is needed *current*, not as a dependency.
+ *
+ * **3. "First focusable" is the wrong target anyway.** It opens every dialog
+ * with "dismiss" selected. Focus goes to the first form control, and the close
+ * button is explicitly excluded from ever being the initial target.
+ */
+
+const Z = {
+  modal: 'var(--z-modal)',
+  toast: 'var(--z-toast)',
+};
+
+/** Everything focusable inside the dialog, in document order. */
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), ' +
+  'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+const palette = {
+  ink: '#111',
+  muted: '#666',
+  line: '#e3e3e6',
+  hairline: '#f0f0f2',
+  danger: '#a11',
+  dangerSoft: '#fdeaea',
+  dangerLine: '#f5c2c2',
+};
+
+/**
+ * Hold a value in a ref that is always current.
+ *
+ * The whole point of bug 2 above: a callback an effect must *call* is not a
+ * callback the effect must *depend on*.
+ */
+function useLatest(value) {
+  const ref = useRef(value);
+  useEffect(() => {
+    ref.current = value;
+  });
+  return ref;
+}
+
+/**
+ * A dialog.
+ *
+ * `children` is the body. `footer` is rendered in the fixed footer beside the
+ * primary action, so a caller can add a secondary control without reaching into
+ * the layout.
+ *
+ * The dialog is itself the `<form>`, which is what makes point 4 of the contract
+ * work: Enter from any text field inside it submits, because that is what a form
+ * does. Building the form *inside* the body instead would leave the footer's
+ * submit button outside it, and Enter would do nothing.
+ */
+export function Modal({
+  open,
+  title,
+  description,
+  children,
+  onClose,
+  onSubmit,
+  submitLabel = 'Save',
+  submitDisabled = false,
+  destructive = false,
+  busy = false,
+  footer = null,
+  width = 520,
+}) {
+  const dialogRef = useRef(null);
+  const titleId = useId();
+  const descriptionId = useId();
+
+  // Current, never a dependency. See bug 2.
+  const onCloseRef = useLatest(onClose);
+
+  /**
+   * Focus once, on open, and put it somewhere useful.
+   *
+   * `[open]` is the entire dependency list on purpose. Adding anything that
+   * changes while the dialog is in use — a handler, a disabled flag, a value —
+   * reintroduces the per-keystroke refocus this is written to prevent.
+   */
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const previous = document.activeElement;
+    const node = dialogRef.current;
+    if (node) {
+      const candidates = Array.from(node.querySelectorAll(FOCUSABLE));
+      // The close button is never the initial target: a dialog that opens with
+      // "dismiss" selected teaches people to dismiss it.
+      const target =
+        candidates.find(el => el.dataset.dialogClose === undefined && el.tagName !== 'BUTTON') ??
+        candidates.find(el => el.dataset.dialogClose === undefined) ??
+        node;
+      target.focus();
+    }
+
+    return () => {
+      // Put focus back where it came from, so closing a dialog does not dump
+      // the caret at the top of the document.
+      if (previous instanceof HTMLElement && document.contains(previous)) previous.focus();
+    };
+  }, [open]);
+
+  /** Escape closes. Tab cycles within the dialog rather than escaping behind it. */
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const onKeyDown = event => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        onCloseRef.current?.();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const node = dialogRef.current;
+      if (!node) return;
+      const items = Array.from(node.querySelectorAll(FOCUSABLE)).filter(
+        el => el.offsetParent !== null || el === document.activeElement
+      );
+      if (items.length === 0) return;
+
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [open, onCloseRef]);
+
+  const submit = useCallback(
+    event => {
+      event.preventDefault();
+      if (submitDisabled || busy) return;
+      onSubmit?.(event);
+    },
+    [onSubmit, submitDisabled, busy]
+  );
+
+  if (!open) return null;
+
+  return (
+    <div
+      // The scrim. `display: grid` with padding is what bounds the dialog: the
+      // child can be at most the viewport minus this padding, which is contract
+      // point 1 and needs no max-height arithmetic.
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: Z.modal,
+        display: 'grid',
+        placeItems: 'center',
+        padding: 24,
+        background: 'rgba(17,17,17,.45)',
+      }}
+      onMouseDown={event => {
+        // Only a press that both starts and ends on the scrim dismisses. A drag
+        // that began inside the dialog and released out here is a text
+        // selection, not a decision to discard what was typed.
+        if (event.target === event.currentTarget) onClose?.();
+      }}
+    >
+      <form
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={description ? descriptionId : undefined}
+        onSubmit={submit}
+        onMouseDown={event => event.stopPropagation()}
+        style={{
+          width: `min(${width}px, 100%)`,
+          // Bounded, and a flex column so the three parts can be told apart.
+          maxHeight: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          // Belt and braces with maxHeight: a flex item's default min-height is
+          // auto here too, and the scrim is a grid whose child would otherwise
+          // refuse to shrink.
+          minHeight: 0,
+          background: '#fff',
+          border: `1px solid ${palette.line}`,
+          borderRadius: 10,
+          boxShadow: '0 16px 48px rgba(0,0,0,.24)',
+          font: '14px/1.5 system-ui, sans-serif',
+          color: palette.ink,
+          animation: 'adminDialogIn .14s ease both',
+        }}
+      >
+        {/* flex: none — the head must never be what the browser compresses. */}
+        <header
+          style={{
+            flex: 'none',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 12,
+            padding: '16px 18px 12px',
+            borderBottom: `1px solid ${palette.hairline}`,
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2 id={titleId} style={{ font: '600 16px/1.35 system-ui', margin: 0 }}>
+              {title}
+            </h2>
+            {description ? (
+              <p id={descriptionId} style={{ margin: '5px 0 0', fontSize: 13, color: palette.muted }}>
+                {description}
+              </p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            // Marks this out so the focus effect can refuse to land on it.
+            data-dialog-close=""
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              flex: 'none',
+              border: 0,
+              background: 'transparent',
+              font: 'inherit',
+              fontSize: 18,
+              lineHeight: 1,
+              color: palette.muted,
+              cursor: 'pointer',
+              padding: 4,
+            }}
+          >
+            ×
+          </button>
+        </header>
+
+        {/*
+          The scrollable middle. `minHeight: 0` is the fix; `overflowY` alone
+          was already present in the customer app and did nothing without it.
+        */}
+        <div
+          data-dialog-body=""
+          style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '14px 18px' }}
+        >
+          {children}
+        </div>
+
+        {/* flex: none again — the footer is the part that went missing. */}
+        <footer
+          style={{
+            flex: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '12px 18px 14px',
+            borderTop: `1px solid ${palette.hairline}`,
+            background: '#fafafb',
+            borderRadius: '0 0 10px 10px',
+          }}
+        >
+          {footer}
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                padding: '8px 14px',
+                border: `1px solid ${palette.line}`,
+                borderRadius: 6,
+                background: '#fff',
+                font: 'inherit',
+                cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              // The primary action is the form's submit, which is what makes
+              // Enter work from any field above. A click handler on a
+              // type="button" here would look identical and break the keyboard.
+              type="submit"
+              disabled={submitDisabled || busy}
+              style={{
+                padding: '8px 14px',
+                border: 0,
+                borderRadius: 6,
+                background: submitDisabled || busy ? '#bbb' : destructive ? palette.danger : palette.ink,
+                color: '#fff',
+                font: 'inherit',
+                cursor: submitDisabled || busy ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {busy ? 'Working…' : submitLabel}
+            </button>
+          </div>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * A confirmation for something that cannot be taken back.
+ *
+ * `destructive` defaults to **true**, matching the customer app's `ConfirmModal`
+ * and for the same reason: dressing an additive action in the danger treatment
+ * is how people learn to click through the red dialogs that matter. An additive
+ * confirmation passes `destructive={false}`.
+ *
+ * `confirmText` implements the type-the-name gate doc 32 §7 requires of workspace
+ * and account deletion. When set, the primary action stays disabled until the
+ * typed value matches exactly — no trimming, no case folding. A gate that
+ * accepts an approximation is a gate that only slows down the careful.
+ *
+ * `requireReason` is the other half. Staff actions that reach into a customer's
+ * account take a mandatory reason, because the audit row is worth little without
+ * one.
+ */
+export function ConfirmModal({
+  open,
+  title,
+  description,
+  blastRadius = null,
+  confirmText = null,
+  requireReason = false,
+  confirmLabel = 'Confirm',
+  destructive = true,
+  busy = false,
+  onCancel,
+  onConfirm,
+}) {
+  const [typed, setTyped] = useState('');
+  const [reason, setReason] = useState('');
+
+  // Cleared on open, not on close: leaving it to close means a dialog that is
+  // dismissed by unmounting keeps the old value for the next thing it confirms.
+  useEffect(() => {
+    if (open) {
+      setTyped('');
+      setReason('');
+    }
+  }, [open]);
+
+  const nameOk = confirmText === null || typed === confirmText;
+  const reasonOk = !requireReason || reason.trim().length > 0;
+  const ready = nameOk && reasonOk;
+
+  return (
+    <Modal
+      open={open}
+      title={title}
+      description={description}
+      onClose={onCancel}
+      onSubmit={() => onConfirm(reason.trim())}
+      submitLabel={confirmLabel}
+      submitDisabled={!ready}
+      destructive={destructive}
+      busy={busy}
+      width={480}
+    >
+      {blastRadius ? (
+        <div
+          style={{
+            background: destructive ? palette.dangerSoft : '#f7f7f8',
+            border: `1px solid ${destructive ? palette.dangerLine : palette.line}`,
+            borderRadius: 6,
+            padding: 12,
+            marginBottom: 14,
+            fontSize: 13,
+          }}
+        >
+          {blastRadius}
+        </div>
+      ) : null}
+
+      {confirmText !== null ? (
+        <label style={{ display: 'block', marginBottom: 14 }}>
+          <span style={{ display: 'block', fontSize: 13, marginBottom: 6 }}>
+            Type <strong>{confirmText}</strong> to confirm
+          </span>
+          <input
+            value={typed}
+            onChange={event => setTyped(event.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            aria-label={`Type ${confirmText} to confirm`}
+            style={{
+              width: '100%',
+              padding: '8px 10px',
+              border: `1px solid ${typed && !nameOk ? palette.dangerLine : '#ccc'}`,
+              borderRadius: 6,
+              font: 'inherit',
+            }}
+          />
+        </label>
+      ) : null}
+
+      {requireReason ? (
+        <label style={{ display: 'block' }}>
+          <span style={{ display: 'block', fontSize: 13, marginBottom: 6 }}>
+            Reason <span style={{ color: palette.muted }}>(recorded in the audit log)</span>
+          </span>
+          <textarea
+            value={reason}
+            onChange={event => setReason(event.target.value)}
+            rows={3}
+            style={{
+              width: '100%',
+              padding: '8px 10px',
+              border: '1px solid #ccc',
+              borderRadius: 6,
+              font: 'inherit',
+              resize: 'vertical',
+            }}
+          />
+        </label>
+      ) : null}
+    </Modal>
+  );
+}
+
+/**
+ * The toast dock.
+ *
+ * One element carrying `--z-toast`, rather than the inline `zIndex: 90` repeated
+ * across eight route files in the customer app — a set of copies nothing keeps
+ * in step. ui-layering.md asks both tracks not to add a ninth.
+ */
+export function ToastDock({ toasts = [], onDismiss }) {
+  if (toasts.length === 0) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      style={{
+        position: 'fixed',
+        right: 16,
+        bottom: 16,
+        zIndex: Z.toast,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+      }}
+    >
+      {toasts.map(toast => (
+        <div
+          key={toast.id}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            maxWidth: 380,
+            padding: '10px 12px',
+            borderRadius: 8,
+            background: toast.tone === 'error' ? palette.danger : palette.ink,
+            color: '#fff',
+            font: '13px/1.45 system-ui, sans-serif',
+            boxShadow: '0 8px 24px rgba(0,0,0,.22)',
+          }}
+        >
+          <span style={{ flex: 1, minWidth: 0 }}>{toast.message}</span>
+          <button
+            type="button"
+            onClick={() => onDismiss?.(toast.id)}
+            aria-label="Dismiss"
+            style={{
+              flex: 'none',
+              border: 0,
+              background: 'transparent',
+              color: 'inherit',
+              font: 'inherit',
+              cursor: 'pointer',
+            }}
+          >
+            ×
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}

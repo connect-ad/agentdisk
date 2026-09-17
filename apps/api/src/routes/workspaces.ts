@@ -5,6 +5,17 @@
  *   GET    /v1/workspaces       the ones they can reach, for the switcher
  *   POST   /v1/workspaces       create another under their billing account
  *   DELETE /v1/workspaces/:id   destroy one, and everything inside it
+ *   PATCH  /v1/workspaces/:id   rename one
+ *
+ * PATCH is the exception to everything the next paragraph says, and the reason
+ * is worth stating. The other three act on the *set* of workspaces, so making
+ * them name one would be circular. A rename acts inside a workspace that
+ * already exists and is already named in the URL - so it goes through `withAuth`
+ * like every ordinary route, which is what gives it a membership check, a role,
+ * and an `audit()` that a deletion cannot have (see `deleteWorkspaceForUser`:
+ * `audit_events` is workspace-scoped by foreign key, so the row describing a
+ * workspace's destruction is the one row it cannot hold - a rename leaves the
+ * workspace standing, so its own record survives with it).
  *
  * Both sit outside `withAuth` deliberately, and it is worth being precise about
  * why rather than treating it as an exception. `withAuth` resolves a workspace
@@ -25,9 +36,13 @@
 
 import { z } from "zod";
 import { ApiError, forbidden, validationError } from "../lib/errors";
+import { assertCanAdminister, isMemberRole } from "../auth/roles";
+import { audit } from "../lib/audit";
+import type { AuthContext } from "../middleware/auth";
 import { newId } from "../lib/ids";
 import { isSlugConflict, uniqueWorkspaceSlug } from "../lib/slug";
 import { listWorkspacesForUser } from "../db/user-lookup";
+import { deleteWorkspaceCascade } from "../db/workspace-cascade";
 import type { UserRow } from "../db/user-lookup";
 
 /** 30 days, matching the reset the sandbox bootstrap uses. */
@@ -143,9 +158,6 @@ const deleteSchema = z.object({
   name: z.string(),
 });
 
-/** R2 accepts up to 1000 keys in one delete. */
-const R2_DELETE_CHUNK = 1000;
-
 /**
  * DELETE /v1/workspaces/:id - destroy a workspace and everything in it.
  *
@@ -224,46 +236,11 @@ export async function deleteWorkspaceForUser(
     });
   }
 
-  // R2 before D1, matching the purge job's ordering and for its reason: the
-  // rows are the only record of which objects exist, so losing them first
-  // orphans bytes that nothing can ever find again. A failure here leaves the
-  // workspace intact and retryable, which is the better half of the trade.
-  const objects = await db
-    .prepare(`SELECT r2_object_key FROM files WHERE workspace_id = ?`)
-    .bind(workspaceId)
-    .all<{ r2_object_key: string }>();
-
-  const keys = objects.results.map(row => row.r2_object_key);
-  for (let i = 0; i < keys.length; i += R2_DELETE_CHUNK) {
-    await files.delete(keys.slice(i, i + R2_DELETE_CHUNK));
-  }
-
-  // Every reference INTO the workspace is cleared before anything is removed.
-  // Within one statement SQLite deletes rows in an arbitrary order and checks
-  // foreign keys immediately, so a self-referencing tree (folders.parent_folder_id)
-  // or one referenced from outside it (files.folder_id) fails whichever way the
-  // DELETE is written - the same trap `deleteRecursive` documents.
-  await db.batch([
-    db.prepare(`UPDATE files SET folder_id = NULL WHERE workspace_id = ?`).bind(workspaceId),
-    db.prepare(`UPDATE folders SET parent_folder_id = NULL WHERE workspace_id = ?`).bind(workspaceId),
-    db
-      .prepare(
-        `DELETE FROM file_tags
-          WHERE file_id IN (SELECT id FROM files WHERE workspace_id = ?)`
-      )
-      .bind(workspaceId),
-    db.prepare(`DELETE FROM files WHERE workspace_id = ?`).bind(workspaceId),
-    db.prepare(`DELETE FROM folders WHERE workspace_id = ?`).bind(workspaceId),
-    // Keys before agents: api_keys.agent_id points at agents.
-    db.prepare(`DELETE FROM api_keys WHERE workspace_id = ?`).bind(workspaceId),
-    db.prepare(`DELETE FROM agents WHERE workspace_id = ?`).bind(workspaceId),
-    db.prepare(`DELETE FROM webhooks WHERE workspace_id = ?`).bind(workspaceId),
-    db.prepare(`DELETE FROM audit_events WHERE workspace_id = ?`).bind(workspaceId),
-    // Only the rows naming this workspace. An org-wide membership has a NULL
-    // workspace_id and grants the other workspaces on the same bill.
-    db.prepare(`DELETE FROM memberships WHERE workspace_id = ?`).bind(workspaceId),
-    db.prepare(`DELETE FROM workspaces WHERE id = ?`).bind(workspaceId),
-  ]);
+  // The ordering, the R2-before-D1 rule and the FK dance all live in
+  // deleteWorkspaceCascade now, shared with the claim merge's cleanup and the
+  // unclaimed sweep. The gates above are what make *this* caller a person's
+  // deliberate act; the cascade itself is the same operation in all three.
+  const { objectsDeleted } = await deleteWorkspaceCascade(db, files, workspaceId);
 
   // Logged, not audited, and that is forced rather than chosen: `audit_events`
   // is workspace-scoped by foreign key, so the one row describing a workspace's
@@ -275,10 +252,73 @@ export async function deleteWorkspaceForUser(
       message: "workspace deleted",
       workspaceId,
       userId: user.id,
-      files: keys.length,
+      files: objectsDeleted,
       at: new Date(now).toISOString(),
     })
   );
 
-  return json({ id: workspaceId, deleted: true, files: keys.length });
+  return json({ id: workspaceId, deleted: true, files: objectsDeleted });
+}
+
+const renameSchema = z.object({
+  // Same shape as creation, so a name that could be created can be set.
+  name: z.string().trim().min(1, "A workspace needs a name.").max(60),
+});
+
+/**
+ * PATCH /v1/workspaces/:id - rename, and nothing else.
+ *
+ * Owner or admin, via `assertCanAdminister`, whose own comment already scopes it
+ * as "workspace settings short of deletion". A reader is refused: they can see
+ * the workspace, not re-label it for everybody else in it.
+ *
+ * Refused for an API key. An agent's credential renaming the workspace would
+ * change what every person in the dashboard sees, driven by something with no
+ * person behind it - the same reasoning that keeps an API key away from the
+ * member roster.
+ *
+ * The name is the only field. A slug is not derivable from it here and must not
+ * be: see `WorkspaceScopedSettings.rename`.
+ */
+export async function renameWorkspace(
+  ctx: AuthContext,
+  request: Request,
+  workspaceId: string
+): Promise<Response> {
+  // `withAuth` resolved the credential against ?workspaceId=; the URL names the
+  // subject. A mismatch is refused rather than silently preferring one, because
+  // a caller that believes it is renaming a different workspace must be told it
+  // is not - the same rule withAuth applies to an API key that names one.
+  if (workspaceId !== ctx.workspaceId) {
+    throw forbidden("The workspace named in the path is not the one this request is scoped to.");
+  }
+
+  if (ctx.identity.kind !== "firebase_user") {
+    throw forbidden("Only a signed-in user can rename a workspace.");
+  }
+  if (!isMemberRole(ctx.identity.role)) throw forbidden("Unknown role.");
+  assertCanAdminister(ctx.identity.role);
+
+  let parsed;
+  try {
+    parsed = renameSchema.parse(await request.json());
+  } catch {
+    throw validationError("Send a JSON body with the workspace's new name.");
+  }
+
+  const previous = ctx.workspace.name;
+  if (parsed.name === previous) {
+    // Nothing to write, and nothing worth an audit row either.
+    return json({ workspace: { id: workspaceId, name: previous, slug: ctx.workspace.slug } });
+  }
+
+  await ctx.db.settings.rename(parsed.name, ctx.now);
+
+  audit(ctx, request, "workspace.renamed", {
+    resourceType: "workspace",
+    resourceId: workspaceId,
+    metadata: { from: previous, to: parsed.name },
+  });
+
+  return json({ workspace: { id: workspaceId, name: parsed.name, slug: ctx.workspace.slug } });
 }

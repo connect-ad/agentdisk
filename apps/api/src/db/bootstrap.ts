@@ -11,13 +11,40 @@
  * key pointing at nothing - cannot exist.
  */
 
-import { generateApiKey } from "../lib/keys";
+import { generateApiKey, randomSecret, sha256Hex } from "../lib/keys";
 import { newId } from "../lib/ids";
 import { FALLBACK_SLUG, slugify } from "../lib/slug";
 import { serializeScopes, type KeyScope } from "../auth/scopes";
 
 /** How long a sandbox workspace's usage period runs before it rolls over. */
 const PERIOD_LENGTH_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * How long a claim link stays good.
+ *
+ * Deliberately longer than the unclaimed-workspace TTL in jobs/sandbox-expiry.ts,
+ * and independent of it. The sweep decides when abandoned *data* goes; this
+ * decides when a *link* stops working. Making the link the shorter of the two
+ * is the right way round: a workspace whose link died is still claimable by
+ * support from the ID, whereas a live link pointing at deleted data is a
+ * broken promise to whoever saved it.
+ *
+ * 30 days because a claim link is typically pasted into an agent's own output
+ * and read by a person hours or days later - an hour-long expiry would fail the
+ * ordinary case, and this is a single-use token guarded by a unique index, not
+ * a session.
+ */
+export const CLAIM_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * 40 base62 characters, wider than the 32 an API key gets.
+ *
+ * A claim token is guessable-once: unlike a key, presenting a wrong one is not
+ * rate-limited by an agent's own behaviour, and a hit grants ownership of a
+ * whole workspace. The extra 8 characters cost nothing in a URL and put this
+ * far beyond any online search.
+ */
+const CLAIM_TOKEN_LENGTH = 40;
 
 /**
  * What the first key can do: everything inside its own workspace, and nothing
@@ -48,6 +75,12 @@ export interface ProvisionResult {
   token: string;
   keyPrefix: string;
   keyLastFour: string;
+  /**
+   * The raw claim token. Like `token`, returned once and never recoverable -
+   * only its SHA-256 reached the workspace row.
+   */
+  claimToken: string;
+  claimTokenExpiresAt: number;
 }
 
 export async function provisionSandboxWorkspace(
@@ -63,6 +96,14 @@ export async function provisionSandboxWorkspace(
   const keyId = newId("apiKey", now);
 
   const key = await generateApiKey("live");
+
+  // The claim link's secret. Generated here rather than on first use so it is
+  // written inside the same batch as the workspace it unlocks - a workspace
+  // that exists with no way to claim it would be unreachable by the person the
+  // agent is provisioning it for, and unclaimable forever.
+  const claimToken = randomSecret(CLAIM_TOKEN_LENGTH);
+  const claimTokenHash = await sha256Hex(claimToken);
+  const claimTokenExpiresAt = now + CLAIM_TOKEN_TTL_MS;
 
   // users.email is NOT NULL UNIQUE, so the placeholder owner needs one. The
   // .invalid TLD is reserved by RFC 2606 precisely so it can never resolve or
@@ -87,8 +128,9 @@ export async function provisionSandboxWorkspace(
     db
       .prepare(
         `INSERT INTO workspaces
-           (id, org_id, name, slug, status, period_reset_at, claimed_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'active', ?, NULL, ?, ?)`
+           (id, org_id, name, slug, status, period_reset_at, claimed_at,
+            claim_token_hash, claim_token_expires_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'active', ?, NULL, ?, ?, ?, ?)`
       )
       // The organization two statements above is brand new, so this workspace
       // is alone in it and no uniqueness query is needed. The fallback covers a
@@ -99,6 +141,8 @@ export async function provisionSandboxWorkspace(
         workspaceName,
         slugify(workspaceName) || FALLBACK_SLUG,
         now + PERIOD_LENGTH_MS,
+        claimTokenHash,
+        claimTokenExpiresAt,
         now,
         now
       ),
@@ -140,5 +184,7 @@ export async function provisionSandboxWorkspace(
     token: key.token,
     keyPrefix: key.keyPrefix,
     keyLastFour: key.keyLastFour,
+    claimToken,
+    claimTokenExpiresAt,
   };
 }

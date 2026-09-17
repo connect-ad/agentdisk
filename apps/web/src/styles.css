@@ -735,7 +735,6 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
 /* The workspace switcher and account menu both sit in the top bar now, so
    their panels drop downward. .wsx__menu--up is the sidebar-era placement and
    is no longer used by either. */
-.shell__wsbtn--bar{width:auto;max-width:min(16.25rem,100%);padding:var(--s-2) var(--s-4);border-radius:var(--r-2)}
 
 /* --- Layer 1: workspace info strip --- */
 .shell__strip{background:var(--surface-2);border-bottom:1px solid var(--line);flex:none}
@@ -768,14 +767,25 @@ code.inline{font-family:var(--font-mono);font-size:0.9em;background:var(--surfac
 .shell__user{display:flex;align-items:center;gap:var(--s-4);width:100%;padding:var(--s-3);border:0;border-radius:var(--r-2);background:transparent;cursor:pointer;text-align:left;transition:background var(--d-1) var(--ease)}
 .shell__user:hover{background:var(--surface-2)}
 
-/* In the bar both are inline controls on one line, at the design's 34px. */
-/* min(cap, 100%) rather than the cap alone. `width:auto` makes this button
-   size to its content, so a bare max-width lets it grow past .shell__ws once
-   that wrapper has been squeezed narrower than the cap — the button then
-   overflows its own parent and the name paints over the controls beside it.
-   Capping at 100% as well keeps it inside whatever room the wrapper has. */
-.shell__wsbtn--bar{width:16.25rem;min-width:16.25rem;max-width:calc(100vw - 10rem);height:2.625rem;padding:0 var(--s-4);border-radius:var(--r-2)}
-.shell__wsbtn--bar .shell__wsmeta{display:block;font-size:var(--t-10);font-weight:var(--w-med);letter-spacing:var(--tr-caps)}
+/* In the bar both are inline controls on one line, at the design's 34px.
+   The button sizes to its content, as the reference does — a fixed width left a
+   wide gap between a short name and the chevron, which read as a broken layout
+   rather than as a control.
+   min(cap, 100%) rather than the cap alone: `width:auto` means a bare max-width
+   lets it grow past .shell__ws once that wrapper has been squeezed narrower than
+   the cap — the button then overflows its own parent and the name paints over
+   the controls beside it. Capping at 100% as well keeps it inside whatever room
+   the wrapper has. */
+.shell__wsbtn--bar{width:auto;max-width:min(16.25rem,100%);height:2.125rem;padding:0 var(--s-4);border-radius:var(--r-2)}
+/* The icon is the one child that must never absorb the squeeze: the name is what
+   ellipsises. */
+.shell__wsbtn--bar>svg{flex:none}
+/* The reference carries the role as a bordered mono tag beside the name, not as
+   a second line under it: 9.5px, 0.06em — the same tracking .badge uses, which
+   has no token — in the mid ink, inside its own hairline box. At 34px there is
+   only one line to sit on, and boxing the tag is what keeps it from reading as
+   part of the name. */
+.shell__wsbtn--bar .shell__wsmeta{flex:none;font-family:var(--font-mono);font-size:var(--t-9-5);font-weight:var(--w-reg);letter-spacing:0.06em;color:var(--ink-2);border:1px solid var(--line);border-radius:var(--r-1);padding:var(--s-1) var(--s-3)}
 
 .shell__page{flex:1;padding:var(--s-8) var(--gutter);min-width:0;display:flex;flex-direction:column;gap:var(--s-7)}
 .shell__page--flush{padding:0}

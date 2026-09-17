@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body { margin:0; -webkit-font-smoothing:antialiased; }
+    *:focus-visible { outline:2px solid var(--acc); outline-offset:2px; border-radius:4px; }
+    @keyframes shimmer { 0%,100% { opacity:.45 } 50% { opacity:.9 } }
+    ::-webkit-scrollbar { height:8px; width:8px }
+    ::-webkit-scrollbar-thumb { background:#8A8A9A; border-radius:99px }
+  </style>
+</helmet>
+
+<div style="min-height:100vh;background:#0E0E16;padding-bottom:40px">
+
+  <div style="width:100%;background:#141420;border-bottom:1px solid #262636;position:sticky;top:0;z-index:20">
+    <div style="max-width:1240px;margin:0 auto;padding:9px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.12em;color:#7E8697">DESIGN SYSTEM</span>
+      <button onClick="{{ toggleTheme }}" style="margin-left:auto;height:28px;padding:0 12px;border:1px solid #2C2C3D;border-radius:7px;background:#1D1D2B;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:12px;font-weight:500;color:#9BA3B2;cursor:pointer">{{ themeLabel }}</button>
+    </div>
+  </div>
+
+  <div style="display:block;padding:36px 24px;overflow-x:auto">
+    <div style="{{ sheetStyle }}">
+
+      <div style="padding:40px 40px 28px;border-bottom:1px solid var(--bd)">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+          <img src="./agentdisk-logo.png" alt="AgentDisk" style="width:36px;height:36px;border-radius:9px;background:#FFFFFF;object-fit:contain;padding:3px;box-sizing:border-box;display:block">
+          <div>
+            <div style="font-family:'Outfit',system-ui,sans-serif;font-size:22px;font-weight:600;letter-spacing:-0.02em;color:var(--tx)">AgentDisk</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.1em;color:var(--tx3);margin-top:2px">DESIGN SYSTEM v1.0</div>
+          </div>
+        </div>
+        <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--tx2);max-width:640px">One palette, one type scale, one component set — applied across the marketing site, the auth pages and the dashboard shell. Every colour pair below meets WCAG 2.1 AA in both modes.</p>
+      </div>
+
+      <!-- COLOUR -->
+      <section style="{{ sec }}">
+        <div style="{{ secHead }}">
+          <span style="{{ secNum }}">01</span>
+          <h2 style="{{ h2 }}">Colour</h2>
+        </div>
+        <p style="{{ secP }}">Neutrals carry the interface; the accent is reserved for stat figures, primary actions, active tabs and agent-authored rows. Semantic colours never appear as decoration.</p>
+
+        <div style="{{ swatchGrid }}">
+          <sc-for list="{{ swatches }}" as="s" hint-placeholder-count="8">
+            <div style="border:1px solid var(--bd);border-radius:11px;overflow:hidden;background:var(--surf)">
+              <div style="{{ s.chipStyle }}"></div>
+              <div style="padding:11px 12px">
+                <div style="font-size:12.5px;font-weight:600;color:var(--tx)">{{ s.name }}</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--tx3);margin-top:3px">{{ s.token }}</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--tx2);margin-top:5px">{{ s.hex }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="{{ pairGrid }}">
+          <sc-for list="{{ pairs }}" as="p" hint-placeholder-count="4">
+            <div style="{{ p.boxStyle }}">
+              <span style="{{ p.txStyle }}">{{ p.label }}</span>
+              <span style="{{ p.ratioStyle }}">{{ p.ratio }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <!-- TYPE -->
+      <section style="{{ sec }}">
+        <div style="{{ secHead }}">
+          <span style="{{ secNum }}">02</span>
+          <h2 style="{{ h2 }}">Typography</h2>
+        </div>
+        <div style="{{ typeMeta }}">
+          <div style="border:1px solid var(--bd);background:var(--surf);border-radius:11px;padding:14px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.11em;color:var(--tx3);margin-bottom:8px">DISPLAY</div>
+            <div style="font-family:'Outfit',system-ui,sans-serif;font-size:22px;font-weight:600;letter-spacing:-0.02em;color:var(--tx)">Outfit</div>
+            <div style="font-size:12px;color:var(--tx2);margin-top:5px">Headings and stat figures</div>
+          </div>
+          <div style="border:1px solid var(--bd);background:var(--surf);border-radius:11px;padding:14px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.11em;color:var(--tx3);margin-bottom:8px">UI / BODY</div>
+            <div style="font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:22px;font-weight:600;color:var(--tx)">IBM Plex Sans</div>
+            <div style="font-size:12px;color:var(--tx2);margin-top:5px">Labels, prose, controls</div>
+          </div>
+          <div style="border:1px solid var(--bd);background:var(--surf);border-radius:11px;padding:14px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.11em;color:var(--tx3);margin-bottom:8px">MONO</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:21px;font-weight:600;color:var(--tx)">IBM Plex Mono</div>
+            <div style="font-size:12px;color:var(--tx2);margin-top:5px">Keys, paths, IDs, checksums, code</div>
+          </div>
+        </div>
+
+        <div style="border:1px solid var(--bd);background:var(--surf);border-radius:11px;overflow:hidden">
+          <sc-for list="{{ typeScale }}" as="t" hint-placeholder-count="7">
+            <div style="display:flex;align-items:baseline;gap:20px;padding:14px 16px;border-bottom:1px solid var(--bd)">
+              <span style="width:104px;flex:0 0 104px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.09em;color:var(--tx3)">{{ t.token }}</span>
+              <span style="{{ t.style }}">{{ t.sample }}</span>
+              <span style="margin-left:auto;flex:0 0 auto;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--tx3)">{{ t.spec }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <!-- COMPONENTS -->
+      <section style="{{ sec }}">
+        <div style="{{ secHead }}">
+          <span style="{{ secNum }}">03</span>
+          <h2 style="{{ h2 }}">Components</h2>
+        </div>
+
+        <div style="{{ compGrid }}">
+
+          <div style="{{ card }}">
+            <div style="{{ cardHead }}">Button</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+              <span style="{{ btnPrimary }}">Primary</span>
+              <span style="{{ btnSecondary }}">Secondary</span>
+              <span style="{{ btnGhost }}">Ghost</span>
+              <span style="{{ btnDanger }}">Danger</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              <span style="{{ btnDisabled }}">Disabled</span>
+              <span style="{{ btnLoading }}">
+                <span style="width:11px;height:11px;border-radius:99px;border:2px solid var(--accInk);border-top-color:transparent;display:block;animation:shimmer 1s ease-in-out infinite"></span>
+                Working
+              </span>
+            </div>
+          </div>
+
+          <div style="{{ card }}">
+            <div style="{{ cardHead }}">Input · Select</div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div style="height:40px;border:1px solid var(--bd2);border-radius:9px;background:var(--surf2);display:flex;align-items:center;padding:0 12px;font-size:13.5px;color:var(--tx)">Default value</div>
+              <div style="height:40px;border:1px solid var(--acc);border-radius:9px;background:var(--surf2);display:flex;align-items:center;padding:0 12px;font-size:13.5px;color:var(--tx)">Focused</div>
+              <div>
+                <div style="height:40px;border:1px solid var(--dngrBd);border-radius:9px;background:var(--surf2);display:flex;align-items:center;padding:0 12px;font-size:13.5px;color:var(--tx)">not-an-email</div>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:6px">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--dngrTx)" stroke-width="2.6" stroke-linecap="round" style="flex:0 0 12px"><circle cx="12" cy="12" r="9.2"></circle><path d="M12 7.5v5M12 16.5v.01"></path></svg>
+                  <span style="font-size:11.5px;color:var(--dngrTx)">Enter a valid email address</span>
+                </div>
+              </div>
+              <div style="height:40px;border:1px solid var(--bd2);border-radius:9px;background:var(--surf2);display:flex;align-items:center;justify-content:space-between;padding:0 12px">
+                <span style="font-size:13.5px;color:var(--tx)">eu-central-1</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--tx2)" stroke-width="2.2" stroke-linecap="round"><path d="m6 9 6 6 6-6"></path></svg>
+              </div>
+            </div>
+          </div>
+
+          <div style="{{ card }}">
+            <div style="{{ cardHead }}">Checkbox · Radio · Switch</div>
+            <div style="display:flex;flex-direction:column;gap:13px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="width:17px;height:17px;border-radius:5px;background:var(--acc);display:flex;align-items:center;justify-content:center;flex:0 0 17px">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--accInk)" stroke-width="3.4" stroke-linecap="round"><path d="M4 12.5 9 17.5 20 6.5"></path></svg>
+                </span>
+                <span style="font-size:13px;color:var(--tx)">Checked</span>
+                <span style="width:17px;height:17px;border-radius:5px;border:1.5px solid var(--bd2);display:block;flex:0 0 17px;margin-left:12px"></span>
+                <span style="font-size:13px;color:var(--tx2)">Unchecked</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="width:16px;height:16px;border-radius:99px;border:5px solid var(--acc);background:var(--surf);display:block;flex:0 0 16px"></span>
+                <span style="font-size:13px;color:var(--tx)">Selected</span>
+                <span style="width:16px;height:16px;border-radius:99px;border:1.5px solid var(--bd2);display:block;flex:0 0 16px;margin-left:12px"></span>
+                <span style="font-size:13px;color:var(--tx2)">Option</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="width:36px;height:20px;border-radius:99px;background:var(--acc);display:flex;align-items:center;justify-content:flex-end;padding:0 3px;flex:0 0 36px"><span style="width:14px;height:14px;border-radius:99px;background:var(--accInk);display:block"></span></span>
+                <span style="font-size:13px;color:var(--tx)">On</span>
+                <span style="width:36px;height:20px;border-radius:99px;background:var(--surf3);border:1px solid var(--bd2);display:flex;align-items:center;padding:0 3px;flex:0 0 36px;margin-left:12px"><span style="width:14px;height:14px;border-radius:99px;background:var(--tx3);display:block"></span></span>
+                <span style="font-size:13px;color:var(--tx2)">Off</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="{{ card }}">
+            <div style="{{ cardHead }}">Badge · Chip</div>
+            <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px">
+              <sc-for list="{{ badges }}" as="b" hint-placeholder-count="5">
+                <span style="{{ b.style }}">{{ b.label }}</span>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:7px">
+              <span style="{{ chipOn }}">All</span>
+              <span style="{{ chipOff }}">Humans</span>
+              <span style="{{ chipOff }}">Agents</span>
+            </div>
+          </div>
+
+          <div style="{{ card }}">
+            <div style="{{ cardHead }}">Stat tile</div>
+            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
+              <sc-for list="{{ tiles }}" as="t" hint-placeholder-count="2">
+                <div style="border:1px solid var(--bd);background:var(--surf2);border-radius:11px;padding:14px">
+                  <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:var(--tx3)">{{ t.label }}</span>
+                    <sc-if value="{{ t.flagged }}" hint-placeholder-val="{{ false }}">
+                      <span style="{{ t.flagStyle }}">{{ t.flag }}</span>
+                    </sc-if>
+                  </div>
+                  <div style="display:flex;align-items:baseline;gap:4px">
+                    <span style="font-family:'Outfit',system-ui,sans-serif;font-size:28px;font-weight:600;letter-spacing:-0.03em;color:var(--tx);line-height:1">{{ t.value }}</span>
+                    <span style="font-size:11.5px;color:var(--tx2)">{{ t.unit }}</span>
+                  </div>
+                  <div style="height:5px;border-radius:99px;background:var(--surf3);overflow:hidden;margin-top:11px"><div style="{{ t.barStyle }}"></div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="{{ card }}">
+            <div style="{{ cardHead }}">Alert · Banner</div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <sc-for list="{{ alerts }}" as="a" hint-placeholder-count="3">
+                <div style="{{ a.boxStyle }}">
+                  <span style="{{ a.dotStyle }}"></span>
+                  <span style="{{ a.txStyle }}">{{ a.text }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="{{ card }}">
+            <div style="{{ cardHead }}">Tabs · Breadcrumb</div>
+            <div style="display:flex;gap:2px;border-bottom:1px solid var(--bd);margin-bottom:14px">
+              <span style="{{ tabOn }}">Overview</span>
+              <span style="{{ tabOff }}">Files</span>
+              <span style="{{ tabOff }}">Activity</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--tx2)">agentdisk:/</span>
+              <span style="color:var(--tx3)">/</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--tx2)">projects</span>
+              <span style="color:var(--tx3)">/</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--tx);font-weight:600">research-agent</span>
+            </div>
+          </div>
+
+          <div style="{{ card }}">
+            <div style="{{ cardHead }}">Skeleton · Empty state</div>
+            <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:16px">
+              <div style="height:11px;width:72%;border-radius:99px;background:var(--surf3);animation:shimmer 1.3s ease-in-out infinite"></div>
+              <div style="height:11px;width:54%;border-radius:99px;background:var(--surf3);animation:shimmer 1.3s ease-in-out infinite .15s"></div>
+              <div style="height:11px;width:63%;border-radius:99px;background:var(--surf3);animation:shimmer 1.3s ease-in-out infinite .3s"></div>
+            </div>
+            <div style="border:1px dashed var(--bd2);border-radius:11px;padding:20px;text-align:center">
+              <div style="font-size:13.5px;font-weight:600;color:var(--tx);margin-bottom:4px">No objects yet</div>
+              <div style="font-size:12.5px;color:var(--tx2);margin-bottom:12px">Agents write here once they hold a scoped key.</div>
+              <span style="{{ btnSecondary }}">Create a key</span>
+            </div>
+          </div>
+
+          <div style="{{ card }}">
+            <div style="{{ cardHead }}">Table row states</div>
+            <div style="border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+              <sc-for list="{{ rows }}" as="r" hint-placeholder-count="4">
+                <div style="{{ r.style }}">
+                  <span style="{{ r.dot }}"></span>
+                  <span style="flex:1;min-width:0;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.path }}</span>
+                  <span style="font-size:11px;color:var(--tx3);flex:0 0 auto">{{ r.state }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="{{ card }}">
+            <div style="{{ cardHead }}">Tooltip · Dropdown</div>
+            <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
+              <div style="background:var(--tx);color:var(--surf);border-radius:7px;padding:6px 10px;font-size:11.5px;font-weight:500">Copy workspace ID</div>
+              <div style="border:1px solid var(--bd2);background:var(--surf);border-radius:10px;padding:5px;box-shadow:0 12px 32px var(--shadow);min-width:150px">
+                <div style="padding:7px 9px;border-radius:7px;background:var(--surf2);font-size:12.5px;color:var(--tx)">Account</div>
+                <div style="padding:7px 9px;border-radius:7px;font-size:12.5px;color:var(--tx)">Billing</div>
+                <div style="padding:7px 9px;border-radius:7px;font-size:12.5px;color:var(--dngrTx)">Sign Out</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- FOUNDATIONS -->
+      <section style="{{ secLast }}">
+        <div style="{{ secHead }}">
+          <span style="{{ secNum }}">04</span>
+          <h2 style="{{ h2 }}">Spacing, radius, breakpoints</h2>
+        </div>
+        <div style="{{ foundGrid }}">
+          <div style="{{ card }}">
+            <div style="{{ cardHead }}">Radius</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <sc-for list="{{ radii }}" as="r" hint-placeholder-count="4">
+                <div style="text-align:center">
+                  <div style="{{ r.boxStyle }}"></div>
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--tx3);margin-top:6px">{{ r.label }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="{{ card }}">
+            <div style="{{ cardHead }}">Spacing scale</div>
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <sc-for list="{{ spacing }}" as="p" hint-placeholder-count="5">
+                <div style="display:flex;align-items:center;gap:11px">
+                  <span style="width:34px;flex:0 0 34px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--tx3)">{{ p.label }}</span>
+                  <span style="{{ p.barStyle }}"></span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="{{ card }}">
+            <div style="{{ cardHead }}">Breakpoints</div>
+            <div style="display:flex;flex-direction:column;gap:11px">
+              <sc-for list="{{ bps }}" as="b" hint-placeholder-count="3">
+                <div>
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:3px">
+                    <span style="font-size:12.5px;font-weight:600;color:var(--tx)">{{ b.name }}</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--tx3)">{{ b.range }}</span>
+                  </div>
+                  <div style="font-size:11.5px;line-height:1.45;color:var(--tx2)">{{ b.note }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;colourMode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Theme&quot;}}">
+const DARK = {
+  "--bg": "#0B0D11", "--surf": "#12151B", "--surf2": "#171B22", "--surf3": "#1F242D",
+  "--bd": "#252B35", "--bd2": "#343C49", "--tx": "#E9ECF1", "--tx2": "#9AA3B2", "--tx3": "#909AA8",
+  "--acc": "#B592FF", "--accSoft": "#1E1533", "--accBd": "#452F6E", "--accInk": "#0B0D11",
+  "--ok": "#34D399", "--okSoft": "#0E251C", "--okBd": "#1F4D3B", "--okTx": "#4ADE9B",
+  "--warn": "#FBBF24", "--warnSoft": "#271E0B", "--warnBd": "#544015", "--warnTx": "#FCD34D",
+  "--dngr": "#F87171", "--dngrSoft": "#2A1315", "--dngrBd": "#5A2A2C", "--dngrTx": "#FCA5A5",
+  "--code": "#0E1116", "--codeTx": "#C6CEDB", "--shadow": "rgba(0,0,0,.55)"
+};
+const LIGHT = {
+  "--bg": "#F6F7F9", "--surf": "#FFFFFF", "--surf2": "#F4F6F9", "--surf3": "#EBEEF3",
+  "--bd": "#E2E6EC", "--bd2": "#C9D0DA", "--tx": "#111621", "--tx2": "#525C6B", "--tx3": "#5F6875",
+  "--acc": "#6D28D9", "--accSoft": "#F3EDFE", "--accBd": "#D7C4FB", "--accInk": "#FFFFFF",
+  "--ok": "#15803D", "--okSoft": "#ECFDF3", "--okBd": "#B7E4C7", "--okTx": "#166534",
+  "--warn": "#B45309", "--warnSoft": "#FEF6E7", "--warnBd": "#F0D9A8", "--warnTx": "#92400E",
+  "--dngr": "#DC2626", "--dngrSoft": "#FEF1F1", "--dngrBd": "#F3C4C4", "--dngrTx": "#B42318",
+  "--code": "#F7F8FB", "--codeTx": "#1E2530", "--shadow": "rgba(17,22,33,.16)"
+};
+
+class Component extends DCLogic {
+  state = { theme: this.props.colourMode ?? "dark" };
+
+  renderVals() {
+    const s = this.state, dark = s.theme === "dark";
+    const T = dark ? DARK : LIGHT;
+    const btn = (bg, color, border) => ({ height: "36px", padding: "0 14px", borderRadius: "9px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px", fontSize: "13px", fontWeight: 600, background: bg, color, border: border || "none" });
+
+    return {
+      sheetStyle: Object.assign({}, T, {
+        width: "1180px", margin: "0 auto", background: "var(--bg)", color: "var(--tx)",
+        fontFamily: "'IBM Plex Sans',system-ui,sans-serif", border: "1px solid #2A2A3A",
+        borderRadius: "14px", overflow: "hidden", boxShadow: "0 24px 70px rgba(0,0,0,.45)"
+      }),
+      themeLabel: dark ? "Dark mode" : "Light mode",
+      toggleTheme: () => this.setState(st => ({ theme: st.theme === "dark" ? "light" : "dark" })),
+
+      sec: { padding: "34px 40px", borderBottom: "1px solid var(--bd)" },
+      secLast: { padding: "34px 40px 44px" },
+      secHead: { display: "flex", alignItems: "center", gap: "11px", marginBottom: "10px" },
+      secNum: { fontFamily: "'IBM Plex Mono',monospace", fontSize: "10px", letterSpacing: "0.11em", color: "var(--acc)", border: "1px solid var(--accBd)", background: "var(--accSoft)", borderRadius: "5px", padding: "3px 7px" },
+      h2: { margin: 0, fontFamily: "'Outfit',system-ui,sans-serif", fontSize: "22px", fontWeight: 600, letterSpacing: "-0.025em", color: "var(--tx)" },
+      secP: { margin: "0 0 22px", fontSize: "13.5px", lineHeight: 1.6, color: "var(--tx2)", maxWidth: "640px" },
+
+      swatchGrid: { display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: "12px", marginBottom: "16px" },
+      swatches: [
+        { name: "Canvas", token: "--bg", hex: dark ? "#0B0D11" : "#F6F7F9", c: "var(--bg)" },
+        { name: "Surface", token: "--surf", hex: dark ? "#12151B" : "#FFFFFF", c: "var(--surf)" },
+        { name: "Border", token: "--bd", hex: dark ? "#252B35" : "#E2E6EC", c: "var(--bd)" },
+        { name: "Ink", token: "--tx", hex: dark ? "#E9ECF1" : "#111621", c: "var(--tx)" },
+        { name: "Accent", token: "--acc", hex: dark ? "#B592FF" : "#6D28D9", c: "var(--acc)" },
+        { name: "Success", token: "--ok", hex: dark ? "#34D399" : "#15803D", c: "var(--ok)" },
+        { name: "Warning", token: "--warn", hex: dark ? "#FBBF24" : "#B45309", c: "var(--warn)" },
+        { name: "Danger", token: "--dngr", hex: dark ? "#F87171" : "#DC2626", c: "var(--dngr)" }
+      ].map(x => ({ ...x, chipStyle: { height: "58px", background: x.c, borderBottom: "1px solid var(--bd)" } })),
+
+      pairGrid: { display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: "12px" },
+      pairs: [
+        { label: "Ink on surface", ratio: dark ? "14.8:1" : "16.1:1", bg: "var(--surf)", fg: "var(--tx)", bd: "var(--bd)" },
+        { label: "Muted on surface", ratio: dark ? "6.2:1" : "7.4:1", bg: "var(--surf)", fg: "var(--tx2)", bd: "var(--bd)" },
+        { label: "Accent ink on accent", ratio: dark ? "11.9:1" : "9.6:1", bg: "var(--acc)", fg: "var(--accInk)", bd: "var(--acc)" },
+        { label: "Danger on soft", ratio: dark ? "7.1:1" : "6.8:1", bg: "var(--dngrSoft)", fg: "var(--dngrTx)", bd: "var(--dngrBd)" }
+      ].map(p => ({
+        label: p.label, ratio: p.ratio,
+        boxStyle: { border: "1px solid " + p.bd, background: p.bg, borderRadius: "11px", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" },
+        txStyle: { fontSize: "13px", fontWeight: 500, color: p.fg },
+        ratioStyle: { fontFamily: "'IBM Plex Mono',monospace", fontSize: "11px", color: p.fg, opacity: 0.85 }
+      })),
+
+      typeMeta: { display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: "12px", marginBottom: "18px" },
+      typeScale: [
+        { token: "display/xl", sample: "Storage agents can reason about", spec: "50 / 1.04 / -3.5%", f: "'Outfit',system-ui,sans-serif", size: "30px", weight: 600, ls: "-0.035em" },
+        { token: "display/lg", sample: "Connecting an agent over MCP", spec: "32 / 1.15 / -3%", f: "'Outfit',system-ui,sans-serif", size: "24px", weight: 600, ls: "-0.03em" },
+        { token: "heading/md", sample: "Agent identities", spec: "22 / 1.25 / -2.5%", f: "'Outfit',system-ui,sans-serif", size: "19px", weight: 600, ls: "-0.025em" },
+        { token: "stat/figure", sample: "1.94M", spec: "34 / 1 / -3%", f: "'Outfit',system-ui,sans-serif", size: "26px", weight: 600, ls: "-0.03em" },
+        { token: "body/md", sample: "Keys are shown in full once, at creation.", spec: "13.5 / 1.6", f: "'IBM Plex Sans',system-ui,sans-serif", size: "13.5px", weight: 400, ls: "0" },
+        { token: "label/mono", sample: "REQUESTS THIS PERIOD", spec: "9.5 / 0.11em", f: "'IBM Plex Mono',monospace", size: "10px", weight: 500, ls: "0.11em" },
+        { token: "code/mono", sample: "adk_live_••••4aUgT", spec: "12 / 1.7", f: "'IBM Plex Mono',monospace", size: "12px", weight: 400, ls: "0" }
+      ].map(t => ({ token: t.token, sample: t.sample, spec: t.spec, style: { fontFamily: t.f, fontSize: t.size, fontWeight: t.weight, letterSpacing: t.ls, color: "var(--tx)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } })),
+
+      compGrid: { display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: "14px" },
+      card: { border: "1px solid var(--bd)", background: "var(--surf)", borderRadius: "12px", padding: "16px" },
+      cardHead: { fontFamily: "'IBM Plex Mono',monospace", fontSize: "9.5px", letterSpacing: "0.11em", color: "var(--tx3)", marginBottom: "14px" },
+
+      btnPrimary: btn("var(--acc)", "var(--accInk)"),
+      btnSecondary: btn("transparent", "var(--tx)", "1px solid var(--bd2)"),
+      btnGhost: btn("transparent", "var(--tx2)"),
+      btnDanger: btn("var(--dngrSoft)", "var(--dngrTx)", "1px solid var(--dngrBd)"),
+      btnDisabled: Object.assign(btn("var(--surf3)", "var(--tx3)"), { cursor: "not-allowed" }),
+      btnLoading: btn("var(--acc)", "var(--accInk)"),
+
+      badges: [
+        { label: "Active", fg: "var(--okTx)", bg: "var(--okSoft)", bd: "var(--okBd)" },
+        { label: "Idle 14d", fg: "var(--warnTx)", bg: "var(--warnSoft)", bd: "var(--warnBd)" },
+        { label: "Revoked", fg: "var(--dngrTx)", bg: "var(--dngrSoft)", bd: "var(--dngrBd)" },
+        { label: "read", fg: "var(--tx2)", bg: "var(--surf3)", bd: "var(--bd)" },
+        { label: "TEAM", fg: "var(--acc)", bg: "var(--accSoft)", bd: "var(--accBd)" }
+      ].map(b => ({ label: b.label, style: { fontFamily: "'IBM Plex Mono',monospace", fontSize: "9.5px", fontWeight: 600, letterSpacing: "0.06em", padding: "3px 7px", borderRadius: "5px", color: b.fg, background: b.bg, border: "1px solid " + b.bd } })),
+      chipOn: { height: "28px", padding: "0 11px", borderRadius: "8px", display: "inline-flex", alignItems: "center", fontSize: "12.5px", fontWeight: 600, color: "var(--acc)", background: "var(--accSoft)", border: "1px solid var(--accBd)" },
+      chipOff: { height: "28px", padding: "0 11px", borderRadius: "8px", display: "inline-flex", alignItems: "center", fontSize: "12.5px", fontWeight: 500, color: "var(--tx2)", background: "var(--surf)", border: "1px solid var(--bd)" },
+
+      tiles: [
+        { label: "STORAGE", value: "39.1", unit: "GB", pct: 78, flag: "78%" },
+        { label: "REQUESTS", value: "1.94", unit: "M", pct: 97, flag: "97%" }
+      ].map(t => ({
+        ...t, flagged: true,
+        flagStyle: { fontFamily: "'IBM Plex Mono',monospace", fontSize: "8.5px", fontWeight: 600, letterSpacing: "0.06em", padding: "2px 5px", borderRadius: "4px", color: t.pct >= 90 ? "var(--dngrTx)" : "var(--warnTx)", background: t.pct >= 90 ? "var(--dngrSoft)" : "var(--warnSoft)", border: "1px solid " + (t.pct >= 90 ? "var(--dngrBd)" : "var(--warnBd)") },
+        barStyle: { height: "100%", width: t.pct + "%", borderRadius: "99px", background: t.pct >= 90 ? "var(--dngr)" : "var(--warn)" }
+      })),
+
+      alerts: [
+        { text: "Webhook delivered in 214 ms", fg: "var(--okTx)", bg: "var(--okSoft)", bd: "var(--okBd)", dot: "var(--ok)" },
+        { text: "Storage at 78% of plan limit", fg: "var(--warnTx)", bg: "var(--warnSoft)", bd: "var(--warnBd)", dot: "var(--warn)" },
+        { text: "Endpoint failing — 6 retries queued", fg: "var(--dngrTx)", bg: "var(--dngrSoft)", bd: "var(--dngrBd)", dot: "var(--dngr)" }
+      ].map(a => ({
+        text: a.text,
+        boxStyle: { display: "flex", alignItems: "center", gap: "10px", border: "1px solid " + a.bd, background: a.bg, borderRadius: "9px", padding: "10px 12px" },
+        dotStyle: { width: "7px", height: "7px", borderRadius: "99px", background: a.dot, flex: "0 0 7px" },
+        txStyle: { fontSize: "12.5px", fontWeight: 500, color: a.fg }
+      })),
+
+      tabOn: { height: "34px", padding: "0 12px", display: "inline-flex", alignItems: "center", fontSize: "13px", fontWeight: 600, color: "var(--acc)", boxShadow: "inset 0 -2px 0 0 var(--acc)" },
+      tabOff: { height: "34px", padding: "0 12px", display: "inline-flex", alignItems: "center", fontSize: "13px", fontWeight: 500, color: "var(--tx2)" },
+
+      rows: [
+        { path: "/projects/corpus.parquet", state: "Default", bg: "transparent", dot: "var(--acc)", square: true },
+        { path: "/projects/notes.md", state: "Hover", bg: "var(--surf2)", dot: "var(--tx3)", square: false },
+        { path: "/projects/sources.csv", state: "Selected", bg: "var(--accSoft)", dot: "var(--tx3)", square: false },
+        { path: "/tmp/scratch-004.bin", state: "Deleting", bg: "var(--dngrSoft)", dot: "var(--dngr)", square: true }
+      ].map(r => ({
+        path: r.path, state: r.state,
+        style: { display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", borderBottom: "1px solid var(--bd)", background: r.bg },
+        dot: { width: "7px", height: "7px", flex: "0 0 7px", borderRadius: r.square ? "2px" : "99px", background: r.dot }
+      })),
+
+      foundGrid: { display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: "14px" },
+      radii: [["6px", "6"], ["9px", "9"], ["12px", "12"], ["99px", "pill"]].map(([r, label]) => ({
+        label, boxStyle: { width: "46px", height: "46px", borderRadius: r, background: "var(--accSoft)", border: "1px solid var(--accBd)" }
+      })),
+      spacing: [["4", 4], ["8", 8], ["12", 12], ["18", 18], ["28", 28], ["40", 40]].map(([label, w]) => ({
+        label: label + "px", barStyle: { height: "10px", width: w * 3 + "px", borderRadius: "3px", background: "var(--acc)", opacity: 0.35 + w / 70, display: "block" }
+      })),
+      bps: [
+        { name: "Mobile", range: "< 700", note: "Stat tiles scroll horizontally, info strip collapses, tables become cards." },
+        { name: "Tablet", range: "700–1079", note: "Stat tiles 2×2, tab strip scrolls, docs drop the right rail." },
+        { name: "Desktop", range: "≥ 1080", note: "Four tiles in a row, full tab strip, three-column docs." }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

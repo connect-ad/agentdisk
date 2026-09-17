@@ -92,6 +92,46 @@ describe("POST /v1/files - inline upload", () => {
     expect(await stored!.text()).toBe(content);
   });
 
+  /**
+   * P2. The dashboard's own Quick start sent `contentType`, which this schema
+   * calls `mimeType`. Zod strips unknown keys by default, so the upload
+   * succeeded, the field vanished, and every file created by following the
+   * product's documentation was stored as application/octet-stream. The typo was
+   * invisible precisely because the API accepted it.
+   */
+  it("refuses an unknown field rather than silently dropping it", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
+
+    const res = await call("POST", "/v1/files", token, {
+      path: "/notes/typo.md",
+      contentType: "text/markdown",
+      content: toBase64("hi"),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+
+    // And nothing was created under the mistaken assumption that it worked.
+    const listed = await call("GET", "/v1/files", token);
+    const files = ((await listed.json()) as { files: { path: string }[] }).files;
+    expect(files.some(f => f.path === "/notes/typo.md")).toBe(false);
+  });
+
+  it("stores the mime type the documented field name carries", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
+
+    const res = await call("POST", "/v1/files", token, {
+      path: "/notes/typed.md",
+      mimeType: "text/markdown",
+      content: toBase64("hi"),
+    });
+
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { file: { mimeType: string } };
+    expect(body.file.mimeType).toBe("text/markdown");
+  });
+
   it("books the bytes against the workspace's usage", async () => {
     const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
     await call("POST", "/v1/files", token, { path: "/a.txt", content: toBase64("12345") });

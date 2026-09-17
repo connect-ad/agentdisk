@@ -17,10 +17,9 @@ import { z } from "zod";
 import { ApiError, validationError } from "../lib/errors";
 import { basename, dirname, normalizePath } from "../lib/paths";
 import { assertScope, assertScopedPath } from "../auth/scopes";
-import { assertWithinQuota } from "../lib/quota";
 import { newId } from "../lib/ids";
 import { effectiveListPrefix } from "./files";
-import type { AuthContext } from "../middleware/auth";
+import { assertQuotaAndWarn, type AuthContext } from "../middleware/auth";
 import type { FolderRow } from "../db/types";
 
 const CreateSchema = z.object({
@@ -280,7 +279,7 @@ export async function copyFile(ctx: AuthContext, request: Request, fileId: strin
 
   // Quota is charged for the copy, because it really is another copy of the
   // bytes. Checked before anything is written.
-  assertWithinQuota(ctx.workspace, ctx.limits, { bytes: row.size_bytes, files: 1 }, ctx.now);
+  assertQuotaAndWarn(ctx, { bytes: row.size_bytes, files: 1 });
 
   const newFileId = newId("file", ctx.now);
   await ctx.storage.copy(fileId, newFileId);

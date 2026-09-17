@@ -18,6 +18,11 @@
 import { z } from "zod";
 import { ApiError, unauthorized, validationError } from "../lib/errors";
 import { verifyPassword, verifyTotp, decryptSecret } from "../staff/crypto";
+import { sendPasswordResetEmail, type EmailConfig } from "../lib/email";
+import {
+  generatePasswordResetLink,
+  type FirebaseAdminConfig,
+} from "../auth/firebase-admin";
 import {
   createStaffSession,
   resolveStaffSession,
@@ -48,6 +53,16 @@ export interface StaffDeps {
   encryptionKey?: string;
   requestId: string;
   now: number;
+  /**
+   * Outbound email, or null when this deployment has none. Resolved once at the
+   * dispatch site rather than read from `env` here, so a handler cannot reach
+   * past the config object to the raw token.
+   */
+  email: EmailConfig | null;
+  /** Privileged Firebase calls, or null when the credential is absent. */
+  firebaseAdmin: FirebaseAdminConfig | null;
+  /** Where a reset link returns the customer once they are done. */
+  dashboardUrl?: string;
 }
 
 /** Failed logins per email per window, before the account is refused outright. */
@@ -261,6 +276,85 @@ export async function staffForceLogout(
   const done = await access(staff, deps).forceLogout(userId, workspaceId);
   if (!done) throw new ApiError("NOT_FOUND", "No such user.");
   return json({ userId, sessionsRevoked: true });
+}
+
+const passwordResetSchema = z.object({
+  // Mandatory, and short-circuiting a reset on somebody else's account without
+  // one is the point. Every other staff mutation that reaches into a customer
+  // account takes a reason; this one reaches all the way to their credentials.
+  reason: z.string().trim().min(1).max(500),
+});
+
+/**
+ * POST /v1/staff/users/:id/password-reset — support and above.
+ *
+ * Sends the customer a reset link. Support-level on purpose: this is the action
+ * a support engineer performs on the phone, and it grants nothing — the link
+ * goes to the account holder's address, never to the staff member, and the
+ * response body deliberately does not contain it. A staff member who could read
+ * the link back would hold a credential for that account.
+ *
+ * The response does not say whether Firebase had an identity for the address.
+ * It says the reset was started, because that is the only fact the caller can
+ * act on, and "no identity" is a detail for the log.
+ */
+export async function staffForcePasswordReset(
+  request: Request,
+  deps: StaffDeps,
+  userId: string
+): Promise<Response> {
+  const staff = await requireStaff(request, deps);
+
+  let body;
+  try {
+    body = passwordResetSchema.parse(await request.json());
+  } catch {
+    throw validationError("A reason is required.");
+  }
+
+  // Both halves, checked before anything is written. Either one missing means
+  // the feature is off in this deployment, and saying so plainly beats the
+  // alternative shape - reporting success for a message nobody will receive.
+  if (deps.email === null) {
+    throw new ApiError("INTERNAL_ERROR", "Email delivery is not configured.", {
+      internalReason: "MAILERSEND_API_TOKEN is not set",
+    });
+  }
+  if (deps.firebaseAdmin === null) {
+    throw new ApiError("INTERNAL_ERROR", "Account administration is not configured.", {
+      internalReason: "FIREBASE_SERVICE_ACCOUNT_JSON is not set",
+    });
+  }
+
+  const emailConfig = deps.email;
+  const adminConfig = deps.firebaseAdmin;
+
+  const outcome = await access(staff, deps).forcePasswordReset(
+    userId,
+    body.reason,
+    async (address) => {
+      const reset = await generatePasswordResetLink(
+        adminConfig,
+        deps.kv,
+        address,
+        deps.now,
+        deps.dashboardUrl === undefined ? {} : { continueUrl: deps.dashboardUrl }
+      );
+      if (reset === null) return "no_identity";
+
+      await sendPasswordResetEmail(emailConfig, {
+        to: address,
+        resetUrl: reset.link,
+        // The recipient did not ask for this, and a reset link arriving
+        // unexplained is indistinguishable from a phishing attempt.
+        initiatedBy: "support",
+      });
+      return "sent";
+    }
+  );
+
+  if (outcome === null) throw new ApiError("NOT_FOUND", "No such user.");
+  return json({ userId, passwordResetSent: true });
 }
 
 export async function staffRevokeKeys(

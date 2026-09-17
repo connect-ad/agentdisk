@@ -121,7 +121,7 @@ export default function ApiKeys() {
           ? <Badge tone="accent" mono>{agentName(r.agentId) ?? r.agentId}</Badge>
           : <span style={{ color: 'var(--ink-3)' }}>Workspace</span>
     },
-    { key: 'key', header: 'Key', width: 200, render: r => <ApiKeyDisplay lastFour={r.lastFour} /> },
+    { key: 'key', header: 'Key', width: 200, render: r => <ApiKeyDisplay prefix={r.prefix} lastFour={r.lastFour} /> },
     {
       key: 'scope',
       header: 'Scope',
@@ -238,10 +238,11 @@ export default function ApiKeys() {
         size="md"
         mark={<Icon name="key" size={16} />}
         onClose={() => setDialog(null)}
+        onSubmit={create}
         footer={
           <>
             <Button variant="secondary" onClick={() => setDialog(null)}>Cancel</Button>
-            <Button onClick={create} loading={busy}>Create key</Button>
+            <Button type="submit" loading={busy}>Create key</Button>
           </>
         }
       >

@@ -4,7 +4,21 @@ import { IconButton } from '../Button/IconButton.jsx';
 
 const FOCUSABLE = 'input,select,textarea,button,[href],[tabindex]:not([tabindex="-1"])';
 
-export function Modal({ open = true, title, description, mark, tone = 'neutral', size = 'sm', footer, onClose, children, className = '', ...rest }) {
+/**
+ * `onSubmit` is point 4 of the modal contract (docs/ui-layering.md §2), and the
+ * one part that cannot be done in CSS -- which is why this vendored component
+ * diverges from its reference. See backlog/031.
+ *
+ * When it is given, the body and footer are wrapped in a <form>, so Enter from
+ * any text field inside completes the dialog. Escape already closes; Enter is
+ * its counterpart, and a single-field dialog that cannot be finished from the
+ * keyboard is broken for the people most likely to be using it.
+ *
+ * The primary action still needs type="submit" at the call site. Every other
+ * button in the footer is safe because Button now defaults to type="button" --
+ * without that, an untyped Cancel inside this form would submit.
+ */
+export function Modal({ open = true, title, description, mark, tone = 'neutral', size = 'sm', footer, onClose, onSubmit, children, className = '', ...rest }) {
   const ref = useRef(null);
 
   // `onClose` is an inline arrow at every call site, so it is a different
@@ -47,8 +61,18 @@ export function Modal({ open = true, title, description, mark, tone = 'neutral',
           </div>
           {onClose ? <div className="modal__x"><IconButton icon={<Icon name="x" size={15} />} label="Close" onClick={onClose} /></div> : null}
         </header>
-        {children ? <div className="modal__body">{children}</div> : null}
-        {footer ? <div className="modal__foot">{footer}</div> : null}
+        {(() => {
+          const body = children ? <div className="modal__body">{children}</div> : null;
+          const foot = footer ? <div className="modal__foot">{footer}</div> : null;
+          if (!onSubmit) return <>{body}{foot}</>;
+          return (
+            // `contents` keeps the form out of the flex column's layout, so the
+            // head/body/foot sizing contract above is unchanged by wrapping.
+            <form style={{ display: 'contents' }} onSubmit={(e) => { e.preventDefault(); onSubmit(e); }}>
+              {body}{foot}
+            </form>
+          );
+        })()}
       </div>
     </div>
   );

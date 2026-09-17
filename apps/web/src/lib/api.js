@@ -134,6 +134,18 @@ export function createApiClient(getToken) {
       request(`/v1/workspaces/${workspaceId}`, { method: 'DELETE', body: { name } }),
 
     /**
+     * Rename a workspace. Name only -- the slug is derived once at creation and
+     * deliberately does not follow it, so no URL anyone holds can break.
+     *
+     * `workspaceId` is passed as well as named in the path: the path is the
+     * subject, and the query parameter is what the auth chain resolves the
+     * caller's membership against. The API refuses a request where they
+     * disagree rather than picking one.
+     */
+    renameWorkspace: (workspaceId, name) =>
+      request(`/v1/workspaces/${workspaceId}`, { method: 'PATCH', body: { name }, workspaceId }),
+
+    /**
      * Take ownership of an unclaimed sandbox. `body` is {mode:'new'} or
      * {mode:'attach', targetWorkspaceId}. No `workspaceId` option: which
      * workspace this concerns is what the claim token decides, and the target
@@ -153,6 +165,17 @@ export function createApiClient(getToken) {
     getFile: (workspaceId, fileId) => request(`/v1/files/${fileId}`, { workspaceId }),
     deleteFile: (workspaceId, fileId) =>
       request(`/v1/files/${fileId}`, { method: 'DELETE', workspaceId }),
+    /**
+     * Resolves to { url, method, expiresAt, sizeBytes } - a short-lived
+     * presigned GET, not the bytes.
+     *
+     * **Call it once per download.** The API accounts egress when it *issues*
+     * the URL, because R2 does not call back on a GET, so a second call for the
+     * same click bills the file twice. Fetching the returned URL costs nothing
+     * further.
+     */
+    downloadFile: (workspaceId, fileId) =>
+      request(`/v1/files/${fileId}/download`, { workspaceId }),
 
     listAgents: workspaceId => request('/v1/agents', { workspaceId }),
     getAgent: (workspaceId, agentId) => request(`/v1/agents/${agentId}`, { workspaceId }),

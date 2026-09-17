@@ -39,8 +39,18 @@ if (!EMAIL || !PASSWORD) {
   process.exit(1);
 }
 
-/** Input renders the required marker inside the label, so it reads "Email*". */
-const byLabel = (page, field) => page.getByLabel(new RegExp('^' + field + '[*]?$'));
+/**
+ * Input renders the required marker inside the label, so it reads "Email*".
+ *
+ * Tolerant of case and of a qualifying word in front, because this is *setup*,
+ * not an assertion. The auth rebuild renamed the field from "Email" to
+ * "WORK EMAIL", which stopped this script dead and with it every authed spec —
+ * a signed-out suite that reports "0 failures" is the outcome a baseline must
+ * never produce. The specs themselves still assert accessible names exactly;
+ * only getting *in* is forgiving.
+ */
+const byLabel = (page, field) =>
+  page.getByLabel(new RegExp('^(work |full )?' + field + '[*]?$', 'i'));
 
 /** Anywhere that requires a session. */
 const INSIDE = /^\/(w\/|app$|dashboard$|verify-email$)/;
@@ -87,7 +97,8 @@ async function main() {
   await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded' });
   await byLabel(page, 'Email').fill(EMAIL);
   await byLabel(page, 'Password').fill(PASSWORD);
-  await page.getByRole('button', { name: /^sign in$/i }).click();
+  // "Sign in" became "Log in" in the auth rebuild; accept either.
+  await page.getByRole('button', { name: /^(sign in|log in)$/i }).click();
 
   // Sign-in is a network round trip to Firebase and then a client-side
   // redirect. Give it room rather than racing an alert against it.

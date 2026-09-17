@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Panel, DataTable, Select, Input, Button, Icon, Badge, Alert, EmptyState,
-  Modal, ConfirmModal, Toast, Checkbox
+  Modal, Toast, Checkbox
 } from '../components/index.js';
 import { useResource } from '../lib/useResource.js';
 import { useWorkspace } from '../lib/workspace.jsx';
@@ -273,12 +273,45 @@ const SUBPROCESSORS = [
   { name: 'Cloudflare', purpose: 'Object storage (R2), database (D1), compute (Workers), CDN', region: 'Global edge' },
   { name: 'Google (Firebase Authentication)', purpose: 'Sign-in, password storage, and session tokens', region: 'US / Global' },
   { name: 'Stripe', purpose: 'Payment processing and invoicing', region: 'US / EU' },
-  { name: 'Resend', purpose: 'Transactional email (notifications, address verification)', region: 'US' }
+  { name: 'MailerSend', purpose: 'Transactional email (notifications, address verification)', region: 'US' }
 ];
 
-export function PrivacyTab({ soleOwnerOf = 0 }) {
-  const [dialog, setDialog] = useState(null);
-  const [toast, setToast] = useState(null);
+/**
+ * How many workspaces this person is the *only* owner of.
+ *
+ * It cannot be read off `listWorkspaces`, which knows the caller's own role but
+ * not how many other owners a workspace has — so each owned workspace needs its
+ * member list. The fan-out is bounded by the number of workspaces somebody
+ * owns, and it runs only when the Privacy tab is opened.
+ *
+ * A workspace whose members cannot be read is counted as *not* solely owned.
+ * Guessing the other way would block account deletion on a request that simply
+ * failed.
+ */
+async function loadSoleOwnership(api) {
+  const { workspaces = [] } = await api.listWorkspaces();
+  const owned = workspaces.filter(w => w.role === 'owner');
+
+  const counts = await Promise.all(
+    owned.map(async w => {
+      try {
+        const { members = [] } = await api.listMembers(w.id);
+        return members.filter(m => m.role === 'owner').length;
+      } catch {
+        return 0;
+      }
+    })
+  );
+
+  return { soleOwnerOf: counts.filter(owners => owners === 1).length };
+}
+
+export function PrivacyTab() {
+  // Computed, never passed in. Settings.jsx used to hand this a literal 0, so
+  // the "only owner" block could not render and the button it gates could not
+  // disable -- a guard that was permanently off while looking present.
+  const { data } = useResource(loadSoleOwnership);
+  const soleOwnerOf = data?.soleOwnerOf ?? 0;
 
   const columns = [
     { key: 'name', header: 'Sub-processor', primary: true, width: 160 },
@@ -294,7 +327,7 @@ export function PrivacyTab({ soleOwnerOf = 0 }) {
         footer={<Button variant="link" as={Link} to="/privacy">Read the full privacy policy</Button>}
       >
         <dl className="dl">
-          <dt>File contents</dt><dd>Stored in object storage in the region you chose. Encrypted at rest.</dd>
+          <dt>File contents</dt><dd>Stored in Cloudflare R2 and encrypted at rest.</dd>
           <dt>File metadata</dt><dd>Path, size, MIME type, checksum, and which agent wrote it.</dd>
           <dt>Audit events</dt><dd>Actor, action, resource, source IP and client string. Kept for the life of the workspace; raw request logs are deleted or aggregated after about 90 days.</dd>
           <dt>Account data</dt><dd>Your email address, your display name, and the account identifier Firebase issues for you. <strong>No password.</strong> Firebase Authentication owns sign-in, so one never reaches AgentDisk to be stored or hashed.</dd>
@@ -306,11 +339,31 @@ export function PrivacyTab({ soleOwnerOf = 0 }) {
         <DataTable columns={columns} rows={SUBPROCESSORS} rowKey="name" />
       </Panel>
 
-      <Panel title="Your data" footer={<Button variant="secondary" onClick={() => setDialog('export')}>Export my data</Button>}>
+      {/*
+        P0-1. This opened a modal announcing "We'll email you a download link
+        within 24 hours" and then did nothing at all -- no job, no request, no
+        record that anybody had asked. Nothing in the product could have honoured
+        it: there is no export endpoint, and no delivery path wired to send one.
+
+        Disabled rather than removed, because unlike Move or Download-as-zip this
+        is a right the privacy policy grants (§13) and will be built. A disabled
+        control with a reason says "not yet"; a success message said "done".
+      */}
+      <Panel
+        title="Your data"
+        footer={<Button variant="secondary" disabled>Export my data</Button>}
+      >
         <p className="ad-small ad-measure">
-          An export includes your files, their metadata, and your audit history as a
+          An export would include your files, their metadata, and your audit history as a
           single archive.
         </p>
+        <Alert tone="warn" title="Not available yet">
+          Self-service export is not built. Your files and metadata can be retrieved
+          today through the API, which is the same data an archive would contain.
+          <br />
+          <Link to="/privacy">Privacy policy §13 and §18</Link> cover the right itself
+          and where to send a request.
+        </Alert>
       </Panel>
 
       <section aria-label="Danger zone">
@@ -319,45 +372,37 @@ export function PrivacyTab({ soleOwnerOf = 0 }) {
             Deleting your account removes your profile, sessions and personal data.
           </Alert>
           {soleOwnerOf > 0 ? (
-            <Alert tone="warn" title="Blocked">
-              You&rsquo;re the only owner of {soleOwnerOf} workspace(s). Transfer ownership or delete those workspaces first.
+            <Alert tone="warn" title="You are the only owner of a workspace">
+              You&rsquo;re the only owner of {soleOwnerOf} workspace
+              {soleOwnerOf === 1 ? '' : 's'}. Transfer ownership or delete
+              {soleOwnerOf === 1 ? ' it' : ' them'} first &mdash; deleting your account
+              cannot orphan a workspace other people may still be working in.
             </Alert>
           ) : null}
+          {/*
+            P0-2. This set a toast reading "Account deletion scheduled" and
+            scheduled nothing. Of the two false promises on this screen it was the
+            worse one: somebody who believes their account is being deleted stops
+            taking any other step to protect it.
+
+            Deleting an account is not just a row -- it has to settle the
+            workspaces they solely own, their agents' live keys and an open Stripe
+            subscription. None of that is built, so the control stays off.
+          */}
+          <Alert tone="warn" title="Not available yet">
+            Self-service account deletion is not built. You can delete a workspace and
+            everything in it today from Settings &rarr; General, and revoke every key
+            from the API keys screen. <Link to="/privacy">Privacy policy §13 and §18</Link>
+            cover the right itself and where to send a request.
+          </Alert>
           <div>
-            <Button variant="danger" disabled={soleOwnerOf > 0} onClick={() => setDialog('delete-account')}>
+            <Button variant="danger" disabled>
               Delete my account
             </Button>
           </div>
         </Panel>
       </section>
 
-      <Modal
-        open={dialog === 'export'}
-        title="Export requested"
-        tone="accent"
-        mark={<Icon name="download" size={16} />}
-        onClose={() => setDialog(null)}
-        footer={<Button onClick={() => setDialog(null)}>Got it</Button>}
-      >
-        <Alert tone="ok" title="We're preparing your export">
-          We&rsquo;ll email you a download link within 24 hours.
-        </Alert>
-      </Modal>
-
-      <ConfirmModal
-        open={dialog === 'delete-account'}
-        title="Delete your account?"
-        description="This removes your profile, sessions and personal data. It cannot be undone."
-        confirmLabel="Delete account"
-        onClose={() => setDialog(null)}
-        onConfirm={() => { setDialog(null); setToast('Account deletion scheduled'); }}
-      />
-
-      {toast ? (
-        <div style={{ position: 'fixed', top: 'var(--s-7)', right: 'var(--s-7)', zIndex: 90 }}>
-          <Toast tone="ok" title={toast} onDismiss={() => setToast(null)} />
-        </div>
-      ) : null}
     </>
   );
 }

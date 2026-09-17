@@ -759,6 +759,27 @@ export class WorkspaceScopedCounters extends WorkspaceScoped {
 }
 
 /**
+ * The workspace row's own editable settings - as opposed to its contents, which
+ * every other repository here covers.
+ *
+ * Bound like the rest, so no caller can rename another tenant's workspace.
+ *
+ * **`slug` is deliberately not touched.** It is derived once at creation and a
+ * rename leaves it alone, because the dashboard has always promised that
+ * renaming breaks no URL - and a slug that followed the name would silently
+ * invalidate every bookmark and every link somebody had shared. The ID remains
+ * the identifier either way.
+ */
+export class WorkspaceScopedSettings extends WorkspaceScoped {
+  async rename(name: string, now: number): Promise<void> {
+    await this.db
+      .prepare(`UPDATE workspaces SET name = ?, updated_at = ? WHERE id = ?`)
+      .bind(name, now, this.workspaceId)
+      .run();
+  }
+}
+
+/**
  * The single place a request's repositories are built. Called once per request,
  * after authorization has resolved which workspace the caller may act in -
  * never from a client-supplied field.
@@ -772,6 +793,7 @@ export function createWorkspaceContext(db: D1Database, workspaceId: string) {
     webhooks: new WorkspaceScopedWebhooks(db, workspaceId),
     auditEvents: new WorkspaceScopedAuditEvents(db, workspaceId),
     counters: new WorkspaceScopedCounters(db, workspaceId),
+    settings: new WorkspaceScopedSettings(db, workspaceId),
   };
 }
 

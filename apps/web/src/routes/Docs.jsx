@@ -46,7 +46,7 @@ const MCP_CONFIG = `{
 const UPLOAD = `curl -X POST ${API_BASE}/v1/files \
   -H "Authorization: Bearer $AGENTDISK_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"path":"/reports/q1.pdf","contentType":"application/pdf",
+  -d '{"path":"/reports/q1.pdf","mimeType":"application/pdf",
        "mode":"inline","content":"<base64 bytes>"}'`;
 
 const WHOAMI = `curl ${API_BASE}/v1/whoami?workspaceId=ws_… \

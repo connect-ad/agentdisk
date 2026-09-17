@@ -90,6 +90,14 @@ beforeEach(async () => {
   await primeJwks();
 
   await env.DB.prepare(`DELETE FROM memberships WHERE user_id != 'usr_TESTUSER'`).run();
+  // Inbound foreign keys first. Workspaces created by a test can now carry
+  // audit rows -- a rename writes one -- and SQLite checks the constraint
+  // immediately, so deleting the workspace while its events still point at it
+  // fails the whole cleanup. The product's own delete path has the same rule in
+  // deleteWorkspaceCascade; this is the ad-hoc equivalent.
+  await env.DB.prepare(
+    `DELETE FROM audit_events WHERE workspace_id NOT LIKE 'ws_AAA%' AND workspace_id NOT LIKE 'ws_BBB%'`
+  ).run();
   await env.DB.prepare(`DELETE FROM workspaces WHERE id NOT LIKE 'ws_AAA%' AND id NOT LIKE 'ws_BBB%'`).run();
   await env.DB.prepare(`DELETE FROM organizations WHERE id != ?`).bind(ORG_ID).run();
   await env.DB.prepare(`DELETE FROM users WHERE id != 'usr_TESTUSER'`).run();
@@ -558,5 +566,112 @@ describe('workspace slugs over HTTP', () => {
     // Not `recycled-2`: nothing holds the plain one any more, and handing out an
     // ever-climbing suffix for a name nobody is using would be a leak of history.
     expect(again.workspace.slug).toBe('recycled');
+  });
+});
+
+function asPatch(token: string, body: unknown): RequestInit {
+  return {
+    method: 'PATCH',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  };
+}
+
+/**
+ * PATCH /v1/workspaces/:id — P1-8.
+ *
+ * The dashboard's Save changes button flashed "Saved" and called nothing,
+ * because there was nothing to call. These cover the endpoint that now backs it,
+ * and one invariant that matters more than the rename itself: **the slug does
+ * not move.** The UI has always promised that renaming breaks no URL, and a slug
+ * that followed the name would invalidate every bookmark silently.
+ */
+describe('PATCH /v1/workspaces/:id', () => {
+  it('renames a workspace the caller owns, and leaves its slug alone', async () => {
+    const token = await mint(OWNER_UID, 'wsowner@example.com');
+    const { keep } = await twoOwned(token);
+
+    const before = await env.DB.prepare(`SELECT slug FROM workspaces WHERE id = ?`)
+      .bind(keep).first<{ slug: string }>();
+
+    const res = await SELF.fetch(
+      `${URL_BASE}/v1/workspaces/${keep}?workspaceId=${keep}`,
+      asPatch(token, { name: 'Renamed' })
+    );
+    expect(res.status).toBe(200);
+
+    const row = await env.DB.prepare(`SELECT name, slug FROM workspaces WHERE id = ?`)
+      .bind(keep).first<{ name: string; slug: string }>();
+    expect(row?.name).toBe('Renamed');
+    expect(row?.slug).toBe(before?.slug);
+  });
+
+  it('records the rename in the audit trail, with both names', async () => {
+    const token = await mint(OWNER_UID, 'wsowner@example.com');
+    const { keep } = await twoOwned(token);
+
+    await SELF.fetch(
+      `${URL_BASE}/v1/workspaces/${keep}?workspaceId=${keep}`,
+      asPatch(token, { name: 'Audited' })
+    );
+
+    const event = await env.DB.prepare(
+      `SELECT action, metadata FROM audit_events WHERE workspace_id = ? AND action = 'workspace.renamed'`
+    ).bind(keep).first<{ action: string; metadata: string }>();
+    expect(event).not.toBeNull();
+    expect(JSON.parse(event!.metadata)).toMatchObject({ from: 'Keep', to: 'Audited' });
+  });
+
+  it('refuses a reader, who may see the workspace but not re-label it', async () => {
+    const token = await mint(GUEST_UID, 'wsguest@example.com');
+
+    const res = await SELF.fetch(
+      `${URL_BASE}/v1/workspaces/${WORKSPACE_A}?workspaceId=${WORKSPACE_A}`,
+      asPatch(token, { name: 'Nope' })
+    );
+    expect(res.status).toBe(403);
+
+    const row = await env.DB.prepare(`SELECT name FROM workspaces WHERE id = ?`)
+      .bind(WORKSPACE_A).first<{ name: string }>();
+    expect(row?.name).not.toBe('Nope');
+  });
+
+  it('refuses an API key: a rename changes what every person in the workspace sees', async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ['read', 'write', 'delete', 'list'] });
+
+    const res = await SELF.fetch(`${URL_BASE}/v1/workspaces/${WORKSPACE_A}`, {
+      method: 'PATCH',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'AgentRenamed' }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('refuses a path that names a different workspace than the request is scoped to', async () => {
+    const token = await mint(OWNER_UID, 'wsowner@example.com');
+    const { keep, doomed } = await twoOwned(token);
+
+    const res = await SELF.fetch(
+      `${URL_BASE}/v1/workspaces/${doomed}?workspaceId=${keep}`,
+      asPatch(token, { name: 'Confused' })
+    );
+    expect(res.status).toBe(403);
+
+    // Neither one moved.
+    const rows = await env.DB.prepare(
+      `SELECT name FROM workspaces WHERE id IN (?, ?)`
+    ).bind(keep, doomed).all<{ name: string }>();
+    expect(rows.results?.map(r => r.name).sort()).toEqual(['Doomed', 'Keep']);
+  });
+
+  it('rejects an empty name', async () => {
+    const token = await mint(OWNER_UID, 'wsowner@example.com');
+    const { keep } = await twoOwned(token);
+
+    const res = await SELF.fetch(
+      `${URL_BASE}/v1/workspaces/${keep}?workspaceId=${keep}`,
+      asPatch(token, { name: '   ' })
+    );
+    expect(res.status).toBe(400);
   });
 });

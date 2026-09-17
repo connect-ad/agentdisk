@@ -26,7 +26,7 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? 'https://api-dev.agentdisk.io'
 const QUICK_START = `curl -X POST ${API_BASE}/v1/files \\
   -H "Authorization: Bearer $AGENTDISK_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"path":"/notes.md","contentType":"text/markdown","mode":"inline","content":"<base64>"}'`;
+  -d '{"path":"/notes.md","mimeType":"text/markdown","mode":"inline","content":"<base64>"}'`;
 
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes)) return '—';

@@ -18,7 +18,8 @@ import { ApiError, validationError } from "../lib/errors";
 import { clientIdentifier, enforce, type RateLimitRule } from "../lib/rate-limit";
 import { parseAllowedHostnames, verifyTurnstile } from "../lib/turnstile";
 import { provisionSandboxWorkspace, SANDBOX_KEY_SCOPE } from "../db/bootstrap";
-import { PLAN_LIMITS } from "../lib/plans";
+import { SANDBOX_LIMITS } from "../lib/plans";
+import { claimUrl } from "../lib/claim";
 
 /** 05 PART 13's stated limit for this route. */
 export const CREATE_WORKSPACE_RATE_LIMIT: RateLimitRule = {
@@ -45,6 +46,14 @@ export interface CreateWorkspaceDeps {
   kv: KVNamespace;
   turnstileSecret: string | undefined;
   allowedHostnames: string | undefined;
+  /**
+   * Where the dashboard lives, so the response can carry a claim link the
+   * agent's human can actually open. Reuses the variable Stripe's portal
+   * already returns to rather than introducing a second one that could be
+   * unset in one environment - a claim link is the only route from an agent's
+   * sandbox to a real account, so it must not go missing on a deploy.
+   */
+  dashboardUrl?: string | undefined;
   now?: number;
 }
 
@@ -102,12 +111,16 @@ export async function createWorkspace(
     workspace: {
       id: result.workspaceId,
       name: parsed.data.name ?? "Sandbox",
-      plan: "free",
+      // Not "free". An unclaimed workspace is on the sandbox allowance, and
+      // reporting the free plan's 2 GB here would have the API promising room
+      // the very next upload would refuse - the "false success" shape this
+      // product's own audit (backlog/023) already found elsewhere.
+      plan: "sandbox",
       claimed: false,
       limits: {
-        storageBytes: PLAN_LIMITS.free.storageBytes,
-        files: PLAN_LIMITS.free.fileCount,
-        maxFileBytes: PLAN_LIMITS.free.maxFileBytes,
+        storageBytes: SANDBOX_LIMITS.storageBytes,
+        files: SANDBOX_LIMITS.fileCount,
+        maxFileBytes: SANDBOX_LIMITS.maxFileBytes,
       },
     },
     agent: {
@@ -126,8 +139,20 @@ export async function createWorkspace(
         pathPrefix: "/*",
       },
     },
+    /**
+     * The one moment the raw claim token exists. Only its SHA-256 was written,
+     * so this link cannot be reissued or looked up later by anybody, support
+     * included - which is the same bargain the API key above makes, and for the
+     * same reason: whoever holds this link can take ownership of this workspace.
+     */
+    claim: {
+      url: claimUrl(deps.dashboardUrl, result.claimToken),
+      expiresAt: result.claimTokenExpiresAt,
+    },
     notice:
-      "Store this key now. It is shown once and cannot be recovered - only a hash of it is kept.",
+      "Store this key now. It is shown once and cannot be recovered - only a hash of it is kept. " +
+      "The claim URL is shown once too: it is how a person takes ownership of this workspace, " +
+      "and an unclaimed workspace is eventually deleted.",
   };
 
   return new Response(JSON.stringify(body), {

@@ -1,7 +1,8 @@
 # 029 · Does MCP enforce `pathPrefix`? Live testing and the code disagree
 
-**Status:** Open — unresolved contradiction, not a diagnosed bug. Settle it
-before doc 19's public MCP launch, which names it as a blocker.
+**Status:** Closed, 16 Sept 2026 — settled in the code's favour. MCP enforces
+`pathPrefix`. Doc 19's launch blocker is cleared; §9.4's report does not
+reproduce and should be read as superseded.
 
 ## The claim
 
@@ -64,3 +65,33 @@ bug nor its absence is currently provable from the suite.
 are literally the same code and cannot drift in what they allow." That claim is
 what §9.4 disputes. It stands until this is settled — the code supports it — but
 it should not be treated as settling the question on its own.
+
+---
+
+## Resolution — 16 Sept 2026
+
+Settled by direct testing against the live dev MCP endpoint, not by re-reading
+the code. With a key scoped to `/qa-folder/*`:
+
+- `get_file` on a file outside the prefix returned **FORBIDDEN**
+- `get_metadata` on the same file returned **FORBIDDEN**
+- `list_files` at the root **excluded** it
+- the same key over REST returned **403**
+
+So the two surfaces agree, which is what "What the code says" above predicted
+from `viaHandler`: the MCP tools are not reimplementations, they call the REST
+handlers, and `assertScopedPath` runs once for both. The §9.4 report and the
+code could not both be right, and the code was right.
+
+`test/mcp.test.ts` already pins this — *"honours a path-prefix scope exactly as
+REST does"* creates inside `/agents/bot` and is refused outside it — so the
+behaviour cannot regress unnoticed. It was passing throughout, which is itself
+part of the answer: a live report contradicting a green test deserved
+re-testing before it deserved a fix.
+
+**Nothing was changed.** The correct outcome for this item was to stop treating
+working code as broken. The residual lesson is about §9.4's method rather than
+the product: a scope finding taken from a manual JSON-RPC session needs the key's
+actual scope read back from the API before the result means anything.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>

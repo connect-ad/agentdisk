@@ -198,13 +198,15 @@ export default function Settings() {
   const [tab, setTab] = useState('general');
   // The real workspace, so the delete confirmation asks you to type the name
   // of the thing you are actually about to destroy.
-  const { api, workspace, workspaceId, workspaces, refresh } = useWorkspace();
+  const { api, workspace, workspaceId, workspaces, refresh, rename } = useWorkspace();
   const navigate = useNavigate();
   const WORKSPACE_NAME = workspace?.name ?? '';
   const [name, setName] = useState(WORKSPACE_NAME);
 
   React.useEffect(() => { setName(WORKSPACE_NAME); }, [WORKSPACE_NAME]);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
   const [dialog, setDialog] = useState(null); // 'delete-ws'
   const [confirmText, setConfirmText] = useState('');
   const [toast, setToast] = useState(null);
@@ -214,6 +216,30 @@ export default function Settings() {
   // The API refuses this too — it is not a client-side-only rule — but saying so
   // before the button is pressed beats a 409 the person cannot act on.
   const isOnlyWorkspace = workspaces.length <= 1;
+
+  /**
+   * Rename the workspace.
+   *
+   * This button used to be `setSaved(true)` and a timeout -- it flashed "Saved"
+   * and called nothing, because until now there was no endpoint to call. The
+   * "Saved" marker is only shown once the API has confirmed it.
+   */
+  const saveName = async () => {
+    const next = name.trim();
+    if (next === '' || next === WORKSPACE_NAME) return;
+
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await rename(workspaceId, next);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setSaveError(`${err.message}${err.requestId ? ` (request ${err.requestId})` : ''}`);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const deleteWorkspace = async () => {
     setDeleting(true); setDeleteError(null);
@@ -254,16 +280,23 @@ export default function Settings() {
             title="Workspace"
             footer={
               <>
-                <Button onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 2000); }}>Save changes</Button>
+                <Button
+                  loading={saving}
+                  disabled={name.trim() === '' || name.trim() === WORKSPACE_NAME}
+                  onClick={() => void saveName()}
+                >
+                  Save changes
+                </Button>
                 {saved ? <span className="saved">Saved</span> : null}
               </>
             }
           >
+            {saveError ? <Alert tone="danger" title="Not renamed">{saveError}</Alert> : null}
             <Input
               label="Workspace name"
               value={name}
               onChange={e => setName(e.target.value)}
-              hint="Cosmetic only. Renaming never changes URLs or API paths."
+              hint="Renaming never changes URLs or API paths — the workspace keeps the address it was created with."
             />
             <Input
               label="Workspace ID"
@@ -307,7 +340,7 @@ export default function Settings() {
 
       {/* --- 8.22 / 8.24 / 8.25 --- */}
       {tab === 'members' ? <MembersTab /> : null}
-      {tab === 'privacy' ? <PrivacyTab soleOwnerOf={0} /> : null}
+      {tab === 'privacy' ? <PrivacyTab /> : null}
       {tab === 'billing' ? <BillingTab /> : null}
 
       <Modal
@@ -316,14 +349,15 @@ export default function Settings() {
         tone="danger"
         mark={<Icon name="alert" size={16} />}
         onClose={() => setDialog(null)}
+        onSubmit={() => { if (confirmText === WORKSPACE_NAME) void deleteWorkspace(); }}
         footer={
           <>
             <Button variant="secondary" onClick={() => setDialog(null)}>Cancel</Button>
             <Button
+              type="submit"
               variant="danger"
               loading={deleting}
               disabled={confirmText !== WORKSPACE_NAME}
-              onClick={deleteWorkspace}
             >
               Delete workspace
             </Button>

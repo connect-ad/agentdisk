@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { staffApi, storeToken, storedToken, StaffApiError } from './api.js';
+import { staffApi, storeToken, storedToken } from './api.js';
+import { ConfirmModal, ToastDock } from './components/Overlay.jsx';
 
 /**
  * The staff console — 14 PART 28.
@@ -19,7 +20,10 @@ const styles = {
   page: { font: '14px/1.5 system-ui, sans-serif', color: '#111', background: '#f7f7f8', minHeight: '100vh' },
   bar: {
     display: 'flex', alignItems: 'center', gap: 16, padding: '12px 20px',
-    background: '#111', color: '#fff', position: 'sticky', top: 0, zIndex: 10
+    // The ladder's top-bar rung, not a bare number. docs/ui-layering.md asks
+    // both apps to stop writing raw z-indexes; the token is declared in app.css
+    // with the same value apps/web uses.
+    background: '#111', color: '#fff', position: 'sticky', top: 0, zIndex: 'var(--z-topbar)'
   },
   main: { maxWidth: 1100, margin: '0 auto', padding: 20 },
   card: { background: '#fff', border: '1px solid #e3e3e6', borderRadius: 8, padding: 16, marginBottom: 16 },
@@ -124,8 +128,19 @@ function WorkspaceDetail({ id, onBack, role }) {
   const [data, setData] = useState(null);
   const [events, setEvents] = useState([]);
   const [error, setError] = useState(null);
-  const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  /**
+   * Which confirmation is open, or null. One piece of state rather than a
+   * boolean per action: two dialogs can then never be open at once, which is a
+   * thing to make impossible rather than to remember.
+   */
+  const [pending, setPending] = useState(null);
+  const [toasts, setToasts] = useState([]);
+
+  const toast = useCallback((message, tone = 'ok') => {
+    const id = `${Date.now()}-${Math.random()}`;
+    setToasts(current => [...current, { id, message, tone }]);
+  }, []);
 
   const load = useCallback(async () => {
     setError(null);
@@ -140,15 +155,21 @@ function WorkspaceDetail({ id, onBack, role }) {
 
   useEffect(() => { void load(); }, [load]);
 
-  const setStatus = async status => {
-    if (!reason.trim()) {
-      setError(new StaffApiError(400, 'VALIDATION_ERROR', 'Say why. This is recorded.'));
-      return;
-    }
+  /**
+   * Run a confirmed action.
+   *
+   * The dialog closes only after the call resolves, so a failure leaves the
+   * reason the operator typed on screen rather than discarding it and asking
+   * them to write it again. Nothing reports success before the server confirms
+   * it — doc 32 §8's "no optimistic mutations", which this product has already
+   * got wrong once.
+   */
+  const run = async (action, successMessage) => {
     setBusy(true); setError(null);
     try {
-      await staffApi.setWorkspaceStatus(id, status, reason.trim());
-      setReason('');
+      await action();
+      setPending(null);
+      toast(successMessage);
       await load();
     } catch (err) {
       setError(err);
@@ -191,19 +212,17 @@ function WorkspaceDetail({ id, onBack, role }) {
                   Suspending stops every API key in this workspace on its next call. The keys
                   themselves are untouched, so reinstating needs no re-minting.
                 </p>
-                <input
-                  style={{ ...styles.input, marginBottom: 10 }}
-                  placeholder="Why? This is recorded against the workspace."
-                  value={reason}
-                  onChange={e => setReason(e.target.value)}
-                />
                 <div style={{ display: 'flex', gap: 8 }}>
                   {data.status === 'active' ? (
-                    <button style={{ ...styles.button, ...styles.danger }} disabled={busy} onClick={() => setStatus('suspended')}>
+                    <button
+                      style={{ ...styles.button, ...styles.danger }}
+                      disabled={busy}
+                      onClick={() => setPending('suspend')}
+                    >
                       Suspend
                     </button>
                   ) : (
-                    <button style={styles.button} disabled={busy} onClick={() => setStatus('active')}>
+                    <button style={styles.button} disabled={busy} onClick={() => setPending('reinstate')}>
                       Reinstate
                     </button>
                   )}
@@ -245,10 +264,55 @@ function WorkspaceDetail({ id, onBack, role }) {
               </tbody>
             </table>
           </div>
+          {/*
+            Siblings of the content, never children of it. ui-layering.md's
+            stacking-context trap: an overlay rendered inside another surface's
+            subtree cannot escape it by out-numbering it — it would need a
+            portal. Keeping dialogs as siblings is what makes the ladder work.
+          */}
+          <ConfirmModal
+            open={pending === 'suspend'}
+            title={`Suspend ${data.name}?`}
+            description="The customer is not notified. Reinstating is immediate and needs no re-minting."
+            blastRadius={
+              <>
+                Every API key in this workspace stops authenticating on its next call —{' '}
+                <strong>{data.fileCount} files</strong> and{' '}
+                <strong>{formatBytes(data.storageBytesUsed)}</strong> become unreachable to the
+                customer's agents until it is reinstated.
+              </>
+            }
+            requireReason
+            confirmLabel="Suspend"
+            busy={busy}
+            onCancel={() => setPending(null)}
+            onConfirm={reason =>
+              run(() => staffApi.setWorkspaceStatus(id, 'suspended', reason), 'Workspace suspended.')
+            }
+          />
+
+          <ConfirmModal
+            open={pending === 'reinstate'}
+            title={`Reinstate ${data.name}?`}
+            description="Existing keys resume working on their next call."
+            // Additive, so not dressed in red. Putting the danger treatment on
+            // everything is how people learn to click through the red dialogs
+            // that matter.
+            destructive={false}
+            requireReason
+            confirmLabel="Reinstate"
+            busy={busy}
+            onCancel={() => setPending(null)}
+            onConfirm={reason =>
+              run(() => staffApi.setWorkspaceStatus(id, 'active', reason), 'Workspace reinstated.')
+            }
+          />
         </>
       ) : (
         <p style={styles.muted}>Loading…</p>
       )}
+
+      <ToastDock toasts={toasts} onDismiss={dropped => setToasts(current => current.filter(t => t.id !== dropped))} />
     </>
   );
 }

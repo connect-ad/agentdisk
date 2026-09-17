@@ -9,7 +9,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy:dev": "wrangler deploy --env dev",
-    "deploy:prod": "wrangler deploy --env prod"
+    "deploy:prod": "wrangler deploy --env prod",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify:layout": "node test/verify-layout.mjs"
   },
   "dependencies": {
     "react": "18.3.1",
@@ -17,8 +20,13 @@
     "react-router-dom": "^7.18.3"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^29.1.1",
     "vite": "^6.0.7",
+    "vitest": "^3.2.7",
     "wrangler": "^4.129.0"
   }
 }

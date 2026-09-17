@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import {
-  PageHead, Panel, DataTable, FileCell, Button, IconButton, Icon, Input, Select,
-  Badge, Modal, ConfirmModal, Toast, EmptyState, UploadItem, Checkbox, CodeBlock
+  PageHead, Panel, DataTable, FileCell, Button, Icon, Input, Select,
+  Badge, Modal, ConfirmModal, Toast, EmptyState, UploadItem, Checkbox, Alert
 } from '../components/index.js';
 import { Drawer } from '../components-local/Drawer.jsx';
 import { useResource } from '../lib/useResource.js';
@@ -90,6 +90,14 @@ export default function FileBrowser() {
   const [confirmText, setConfirmText] = useState('');
   const [dragging, setDragging] = useState(false);
   const [toast, setToast] = useState(null);
+  // A dialog's in-flight and failed states. Kept next to `dialog` rather than
+  // inside each modal so that closing one always clears both.
+  const [busy, setBusy] = useState(false);
+  const [dialogError, setDialogError] = useState(null);
+  const [folderName, setFolderName] = useState('');
+  // The id of the file whose download link is being fetched, so only that one
+  // button shows a spinner rather than every Download on the screen.
+  const [downloading, setDownloading] = useState(null);
 
   const rows = useMemo(() => {
     if (loading || failed) return [];
@@ -140,6 +148,145 @@ export default function FileBrowser() {
     for (const file of Array.from(files)) void startUpload(file);
   };
 
+  /** Close whichever dialog is open, and drop the state that belonged to it. */
+  const closeDialog = () => {
+    setDialog(null); setDialogError(null); setConfirmText(''); setFolderName('');
+  };
+
+  /**
+   * Create a folder at the workspace root.
+   *
+   * Root, not "the current folder", because this screen has no folder
+   * navigation yet -- `onRowClick` deliberately does nothing for a folder row.
+   * Building a path from a location the user cannot actually be in would be
+   * inventing state.
+   *
+   * Validation here is only what saves a round trip on an obviously empty name.
+   * Everything else is the API's to judge and its wording is what gets shown:
+   * `normalizePath` already rejects backslashes, control characters, '..' and
+   * over-long segments, and the duplicate check returns CONFLICT. Re-deciding
+   * any of that in the browser would be a second, quietly diverging definition
+   * of a valid path.
+   */
+  const runCreateFolder = async () => {
+    const name = folderName.trim();
+    if (name === '') {
+      setDialogError('Give the folder a name.');
+      return;
+    }
+
+    setBusy(true);
+    setDialogError(null);
+    try {
+      await api.createFolder(workspaceId, `/${name}`);
+      closeDialog();
+      void reload();
+      setToast({ tone: 'ok', title: 'Folder created', body: `/${name}` });
+    } catch (err) {
+      // The dialog stays open holding what was typed, so a duplicate name can
+      // be edited rather than retyped.
+      setDialogError(err?.message ?? 'The folder could not be created.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Which files a delete dialog is pointing at.
+   *
+   * The drawer's Delete concerns the one file the drawer is showing; the bulk
+   * bar's concerns the selection. `detail` wins when both are set, matching the
+   * title the dialog already renders.
+   */
+  const deleteTargets = detail ? [detail.id] : selected;
+
+  /**
+   * Fetch a presigned URL for one file and hand it to the browser.
+   *
+   * **Exactly one call per click.** The API accounts egress when it issues the
+   * URL rather than when the bytes move, because R2 does not call back on a
+   * GET -- so asking twice for one download bills the file twice. Fetching the
+   * URL afterwards costs nothing further, which is why this opens it directly
+   * instead of streaming through the app.
+   *
+   * The anchor carries `download`, which cross-origin responses are free to
+   * ignore; whether the file saves or opens is then R2's Content-Disposition to
+   * decide, not ours. `noopener` because the URL is a bearer credential for the
+   * object and the opened document has no business reaching back.
+   */
+  const runDownload = async file => {
+    setDownloading(file.id);
+    try {
+      const { url } = await api.downloadFile(workspaceId, file.id);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name;
+      a.rel = 'noopener';
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err) {
+      setToast({
+        tone: 'danger',
+        title: 'Download failed',
+        body: err?.message ?? 'The link could not be created.'
+      });
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  /**
+   * Delete files, then let the server decide what the list now holds.
+   *
+   * **Nothing is removed optimistically.** `reload()` re-reads the listing, so a
+   * file whose DELETE failed is simply still there afterwards — the honest
+   * outcome, reached without a rollback path that could itself be wrong. This
+   * screen used to set a "Deleted" toast and call no API at all, which left the
+   * file in place and the person believing it was gone.
+   *
+   * `allSettled` rather than `all`: in a bulk delete one rejection must not
+   * hide the files that did go, and the tally of each is what the toast reports.
+   */
+  const runDelete = async targetIds => {
+    if (targetIds.length === 0) return;
+    setBusy(true);
+    setDialogError(null);
+
+    const results = await Promise.allSettled(
+      targetIds.map(id => api.deleteFile(workspaceId, id))
+    );
+    const failed = results.filter(r => r.status === 'rejected');
+    const firstError = failed[0]?.reason?.message ?? 'The server did not say why.';
+    setBusy(false);
+
+    // Total failure keeps the dialog open: the rows are all still there, so
+    // closing it would look like the work was done.
+    if (failed.length === targetIds.length) {
+      setDialogError(firstError);
+      return;
+    }
+
+    closeDialog();
+    setSelected([]);
+    setDetail(null);
+    void reload();
+
+    setToast(
+      failed.length > 0
+        ? {
+            tone: 'warn',
+            title: `Deleted ${targetIds.length - failed.length} of ${targetIds.length}`,
+            body: `${failed.length} could not be deleted. ${firstError}`
+          }
+        : {
+            tone: 'ok',
+            title: targetIds.length === 1 ? 'File deleted' : `${targetIds.length} files deleted`
+          }
+    );
+  };
+
   const allSelected = rows.length > 0 && selected.length === rows.length;
   const toggleAll = () => setSelected(allSelected ? [] : rows.map(r => r.id));
   const toggleOne = id =>
@@ -173,17 +320,7 @@ export default function FileBrowser() {
           ? <Badge tone="accent" mono>{r.by}</Badge>
           : <span style={{ color: 'var(--ink-2)' }}>{r.by}</span>
     },
-    { key: 'modified', header: 'Modified', width: 150, render: r => <span style={{ color: 'var(--ink-3)' }}>{r.modified}</span> },
-    {
-      key: 'act',
-      header: '',
-      width: 44,
-      render: () => (
-        <span onClick={e => e.stopPropagation()}>
-          <IconButton icon={<Icon name="more" size={14} />} label="Row actions" />
-        </span>
-      )
-    }
+    { key: 'modified', header: 'Modified', width: 150, render: r => <span style={{ color: 'var(--ink-3)' }}>{r.modified}</span> }
   ];
 
   const emptyState = query.trim() ? (
@@ -198,7 +335,13 @@ export default function FileBrowser() {
     <EmptyState
       icon={<Icon name="folder" size={19} />}
       title="This folder is empty"
-      actions={<Button size="sm" icon={<Icon name="upload" size={13} />}>Upload files</Button>}
+      actions={
+        canWrite ? (
+          <Button size="sm" icon={<Icon name="upload" size={13} />} onClick={() => fileInput.current?.click()}>
+            Upload files
+          </Button>
+        ) : null
+      }
     >
       Drag files here, or upload them.
     </EmptyState>
@@ -212,7 +355,7 @@ export default function FileBrowser() {
         actions={
           canWrite ? (
             <>
-              <Button variant="secondary" icon={<Icon name="folder" size={14} />} onClick={() => setDialog('new-folder')}>
+              <Button variant="secondary" icon={<Icon name="folder" size={14} />} onClick={() => { setDialogError(null); setFolderName(''); setDialog('new-folder'); }}>
                 New folder
               </Button>
               {/*
@@ -265,8 +408,6 @@ export default function FileBrowser() {
             {selected.length} selected
           </span>
           <span className="toolbar__spacer" />
-          <Button size="sm" variant="secondary" icon={<Icon name="folder" size={13} />}>Move</Button>
-          <Button size="sm" variant="secondary" icon={<Icon name="download" size={13} />}>Download as zip</Button>
           <Button
             size="sm"
             variant="danger"
@@ -336,8 +477,14 @@ export default function FileBrowser() {
         onClose={() => setDetail(null)}
         footer={
           <>
-            <Button size="sm" icon={<Icon name="download" size={13} />}>Download</Button>
-            <Button size="sm" variant="secondary" icon={<Icon name="link" size={13} />}>Copy signed link</Button>
+            <Button
+              size="sm"
+              icon={<Icon name="download" size={13} />}
+              loading={downloading === detail?.id}
+              onClick={() => void runDownload(detail)}
+            >
+              Download
+            </Button>
             <Button size="sm" variant="ghost">Rename</Button>
             <Button size="sm" variant="danger-outline" onClick={() => setDialog('delete')}>Delete</Button>
           </>
@@ -349,7 +496,16 @@ export default function FileBrowser() {
               compact
               icon={<Icon name="file" size={19} />}
               title="Preview not available for this file type"
-              actions={<Button size="sm" variant="secondary">Download</Button>}
+              actions={
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  loading={downloading === detail.id}
+                  onClick={() => void runDownload(detail)}
+                >
+                  Download
+                </Button>
+              }
             />
             <dl className="dl">
               <dt>Path</dt><dd className="ad-mono-sm">{detail.path || '—'}</dd>
@@ -377,30 +533,45 @@ export default function FileBrowser() {
         title="New folder"
         tone="accent"
         mark={<Icon name="folder" size={16} />}
-        onClose={() => setDialog(null)}
+        onClose={closeDialog}
+        onSubmit={() => void runCreateFolder()}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setDialog(null)}>Cancel</Button>
-            <Button onClick={() => setDialog(null)}>Create folder</Button>
+            <Button variant="secondary" onClick={closeDialog}>Cancel</Button>
+            <Button type="submit" loading={busy}>Create folder</Button>
           </>
         }
       >
         <Input
           label="Folder name"
           placeholder="market-research"
+          value={folderName}
+          onChange={e => setFolderName(e.target.value)}
           hint="Letters, numbers, dashes and underscores. This becomes part of the path agents use."
         />
+        {dialogError ? <Alert tone="danger" title="Not created">{dialogError}</Alert> : null}
       </Modal>
 
       {/* --- delete: single --- */}
+      {/*
+        The description says what actually happens. It used to promise "trash for
+        30 days" in the same breath as "can't be undone" — self-contradictory,
+        and wrong in both halves: the grace period is PURGE_GRACE_MS, 24 hours,
+        and no trash screen exists to restore from. The API's POST
+        /v1/files/:id/restore is the only route back, so the copy names the
+        window without implying the dashboard can use it.
+      */}
       <ConfirmModal
         open={dialog === 'delete'}
         title={`Delete ${detail ? detail.name : `${selected.length} item(s)`}?`}
-        description="This can't be undone. Deleted files are recoverable from trash for 30 days."
+        description="Deleted files stop being listed at once and are removed permanently 24 hours later. The dashboard cannot restore one."
         confirmLabel="Delete"
-        onClose={() => setDialog(null)}
-        onConfirm={() => { setDialog(null); setSelected([]); setDetail(null); setToast({ tone: 'ok', title: 'Deleted' }); }}
-      />
+        loading={busy}
+        onClose={closeDialog}
+        onConfirm={() => void runDelete(deleteTargets)}
+      >
+        {dialogError ? <Alert tone="danger" title="Not deleted">{dialogError}</Alert> : null}
+      </ConfirmModal>
 
       {/* --- delete: bulk (>5) requires typing DELETE --- */}
       <Modal
@@ -408,14 +579,16 @@ export default function FileBrowser() {
         title={`Delete ${selected.length} items?`}
         tone="danger"
         mark={<Icon name="alert" size={16} />}
-        onClose={() => setDialog(null)}
+        onClose={closeDialog}
+        onSubmit={() => { if (confirmText === 'DELETE') void runDelete(selected); }}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setDialog(null)}>Cancel</Button>
+            <Button variant="secondary" onClick={closeDialog}>Cancel</Button>
             <Button
+              type="submit"
               variant="danger"
+              loading={busy}
               disabled={confirmText !== 'DELETE'}
-              onClick={() => { setDialog(null); setSelected([]); setToast({ tone: 'ok', title: 'Deleted' }); }}
             >
               Delete
             </Button>
@@ -428,6 +601,7 @@ export default function FileBrowser() {
           mono
           onChange={e => setConfirmText(e.target.value)}
         />
+        {dialogError ? <Alert tone="danger" title="Not deleted">{dialogError}</Alert> : null}
       </Modal>
 
       {toast ? (

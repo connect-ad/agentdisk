@@ -76,6 +76,9 @@ export const ID_PREFIX = {
   // they get the same sortable IDs: an investigation reads both trails.
   staffUser: "stf",
   staffSession: "ssn",
+  // A row in staff_actions - the fleet-wide staff log, whose rows are not
+  // workspace-scoped and so cannot live in audit_events. See migration 0011.
+  staffAction: "sac",
   // Not an entity: request IDs are never stored, only echoed in error bodies
   // and logs (05 PART 13's envelope). Same generator, same sortability.
   request: "req",

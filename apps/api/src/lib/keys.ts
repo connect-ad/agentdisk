@@ -51,6 +51,32 @@ function randomBase62(length: number): string {
   return out.join("");
 }
 
+/**
+ * A URL-safe random secret, for credentials that are not API keys.
+ *
+ * Exported so the claim link (db/bootstrap.ts) draws from the same rejection-
+ * sampled base62 generator as every API key rather than growing a second
+ * source of randomness beside it. A claim token is a bearer credential of
+ * equal power to "own this workspace", so it has no business being generated
+ * any less carefully than the key it ships alongside.
+ */
+export function randomSecret(length: number = SECRET_LENGTH): string {
+  return randomBase62(length);
+}
+
+/**
+ * SHA-256 as lowercase hex.
+ *
+ * `hashApiKey` is this plus a name that says what it is for. Both exist because
+ * the claim token is stored the same way and must not reuse a function whose
+ * documented contract is about API keys - if the key hashing ever gains a
+ * pepper or a prefix, the claim token should not silently inherit it.
+ */
+export async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export function modePrefix(mode: KeyMode): string {
   return mode === "live" ? LIVE_PREFIX : TEST_PREFIX;
 }
@@ -63,8 +89,7 @@ export function modePrefix(mode: KeyMode): string {
  * against the other mode.
  */
 export async function hashApiKey(token: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return sha256Hex(token);
 }
 
 export async function generateApiKey(mode: KeyMode): Promise<GeneratedKey> {

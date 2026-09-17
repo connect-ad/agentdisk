@@ -28,7 +28,7 @@ import type { Stripe } from "../src/billing/stripe";
 const NOW = 1_790_000_000_000;
 
 function staff(role: StaffUser["role"], id = `stf_${role}`): StaffUser {
-  return { id, email: `${role}@agentdisk.io`, role, disabled_at: null } as StaffUser;
+  return { id, email: `${role}@agentdisk.io`, role, disabledAt: null } as StaffUser;
 }
 
 /** Records every call, and can be told to fail on any one of them. */

@@ -40,7 +40,7 @@ const loginSchema = z.object({
   totp: z.string().trim().min(6).max(8),
 });
 
-function json(body: unknown, status = 200): Response {
+export function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json; charset=utf-8" },
@@ -71,6 +71,8 @@ export interface StaffDeps {
    * log is worse than an honest blank.
    */
   sourceIp?: string | null;
+  /** Stripe, for the plan screens. Absent means those endpoints refuse, naming why. */
+  stripeSecretKey?: string;
 }
 
 /** Failed logins per email per window, before the account is refused outright. */
@@ -189,7 +191,7 @@ function bearer(request: Request): string | null {
 }
 
 /** Resolve the session or refuse. Used by every route below. */
-async function requireStaff(request: Request, deps: StaffDeps): Promise<StaffUser> {
+export async function requireStaff(request: Request, deps: StaffDeps): Promise<StaffUser> {
   const token = bearer(request);
   if (token === null) throw unauthorized("no staff session token");
 

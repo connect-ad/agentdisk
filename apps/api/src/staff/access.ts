@@ -362,6 +362,290 @@ export class StaffScopedAccess extends AuditedStaffAccess {
       .first<Record<string, number>>();
     return row ?? {};
   }
+
+  /* ------------------------ console actions (32 PART 6) ------------------- */
+
+  /**
+   * Set or clear a workspace's plan override - the "quota bump" action.
+   *
+   * The design draws this ungated, which is a real privilege escalation as
+   * drawn: `workspaces.plan_override` is what `resolveWorkspaceLimits` reads
+   * first, so it hands somebody another plan's entitlements outright. admin+.
+   *
+   * Clearing it (null) returns the workspace to its organization's plan, which
+   * is why null is a legitimate value here rather than a missing argument.
+   */
+  async setPlanOverride(
+    workspaceId: string,
+    planId: string | null,
+    reason: string
+  ): Promise<boolean> {
+    await this.requireRole("admin", "adjust plan overrides");
+
+    if (planId !== null) {
+      // An override naming a plan that does not exist would resolve to the
+      // lib/plans.ts floor for a tier nobody is on - a silent downgrade that
+      // looks like a grant.
+      const plan = await this.db
+        .prepare(`SELECT id FROM plans WHERE id = ?`)
+        .bind(planId)
+        .first<{ id: string }>();
+      if (plan === null) throw new ApiError("VALIDATION_ERROR", "No such plan.");
+    }
+
+    const result = await this.db
+      .prepare(`UPDATE workspaces SET plan_override = ?, updated_at = ? WHERE id = ?`)
+      .bind(planId, this.now, workspaceId)
+      .run();
+
+    const changed = (result.meta.changes ?? 0) > 0;
+    if (changed) {
+      await this.record(workspaceId, "staff.plan_override", { planId });
+    }
+    await this.recordFleet({
+      action: "workspace.plan_override",
+      workspaceId: changed ? workspaceId : null,
+      targetType: "workspace",
+      targetId: workspaceId,
+      reason,
+      result: changed ? "success" : "denied",
+      metadata: { planId },
+    });
+    return changed;
+  }
+
+  /**
+   * Soft-delete a workspace. Nothing is destroyed here either.
+   *
+   * Three guards, and each one is deliberate:
+   *
+   * **It must already be suspended.** Suspension is instant, reversible, and
+   * cuts off access, so it is the correct first move in every scenario that
+   * ends in deletion - and it gives the customer a chance to notice before
+   * their data enters a 30-day countdown.
+   *
+   * **The name must be typed exactly**, the same pattern the customer's own
+   * danger zone uses. The confirmation then belongs to the operation rather
+   * than to one client that could be bypassed.
+   *
+   * **super_admin only.** This destroys somebody else's data on a 30-day
+   * timer, without their consent, and it is not a routine support action.
+   */
+  async softDeleteWorkspace(
+    workspaceId: string,
+    typedName: string,
+    reason: string
+  ): Promise<{ deleted: boolean; blastRadius: Record<string, number> }> {
+    await this.requireRole("super_admin", "delete workspaces");
+
+    const workspace = await this.db
+      .prepare(`SELECT id, name, status, deleted_at AS deletedAt FROM workspaces WHERE id = ?`)
+      .bind(workspaceId)
+      .first<{ id: string; name: string; status: string; deletedAt: number | null }>();
+    if (workspace === null) throw new ApiError("NOT_FOUND", "No such workspace.");
+
+    if (workspace.status !== "suspended") {
+      throw new ApiError("CONFLICT", "Suspend this workspace before deleting it.");
+    }
+    if (typedName !== workspace.name) {
+      throw new ApiError("VALIDATION_ERROR", "The typed name does not match this workspace.");
+    }
+
+    const blast = await this.workspaceBlastRadius(workspaceId);
+
+    const result = await this.db
+      .prepare(
+        `UPDATE workspaces SET status = 'deleted', deleted_at = ?, updated_at = ?
+          WHERE id = ? AND deleted_at IS NULL`
+      )
+      .bind(this.now, this.now, workspaceId)
+      .run();
+
+    const deleted = (result.meta.changes ?? 0) > 0;
+    if (deleted) {
+      await this.record(workspaceId, "staff.workspace.deleted", { reason });
+    }
+    await this.recordFleet({
+      action: "workspace.delete",
+      workspaceId,
+      targetType: "workspace",
+      targetId: workspaceId,
+      reason,
+      result: deleted ? "success" : "denied",
+      metadata: { ...blast, name: workspace.name },
+    });
+
+    return { deleted, blastRadius: blast };
+  }
+
+  /** Undo a soft delete inside its window. The workspace comes back suspended, not active. */
+  async restoreWorkspace(workspaceId: string, reason: string): Promise<boolean> {
+    await this.requireRole("super_admin", "restore workspaces");
+
+    // Restored to 'suspended' rather than 'active' on purpose: whatever caused
+    // the suspension that had to precede deletion has not been resolved by the
+    // restore, and silently handing access back would undo that decision too.
+    const result = await this.db
+      .prepare(
+        `UPDATE workspaces SET status = 'suspended', deleted_at = NULL, updated_at = ?
+          WHERE id = ? AND deleted_at IS NOT NULL`
+      )
+      .bind(this.now, workspaceId)
+      .run();
+
+    const restored = (result.meta.changes ?? 0) > 0;
+    if (restored) await this.record(workspaceId, "staff.workspace.restored", { reason });
+    await this.recordFleet({
+      action: "workspace.restore",
+      workspaceId,
+      targetType: "workspace",
+      targetId: workspaceId,
+      reason,
+      result: restored ? "success" : "denied",
+    });
+    return restored;
+  }
+
+  /** What deleting this workspace would eventually take with it, from live counts. */
+  async workspaceBlastRadius(workspaceId: string): Promise<Record<string, number>> {
+    const row = await this.db
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM files WHERE workspace_id = ?) AS files,
+           (SELECT COALESCE(SUM(size_bytes), 0) FROM files WHERE workspace_id = ?) AS bytes,
+           (SELECT COUNT(*) FROM agents WHERE workspace_id = ?) AS agents,
+           (SELECT COUNT(*) FROM api_keys WHERE workspace_id = ? AND revoked_at IS NULL) AS keys,
+           (SELECT COUNT(*) FROM memberships WHERE workspace_id = ?) AS members`
+      )
+      .bind(workspaceId, workspaceId, workspaceId, workspaceId, workspaceId)
+      .first<Record<string, number>>();
+    return row ?? {};
+  }
+
+  /**
+   * Disable or re-enable one agent identity - the abuse-response action.
+   *
+   * support+, because this is the fastest way to stop a misbehaving agent and
+   * waiting for an admin is the wrong trade when something is actively
+   * misbehaving. Reversible, which is what makes support+ defensible.
+   */
+  async setAgentStatus(agentId: string, disabled: boolean, reason: string): Promise<boolean> {
+    await this.requireRole("support", "disable agents");
+
+    const agent = await this.db
+      .prepare(`SELECT id, workspace_id AS workspaceId, name FROM agents WHERE id = ?`)
+      .bind(agentId)
+      .first<{ id: string; workspaceId: string; name: string }>();
+    if (agent === null) throw new ApiError("NOT_FOUND", "No such agent.");
+
+    const result = await this.db
+      .prepare(`UPDATE agents SET status = ? WHERE id = ?`)
+      .bind(disabled ? "disabled" : "active", agentId)
+      .run();
+
+    const changed = (result.meta.changes ?? 0) > 0;
+    await this.record(agent.workspaceId, disabled ? "staff.agent.disabled" : "staff.agent.enabled", {
+      agentId,
+      name: agent.name,
+    });
+    await this.recordFleet({
+      action: disabled ? "agent.disable" : "agent.enable",
+      workspaceId: agent.workspaceId,
+      targetType: "agent",
+      targetId: agentId,
+      reason,
+      result: changed ? "success" : "denied",
+    });
+    return changed;
+  }
+
+  /**
+   * Revoke one API key.
+   *
+   * Takes effect on the very next request: nothing caches key lookups, by
+   * deliberate choice, so every authentication reads `api_keys` directly. If a
+   * cache is ever introduced, its invalidation belongs on this line and on the
+   * customer-facing revoke beside it.
+   */
+  async revokeKey(keyId: string, reason: string): Promise<boolean> {
+    await this.requireRole("support", "revoke keys");
+
+    const key = await this.db
+      .prepare(
+        `SELECT id, workspace_id AS workspaceId, name, key_prefix AS prefix
+           FROM api_keys WHERE id = ?`
+      )
+      .bind(keyId)
+      .first<{ id: string; workspaceId: string; name: string; prefix: string }>();
+    if (key === null) throw new ApiError("NOT_FOUND", "No such key.");
+
+    const result = await this.db
+      .prepare(`UPDATE api_keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL`)
+      .bind(this.now, keyId)
+      .run();
+
+    const revoked = (result.meta.changes ?? 0) > 0;
+    if (revoked) {
+      await this.record(key.workspaceId, "staff.key.revoked", { keyId, name: key.name });
+    }
+    await this.recordFleet({
+      action: "key.revoke",
+      workspaceId: key.workspaceId,
+      targetType: "key",
+      targetId: keyId,
+      reason,
+      result: revoked ? "success" : "denied",
+    });
+    return revoked;
+  }
+
+  /**
+   * The Needs Attention rule, in one place.
+   *
+   * Over 95% of an enforced quota dimension, OR an organization that is not
+   * billing-active. The third criterion the design draws - three or more
+   * failing webhook endpoints - is deliberately absent: nothing in this product
+   * records webhook delivery attempts, so it could only ever be guessed at. The
+   * workspace detail screen says "delivery history not tracked yet" rather than
+   * showing a number nothing computes.
+   *
+   * Storage is the dimension checked. Egress, requests and file count are
+   * unlimited on every current plan, so a percentage of them is not a thing
+   * that exists.
+   */
+  async needsAttention(limit = 50): Promise<(FleetWorkspace & { why: string })[]> {
+    const rows = await this.db
+      .prepare(
+        `SELECT w.id, w.name, w.status, w.org_id AS orgId, o.name AS orgName,
+                COALESCE(w.plan_override, o.plan) AS plan,
+                o.billing_status AS billingStatus,
+                w.storage_bytes_used AS storageBytesUsed, w.file_count AS fileCount,
+                w.created_at AS createdAt,
+                p.storage_bytes AS planStorageBytes
+           FROM workspaces w
+           JOIN organizations o ON o.id = w.org_id
+           LEFT JOIN plans p ON p.id = COALESCE(w.plan_override, o.plan)
+          WHERE w.status != 'deleted'
+            AND (
+              o.billing_status != 'active'
+              OR (p.storage_bytes IS NOT NULL AND p.storage_bytes > 0
+                  AND w.storage_bytes_used * 100 >= p.storage_bytes * 95)
+            )
+          ORDER BY w.updated_at DESC LIMIT ?`
+      )
+      .bind(limit)
+      .all<FleetWorkspace & { planStorageBytes: number | null }>();
+
+    return (rows.results ?? []).map(row => {
+      const reasons: string[] = [];
+      if (row.billingStatus !== "active") reasons.push(`Billing is ${row.billingStatus}`);
+      if (row.planStorageBytes !== null && row.planStorageBytes > 0) {
+        const percent = Math.round((row.storageBytesUsed * 100) / row.planStorageBytes);
+        if (percent >= 95) reasons.push(`Storage at ${percent}% of plan`);
+      }
+      return { ...row, why: reasons.join(" · ") };
+    });
+  }
 }
 
 export function requireStaffRole(staff: StaffUser, minimum: StaffRole): void {

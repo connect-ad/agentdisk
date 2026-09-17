@@ -300,3 +300,60 @@ export async function generatePasswordResetLink(
 
   return { link: body.oobLink, email: body.email ?? email };
 }
+
+/**
+ * Disable or re-enable a Firebase identity — `accounts:update`.
+ *
+ * **Disable, never delete.** A deleted Firebase account cannot be restored, and
+ * the staff deletion flow it serves is soft for thirty days precisely so that
+ * it can be. Deleting here would make the restore path a lie.
+ *
+ * Returns false when there is no such identity, which is an answer rather than
+ * a fault: `users` in D1 and Firebase are two stores, and a row can outlive its
+ * identity or predate it — an invited colleague has a row before they have ever
+ * signed in.
+ *
+ * **This is the second half of disablement, not the whole of it.** An ID token
+ * already issued stays valid for up to its remaining hour whatever Firebase is
+ * told here, so the first-party `users.disabled_at` check in
+ * `auth/authenticate.ts` is what takes effect immediately. If this call fails,
+ * the account is still refused by us — which is the point of doing both.
+ */
+export async function setFirebaseUserDisabled(
+  config: FirebaseAdminConfig,
+  kv: KVNamespace,
+  firebaseUid: string,
+  disabled: boolean,
+  now: number
+): Promise<boolean> {
+  const accessToken = await getAccessToken(config, kv, now);
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `${IDENTITY_TOOLKIT_BASE}/${encodeURIComponent(config.projectId)}/accounts:update`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ localId: firebaseUid, disableUser: disabled }),
+      }
+    );
+  } catch (cause) {
+    throw new ApiError("INTERNAL_ERROR", "The identity could not be updated.", {
+      internalReason: `Identity Toolkit unreachable: ${String(cause)}`,
+    });
+  }
+
+  if (!response.ok) {
+    const detail = (await response.text().catch(() => "")).slice(0, 300);
+    if (detail.includes("USER_NOT_FOUND")) return false;
+    throw new ApiError("INTERNAL_ERROR", "The identity could not be updated.", {
+      internalReason: `Identity Toolkit returned ${response.status}: ${detail}`,
+    });
+  }
+
+  return true;
+}

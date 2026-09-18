@@ -369,11 +369,18 @@ export function Modal({
               type="button"
               onClick={onClose}
               style={{
-                padding: '8px 14px',
-                border: `1px solid ${palette.line}`,
-                borderRadius: 6,
-                background: palette.surface,
+                height: 38,
+                padding: '0 14px',
+                // The brighter border, not the hairline one. Cancel sits beside
+                // a filled primary and beside a red Retire; on the surf2 footer
+                // the faint border made it read as disabled rather than as the
+                // ordinary way out.
+                border: `1px solid ${palette.fieldLine}`,
+                borderRadius: 9,
+                background: 'transparent',
+                color: palette.ink,
                 font: 'inherit',
+                fontWeight: 500,
                 cursor: 'pointer',
               }}
             >

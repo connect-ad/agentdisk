@@ -262,3 +262,40 @@ a {
   background: var(--bd2);
   border-radius: 99px;
 }
+
+/*
+ * The dialog body's scrollbar is drawn, not left to the platform.
+ *
+ * A dialog that scrolls has to LOOK like it scrolls. The default overlay
+ * scrollbar fades out when the pointer is still, so a body with more content
+ * below the fold appears to be simply cut off — and the one place that matters
+ * most is the Limits tab, where the rows below are the ones nobody knows are
+ * there.
+ *
+ * The thumb carries a border in the dialog's own surface colour, which is what
+ * insets it from the track rather than filling the gutter edge to edge.
+ */
+[data-dialog-body] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bd2) var(--surf2);
+}
+
+[data-dialog-body]::-webkit-scrollbar {
+  width: 10px;
+}
+
+[data-dialog-body]::-webkit-scrollbar-track {
+  background: var(--surf2);
+  border-radius: 99px;
+  margin: 6px 0;
+}
+
+[data-dialog-body]::-webkit-scrollbar-thumb {
+  background: var(--bd2);
+  border-radius: 99px;
+  border: 2px solid var(--surf);
+}
+
+[data-dialog-body]::-webkit-scrollbar-thumb:hover {
+  background: var(--tx3);
+}

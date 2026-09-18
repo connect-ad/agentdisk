@@ -1,5 +1,5 @@
 /**
- * Does `minHeight` actually make the real Modal taller?
+ * Does the real Modal stay inside the viewport and keep its footer on screen?
  *
  * The scroll harness beside this one asks whether the footer survives content
  * that overflows. This one asks the opposite question: with only a little
@@ -26,7 +26,6 @@ function Harness() {
       onSubmit={() => {}}
       submitLabel="Save and push to Stripe"
       width={860}
-      minHeight={780}
       tabs={[
         <button key="plan" type="button" style={{ height: 34, padding: '0 14px', border: 'none', background: 'transparent', fontSize: 12.5, color: 'var(--acc)', boxShadow: 'inset 0 -2px 0 0 var(--acc)' }}>Plan</button>,
         <button key="limits" type="button" style={{ height: 34, padding: '0 14px', border: 'none', background: 'transparent', fontSize: 12.5, color: 'var(--tx2)' }}>Limits</button>

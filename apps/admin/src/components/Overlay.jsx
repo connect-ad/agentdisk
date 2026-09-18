@@ -123,16 +123,6 @@ export function Modal({
    */
   tabs = null,
   width = 520,
-  /**
-   * A floor on the dialog's height, for forms that would otherwise size to a
-   * body smaller than their content and scroll for no good reason.
-   *
-   * `min(<this>, 100%)` rather than a bare number, so it can never beat
-   * `maxHeight: 100%` and push the footer under the fold on a short window -
-   * the failure this component exists to prevent. Opt-in: a two-line
-   * confirmation should stay two lines tall rather than become an empty box.
-   */
-  minHeight: floor = null,
 }) {
   const dialogRef = useRef(null);
   const titleId = useId();
@@ -225,8 +215,15 @@ export function Modal({
         position: 'fixed',
         inset: 0,
         zIndex: Z.modal,
-        display: 'grid',
-        placeItems: 'center',
+        // Flex, not grid, and matching the design file.
+        //
+        // As a grid item the dialog would not respect its own max-height: the
+        // computed value read 876px while the box measured 975 and the body
+        // grew to 776 with almost nothing in it. A flex item with
+        // `align-items: center` does not stretch and does clamp.
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         // 12, not 24. On a short window every pixel here is one the body does
         // not get, and the scrim only has to read as a margin rather than a
         // comfortable one. Contract point 1 still holds: the dialog cannot
@@ -251,9 +248,18 @@ export function Modal({
         onMouseDown={event => event.stopPropagation()}
         style={{
           width: `min(${width}px, 100%)`,
-          // Bounded, and a flex column so the three parts can be told apart.
-          maxHeight: '100%',
-          ...(floor === null ? {} : { height: `min(${floor}px, 100%)` }),
+          // Bounded by the viewport, in vh rather than a percentage: as a grid
+          // item the percentage resolved against a containing block that did not
+          // behave, and the dialog both overflowed its own max-height and grew a
+          // body of 776px around a single input.
+          //
+          // The 24 is the scrim's padding doubled, so the dialog stops exactly
+          // where the scrim's inset does and the footer cannot leave the screen.
+          //
+          // There is deliberately NO explicit height. The dialog is as tall as
+          // its content, capped here - which is how the design behaves, and it
+          // removes a mechanism that was fighting the layout rather than helping.
+          maxHeight: 'calc(100vh - 24px)',
           display: 'flex',
           flexDirection: 'column',
           // Belt and braces with maxHeight: a flex item's default min-height is

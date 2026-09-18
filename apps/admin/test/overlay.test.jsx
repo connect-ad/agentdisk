@@ -161,8 +161,14 @@ describe('the modal-scroll contract', () => {
     const dialog = screen.getByRole('dialog');
     const body = dialog.querySelector('[data-dialog-body]');
 
-    // Point 1: bounded.
-    expect(dialog.style.maxHeight).toBe('100%');
+    // Point 1: bounded — by the viewport, in vh.
+    //
+    // Was pinned to '100%'. As a grid item that percentage resolved against a
+    // containing block that did not behave: the dialog overflowed its own
+    // max-height and grew a 776px body around a single input. What the
+    // assertion is for is that a bound EXISTS and is tied to the viewport, not
+    // which unit expresses it.
+    expect(dialog.style.maxHeight).toBe('calc(100vh - 24px)');
     expect(dialog.style.display).toBe('flex');
     expect(dialog.style.flexDirection).toBe('column');
 

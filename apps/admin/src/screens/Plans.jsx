@@ -579,7 +579,7 @@ function PlanEditor({
       submitDisabled={!ready}
       destructive={false}
       busy={busy}
-      width={860}
+      width={620}
       // Between the header and the body, so scrolling the content cannot carry
       // the way back to the other tab off the screen with it.
       tabs={[
@@ -608,9 +608,6 @@ function PlanEditor({
           {item.label}
         </button>
       ))}
-      // Tall enough that neither tab scrolls on an ordinary window, and
-      // capped at the viewport on a short one.
-      minHeight={780}
       footer={
         canRetire ? (
           <button
@@ -649,13 +646,7 @@ function PlanEditor({
           </div>
         )}
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(220px, 2fr) minmax(170px, 1fr)',
-            columnGap: '14px'
-          }}
-        >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
             <label htmlFor="plan-name" style={label}>
               Name
@@ -664,7 +655,7 @@ function PlanEditor({
               id="plan-name"
               value={draft.name ?? ''}
               onChange={event => set('name', event.target.value)}
-              style={{ ...input, height: '34px', fontSize: '13px' }}
+              style={{ ...input, fontSize: '13.5px' }}
             />
           </div>
           <div>
@@ -678,19 +669,18 @@ function PlanEditor({
               step="1"
               value={draft.amount_cents ?? 0}
               onChange={event => set('amount_cents', Number(event.target.value))}
-              style={{ ...input, ...mono, height: '34px', fontSize: '12.5px' }}
+              style={{ ...input, ...mono, fontSize: '13px' }}
             />
             {/*
               Cents, not dollars, because that is what Stripe stores - and the
               one mistake this invites is entering 49 for $49. Showing the
               rendered price as they type is cheaper than explaining it.
             */}
-            <p style={{ margin: '5px 0 0', fontSize: '11px', color: 'var(--tx3)' }}>
+            <p style={{ margin: '6px 0 0', fontSize: '11.5px', color: 'var(--tx3)' }}>
               Integer only. {(draft.amount_cents ?? 0).toLocaleString('en-US')} renders as{' '}
               {money(draft.amount_cents ?? 0)} on the pricing page.
             </p>
           </div>
-        </div>
 
         {repriced && (
           <div
@@ -699,7 +689,7 @@ function PlanEditor({
               background: 'var(--warnSoft)',
               borderRadius: '9px',
               padding: '9px 11px',
-              margin: '10px 0 0',
+              margin: 0,
               fontSize: '11.5px',
               lineHeight: 1.5,
               color: 'var(--warnTx)'
@@ -711,7 +701,7 @@ function PlanEditor({
           </div>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '11px', marginTop: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '11px' }}>
           <button
             type="button"
             role="checkbox"
@@ -747,13 +737,13 @@ function PlanEditor({
           </span>
         </div>
 
-        <div style={{ marginTop: '12px' }}>
+        <div>
           <div
             style={{
               display: 'flex',
               alignItems: 'baseline',
               justifyContent: 'space-between',
-              marginBottom: '6px'
+              marginBottom: '7px'
             }}
           >
             <label htmlFor="plan-reason" style={{ ...label, margin: 0 }}>
@@ -787,36 +777,25 @@ function PlanEditor({
             placeholder="Why is this plan changing?"
             style={{
               ...input,
-              height: '34px',
-              fontSize: '12.5px',
+              fontSize: '13px',
               border: `1px solid ${reasonOk ? 'var(--bd2)' : 'var(--dngrBd)'}`
             }}
           />
-          <p style={{ margin: '5px 0 0', fontSize: '11px', color: 'var(--tx3)' }}>
+          <p style={{ margin: '6px 0 0', fontSize: '11.5px', color: 'var(--tx3)' }}>
             Written verbatim to the audit log against your staff account.
           </p>
+        </div>
         </div>
       </div>
 
       <div hidden={tab !== 'limits'}>
-        <p style={{ margin: '0 0 10px', fontSize: '11.5px', lineHeight: 1.5, color: 'var(--tx2)' }}>
+        <p style={{ margin: '0 0 16px', fontSize: '12.5px', lineHeight: 1.55, color: 'var(--tx2)' }}>
           <strong style={{ color: 'var(--tx)' }}>Default</strong> inherits the fallback in our
           source. <strong style={{ color: 'var(--tx)' }}>Unlimited</strong> removes the ceiling.{' '}
           <strong style={{ color: 'var(--tx)' }}>Value</strong> sets an explicit number for this
           plan.
         </p>
-        {/*
-          Two columns rather than the design's single stack. Nine of these in one
-          column is roughly 490px, which does not fit the window this console is
-          actually used in; the row itself is unchanged.
-        */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-            gap: '7px'
-          }}
-        >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '11px' }}>
           {DIMENSIONS.map(dimension => (
             <QuotaField
               key={dimension.key}

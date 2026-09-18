@@ -46,14 +46,34 @@ const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), ' +
   'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/**
+ * Theme tokens, not literals.
+ *
+ * These were hardcoded light values - `#111` on `#fff` - written before the
+ * console had a theme at all. The result was a white dialog opening in the
+ * middle of a dark console: legible, but plainly not part of the same
+ * application, and the one surface where somebody confirms a destructive action
+ * is the worst place to look like a different program.
+ *
+ * Every value now resolves through `app.css`, so the dialog follows the theme
+ * toggle with nothing here having to know it happened.
+ */
 const palette = {
-  ink: '#111',
-  muted: '#666',
-  line: '#e3e3e6',
-  hairline: '#f0f0f2',
-  danger: '#a11',
-  dangerSoft: '#fdeaea',
-  dangerLine: '#f5c2c2',
+  ink: 'var(--tx)',
+  muted: 'var(--tx2)',
+  faint: 'var(--tx3)',
+  surface: 'var(--surf)',
+  surfaceAlt: 'var(--surf2)',
+  line: 'var(--bd)',
+  hairline: 'var(--bd)',
+  field: 'var(--surf2)',
+  fieldLine: 'var(--bd2)',
+  accent: 'var(--acc)',
+  accentInk: 'var(--accInk)',
+  disabled: 'var(--surf3)',
+  danger: 'var(--dngr)',
+  dangerSoft: 'var(--dngrSoft)',
+  dangerLine: 'var(--dngrBd)',
 };
 
 /**
@@ -190,7 +210,7 @@ export function Modal({
         display: 'grid',
         placeItems: 'center',
         padding: 24,
-        background: 'rgba(17,17,17,.45)',
+        background: 'rgba(0,0,0,.55)',
       }}
       onMouseDown={event => {
         // Only a press that both starts and ends on the scrim dismisses. A drag
@@ -217,11 +237,11 @@ export function Modal({
           // auto here too, and the scrim is a grid whose child would otherwise
           // refuse to shrink.
           minHeight: 0,
-          background: '#fff',
+          background: palette.surface,
           border: `1px solid ${palette.line}`,
           borderRadius: 10,
-          boxShadow: '0 16px 48px rgba(0,0,0,.24)',
-          font: '14px/1.5 system-ui, sans-serif',
+          boxShadow: `0 16px 48px var(--shadow)`,
+          font: '14px/1.5 var(--font)',
           color: palette.ink,
           animation: 'adminDialogIn .14s ease both',
         }}
@@ -289,7 +309,7 @@ export function Modal({
             gap: 10,
             padding: '12px 18px 14px',
             borderTop: `1px solid ${palette.hairline}`,
-            background: '#fafafb',
+            background: palette.surfaceAlt,
             borderRadius: '0 0 10px 10px',
           }}
         >
@@ -302,7 +322,7 @@ export function Modal({
                 padding: '8px 14px',
                 border: `1px solid ${palette.line}`,
                 borderRadius: 6,
-                background: '#fff',
+                background: palette.surface,
                 font: 'inherit',
                 cursor: 'pointer',
               }}
@@ -319,8 +339,11 @@ export function Modal({
                 padding: '8px 14px',
                 border: 0,
                 borderRadius: 6,
-                background: submitDisabled || busy ? '#bbb' : destructive ? palette.danger : palette.ink,
-                color: '#fff',
+                background: submitDisabled || busy ? palette.disabled : destructive ? palette.danger : palette.accent,
+                // Not white. The accent is a pale lilac in dark mode and a deep
+                // violet in light mode, so the readable ink differs between
+                // them - `--accInk` is the token that already knows which.
+                color: submitDisabled || busy ? palette.muted : destructive ? '#fff' : palette.accentInk,
                 font: 'inherit',
                 cursor: submitDisabled || busy ? 'not-allowed' : 'pointer',
               }}
@@ -396,7 +419,7 @@ export function ConfirmModal({
       {blastRadius ? (
         <div
           style={{
-            background: destructive ? palette.dangerSoft : '#f7f7f8',
+            background: destructive ? palette.dangerSoft : palette.surfaceAlt,
             border: `1px solid ${destructive ? palette.dangerLine : palette.line}`,
             borderRadius: 6,
             padding: 12,
@@ -422,7 +445,7 @@ export function ConfirmModal({
             style={{
               width: '100%',
               padding: '8px 10px',
-              border: `1px solid ${typed && !nameOk ? palette.dangerLine : '#ccc'}`,
+              border: `1px solid ${typed && !nameOk ? palette.dangerLine : palette.fieldLine}`,
               borderRadius: 6,
               font: 'inherit',
             }}
@@ -442,8 +465,10 @@ export function ConfirmModal({
             style={{
               width: '100%',
               padding: '8px 10px',
-              border: '1px solid #ccc',
+              border: `1px solid ${palette.fieldLine}`,
               borderRadius: 6,
+              background: palette.field,
+              color: palette.ink,
               font: 'inherit',
               resize: 'vertical',
             }}
@@ -487,10 +512,11 @@ export function ToastDock({ toasts = [], onDismiss }) {
             maxWidth: 380,
             padding: '10px 12px',
             borderRadius: 8,
-            background: toast.tone === 'error' ? palette.danger : palette.ink,
-            color: '#fff',
-            font: '13px/1.45 system-ui, sans-serif',
-            boxShadow: '0 8px 24px rgba(0,0,0,.22)',
+            background: toast.tone === 'error' ? palette.dangerSoft : palette.surface,
+            border: `1px solid ${toast.tone === 'error' ? palette.dangerLine : palette.line}`,
+            color: toast.tone === 'error' ? 'var(--dngrTx)' : palette.ink,
+            font: '13px/1.45 var(--font)',
+            boxShadow: `0 8px 24px var(--shadow)`,
           }}
         >
           <span style={{ flex: 1, minWidth: 0 }}>{toast.message}</span>

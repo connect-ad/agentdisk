@@ -470,7 +470,23 @@ export class StaffPlanAccess extends AuditedStaffAccess {
 
       compare("name", row?.name ?? null, product.name);
       compare("description", row?.description ?? null, product.description ?? null);
-      compare("amount_cents", row?.amount_cents ?? null, price?.unit_amount ?? null);
+
+      // Price needs its own handling, because "Stripe has no active recurring
+      // price" is not the same claim as "Stripe says the price is null".
+      //
+      // A free plan has no price BY DESIGN - a $0 recurring price would give
+      // every free account a real subscription that can go past_due - so
+      // comparing our 0 against a missing price reported a difference that
+      // could never be resolved and could never be safely applied. It showed up
+      // on every diff for AgentDisk Free and meant nothing.
+      //
+      // A plan we sell for money with no active price is a different matter
+      // entirely: somebody archived it in Stripe, and that IS worth surfacing.
+      if (price !== null) {
+        compare("amount_cents", row?.amount_cents ?? null, price.unit_amount ?? null);
+      } else if ((row?.amount_cents ?? 0) > 0) {
+        fields.push({ field: "amount_cents", local: row?.amount_cents ?? null, remote: null });
+      }
       for (const column of ENTITLEMENT_COLUMNS) {
         compare(column, row?.[column as EntitlementColumn] ?? null, entitlementFromMetadata(metadata, column));
       }
@@ -536,7 +552,14 @@ export class StaffPlanAccess extends AuditedStaffAccess {
         let value: string | number | null;
         if (field === "name") value = product.name;
         else if (field === "description") value = product.description ?? null;
-        else if (field === "amount_cents") value = price?.unit_amount ?? 0;
+        else if (field === "amount_cents") {
+          // Refuse rather than write 0. Taking a price that does not exist
+          // would silently make a paid plan free - the exact damage the
+          // diff-then-confirm flow exists to prevent, arriving through the
+          // confirm step itself.
+          if (price === null) continue;
+          value = price.unit_amount ?? 0;
+        }
         else if (field === "priority_support") value = metadata["priority_support"] === "1" ? 1 : 0;
         else if (field === "sort_order") value = entitlementFromMetadata(metadata, "sort_order") ?? 0;
         else value = entitlementFromMetadata(metadata, field);

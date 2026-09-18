@@ -254,13 +254,17 @@ describe('confirmation gates', () => {
     const { unmount } = render(
       <ConfirmModal open title="Delete" onCancel={() => {}} onConfirm={() => {}} />
     );
-    expect(screen.getByRole('button', { name: 'Confirm' }).style.background).toBe('rgb(170, 17, 17)');
+    // The token, not a resolved colour. These were literals until the overlay
+    // adopted the theme; jsdom does not resolve custom properties, and pinning
+    // the hex again would only re-pin whichever theme happened to be built in.
+    // What matters is that destructive and additive get DIFFERENT treatments.
+    expect(screen.getByRole('button', { name: 'Confirm' }).style.background).toBe('var(--dngr)');
     unmount();
 
     render(
       <ConfirmModal open title="Claim" destructive={false} onCancel={() => {}} onConfirm={() => {}} />
     );
-    expect(screen.getByRole('button', { name: 'Confirm' }).style.background).not.toBe('rgb(170, 17, 17)');
+    expect(screen.getByRole('button', { name: 'Confirm' }).style.background).not.toBe('var(--dngr)');
   });
 
   it('clears what was typed between openings', async () => {

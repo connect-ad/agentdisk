@@ -413,6 +413,71 @@ describe("sync from Stripe", () => {
     expect(diffs[0]?.fields.map(f => f.field)).toContain("agents");
   });
 
+  it("does not report a price difference for a plan that has none by design", async () => {
+    // AgentDisk Free has no Stripe price on purpose, so the remote amount is
+    // absent rather than zero. Comparing our 0 against that absence reported a
+    // difference on every single diff, could never be resolved, and offered the
+    // operator a tickbox whose only effect would be to write null.
+    await env.DB.prepare(
+      `UPDATE plans SET amount_cents = 0, stripe_product_id = 'prod_free' WHERE id = 'free'`
+    ).run();
+
+    const stripe = stripeStub({
+      products: [
+        product({
+          id: "prod_free",
+          name: "AgentDisk Free",
+          metadata: { package_id: "agentdisk-free", plan_id: "free" },
+        }),
+      ],
+      // No prices at all for this product.
+      prices: [],
+    });
+
+    const diffs = await access("admin").stripeDiff(stripe.client);
+    const free = diffs.find(d => d.planId === "free");
+    expect(free?.fields.map(f => f.field) ?? []).not.toContain("amount_cents");
+  });
+
+  it("still reports a paid plan whose Stripe price has been archived", async () => {
+    // The other side of the same coin, and the reason this is not just "skip
+    // when there is no price": a plan we sell for money with no active price is
+    // somebody having archived it, which is worth surfacing loudly.
+    await env.DB.prepare(
+      `UPDATE plans SET amount_cents = 2000, stripe_product_id = 'prod_pro' WHERE id = 'pro'`
+    ).run();
+
+    const stripe = stripeStub({
+      products: [
+        product({
+          id: "prod_pro",
+          name: "AgentDisk Pro",
+          metadata: { package_id: "agentdisk-pro", plan_id: "pro" },
+        }),
+      ],
+      prices: [],
+    });
+
+    const diffs = await access("admin").stripeDiff(stripe.client);
+    const pro = diffs.find(d => d.planId === "pro");
+    expect(pro?.fields.map(f => f.field) ?? []).toContain("amount_cents");
+  });
+
+  it("refuses to take a price that does not exist, rather than writing zero", async () => {
+    // Applying `amount_cents` from a product with no active price would make a
+    // paid plan free - damage arriving through the confirm step that exists to
+    // prevent exactly this.
+    const before = await planRow("pro");
+    const applied = await access("admin").syncFromStripe(
+      stripeStub({ prices: [] }).client,
+      [{ planId: "pro", fields: ["amount_cents"] }],
+      "should take nothing"
+    );
+
+    expect(applied).toHaveLength(0);
+    expect((await planRow("pro"))?.amount_cents).toBe(before?.amount_cents);
+  });
+
   it("applies only the ticked fields", async () => {
     const before = await planRow("pro");
     const stripe = stripeStub();

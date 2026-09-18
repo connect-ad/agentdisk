@@ -135,6 +135,7 @@ const ROUTE_ROLE = { staff: 'super_admin' };
 export default function App() {
   const [staff, setStaff] = useState(null);
   const [identity, setIdentity] = useState(null);
+  const [authError, setAuthError] = useState(null);
   const [checking, setChecking] = useState(firebaseConfigured);
   const [expired, setExpired] = useState(false);
   const [toasts, setToasts] = useState([]);
@@ -167,14 +168,21 @@ export default function App() {
 
       setIdentity(user.email ?? null);
       setChecking(true);
+      setAuthError(null);
       try {
         const result = await staffApi.whoami();
         setStaff(result.staff);
         setExpired(false);
-      } catch {
-        // Authenticated, but not staff — or no longer staff. Not an error to
-        // report; it is one of the two signed-out states.
+      } catch (err) {
         setStaff(null);
+        // **Only a 401 means "not staff".** Anything else — a blocked CORS
+        // preflight, a 500, the API being unreachable — is a failure to ASK the
+        // question, and reporting it as the answer sends somebody hunting for a
+        // missing database row that is sitting right there. That is exactly
+        // what happened the first time this shipped: the console's origin was
+        // absent from CORS_ALLOWED_ORIGINS, every call was blocked by the
+        // browser, and the screen said "no staff access" with great confidence.
+        if (err?.status !== 401) setAuthError(err);
       } finally {
         setChecking(false);
       }
@@ -212,7 +220,7 @@ export default function App() {
   if (!staff) {
     // `identity` present means signed in but not staff, which the screen says
     // in those words rather than looping them back to a button.
-    return <Login notStaff={identity} />;
+    return <Login notStaff={authError ? null : identity} error={authError} />;
   }
 
   const route = describe(path);

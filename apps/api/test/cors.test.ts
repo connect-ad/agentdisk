@@ -13,6 +13,7 @@ import { parseAllowedOrigins, resolveAllowedOrigin } from "../src/lib/cors";
 
 const URL_BASE = "https://api-dev.agentdisk.io";
 const DASHBOARD = "https://app-dev.agentdisk.io";
+const CONSOLE = "https://admin-dev.agentdisk.io";
 
 function preflight(path: string, origin: string, method = "POST"): Promise<Response> {
   return SELF.fetch(`${URL_BASE}${path}`, {
@@ -26,6 +27,19 @@ function preflight(path: string, origin: string, method = "POST"): Promise<Respo
 }
 
 describe("preflight", () => {
+  it("permits the staff console's own origin", async () => {
+    // The console is a SECOND origin calling the same API, and it was left out
+    // of CORS_ALLOWED_ORIGINS when it started calling /v1/staff/* with a
+    // Firebase token. Every request from it was blocked by the browser, and the
+    // console reported that as "you have no staff access" - a correct-looking
+    // answer to a question that was never asked.
+    //
+    // curl never sees this, which is why it survived a full endpoint smoke test.
+    const res = await preflight("/v1/staff/whoami", CONSOLE, "GET");
+    expect(res.headers.get("access-control-allow-origin")).toBe(CONSOLE);
+    expect(res.headers.get("access-control-allow-headers")).toContain("authorization");
+  });
+
   it("permits the dashboard origin, without authentication", async () => {
     // No Authorization header anywhere in this request - a browser has not sent
     // the real call yet. If the chain ran first, every cross-origin request in

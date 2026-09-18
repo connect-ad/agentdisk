@@ -24,7 +24,7 @@ import { card, mono, primaryBtn } from '../lib/ui.js';
  * somebody with super_admin added to a table; there is nothing here to enrol
  * in or recover.
  */
-export function Login({ notStaff = null, onSignedIn }) {
+export function Login({ notStaff = null, error: upstreamError = null, onSignedIn }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -152,6 +152,34 @@ export function Login({ notStaff = null, onSignedIn }) {
               <div style={{ marginTop: '6px' }}>
                 Ask a super_admin to add this address under Staff Accounts, or sign in with a
                 different one.
+              </div>
+            </div>
+          )}
+
+          {/*
+            Distinct from `notStaff`: we could not ASK whether they are staff.
+            Saying so keeps somebody from hunting for a missing database row.
+          */}
+          {upstreamError && (
+            <div
+              role="alert"
+              style={{
+                border: '1px solid var(--dngrBd)',
+                background: 'var(--dngrSoft)',
+                borderRadius: '9px',
+                padding: '12px',
+                marginBottom: '16px',
+                fontSize: '12.5px',
+                lineHeight: 1.6,
+                color: 'var(--dngrTx)'
+              }}
+            >
+              <strong>The API could not be reached.</strong> This is not a problem with your
+              account — your staff access could not be checked at all.
+              <div style={{ ...mono, marginTop: '6px', fontSize: '11px' }}>
+                {upstreamError.code ?? 'NETWORK'}
+                {upstreamError.status ? ` · ${upstreamError.status}` : ''}
+                {upstreamError.requestId ? ` · ${upstreamError.requestId}` : ''}
               </div>
             </div>
           )}

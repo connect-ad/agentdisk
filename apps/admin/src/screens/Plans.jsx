@@ -447,6 +447,25 @@ function QuotaField({ id, name, value, onChange }) {
   );
 }
 
+/**
+ * Two tabs, because the dialog has to fit a short window.
+ *
+ * Compacting got the form from ~500px to 376px, and that was still too tall for
+ * a browser at 125% zoom in a small window - the body ends up under 200px, and
+ * no arrangement of fourteen fields fits that. Height had run out as a thing to
+ * economise on.
+ *
+ * So the form splits along the line it already had: what the plan IS (name,
+ * price, support, and the reason for the change) and what it ALLOWS (the nine
+ * quota dimensions). Each tab is four rows, so the body is short by
+ * construction rather than by squeezing.
+ *
+ * Both tabs submit the same draft - switching tabs is not a step in a wizard
+ * and nothing is saved until Save is pressed. That matters because a reason is
+ * mandatory and lives on the first tab: somebody editing a limit must not be
+ * able to submit from the second tab without it, and `submitDisabled` reads the
+ * whole draft rather than the visible tab.
+ */
 function PlanEditor({
   plan,
   open,
@@ -461,6 +480,7 @@ function PlanEditor({
   const [draft, setDraft] = useState({});
   const [reason, setReason] = useState('');
   const [initialised, setInitialised] = useState(null);
+  const [tab, setTab] = useState('plan');
 
   // Seed from the plan the first time this opens for it, without a useEffect
   // whose dependency array would re-seed on every parent render and throw away
@@ -483,6 +503,7 @@ function PlanEditor({
           }
     );
     setReason('');
+    setTab('plan');
   }
 
   const set = (key, value) => setDraft(current => ({ ...current, [key]: value }));
@@ -525,6 +546,55 @@ function PlanEditor({
         ) : null
       }
     >
+      <div
+        role="tablist"
+        style={{ display: 'flex', gap: '2px', borderBottom: '1px solid var(--bd)', marginBottom: '12px' }}
+      >
+        {[
+          { key: 'plan', label: 'Plan' },
+          { key: 'limits', label: 'Limits' }
+        ].map(item => (
+          <button
+            key={item.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === item.key}
+            onClick={() => setTab(item.key)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              borderBottom: `2px solid ${tab === item.key ? 'var(--acc)' : 'transparent'}`,
+              padding: '6px 12px',
+              cursor: 'pointer',
+              fontFamily: 'var(--font)',
+              fontSize: '12.5px',
+              fontWeight: tab === item.key ? 600 : 500,
+              color: tab === item.key ? 'var(--acc)' : 'var(--tx2)'
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
+        {/*
+          The reason is mandatory and lives on the Plan tab, so somebody who
+          jumped straight to Limits needs to be told why Save is inert rather
+          than left to wonder.
+        */}
+        {reason.trim().length < 3 && tab === 'limits' && (
+          <span
+            style={{
+              marginLeft: 'auto',
+              alignSelf: 'center',
+              fontSize: '11.5px',
+              color: 'var(--warnTx)'
+            }}
+          >
+            A reason is required, on the Plan tab.
+          </span>
+        )}
+      </div>
+
+      <div hidden={tab !== 'plan'}>
       {creating && (
         <>
           <label htmlFor="plan-id" style={label}>
@@ -592,34 +662,6 @@ function PlanEditor({
         </div>
       )}
 
-      <div style={{ borderTop: '1px solid var(--bd)', margin: '2px 0 12px' }} />
-
-      {/*
-        Two columns, not nine stacked rows.
-
-        The form carries fourteen fields and the dialog is bounded by the
-        viewport, so on a short window the body became a 90px slot scrolling
-        through a very long list - technically correct and miserable to use.
-        Halving the height is the fix that helps at every window size, rather
-        than trying to win more height from a viewport that does not have it.
-      */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-          columnGap: '14px'
-        }}
-      >
-        {DIMENSIONS.map(dimension => (
-          <QuotaField
-            key={dimension.key}
-            id={`plan-${dimension.key}`}
-            name={dimension.label}
-            value={draft[dimension.key]}
-            onChange={value => set(dimension.key, value)}
-          />
-        ))}
-      </div>
 
       <div
         style={{
@@ -653,6 +695,38 @@ function PlanEditor({
             style={{ ...input, height: '30px', fontSize: '12px', flex: '1 1 auto', minWidth: 0 }}
           />
         </div>
+      </div>
+
+      </div>
+
+      <div hidden={tab !== 'limits'}>
+      {/*
+        Two columns, not nine stacked rows.
+
+        The form carries fourteen fields and the dialog is bounded by the
+        viewport, so on a short window the body became a 90px slot scrolling
+        through a very long list - technically correct and miserable to use.
+        Halving the height is the fix that helps at every window size, rather
+        than trying to win more height from a viewport that does not have it.
+      */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+          columnGap: '14px'
+        }}
+      >
+        {DIMENSIONS.map(dimension => (
+          <QuotaField
+            key={dimension.key}
+            id={`plan-${dimension.key}`}
+            name={dimension.label}
+            value={draft[dimension.key]}
+            onChange={value => set(dimension.key, value)}
+          />
+        ))}
+      </div>
+
       </div>
 
       {error && (

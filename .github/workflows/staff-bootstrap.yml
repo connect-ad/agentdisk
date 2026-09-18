@@ -85,6 +85,11 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.TERRAFORM_CF_ACCESS_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CF_ACCOUNT_ID }}
+      # The database is named explicitly and resolved against the account, so
+      # `--env` is deliberately NOT passed to wrangler below: it would read
+      # [env.<name>] in wrangler.toml, whose database_id is still the committed
+      # TF_OUTPUT_ placeholder. The deploy pipeline rewrites that with
+      # apply-tf-outputs.mjs first; this workflow has no reason to.
       D1_NAME: ${{ vars.EXPECTED_D1_DATABASE }}
       ENVIRONMENT_NAME: ${{ inputs.environment }}
 
@@ -134,7 +139,7 @@ jobs:
       - name: Check the address is free
         run: |
           set -euo pipefail
-          existing="$(npx wrangler d1 execute "$D1_NAME" --remote --env "$ENVIRONMENT_NAME" --json \
+          existing="$(npx wrangler d1 execute "$D1_NAME" --remote --json \
             --command "SELECT COUNT(*) AS n FROM staff_users WHERE email = '$(echo "${{ inputs.email }}" | tr '[:upper:]' '[:lower:]' | sed "s/'/''/g")'" \
             | tr -d '[:space:]')"
           echo "$existing"
@@ -161,7 +166,7 @@ jobs:
         working-directory: apps/api
         run: |
           set -euo pipefail
-          npx wrangler d1 execute "$D1_NAME" --remote --env "$ENVIRONMENT_NAME" --file "$STAFF_SQL"
+          npx wrangler d1 execute "$D1_NAME" --remote --file "$STAFF_SQL"
           # The file holds a hash and an encrypted secret, neither usable alone -
           # but it is still a fact about a credential, and it must not survive
           # into an artifact or a cache.
@@ -170,7 +175,7 @@ jobs:
       - name: Confirm it landed
         run: |
           set -euo pipefail
-          npx wrangler d1 execute "$D1_NAME" --remote --env "$ENVIRONMENT_NAME" \
+          npx wrangler d1 execute "$D1_NAME" --remote \
             --command "SELECT id, email, role, disabled_at, totp_confirmed_at FROM staff_users ORDER BY created_at DESC LIMIT 5"
 
       - name: Credential, shown once

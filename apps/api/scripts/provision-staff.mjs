@@ -241,7 +241,7 @@ Staff account prepared — NOT yet created. One command left.
 
 Apply it:
 
-  npx wrangler d1 execute agentdisk-${environment} --remote --file "${outPath}"
+  npx wrangler d1 execute agentdisk-${environment}-db --remote --file "${outPath}"
 
 Then delete that file. It is not a credential, but it is a fact about one.
 

@@ -17,7 +17,7 @@
 
 import { z } from "zod";
 import { ApiError, unauthorized, validationError } from "../lib/errors";
-import { verifyPassword, verifyTotp, readTotpSecret } from "../staff/crypto";
+import { DUMMY_PASSWORD_HASH, verifyPassword, verifyTotp, readTotpSecret } from "../staff/crypto";
 import { sendPasswordResetEmail, type EmailConfig } from "../lib/email";
 import {
   generatePasswordResetLink,
@@ -143,7 +143,7 @@ export async function staffLogin(request: Request, deps: StaffDeps): Promise<Res
   if (row === null) {
     // Still hash something, so a missing account does not return measurably
     // faster than a wrong password.
-    await verifyPassword(body.password, "pbkdf2$210000$00$00");
+    await verifyPassword(body.password, DUMMY_PASSWORD_HASH);
     return fail(`no staff account for ${body.email}`);
   }
   if (row.disabledAt !== null) return fail(`staff account ${row.id} is disabled`);

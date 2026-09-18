@@ -69,7 +69,10 @@ const encryptionKey = process.env.DATABASE_ENCRYPTION_KEY;
 // Kept byte-compatible with apps/api/src/staff/crypto.ts. If that file's
 // parameters change, this one has to change with it — which is why both say so.
 
-const PBKDF2_ITERATIONS = 210_000;
+// 100,000: the ceiling Workers enforces. Above it `deriveBits` throws rather
+// than running slowly, so a higher number here produces an account the Worker
+// cannot verify at all. Must stay equal to src/staff/crypto.ts.
+const PBKDF2_ITERATIONS = 100_000;
 const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
 const toHex = (bytes) =>

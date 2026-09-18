@@ -21,7 +21,24 @@
  * sits in, which is to say it is not a second factor.
  */
 
-const PBKDF2_ITERATIONS = 210_000;
+/**
+ * 100,000, because that is the ceiling the runtime enforces.
+ *
+ * This was 210,000, chosen as a defensible cost. Workers refuses it outright:
+ * `Pbkdf2 failed: iteration counts above 100000 are not supported`. The failure
+ * is a thrown error at `deriveBits`, not a slow hash, so EVERY staff login on
+ * the deployed Worker returned a 500 - including the dummy-hash branch taken
+ * when no such account exists. It passed in tests because the test runtime does
+ * not enforce the cap, which is exactly the gap 0008's comment warned about
+ * when it said this needed measuring rather than assuming.
+ *
+ * Lower than we would choose. It is what the platform can actually do, and a
+ * number the platform rejects is not a stronger setting - it is an outage.
+ */
+const PBKDF2_ITERATIONS = 100_000;
+
+/** The same ceiling, applied when reading a hash somebody else wrote. */
+const MAX_PBKDF2_ITERATIONS = 100_000;
 const SALT_BYTES = 16;
 const KEY_BITS = 256;
 
@@ -79,9 +96,24 @@ export async function verifyPassword(password: string, stored: string): Promise<
   const expected = parts[3];
   if (!Number.isFinite(iterations) || salt === undefined || expected === undefined) return false;
 
+  // A hash written at a cost this runtime cannot reproduce can never be
+  // verified here. Returning false rather than letting `deriveBits` throw keeps
+  // it an ordinary authentication failure - one identical body, like every
+  // other - instead of a 500 that tells the caller their account exists and
+  // something about it is broken.
+  if (iterations > MAX_PBKDF2_ITERATIONS) return false;
+
   const actual = toHex(await derive(password, fromHex(salt), iterations));
   return timingSafeEqualHex(actual, expected);
 }
+
+/**
+ * A hash to check against when there is no account, so a missing one does not
+ * answer measurably faster than a wrong password. Built from the same constant
+ * as a real hash: hardcoding the old 210,000 here is what made the "no such
+ * account" branch throw rather than merely fail.
+ */
+export const DUMMY_PASSWORD_HASH = `pbkdf2$${PBKDF2_ITERATIONS}$00$00`;
 
 /** Constant-time over equal-length hex. Length is fixed for everything we produce. */
 export function timingSafeEqualHex(a: string, b: string): boolean {

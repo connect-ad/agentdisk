@@ -17,6 +17,7 @@ import {
   decryptSecret,
   encryptSecret,
   readTotpSecret,
+  DUMMY_PASSWORD_HASH,
   generateTotpSecret,
   hashPassword,
   timingSafeEqualHex,
@@ -51,7 +52,10 @@ describe("password hashing", () => {
     const hash = await hashPassword("x");
     const [scheme, iterations] = hash.split("$");
     expect(scheme).toBe("pbkdf2");
-    expect(Number(iterations)).toBeGreaterThanOrEqual(210_000);
+    // Was >= 210,000. Workers refuses anything above 100,000 by throwing, so
+    // that assertion demanded a cost the runtime cannot run - and passed here
+    // only because the test runtime does not enforce the cap.
+    expect(Number(iterations)).toBe(100_000);
   });
 
   it("refuses a malformed stored hash rather than throwing", async () => {
@@ -183,15 +187,18 @@ describe("constant-time compare", () => {
  * would assert nothing.
  */
 describe("provision-staff.mjs output", () => {
-  const PASSWORD = "Z-PafuvrLhtLGTxxpXuLmC7S-_rYKjrT";
+  // Regenerated 18 Sept 2026 when PBKDF2_ITERATIONS dropped from 210,000 to
+  // 100,000. The previous literals were a real run too - and the Worker could
+  // no longer verify them, which is the whole point of this block.
+  const PASSWORD = "wccE7Py4gpNus47EyqHrtdVavNmdbAVK";
   const HASH =
-    "pbkdf2$210000$74b355bf562b5e4089cd558f9dcfd952$" +
-    "596357ef188649ba67fd6946650c7ad252771ab41c8066fce0b48ce62d87a49f";
+    "pbkdf2$100000$f4d387aad2499887144072c86c118172$" +
+    "670546067fa6fe2ac6a266c43a84a680076833711ce5c73ea9e02775e1533ea9";
   const SCRIPT_KEY = "test-key-for-roundtrip-only";
   const ENCRYPTED_TOTP =
-    "4594143e4bb7bb31a1841753:" +
-    "7399bbe151265dd7c4392688c6d39a3c497a61911ede9a1117b7c8c7cd9f1122c59fa91e123b8f5cc4dddcfa3fc8e90f";
-  const TOTP_SECRET = "6HLJXZL72O32GLSJ3457CMTBKDGJH6FM";
+    "96d37870f8dda3641e9a8af3:" +
+    "c5a23c7d06222b403f47fce836b423d829fa0cb94ffaa8976ff278bc5dbfba8fdeb0ddc6ef1beeed4522d6e7573dc324";
+  const TOTP_SECRET = "DNB4JBA6HHQ5TNS6FZOV6V73GKNVDA4Y";
 
   it("produces a password hash the Worker verifies", async () => {
     expect(await verifyPassword(PASSWORD, HASH)).toBe(true);
@@ -267,5 +274,40 @@ describe("readTotpSecret", () => {
     for (let i = 0; i < 40; i += 1) {
       expect(generateTotpSecret()).toMatch(/^[A-Z2-7]+$/);
     }
+  });
+});
+
+/**
+ * The iteration count the runtime will actually run.
+ *
+ * Workers refuses PBKDF2 above 100,000 by throwing at `deriveBits`, not by
+ * running slowly. The code shipped at 210,000, so every staff login on the
+ * deployed Worker answered 500 — including the branch taken when no such
+ * account exists, which hashes a dummy to equalise timing. Nothing caught it
+ * because this test runtime does not enforce the cap.
+ *
+ * So these assert the NUMBER rather than the behaviour. That is unusual and
+ * deliberate: the behaviour is identical either side of the limit here, and
+ * only differs where it cannot be tested.
+ */
+describe("PBKDF2 cost stays inside what Workers allows", () => {
+  it("hashes at no more than 100,000 iterations", async () => {
+    const stored = await hashPassword("any-password");
+    const iterations = Number.parseInt(stored.split("$")[1] ?? "", 10);
+    expect(iterations).toBeLessThanOrEqual(100_000);
+  });
+
+  it("refuses a stored hash written above the cap, rather than throwing", async () => {
+    // A 500 here would tell the caller their account exists and something about
+    // it is broken. Every authentication failure returns one identical body.
+    const tooExpensive = `pbkdf2$210000$74b355bf562b5e4089cd558f9dcfd952$${"0".repeat(64)}`;
+    expect(await verifyPassword("anything", tooExpensive)).toBe(false);
+  });
+
+  it("uses the same cost for the dummy hash as for a real one", async () => {
+    // The dummy is hashed when no account matches. Pinning it to a literal that
+    // drifted from the constant is what made the missing-account path throw.
+    const real = await hashPassword("x");
+    expect(DUMMY_PASSWORD_HASH.split("$")[1]).toBe(real.split("$")[1]);
   });
 });

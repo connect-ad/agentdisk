@@ -66,14 +66,13 @@ const COLS =
 /**
  * See the `height` prop on the editor's Modal.
  *
- * 498 is the exact fit for the Plan tab as measured; the extra six are for
- * `--font`, which falls back to `system-ui` with nothing loaded, so line
- * heights differ by a pixel or two between operating systems. An exact fit
- * would turn that into a two-pixel scrollbar on the tab the design says never
- * scrolls. Six pixels is invisible on Plan and moves the Limits fold by less
- * than a row's gap.
+ * 538 is the exact fit for the Plan tab as measured; the extra six are for the
+ * moment before the web font arrives, when `--font` is still `system-ui` and
+ * line heights differ by a pixel or two. An exact fit would turn that into a
+ * two-pixel scrollbar on the tab the design says never scrolls. Six pixels is
+ * invisible on Plan and moves the Limits fold by less than a row's gap.
  */
-const PLAN_EDITOR_HEIGHT = 504;
+const PLAN_EDITOR_HEIGHT = 544;
 
 /**
  * The nine limits, with the two things the design asks each row to state.
@@ -619,13 +618,13 @@ function PlanEditor({
           aria-selected={tab === item.key}
           onClick={() => setTab(item.key)}
           style={{
-            height: '34px',
+            height: '36px',
             padding: '0 14px',
             border: 'none',
             background: 'transparent',
             cursor: 'pointer',
             fontFamily: 'var(--font)',
-            fontSize: '12.5px',
+            fontSize: '13px',
             fontWeight: tab === item.key ? 600 : 500,
             color: tab === item.key ? 'var(--acc)' : 'var(--tx2)',
             boxShadow: tab === item.key ? 'inset 0 -2px 0 0 var(--acc)' : 'none'
@@ -639,14 +638,21 @@ function PlanEditor({
           <button
             type="button"
             onClick={onRetire}
+            // A button, not a link. It shares a row with two buttons of the
+            // same height, and the design draws it as one so that the row reads
+            // as three actions and not as two actions and a footnote.
             style={{
-              background: 'none',
-              border: 'none',
-              padding: 0,
+              height: '38px',
+              padding: '0 14px',
+              border: '1px solid var(--dngrBd)',
+              borderRadius: '9px',
+              background: 'transparent',
               color: 'var(--dngrTx)',
               cursor: 'pointer',
-              fontSize: '12.5px',
-              fontFamily: 'var(--font)'
+              fontSize: '13px',
+              fontWeight: 600,
+              fontFamily: 'var(--font)',
+              whiteSpace: 'nowrap'
             }}
           >
             Retire this plan

@@ -287,9 +287,12 @@ export function Modal({
           // refuse to shrink.
           minHeight: 0,
           background: palette.surface,
-          border: `1px solid ${palette.line}`,
-          borderRadius: 10,
-          boxShadow: `0 16px 48px var(--shadow)`,
+          // The design's frame: the brighter border, the larger radius and the
+          // deeper shadow. It is the one surface that sits on top of everything
+          // else, and the frame is what says so.
+          border: `1px solid ${palette.fieldLine}`,
+          borderRadius: 14,
+          boxShadow: `0 28px 70px var(--shadow)`,
           font: '14px/1.5 var(--font)',
           color: palette.ink,
           animation: 'adminDialogIn .14s ease both',
@@ -301,17 +304,28 @@ export function Modal({
             flex: 'none',
             display: 'flex',
             alignItems: 'flex-start',
-            gap: 12,
-            padding: '12px 16px 10px',
+            gap: 14,
+            // The design's header, measured from the file rather than from a
+            // screenshot: it was 12/16/10 with a 15px title in the body face,
+            // and read as a smaller, tighter dialog than the one it was drawn
+            // from.
+            padding: '20px 22px 16px',
             borderBottom: `1px solid ${palette.hairline}`,
           }}
         >
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h2 id={titleId} style={{ font: '600 15px/1.3 var(--font)', margin: 0 }}>
+            <h2
+              id={titleId}
+              style={{
+                margin: '0 0 5px',
+                font: '600 19px/1.25 var(--fontHead)',
+                letterSpacing: '-0.02em',
+              }}
+            >
               {title}
             </h2>
             {description ? (
-              <p id={descriptionId} style={{ margin: '3px 0 0', fontSize: 12, lineHeight: 1.4, color: palette.muted }}>
+              <p id={descriptionId} style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: palette.muted }}>
                 {description}
               </p>
             ) : null}
@@ -365,7 +379,7 @@ export function Modal({
         */}
         <div
           data-dialog-body=""
-          style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '12px 16px' }}
+          style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '20px 22px' }}
         >
           {children}
         </div>
@@ -376,15 +390,15 @@ export function Modal({
             flex: 'none',
             display: 'flex',
             alignItems: 'center',
-            gap: 10,
-            padding: '10px 16px 11px',
+            gap: 9,
+            padding: '15px 22px',
             borderTop: `1px solid ${palette.hairline}`,
             background: palette.surfaceAlt,
-            borderRadius: '0 0 10px 10px',
+            borderRadius: '0 0 14px 14px',
           }}
         >
           {footer}
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 9 }}>
             <button
               type="button"
               onClick={onClose}
@@ -400,6 +414,7 @@ export function Modal({
                 background: 'transparent',
                 color: palette.ink,
                 font: 'inherit',
+                fontSize: 13,
                 fontWeight: 500,
                 cursor: 'pointer',
               }}
@@ -413,15 +428,19 @@ export function Modal({
               type="submit"
               disabled={submitDisabled || busy}
               style={{
-                padding: '8px 14px',
+                height: 38,
+                padding: '0 16px',
                 border: 0,
-                borderRadius: 6,
+                borderRadius: 9,
                 background: submitDisabled || busy ? palette.disabled : destructive ? palette.danger : palette.accent,
                 // Not white. The accent is a pale lilac in dark mode and a deep
                 // violet in light mode, so the readable ink differs between
                 // them - `--accInk` is the token that already knows which.
-                color: submitDisabled || busy ? palette.muted : destructive ? '#fff' : palette.accentInk,
+                color: submitDisabled || busy ? palette.faint : destructive ? '#fff' : palette.accentInk,
                 font: 'inherit',
+                fontSize: 13,
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
                 cursor: submitDisabled || busy ? 'not-allowed' : 'pointer',
               }}
             >

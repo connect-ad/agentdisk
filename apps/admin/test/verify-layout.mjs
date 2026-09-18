@@ -175,9 +175,17 @@ async function assertPlanEditor(page, label, viewport) {
       }));
       const whole = rows.filter(r => r.rect.top >= view.top - 1 && r.rect.bottom <= view.bottom + 1);
       const touched = rows.filter(r => r.rect.top < view.bottom - 1 && r.rect.bottom > view.top + 1);
+      // What the window allows the dialog to be: the scrim's box less its
+      // padding, in the dialog's own coordinate space (:root is zoomed).
+      const scrimStyle = getComputedStyle(scrim);
+      const scrimInner =
+        scrim.clientHeight - parseFloat(scrimStyle.paddingTop) - parseFloat(scrimStyle.paddingBottom);
       return {
         viewportHeight: window.innerHeight,
         scrimHeight: Math.round(scrim.getBoundingClientRect().height),
+        // True when the dialog is shorter than the room it was given, i.e. it
+        // took its own height rather than the window's.
+        atDesignHeight: dialog.clientHeight < scrimInner - 1,
         dialogTop: Math.round(dialog.getBoundingClientRect().top),
         dialogBottom: Math.round(dialog.getBoundingClientRect().bottom),
         dialogHeight: Math.round(dialog.getBoundingClientRect().height),
@@ -219,11 +227,23 @@ async function assertPlanEditor(page, label, viewport) {
     `footer bottom ${plan.footBottom} / viewport ${plan.viewportHeight}`
   );
 
-  check(
-    `[plans ${label}] the Plan tab does not scroll`,
-    plan.tab === 'Plan' && plan.bodyScroll <= plan.bodyClient + 1,
-    `content ${plan.bodyScroll} in visible ${plan.bodyClient}`
-  );
+  // The design's height holds the whole Plan tab with nothing to scroll. On a
+  // window too short for that height the dialog is clamped to the window and
+  // Plan scrolls inside it - which is the contract, not a failure; the check
+  // is that it did clamp rather than grow.
+  if (plan.atDesignHeight) {
+    check(
+      `[plans ${label}] the Plan tab does not scroll`,
+      plan.tab === 'Plan' && plan.bodyScroll <= plan.bodyClient + 1,
+      `content ${plan.bodyScroll} in visible ${plan.bodyClient}`
+    );
+  } else {
+    check(
+      `[plans ${label}] the window is shorter than the design height, and the Plan tab scrolls inside it`,
+      plan.tab === 'Plan' && plan.bodyScroll > plan.bodyClient + 1,
+      `content ${plan.bodyScroll} > visible ${plan.bodyClient}`
+    );
+  }
 
   // ---- The Limits tab. ---------------------------------------------------
   await page.click('[role="tab"]:has-text("Limits")');

@@ -55,6 +55,15 @@
   box-sizing: border-box;
 }
 
+/*
+ * The three faces the design is drawn in. `--font`, `--fontHead` and `--mono`
+ * below have named them since the palette was imported, and nothing loaded
+ * them, so every screen fell through to `system-ui` - Segoe UI on the machine
+ * this console is used from - and read as a different size and rhythm from
+ * the design at every declared px. Same import the dashboard makes.
+ */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
 /* -------------------------------------------------------------------------
  * UI scale.
  *

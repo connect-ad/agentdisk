@@ -364,59 +364,85 @@ export function Plans({ role, onToast }) {
 
 /** A number field that keeps `null` and `-1` distinguishable. */
 /**
- * One quota dimension, in as little vertical space as it can honestly take.
+ * One quota dimension, on a single line.
  *
- * The three states are a select rather than free text because `null` and `-1`
+ * The label sits BESIDE the control rather than above it. Stacked, nine of
+ * these plus the rest of the form ran to about 500px, which does not fit a
+ * browser at 125% zoom - and 125% is what this console is actually read at.
+ * Inline, the same nine cost roughly 120px.
+ *
+ * The three states stay a select rather than free text, because `null` and `-1`
  * are genuinely different answers - "the row did not say", which defers to the
  * lib/plans.ts floor, versus "unlimited", which is a decision somebody made -
  * and a number field cannot express the first at all.
- *
- * Laid out on one line with the label above, so nine of these fit three-up in a
- * dialog without it becoming a scrolling column.
  */
 function QuotaField({ id, name, value, onChange }) {
   const mode = value === null || value === undefined ? 'default' : value < 0 ? 'unlimited' : 'value';
 
   return (
-    <div style={{ marginBottom: '10px', minWidth: 0 }}>
-      <label htmlFor={id} style={{ ...label, marginBottom: '4px' }}>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        marginBottom: '8px',
+        minWidth: 0
+      }}
+    >
+      <label
+        htmlFor={id}
+        style={{
+          ...label,
+          flex: '0 0 92px',
+          margin: 0,
+          textAlign: 'right',
+          lineHeight: 1.3
+        }}
+      >
         {name}
       </label>
-      <div style={{ display: 'flex', gap: '6px', minWidth: 0 }}>
-        <select
-          aria-label={`${name} mode`}
-          value={mode}
-          onChange={event => {
-            if (event.target.value === 'default') onChange(null);
-            else if (event.target.value === 'unlimited') onChange(-1);
-            else onChange(0);
-          }}
+      <select
+        aria-label={`${name} mode`}
+        value={mode}
+        onChange={event => {
+          if (event.target.value === 'default') onChange(null);
+          else if (event.target.value === 'unlimited') onChange(-1);
+          else onChange(0);
+        }}
+        style={{
+          ...input,
+          // A token once a number sits beside it: "Unlimited" only has to be
+          // readable while it IS the answer.
+          flex: mode === 'value' ? '0 0 78px' : '1 1 auto',
+          width: 'auto',
+          height: '30px',
+          padding: '0 6px',
+          fontSize: '12px'
+        }}
+      >
+        <option value="default">Default</option>
+        <option value="unlimited">Unlimited</option>
+        <option value="value">Value</option>
+      </select>
+      {mode === 'value' && (
+        <input
+          id={id}
+          type="number"
+          min="0"
+          value={value ?? 0}
+          onChange={event => onChange(Number(event.target.value))}
           style={{
             ...input,
-            // Shrinks to a token when a number sits beside it, because the word
-            // "Unlimited" only has to be readable while it IS the answer.
-            width: mode === 'value' ? '86px' : '100%',
-            flex: mode === 'value' ? '0 0 86px' : '1 1 auto',
-            height: '32px',
-            padding: '0 8px',
-            fontSize: '12.5px'
+            ...mono,
+            flex: '1 1 auto',
+            width: 'auto',
+            minWidth: 0,
+            height: '30px',
+            padding: '0 6px',
+            fontSize: '12px'
           }}
-        >
-          <option value="default">Default</option>
-          <option value="unlimited">Unlimited</option>
-          <option value="value">Value</option>
-        </select>
-        {mode === 'value' && (
-          <input
-            id={id}
-            type="number"
-            min="0"
-            value={value ?? 0}
-            onChange={event => onChange(Number(event.target.value))}
-            style={{ ...input, ...mono, flex: '1 1 auto', minWidth: 0, height: '32px', padding: '0 8px', fontSize: '12.5px' }}
-          />
-        )}
-      </div>
+        />
+      )}
     </div>
   );
 }
@@ -580,7 +606,7 @@ function PlanEditor({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
           columnGap: '14px'
         }}
       >
@@ -595,26 +621,39 @@ function PlanEditor({
         ))}
       </div>
 
-      <label style={{ ...label, display: 'flex', alignItems: 'center', gap: '8px', textTransform: 'none' }}>
-        <input
-          type="checkbox"
-          checked={draft.priority_support === 1}
-          onChange={event => set('priority_support', event.target.checked ? 1 : 0)}
-        />
-        <span style={{ fontSize: '12.5px', color: 'var(--tx)', letterSpacing: 0 }}>
-          Priority support (display only — nothing enforces it)
-        </span>
-      </label>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(180px, 1fr) minmax(220px, 2fr)',
+          columnGap: '14px',
+          alignItems: 'center',
+          marginTop: '4px'
+        }}
+      >
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <input
+            type="checkbox"
+            checked={draft.priority_support === 1}
+            onChange={event => set('priority_support', event.target.checked ? 1 : 0)}
+          />
+          <span style={{ fontSize: '12px', color: 'var(--tx)' }}>
+            Priority support <span style={{ color: 'var(--tx3)' }}>(display only)</span>
+          </span>
+        </label>
 
-      <label htmlFor="plan-reason" style={{ ...label, marginTop: '14px' }}>
-        Reason (recorded in the audit log)
-      </label>
-      <input
-        id="plan-reason"
-        value={reason}
-        onChange={event => setReason(event.target.value)}
-        style={input}
-      />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <label htmlFor="plan-reason" style={{ ...label, flex: '0 0 62px', margin: 0, textAlign: 'right' }}>
+            Reason
+          </label>
+          <input
+            id="plan-reason"
+            value={reason}
+            onChange={event => setReason(event.target.value)}
+            placeholder="Recorded in the audit log"
+            style={{ ...input, height: '30px', fontSize: '12px', flex: '1 1 auto', minWidth: 0 }}
+          />
+        </div>
+      </div>
 
       {error && (
         <div style={{ marginTop: '14px' }}>

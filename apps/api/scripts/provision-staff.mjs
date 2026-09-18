@@ -54,14 +54,16 @@ if (!email || !email.includes("@")) die("--email is required and must be an addr
 if (!ROLES.includes(role)) die(`--role must be one of ${ROLES.join(", ")}`);
 if (!["dev", "prod"].includes(environment)) die("--env must be dev or prod");
 
+// Optional since 18 Sept 2026, at the owner's explicit direction. With a key
+// the TOTP secret is encrypted at rest exactly as before; without one it is
+// stored as the base32 the authenticator app uses, and `readTotpSecret` in the
+// Worker accepts either. The trade is recorded in staff/crypto.ts: a copy of
+// the database then yields every staff member's second factor.
+//
+// If it IS set it must match what the Worker runs with, or the row written here
+// cannot be read at login - and that failure appears only as a correct code
+// being rejected, with nothing wrong at this end to warn you.
 const encryptionKey = process.env.DATABASE_ENCRYPTION_KEY;
-if (!encryptionKey) {
-  die(
-    "DATABASE_ENCRYPTION_KEY is not set. It must match the value the Worker runs with, " +
-      "or the TOTP secret written here cannot be decrypted at login. " +
-      "Set it in your shell from the GitHub Environment secret; do not pass it as an argument."
-  );
-}
 
 /* -------------------------- crypto, mirrored ----------------------------- */
 // Kept byte-compatible with apps/api/src/staff/crypto.ts. If that file's
@@ -197,15 +199,17 @@ const totpSecret = generateTotpSecret();
 const now = Date.now();
 
 const passwordHash = await hashPassword(password);
-const encryptedTotp = await encryptSecret(totpSecret, encryptionKey);
+const storedTotp = encryptionKey
+  ? await encryptSecret(totpSecret, encryptionKey)
+  : totpSecret;
 
 // SQL string literals: the only user-controlled value is the email, and a
 // doubled quote is SQLite's own escape. Everything else is generated hex.
 const sqlSafeEmail = email.replace(/'/g, "''");
 
 const sql = `-- Staff account for ${sqlSafeEmail} (${role}), generated ${new Date(now).toISOString()}.
--- Contains a password hash and an ENCRYPTED TOTP secret; neither is usable on
--- its own. Delete this file once applied.
+-- Contains a password hash and ${encryptionKey ? "an ENCRYPTED" : "a PLAINTEXT"} TOTP secret.
+-- Delete this file once applied.
 --
 -- totp_confirmed_at is set, not left NULL. Migration 0013 made "invited but
 -- never enrolled" a real state that cannot authenticate, and an account created
@@ -218,7 +222,7 @@ VALUES (
   '${id}',
   '${sqlSafeEmail}',
   '${passwordHash}',
-  '${encryptedTotp}',
+  '${storedTotp}',
   '${role}',
   ${now},
   ${now}
@@ -227,6 +231,15 @@ VALUES (
 
 const outPath = resolve(process.cwd(), `staff-${environment}-${id}.sql`);
 writeFileSync(outPath, sql, { encoding: "utf8", mode: 0o600 });
+
+const plaintextNote = encryptionKey
+  ? ""
+  : [
+      "",
+      "  NOTE: no DATABASE_ENCRYPTION_KEY was set, so the TOTP secret is stored",
+      "  in plaintext. Anyone with a copy of the database holds this account's",
+      "  second factor.",
+    ].join("\n");
 
 const totpNow = await currentTotp(totpSecret);
 const otpauth = `otpauth://totp/${encodeURIComponent(`AgentDisk:${email}`)}?secret=${totpSecret}&issuer=AgentDisk&algorithm=SHA1&digits=6&period=30`;
@@ -244,6 +257,7 @@ Apply it:
   npx wrangler d1 execute agentdisk-${environment}-db --remote --file "${outPath}"
 
 Then delete that file. It is not a credential, but it is a fact about one.
+${plaintextNote}
 
 ------------------------------------------------------------------------
 SHOWN ONCE. Nothing below is stored anywhere, by design.

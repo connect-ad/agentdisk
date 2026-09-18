@@ -17,7 +17,7 @@
 
 import { z } from "zod";
 import { ApiError, unauthorized, validationError } from "../lib/errors";
-import { verifyPassword, verifyTotp, decryptSecret } from "../staff/crypto";
+import { verifyPassword, verifyTotp, readTotpSecret } from "../staff/crypto";
 import { sendPasswordResetEmail, type EmailConfig } from "../lib/email";
 import {
   generatePasswordResetLink,
@@ -151,8 +151,8 @@ export async function staffLogin(request: Request, deps: StaffDeps): Promise<Res
     return fail(`wrong password for staff ${row.id}`);
   }
 
-  const secret = await decryptSecret(row.totpSecret, deps.encryptionKey);
-  if (secret === null) return fail(`TOTP secret for staff ${row.id} could not be decrypted`);
+  const secret = await readTotpSecret(row.totpSecret, deps.encryptionKey);
+  if (secret === null) return fail(`TOTP secret for staff ${row.id} could not be read`);
   if (!(await verifyTotp(secret, body.totp, deps.now))) {
     return fail(`wrong TOTP code for staff ${row.id}`);
   }

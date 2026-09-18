@@ -16,6 +16,7 @@ import {
   currentTotp,
   decryptSecret,
   encryptSecret,
+  readTotpSecret,
   generateTotpSecret,
   hashPassword,
   timingSafeEqualHex,
@@ -210,5 +211,61 @@ describe("provision-staff.mjs output", () => {
     const now = 1_788_777_044_851;
     const code = await currentTotp(decrypted as string, now);
     expect(await verifyTotp(decrypted as string, code, now)).toBe(true);
+  });
+});
+
+/**
+ * Reading a TOTP secret when the column is not encrypted.
+ *
+ * Encryption at rest for `staff_users.totp_secret` became optional on
+ * 18 September 2026 at the owner's explicit direction. What has to keep holding
+ * is that the two forms cannot be confused for one another, in either
+ * direction: a plaintext base32 secret must never be fed to the decrypter, and
+ * an encrypted value must never be handed back as though it were the secret.
+ *
+ * The discriminator is the colon in `<iv hex>:<ciphertext hex>`. Base32 is
+ * drawn from A-Z and 2-7, so a real secret cannot contain one - which makes
+ * this a property of the alphabet rather than a convention somebody has to
+ * remember.
+ */
+describe("readTotpSecret", () => {
+  // Scoped here rather than shared: the describe above owns its own KEY, and a
+  // module-level one would couple two blocks that test different things.
+  const KEY = "a-database-encryption-key-for-tests";
+  const SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+
+  it("returns a plaintext secret unchanged, with or without a key", async () => {
+    expect(await readTotpSecret(SECRET, undefined)).toBe(SECRET);
+    expect(await readTotpSecret(SECRET, KEY)).toBe(SECRET);
+  });
+
+  it("still decrypts a value written when a key was configured", async () => {
+    // The reason no migration was needed: rows written before this change keep
+    // working for as long as the key is still set.
+    const stored = await encryptSecret(SECRET, KEY);
+    expect(await readTotpSecret(stored, KEY)).toBe(SECRET);
+  });
+
+  it("refuses an encrypted value when the key is gone, rather than returning it raw", async () => {
+    // The direction that would be a real failure. Handing the ciphertext back
+    // as though it were the secret would make every code wrong with no
+    // indication why - and returning null instead means the login fails closed.
+    const stored = await encryptSecret(SECRET, KEY);
+    expect(await readTotpSecret(stored, undefined)).toBeNull();
+    expect(await readTotpSecret(stored, "")).toBeNull();
+  });
+
+  it("still refuses a wrong key", async () => {
+    const stored = await encryptSecret(SECRET, KEY);
+    expect(await readTotpSecret(stored, "a-different-key")).toBeNull();
+  });
+
+  it("never mistakes a base32 secret for a ciphertext", async () => {
+    // Base32 is A-Z and 2-7. If a colon could appear in a generated secret this
+    // whole discriminator would be unsound, so the alphabet is the thing worth
+    // asserting.
+    for (let i = 0; i < 40; i += 1) {
+      expect(generateTotpSecret()).toMatch(/^[A-Z2-7]+$/);
+    }
   });
 });

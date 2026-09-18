@@ -233,3 +233,32 @@ export async function decryptSecret(stored: string, key: string): Promise<string
     return null;
   }
 }
+
+/**
+ * Read a stored TOTP secret, encrypted or not.
+ *
+ * **Encryption at rest for this column is now optional, at the owner's
+ * explicit direction (18 Sept 2026).** The trade being accepted, stated so
+ * nobody has to reconstruct it later: a copy of the D1 database now yields
+ * every staff member's second factor in usable form. Passwords are still
+ * PBKDF2 hashes, so a database disclosure alone is not a login - but it removes
+ * the property that made TOTP worth having against a compromised password,
+ * which is the case two-factor exists for.
+ *
+ * The stored format is self-describing rather than configured, which is what
+ * lets both kinds coexist with no migration and no flag. `encryptSecret` writes
+ * `<iv hex>:<ciphertext hex>`, and a base32 TOTP secret is drawn from
+ * `A-Z2-7` - it can never contain a colon. So the separator is an unambiguous
+ * discriminator, not a guess.
+ *
+ * Returns null only when a value that IS encrypted cannot be decrypted, which
+ * stays a real failure: a wrong key must not silently authenticate.
+ */
+export async function readTotpSecret(
+  stored: string,
+  key: string | undefined
+): Promise<string | null> {
+  if (!stored.includes(":")) return stored;
+  if (key === undefined || key === "") return null;
+  return decryptSecret(stored, key);
+}

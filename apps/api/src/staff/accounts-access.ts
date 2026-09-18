@@ -116,14 +116,9 @@ export class StaffAccountAccess extends AuditedStaffAccess {
     if (!STAFF_ROLES.includes(role as StaffRole)) {
       throw validationError(`A role must be one of ${STAFF_ROLES.join(", ")}.`);
     }
-    if (encryptionKey === undefined || encryptionKey === "") {
-      // Without it the TOTP secret would have to be stored in plaintext, which
-      // makes the second factor worth exactly as much as the database it sits
-      // in. Refusing is the only correct answer.
-      throw new ApiError("INTERNAL_ERROR", "Staff provisioning is not configured here.", {
-        internalReason: "DATABASE_ENCRYPTION_KEY is not set",
-      });
-    }
+    // No key, no refusal. Encryption at rest for this column is optional at the
+    // owner's direction; when a key IS configured the secret is still encrypted
+    // with it, and `readTotpSecret` accepts either form at login.
 
     const existing = await this.db
       .prepare(`SELECT id FROM staff_users WHERE email = ?`)
@@ -148,7 +143,9 @@ export class StaffAccountAccess extends AuditedStaffAccess {
         id,
         normalised,
         await hashPassword(password),
-        await encryptSecret(totpSecret, encryptionKey),
+        encryptionKey === undefined || encryptionKey === ""
+          ? totpSecret
+          : await encryptSecret(totpSecret, encryptionKey),
         role,
         this.now
       )

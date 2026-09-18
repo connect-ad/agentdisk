@@ -163,26 +163,46 @@ export const th = {
 
 export const thR = { ...th, textAlign: 'right' };
 
-export function headRow(columns) {
+/**
+ * A vertical rule between columns.
+ *
+ * Spread into every cell of a `divided` row. The divider sits on the LEFT of
+ * each cell and the first cell suppresses it, so a row never ends with a rule
+ * hanging off its edge.
+ *
+ * Dividers need `gap: 0` on the grid - a rule floating in the middle of a 12px
+ * gap reads as belonging to neither column. The padding here replaces that gap.
+ */
+export function cell(first = false) {
+  return {
+    minWidth: 0,
+    padding: '0 10px',
+    borderLeft: first ? 'none' : '1px solid var(--bd)',
+    display: 'flex',
+    alignItems: 'center'
+  };
+}
+
+export function headRow(columns, divided = false) {
   return {
     display: 'grid',
     gridTemplateColumns: columns,
-    gap: '12px',
+    gap: divided ? 0 : '12px',
     alignItems: 'center',
-    padding: '0 14px',
+    padding: divided ? '0 4px' : '0 14px',
     height: '34px',
     background: 'var(--surf2)',
     borderBottom: '1px solid var(--bd)'
   };
 }
 
-export function dataRow(columns, asButton) {
+export function dataRow(columns, asButton, divided = false) {
   return {
     display: 'grid',
     gridTemplateColumns: columns,
-    gap: '12px',
+    gap: divided ? 0 : '12px',
     alignItems: 'center',
-    padding: '10px 14px',
+    padding: divided ? '10px 4px' : '10px 14px',
     borderBottom: '1px solid var(--bd)',
     width: '100%',
     ...(asButton

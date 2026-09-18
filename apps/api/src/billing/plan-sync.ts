@@ -159,8 +159,8 @@ export async function syncProductToPlan(
          storage_bytes, file_count, egress_bytes_period, requests_period,
          max_file_bytes, agents, members, workspaces, api_keys,
          priority_support, is_public, is_default, sort_order,
-         created_at, updated_at
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         created_at, updated_at, last_synced_at, last_synced_direction
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'inbound')
        ON CONFLICT(id) DO UPDATE SET
          package_id = excluded.package_id,
          name = excluded.name,
@@ -183,7 +183,20 @@ export async function syncProductToPlan(
          is_public = excluded.is_public,
          is_default = excluded.is_default,
          sort_order = excluded.sort_order,
-         updated_at = excluded.updated_at`
+         updated_at = excluded.updated_at,
+         -- Stamped here, not only by the console's own edit paths.
+         --
+         -- This is the function BOTH the product.* webhook and the staff
+         -- "Reconcile all" run through, and neither wrote these columns - so
+         -- last_synced_at stayed NULL forever and the Plans screen showed
+         -- "not synced" on every row no matter how many times somebody synced.
+         -- A status that cannot change is worse than no status: it reads as a
+         -- problem to chase.
+         --
+         -- 'inbound' is right for both callers: a webhook and a reconcile are
+         -- each Stripe telling us something. 'outbound' belongs to a push.
+         last_synced_at = excluded.last_synced_at,
+         last_synced_direction = excluded.last_synced_direction`
     )
     .bind(
       planId,
@@ -211,6 +224,7 @@ export async function syncProductToPlan(
       product.active ? 1 : 0,
       flag(metadata, "is_default"),
       entitlement(metadata, "sort_order") ?? 0,
+      now,
       now,
       now
     )

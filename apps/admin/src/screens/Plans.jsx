@@ -4,9 +4,10 @@ import { useResource } from '../lib/useResource.js';
 import { ConfirmModal, Modal } from '../components/Overlay.jsx';
 import { EmptyState, ErrorState, Skeleton } from '../components/States.jsx';
 import { holds } from '../components/Shell.jsx';
-import { bytes, count, dateTime, money, quota } from '../lib/format.js';
+import { bytes, count, dateTime, money, quota, since } from '../lib/format.js';
 import {
   card,
+  cell,
   dataRow,
   disabledBtn,
   ellipsis,
@@ -48,20 +49,19 @@ import {
  */
 
 /**
- * The last track is the one that used to force a horizontal scrollbar.
+ * Nine tracks, with the actions split out from the status.
  *
- * It was 86px and holds a status pill plus Edit and Retire, so the content
- * overflowed its track and widened the row - a grid track does not shrink what
- * is inside it. The Plan column was taking the slack as `1fr` while the actions
- * spilled past the edge.
+ * Two things were wrong before. The last track was 86px and held a status pill
+ * plus Edit plus Retire, so its contents overflowed and widened the row into a
+ * horizontal scrollbar - a grid track does not shrink what is inside it. And
+ * the SYNC header sat above a right-aligned group, so the label and the thing
+ * it labelled were at opposite ends of the same cell.
  *
- * So Plan is bounded rather than greedy, the numeric columns are sized to their
- * actual contents, and the Stripe price takes what is left and truncates - it
- * is a 30-character opaque id nobody reads in full, and the row expands to show
- * it on demand elsewhere.
+ * Giving the actions their own track fixes both: SYNC now labels only the
+ * status, and the buttons have room to sit without pushing anything.
  */
 const COLS =
-  'minmax(120px,1.1fr) 68px 82px 58px 68px 84px minmax(80px,1fr) 176px';
+  'minmax(120px,1.1fr) 68px 84px 58px 70px 86px minmax(90px,1fr) 128px 104px';
 
 const DIMENSIONS = [
   { key: 'storage_bytes', label: 'Storage', format: bytes, unit: 'bytes' },
@@ -75,12 +75,21 @@ const DIMENSIONS = [
   { key: 'requests_period', label: 'Requests / period', format: quota }
 ];
 
+/**
+ * What the SYNC column says, and when it last happened.
+ *
+ * `last_synced_at` is stamped by the shared product-to-plan upsert, so a
+ * webhook and a Reconcile all both move it. It was previously written only by
+ * the console's own edit paths - which meant this column read "not synced"
+ * forever however many times somebody synced, and a status that cannot change
+ * reads as a problem to chase.
+ */
 function syncState(plan) {
-  if (!plan.stripe_product_id) return { tone: pills.warn, text: 'no product' };
-  if (!plan.last_synced_at) return { tone: pills.neutral, text: 'not synced' };
+  if (!plan.stripe_product_id) return { tone: pills.warn, text: 'no product', at: null };
+  if (!plan.last_synced_at) return { tone: pills.neutral, text: 'not synced', at: null };
   return plan.last_synced_direction === 'inbound'
-    ? { tone: pills.neutral, text: 'from stripe' }
-    : { tone: pills.ok, text: 'pushed' };
+    ? { tone: pills.neutral, text: 'from stripe', at: plan.last_synced_at }
+    : { tone: pills.ok, text: 'pushed', at: plan.last_synced_at };
 }
 
 export function Plans({ role, onToast }) {
@@ -183,56 +192,76 @@ export function Plans({ role, onToast }) {
       ) : (
         <div style={card}>
           <div style={{ overflowX: 'auto' }}>
-            <div style={{ minWidth: '760px' }}>
-              <div style={headRow(COLS)}>
-                <span style={th}>Plan</span>
-                <span style={thR}>Price</span>
-                <span style={thR}>Storage</span>
-                <span style={thR}>Agents</span>
-                <span style={thR}>Members</span>
-                <span style={thR}>Workspaces</span>
-                <span style={th}>Stripe price</span>
-                <span style={th}>Sync</span>
+            <div style={{ minWidth: '820px' }}>
+              <div style={headRow(COLS, true)}>
+                <span style={{ ...cell(true), ...th }}>Plan</span>
+                <span style={{ ...cell(), ...th, justifyContent: 'flex-end' }}>Price</span>
+                <span style={{ ...cell(), ...th, justifyContent: 'flex-end' }}>Storage</span>
+                <span style={{ ...cell(), ...th, justifyContent: 'flex-end' }}>Agents</span>
+                <span style={{ ...cell(), ...th, justifyContent: 'flex-end' }}>Members</span>
+                <span style={{ ...cell(), ...th, justifyContent: 'flex-end' }}>Workspaces</span>
+                <span style={{ ...cell(), ...th }}>Stripe price</span>
+                <span style={{ ...cell(), ...th }}>Sync</span>
+                <span style={{ ...cell(), ...th }}>Actions</span>
               </div>
               {plans.map(plan => {
                 const state = syncState(plan);
                 return (
-                  <div key={plan.id} style={dataRow(COLS, false)}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                      <span style={{ fontSize: '12.5px', fontWeight: 500, color: 'var(--tx)' }}>
+                  <div key={plan.id} style={dataRow(COLS, false, true)}>
+                    <span style={{ ...cell(true), gap: '8px' }}>
+                      <span
+                        style={{
+                          fontSize: '12.5px',
+                          fontWeight: 500,
+                          color: 'var(--tx)',
+                          ...ellipsis
+                        }}
+                      >
                         {plan.name}
                       </span>
                       {plan.is_default === 1 && <span style={pills.accent}>default</span>}
                       {plan.is_public === 0 && <span style={pills.neutral}>retired</span>}
                     </span>
-                    <span style={{ ...mono, fontSize: '11.5px', color: 'var(--tx)', textAlign: 'right' }}>
+
+                    <span style={{ ...cell(), ...mono, fontSize: '11.5px', color: 'var(--tx)', justifyContent: 'flex-end' }}>
                       {money(plan.amount_cents, plan.currency)}
                     </span>
-                    <span style={{ ...mono, fontSize: '11.5px', color: 'var(--tx2)', textAlign: 'right' }}>
+                    <span style={{ ...cell(), ...mono, fontSize: '11.5px', color: 'var(--tx2)', justifyContent: 'flex-end' }}>
                       {quota(plan.storage_bytes) === 'Unlimited' ? 'Unlimited' : bytes(plan.storage_bytes)}
                     </span>
-                    <span style={{ ...mono, fontSize: '11.5px', color: 'var(--tx2)', textAlign: 'right' }}>
+                    <span style={{ ...cell(), ...mono, fontSize: '11.5px', color: 'var(--tx2)', justifyContent: 'flex-end' }}>
                       {quota(plan.agents)}
                     </span>
-                    <span style={{ ...mono, fontSize: '11.5px', color: 'var(--tx2)', textAlign: 'right' }}>
+                    <span style={{ ...cell(), ...mono, fontSize: '11.5px', color: 'var(--tx2)', justifyContent: 'flex-end' }}>
                       {quota(plan.members)}
                     </span>
-                    <span style={{ ...mono, fontSize: '11.5px', color: 'var(--tx2)', textAlign: 'right' }}>
+                    <span style={{ ...cell(), ...mono, fontSize: '11.5px', color: 'var(--tx2)', justifyContent: 'flex-end' }}>
                       {quota(plan.workspaces)}
                     </span>
-                    <span style={{ ...mono, fontSize: '10.5px', color: 'var(--tx3)', ...ellipsis }}>
-                      {plan.stripe_price_id ?? '—'}
-                    </span>
                     <span
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        minWidth: 0,
-                        justifyContent: 'flex-end'
-                      }}
+                      style={{ ...cell(), ...mono, fontSize: '10.5px', color: 'var(--tx3)' }}
+                      title={plan.stripe_price_id ?? undefined}
                     >
+                      <span style={ellipsis}>{plan.stripe_price_id ?? '—'}</span>
+                    </span>
+
+                    {/*
+                      The badge and when it happened, stacked. A status with no
+                      time attached cannot be told apart from a stale one.
+                    */}
+                    <span style={{ ...cell(), flexDirection: 'column', alignItems: 'flex-start', gap: '3px' }}>
                       <span style={state.tone}>{state.text}</span>
+                      {state.at && (
+                        <span
+                          style={{ ...mono, fontSize: '9.5px', color: 'var(--tx3)' }}
+                          title={dateTime(state.at)}
+                        >
+                          {since(state.at)}
+                        </span>
+                      )}
+                    </span>
+
+                    <span style={{ ...cell(), gap: '10px' }}>
                       {canEdit && (
                         <button
                           type="button"
@@ -254,6 +283,7 @@ export function Plans({ role, onToast }) {
                         <button
                           type="button"
                           onClick={() => setRetiring(plan)}
+                          title="Hides it from new signups. Existing subscribers keep the plan and keep being billed."
                           style={{
                             background: 'none',
                             border: 'none',

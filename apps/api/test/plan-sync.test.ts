@@ -267,3 +267,34 @@ describe("retirePlanForProduct", () => {
     expect(await retirePlanForProduct(env.DB, product({}), NOW)).toBeNull();
   });
 });
+
+/**
+ * The sync stamp.
+ *
+ * `last_synced_at` is what the Plans screen renders as "synced 14:02". It was
+ * written only by the console's own edit paths, never by this function - which
+ * is the one BOTH the `product.*` webhook and the staff "Reconcile all" run
+ * through. So the column stayed NULL however many times somebody synced, and
+ * the screen said "not synced" permanently.
+ *
+ * A status that cannot change is worse than no status at all: it reads as a
+ * problem to go and chase.
+ */
+describe("the sync stamp", () => {
+  it("records when a sync happened, and which way it went", async () => {
+    await syncProductToPlan(env.DB, stripeStub([price()]), product(fullMetadata), NOW);
+
+    const row = await planRow("pro");
+    expect(row?.last_synced_at).toBe(NOW);
+    // Inbound: a webhook and a reconcile are both Stripe telling us something.
+    // 'outbound' belongs to a push from the console.
+    expect(row?.last_synced_direction).toBe("inbound");
+  });
+
+  it("moves the stamp forward on a re-sync", async () => {
+    await syncProductToPlan(env.DB, stripeStub([price()]), product(fullMetadata), NOW);
+    await syncProductToPlan(env.DB, stripeStub([price()]), product(fullMetadata), NOW + 60_000);
+
+    expect((await planRow("pro"))?.last_synced_at).toBe(NOW + 60_000);
+  });
+});

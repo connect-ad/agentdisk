@@ -61,7 +61,7 @@ import {
  * status, and the buttons have room to sit without pushing anything.
  */
 const COLS =
-  'minmax(120px,1.1fr) 68px 84px 58px 70px 86px minmax(90px,1fr) 128px 104px';
+  'minmax(120px,1.1fr) 68px 84px 58px 70px 86px minmax(90px,1fr) 160px 76px';
 
 const DIMENSIONS = [
   { key: 'storage_bytes', label: 'Storage', format: bytes, unit: 'bytes' },
@@ -247,14 +247,17 @@ export function Plans({ role, onToast }) {
                     </span>
 
                     {/*
-                      The badge and when it happened, stacked. A status with no
-                      time attached cannot be told apart from a stale one.
+                      Badge and time on ONE line. Stacking them made this the
+                      only two-line cell in the table, so every row grew to fit
+                      it and the column rules ran past the other cells' content
+                      - one cell dictating the height of a whole row is what
+                      "the columns look broken" actually was.
                     */}
-                    <span style={{ ...cell(), flexDirection: 'column', alignItems: 'flex-start', gap: '3px' }}>
+                    <span style={{ ...cell(), gap: '7px' }}>
                       <span style={state.tone}>{state.text}</span>
                       {state.at && (
                         <span
-                          style={{ ...mono, fontSize: '9.5px', color: 'var(--tx3)' }}
+                          style={{ ...mono, fontSize: '10px', color: 'var(--tx3)', ...ellipsis }}
                           title={dateTime(state.at)}
                         >
                           {since(state.at)}
@@ -360,15 +363,26 @@ export function Plans({ role, onToast }) {
 }
 
 /** A number field that keeps `null` and `-1` distinguishable. */
+/**
+ * One quota dimension, in as little vertical space as it can honestly take.
+ *
+ * The three states are a select rather than free text because `null` and `-1`
+ * are genuinely different answers - "the row did not say", which defers to the
+ * lib/plans.ts floor, versus "unlimited", which is a decision somebody made -
+ * and a number field cannot express the first at all.
+ *
+ * Laid out on one line with the label above, so nine of these fit three-up in a
+ * dialog without it becoming a scrolling column.
+ */
 function QuotaField({ id, name, value, onChange }) {
   const mode = value === null || value === undefined ? 'default' : value < 0 ? 'unlimited' : 'value';
 
   return (
-    <div style={{ marginBottom: '12px' }}>
-      <label htmlFor={id} style={label}>
+    <div style={{ marginBottom: '10px', minWidth: 0 }}>
+      <label htmlFor={id} style={{ ...label, marginBottom: '4px' }}>
         {name}
       </label>
-      <div style={{ display: 'flex', gap: '8px' }}>
+      <div style={{ display: 'flex', gap: '6px', minWidth: 0 }}>
         <select
           aria-label={`${name} mode`}
           value={mode}
@@ -377,14 +391,20 @@ function QuotaField({ id, name, value, onChange }) {
             else if (event.target.value === 'unlimited') onChange(-1);
             else onChange(0);
           }}
-          style={{ ...input, width: '150px', height: '34px' }}
+          style={{
+            ...input,
+            // Shrinks to a token when a number sits beside it, because the word
+            // "Unlimited" only has to be readable while it IS the answer.
+            width: mode === 'value' ? '86px' : '100%',
+            flex: mode === 'value' ? '0 0 86px' : '1 1 auto',
+            height: '32px',
+            padding: '0 8px',
+            fontSize: '12.5px'
+          }}
         >
-          {/* null and -1 are different answers and must stay different: one is
-              "the row did not say", which defers to the code floor, and the
-              other is a decision. */}
-          <option value="default">From code default</option>
+          <option value="default">Default</option>
           <option value="unlimited">Unlimited</option>
-          <option value="value">Set a value</option>
+          <option value="value">Value</option>
         </select>
         {mode === 'value' && (
           <input
@@ -393,7 +413,7 @@ function QuotaField({ id, name, value, onChange }) {
             min="0"
             value={value ?? 0}
             onChange={event => onChange(Number(event.target.value))}
-            style={{ ...input, ...mono, flex: 1, height: '34px' }}
+            style={{ ...input, ...mono, flex: '1 1 auto', minWidth: 0, height: '32px', padding: '0 8px', fontSize: '12.5px' }}
           />
         )}
       </div>
@@ -458,7 +478,7 @@ function PlanEditor({
       submitDisabled={!ready}
       destructive={false}
       busy={busy}
-      width={620}
+      width={860}
       footer={
         canRetire ? (
           <button
@@ -508,7 +528,7 @@ function PlanEditor({
             id="plan-name"
             value={draft.name ?? ''}
             onChange={event => set('name', event.target.value)}
-            style={{ ...input, marginBottom: '12px' }}
+            style={{ ...input, height: '32px', fontSize: '12.5px', marginBottom: '10px' }}
           />
         </div>
         <div>
@@ -522,7 +542,7 @@ function PlanEditor({
             step="1"
             value={draft.amount_cents ?? 0}
             onChange={event => set('amount_cents', Number(event.target.value))}
-            style={{ ...input, ...mono, marginBottom: repriced ? '8px' : '12px' }}
+            style={{ ...input, ...mono, height: '32px', fontSize: '12.5px', marginBottom: repriced ? '6px' : '10px' }}
           />
         </div>
       </div>
@@ -546,7 +566,7 @@ function PlanEditor({
         </div>
       )}
 
-      <div style={{ borderTop: '1px solid var(--bd)', margin: '6px 0 14px' }} />
+      <div style={{ borderTop: '1px solid var(--bd)', margin: '2px 0 12px' }} />
 
       {/*
         Two columns, not nine stacked rows.
@@ -560,7 +580,7 @@ function PlanEditor({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
           columnGap: '14px'
         }}
       >

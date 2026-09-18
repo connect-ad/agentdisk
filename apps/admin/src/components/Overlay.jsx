@@ -114,6 +114,14 @@ export function Modal({
   destructive = false,
   busy = false,
   footer = null,
+  /**
+   * A strip between the header and the body, for tabs.
+   *
+   * Outside the scrolling body on purpose: tabs inside it scroll away with the
+   * content, so the way back to the other tab disappears exactly when somebody
+   * has scrolled far enough to want it.
+   */
+  tabs = null,
   width = 520,
   /**
    * A floor on the dialog's height, for forms that would otherwise size to a
@@ -224,7 +232,7 @@ export function Modal({
         // comfortable one. Contract point 1 still holds: the dialog cannot
         // exceed the viewport minus this.
         padding: 12,
-        background: 'rgba(0,0,0,.55)',
+        background: 'var(--scrim)',
       }}
       onMouseDown={event => {
         // Only a press that both starts and ends on the scrim dismisses. A drag
@@ -290,19 +298,40 @@ export function Modal({
             aria-label="Close"
             style={{
               flex: 'none',
-              border: 0,
-              background: 'transparent',
+              width: 28,
+              height: 28,
+              border: `1px solid ${palette.line}`,
+              borderRadius: 7,
+              background: palette.surfaceAlt,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               font: 'inherit',
-              fontSize: 18,
+              fontSize: 15,
               lineHeight: 1,
               color: palette.muted,
               cursor: 'pointer',
-              padding: 4,
+              padding: 0,
             }}
           >
             ×
           </button>
         </header>
+
+        {tabs === null ? null : (
+          <div
+            style={{
+              flex: 'none',
+              display: 'flex',
+              gap: 2,
+              padding: '0 22px',
+              borderBottom: `1px solid ${palette.line}`,
+              background: palette.surfaceAlt,
+            }}
+          >
+            {tabs}
+          </div>
+        )}
 
         {/*
           The scrollable middle. `minHeight: 0` is the fix; `overflowY` alone

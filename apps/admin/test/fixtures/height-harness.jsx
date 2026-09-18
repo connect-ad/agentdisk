@@ -27,6 +27,10 @@ function Harness() {
       submitLabel="Save and push to Stripe"
       width={860}
       minHeight={780}
+      tabs={[
+        <button key="plan" type="button" style={{ height: 34, padding: '0 14px', border: 'none', background: 'transparent', fontSize: 12.5, color: 'var(--acc)', boxShadow: 'inset 0 -2px 0 0 var(--acc)' }}>Plan</button>,
+        <button key="limits" type="button" style={{ height: 34, padding: '0 14px', border: 'none', background: 'transparent', fontSize: 12.5, color: 'var(--tx2)' }}>Limits</button>
+      ]}
     >
       <div data-testid="short-body">
         <label style={{ display: 'block', marginBottom: 12 }}>

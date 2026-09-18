@@ -168,6 +168,9 @@ body {
   --code: #0e1116;
   --codeTx: #c6cedb;
   --shadow: rgba(0, 0, 0, 0.55);
+  /* The dialog scrim. Its own token because the design gives it a different
+     weight per theme than a flat alpha on black would. */
+  --scrim: rgba(5, 6, 9, 0.7);
 
   --font: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
   --fontHead: 'Outfit', system-ui, sans-serif;
@@ -203,6 +206,7 @@ body {
   --code: #f7f8fb;
   --codeTx: #1e2530;
   --shadow: rgba(17, 22, 33, 0.16);
+  --scrim: rgba(17, 22, 33, 0.45);
 }
 
 body {

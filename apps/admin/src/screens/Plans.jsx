@@ -63,16 +63,28 @@ import {
 const COLS =
   'minmax(120px,1.1fr) 68px 84px 58px 70px 86px minmax(90px,1fr) 160px 76px';
 
+/**
+ * The nine limits, with the two things the design asks each row to state.
+ *
+ * `unit` is what the number means, shown beside the field so nobody has to
+ * infer it from the label. `codeDefault` is what `lib/plans.ts` falls back to
+ * when the column is null - the Default mode is not "no limit", it is "this
+ * plan did not say", and showing the value it defers to is the difference
+ * between the two being legible and being a guess.
+ *
+ * The values are the Free tier's floor, which is what a plan with nothing set
+ * would actually get.
+ */
 const DIMENSIONS = [
-  { key: 'storage_bytes', label: 'Storage', format: bytes, unit: 'bytes' },
-  { key: 'max_file_bytes', label: 'Max single file', format: bytes, unit: 'bytes' },
-  { key: 'agents', label: 'Agent identities', format: quota },
-  { key: 'members', label: 'Members', format: quota },
-  { key: 'workspaces', label: 'Workspaces', format: quota },
-  { key: 'api_keys', label: 'API keys', format: quota },
-  { key: 'file_count', label: 'Files', format: quota },
-  { key: 'egress_bytes_period', label: 'Egress / period', format: quota },
-  { key: 'requests_period', label: 'Requests / period', format: quota }
+  { key: 'storage_bytes', label: 'Storage', unit: 'bytes', codeDefault: '1 GB' },
+  { key: 'max_file_bytes', label: 'Max single file', unit: 'bytes', codeDefault: '100 MB' },
+  { key: 'agents', label: 'Agent identities', unit: 'count', codeDefault: '1' },
+  { key: 'members', label: 'Members', unit: 'count', codeDefault: '1' },
+  { key: 'workspaces', label: 'Workspaces', unit: 'count', codeDefault: '1' },
+  { key: 'api_keys', label: 'API keys', unit: 'count', codeDefault: '2' },
+  { key: 'file_count', label: 'Files', unit: 'count', codeDefault: 'unlimited' },
+  { key: 'egress_bytes_period', label: 'Egress / period', unit: 'bytes', codeDefault: 'unlimited' },
+  { key: 'requests_period', label: 'Requests / period', unit: 'count', codeDefault: 'unlimited' }
 ];
 
 /**
@@ -364,108 +376,149 @@ export function Plans({ role, onToast }) {
 
 /** A number field that keeps `null` and `-1` distinguishable. */
 /**
- * One quota dimension, on a single line.
+ * One limit: a segmented control and a number, per the design.
  *
- * The label sits BESIDE the control rather than above it. Stacked, nine of
- * these plus the rest of the form ran to about 500px, which does not fit a
- * browser at 125% zoom - and 125% is what this console is actually read at.
- * Inline, the same nine cost roughly 120px.
+ * The three modes are buttons rather than a `<select>` because all three are
+ * then visible at once, and these three are genuinely different answers that a
+ * reader has to be able to tell apart at a glance:
  *
- * The three states stay a select rather than free text, because `null` and `-1`
- * are genuinely different answers - "the row did not say", which defers to the
- * lib/plans.ts floor, versus "unlimited", which is a decision somebody made -
- * and a number field cannot express the first at all.
+ *   Default   -> null, "this plan did not say", defers to the lib/plans.ts floor
+ *   Unlimited -> -1, a decision that there is no ceiling
+ *   Value     -> the ceiling
+ *
+ * The number stays on screen when the mode is not Value, dimmed rather than
+ * removed. It shows what WOULD apply without implying it currently does, and a
+ * field that disappears takes its value with it - somebody switching to
+ * Unlimited and back would otherwise lose what they had typed.
  */
-function QuotaField({ id, name, value, onChange }) {
+function QuotaField({ id, name, unit, codeDefault, value, onChange }) {
   const mode = value === null || value === undefined ? 'default' : value < 0 ? 'unlimited' : 'value';
+
+  const modes = [
+    ['default', 'Default'],
+    ['unlimited', 'Unlimited'],
+    ['value', 'Value']
+  ];
 
   return (
     <div
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: '8px',
-        marginBottom: '5px',
+        gap: '10px',
+        border: '1px solid var(--bd)',
+        borderRadius: '10px',
+        padding: '7px 10px',
         minWidth: 0
       }}
     >
-      <label
-        htmlFor={id}
-        style={{
-          ...label,
-          flex: '0 0 92px',
-          margin: 0,
-          textAlign: 'right',
-          lineHeight: 1.3
-        }}
-      >
-        {name}
-      </label>
-      <select
+      <span style={{ width: '104px', flex: '0 0 104px', minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: 'var(--tx)', ...ellipsis }}>
+          {name}
+        </span>
+        <span
+          style={{
+            ...mono,
+            display: 'block',
+            fontSize: '9.5px',
+            letterSpacing: '0.06em',
+            color: 'var(--tx3)',
+            marginTop: '1px',
+            textTransform: 'uppercase',
+            ...ellipsis
+          }}
+        >
+          Default {codeDefault}
+        </span>
+      </span>
+
+      <span
+        role="radiogroup"
         aria-label={`${name} mode`}
-        value={mode}
-        onChange={event => {
-          if (event.target.value === 'default') onChange(null);
-          else if (event.target.value === 'unlimited') onChange(-1);
-          else onChange(0);
-        }}
         style={{
-          ...input,
-          // A token once a number sits beside it: "Unlimited" only has to be
-          // readable while it IS the answer.
-          flex: mode === 'value' ? '0 0 78px' : '1 1 auto',
-          width: 'auto',
-          height: '28px',
-          padding: '0 6px',
-          fontSize: '12px'
+          display: 'flex',
+          gap: '2px',
+          background: 'var(--surf2)',
+          border: '1px solid var(--bd)',
+          borderRadius: '8px',
+          padding: '2px',
+          flex: '0 0 auto'
         }}
       >
-        <option value="default">Default</option>
-        <option value="unlimited">Unlimited</option>
-        <option value="value">Value</option>
-      </select>
-      {mode === 'value' && (
+        {modes.map(([key, label]) => {
+          const active = mode === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => onChange(key === 'default' ? null : key === 'unlimited' ? -1 : 0)}
+              style={{
+                height: '24px',
+                padding: '0 8px',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontFamily: 'var(--font)',
+                fontSize: '11px',
+                fontWeight: active ? 600 : 500,
+                background: active ? 'var(--acc)' : 'transparent',
+                color: active ? 'var(--accInk)' : 'var(--tx2)'
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </span>
+
+      <span
+        style={{
+          height: '28px',
+          flex: '1 1 auto',
+          minWidth: '86px',
+          border: `1px solid ${mode === 'value' ? 'var(--bd2)' : 'var(--bd)'}`,
+          borderRadius: '8px',
+          background: mode === 'value' ? 'var(--surf2)' : 'var(--surf)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          padding: '0 8px',
+          // Dimmed, not hidden: it shows what the value would be without
+          // claiming it applies, and keeps what was typed across a mode change.
+          opacity: mode === 'value' ? 1 : 0.45
+        }}
+      >
         <input
           id={id}
           type="number"
           min="0"
-          value={value ?? 0}
+          disabled={mode !== 'value'}
+          value={mode === 'value' ? (value ?? 0) : ''}
+          placeholder={mode === 'unlimited' ? '∞' : '—'}
           onChange={event => onChange(Number(event.target.value))}
           style={{
-            ...input,
             ...mono,
             flex: '1 1 auto',
-            width: 'auto',
             minWidth: 0,
-            height: '28px',
-            padding: '0 6px',
-            fontSize: '12px'
+            width: '100%',
+            border: 'none',
+            background: 'transparent',
+            color: mode === 'value' ? 'var(--tx)' : 'var(--tx3)',
+            fontSize: '12px',
+            padding: 0,
+            outline: 'none'
           }}
         />
-      )}
+        <span style={{ ...mono, fontSize: '9px', letterSpacing: '0.07em', color: 'var(--tx3)', textTransform: 'uppercase' }}>
+          {unit}
+        </span>
+      </span>
     </div>
   );
 }
 
-/**
- * Two tabs, because the dialog has to fit a short window.
- *
- * Compacting got the form from ~500px to 376px, and that was still too tall for
- * a browser at 125% zoom in a small window - the body ends up under 200px, and
- * no arrangement of fourteen fields fits that. Height had run out as a thing to
- * economise on.
- *
- * So the form splits along the line it already had: what the plan IS (name,
- * price, support, and the reason for the change) and what it ALLOWS (the nine
- * quota dimensions). Each tab is four rows, so the body is short by
- * construction rather than by squeezing.
- *
- * Both tabs submit the same draft - switching tabs is not a step in a wizard
- * and nothing is saved until Save is pressed. That matters because a reason is
- * mandatory and lives on the first tab: somebody editing a limit must not be
- * able to submit from the second tab without it, and `submitDisabled` reads the
- * whole draft rather than the visible tab.
- */
 function PlanEditor({
   plan,
   open,
@@ -508,7 +561,8 @@ function PlanEditor({
 
   const set = (key, value) => setDraft(current => ({ ...current, [key]: value }));
   const repriced = !creating && plan && draft.amount_cents !== plan.amount_cents;
-  const ready = reason.trim().length >= 3 && (!creating || String(draft.id ?? '').length >= 2);
+  const reasonOk = reason.trim().length >= 3;
+  const ready = reasonOk && (!creating || String(draft.id ?? '').length >= 2);
 
   return (
     <Modal
@@ -526,6 +580,34 @@ function PlanEditor({
       destructive={false}
       busy={busy}
       width={860}
+      // Between the header and the body, so scrolling the content cannot carry
+      // the way back to the other tab off the screen with it.
+      tabs={[
+        { key: 'plan', label: 'Plan' },
+        { key: 'limits', label: 'Limits' }
+      ].map(item => (
+        <button
+          key={item.key}
+          type="button"
+          role="tab"
+          aria-selected={tab === item.key}
+          onClick={() => setTab(item.key)}
+          style={{
+            height: '34px',
+            padding: '0 14px',
+            border: 'none',
+            background: 'transparent',
+            cursor: 'pointer',
+            fontFamily: 'var(--font)',
+            fontSize: '12.5px',
+            fontWeight: tab === item.key ? 600 : 500,
+            color: tab === item.key ? 'var(--acc)' : 'var(--tx2)',
+            boxShadow: tab === item.key ? 'inset 0 -2px 0 0 var(--acc)' : 'none'
+          }}
+        >
+          {item.label}
+        </button>
+      ))}
       // Tall enough that neither tab scrolls on an ordinary window, and
       // capped at the viewport on a short one.
       minHeight={780}
@@ -549,187 +631,204 @@ function PlanEditor({
         ) : null
       }
     >
-      <div
-        role="tablist"
-        style={{ display: 'flex', gap: '2px', borderBottom: '1px solid var(--bd)', marginBottom: '10px' }}
-      >
-        {[
-          { key: 'plan', label: 'Plan' },
-          { key: 'limits', label: 'Limits' }
-        ].map(item => (
-          <button
-            key={item.key}
-            type="button"
-            role="tab"
-            aria-selected={tab === item.key}
-            onClick={() => setTab(item.key)}
+      <div hidden={tab !== 'plan'}>
+        {creating && (
+          <div style={{ marginBottom: '12px' }}>
+            <label htmlFor="plan-id" style={label}>
+              Plan id
+            </label>
+            <input
+              id="plan-id"
+              value={draft.id ?? ''}
+              onChange={event => set('id', event.target.value.toLowerCase())}
+              style={{ ...input, ...mono, height: '34px', fontSize: '12.5px' }}
+            />
+            <p style={{ margin: '5px 0 0', fontSize: '11px', color: 'var(--tx3)' }}>
+              Lowercase, and permanent. It is the key every subscription resolves through.
+            </p>
+          </div>
+        )}
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(220px, 2fr) minmax(170px, 1fr)',
+            columnGap: '14px'
+          }}
+        >
+          <div>
+            <label htmlFor="plan-name" style={label}>
+              Name
+            </label>
+            <input
+              id="plan-name"
+              value={draft.name ?? ''}
+              onChange={event => set('name', event.target.value)}
+              style={{ ...input, height: '34px', fontSize: '13px' }}
+            />
+          </div>
+          <div>
+            <label htmlFor="plan-price" style={label}>
+              Price, cents / month
+            </label>
+            <input
+              id="plan-price"
+              type="number"
+              min="0"
+              step="1"
+              value={draft.amount_cents ?? 0}
+              onChange={event => set('amount_cents', Number(event.target.value))}
+              style={{ ...input, ...mono, height: '34px', fontSize: '12.5px' }}
+            />
+            {/*
+              Cents, not dollars, because that is what Stripe stores - and the
+              one mistake this invites is entering 49 for $49. Showing the
+              rendered price as they type is cheaper than explaining it.
+            */}
+            <p style={{ margin: '5px 0 0', fontSize: '11px', color: 'var(--tx3)' }}>
+              Integer only. {(draft.amount_cents ?? 0).toLocaleString('en-US')} renders as{' '}
+              {money(draft.amount_cents ?? 0)} on the pricing page.
+            </p>
+          </div>
+        </div>
+
+        {repriced && (
+          <div
             style={{
-              background: 'transparent',
-              border: 'none',
-              borderBottom: `2px solid ${tab === item.key ? 'var(--acc)' : 'transparent'}`,
-              padding: '5px 11px',
-              cursor: 'pointer',
-              fontFamily: 'var(--font)',
-              fontSize: '12.5px',
-              fontWeight: tab === item.key ? 600 : 500,
-              color: tab === item.key ? 'var(--acc)' : 'var(--tx2)'
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
-        {/*
-          The reason is mandatory and lives on the Plan tab, so somebody who
-          jumped straight to Limits needs to be told why Save is inert rather
-          than left to wonder.
-        */}
-        {reason.trim().length < 3 && tab === 'limits' && (
-          <span
-            style={{
-              marginLeft: 'auto',
-              alignSelf: 'center',
+              border: '1px solid var(--warnBd)',
+              background: 'var(--warnSoft)',
+              borderRadius: '9px',
+              padding: '9px 11px',
+              margin: '10px 0 0',
               fontSize: '11.5px',
+              lineHeight: 1.5,
               color: 'var(--warnTx)'
             }}
           >
-            A reason is required, on the Plan tab.
-          </span>
+            A Stripe price cannot be changed. Saving mints a <strong>new</strong> price at{' '}
+            {money(draft.amount_cents)} and archives the old one — everyone already subscribed keeps
+            billing the archived price until they change plan.
+          </div>
         )}
-      </div>
 
-      <div hidden={tab !== 'plan'}>
-      {creating && (
-        <>
-          <label htmlFor="plan-id" style={label}>
-            Plan id (lowercase, permanent)
-          </label>
-          <input
-            id="plan-id"
-            value={draft.id ?? ''}
-            onChange={event => set('id', event.target.value.toLowerCase())}
-            style={{ ...input, ...mono, marginBottom: '12px' }}
-          />
-        </>
-      )}
-
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(200px, 2fr) minmax(140px, 1fr)',
-          columnGap: '14px'
-        }}
-      >
-        <div>
-          <label htmlFor="plan-name" style={label}>
-            Name
-          </label>
-          <input
-            id="plan-name"
-            value={draft.name ?? ''}
-            onChange={event => set('name', event.target.value)}
-            style={{ ...input, height: '32px', fontSize: '12.5px', marginBottom: '10px' }}
-          />
-        </div>
-        <div>
-          <label htmlFor="plan-price" style={label}>
-            Price, cents / month
-          </label>
-          <input
-            id="plan-price"
-            type="number"
-            min="0"
-            step="1"
-            value={draft.amount_cents ?? 0}
-            onChange={event => set('amount_cents', Number(event.target.value))}
-            style={{ ...input, ...mono, height: '32px', fontSize: '12.5px', marginBottom: repriced ? '6px' : '10px' }}
-          />
-        </div>
-      </div>
-
-      {repriced && (
-        <div
-          style={{
-            border: '1px solid var(--warnBd)',
-            background: 'var(--warnSoft)',
-            borderRadius: '9px',
-            padding: '10px 12px',
-            marginBottom: '12px',
-            fontSize: '12px',
-            lineHeight: 1.55,
-            color: 'var(--warnTx)'
-          }}
-        >
-          A Stripe Price cannot be changed. Saving mints a <strong>new</strong> price at{' '}
-          {money(draft.amount_cents)} and archives the old one. Everyone already subscribed keeps
-          billing the archived price until they change plan.
-        </div>
-      )}
-
-
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(180px, 1fr) minmax(220px, 2fr)',
-          columnGap: '14px',
-          alignItems: 'center',
-          marginTop: '4px'
-        }}
-      >
-        <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <input
-            type="checkbox"
-            checked={draft.priority_support === 1}
-            onChange={event => set('priority_support', event.target.checked ? 1 : 0)}
-          />
-          <span style={{ fontSize: '12px', color: 'var(--tx)' }}>
-            Priority support <span style={{ color: 'var(--tx3)' }}>(display only)</span>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '11px', marginTop: '12px' }}>
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={draft.priority_support === 1}
+            onClick={() => set('priority_support', draft.priority_support === 1 ? 0 : 1)}
+            style={{
+              width: '18px',
+              height: '18px',
+              flex: '0 0 18px',
+              marginTop: '1px',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: draft.priority_support === 1 ? 'var(--acc)' : 'transparent',
+              border: draft.priority_support === 1 ? 'none' : '1.5px solid var(--bd2)',
+              color: 'var(--accInk)',
+              fontSize: '11px',
+              lineHeight: 1,
+              padding: 0
+            }}
+          >
+            {draft.priority_support === 1 ? '✓' : ''}
+          </button>
+          <span>
+            <span style={{ display: 'block', fontSize: '12.5px', fontWeight: 500, color: 'var(--tx)' }}>
+              Priority support
+            </span>
+            <span style={{ display: 'block', fontSize: '11px', color: 'var(--tx3)', marginTop: '1px' }}>
+              Display only — shown on the pricing page, enforces nothing.
+            </span>
           </span>
-        </label>
+        </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <label htmlFor="plan-reason" style={{ ...label, flex: '0 0 62px', margin: 0, textAlign: 'right' }}>
-            Reason
-          </label>
+        <div style={{ marginTop: '12px' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              justifyContent: 'space-between',
+              marginBottom: '6px'
+            }}
+          >
+            <label htmlFor="plan-reason" style={{ ...label, margin: 0 }}>
+              Reason
+            </label>
+            {/*
+              Red until filled. This is the field people try to skip, and an
+              inert Save with no explanation is how they end up believing the
+              dialog is broken.
+            */}
+            <span
+              style={{
+                ...mono,
+                fontSize: '8.5px',
+                fontWeight: 600,
+                letterSpacing: '0.07em',
+                padding: '2px 5px',
+                borderRadius: '4px',
+                color: reasonOk ? 'var(--tx3)' : 'var(--dngrTx)',
+                background: reasonOk ? 'var(--surf3)' : 'var(--dngrSoft)',
+                border: `1px solid ${reasonOk ? 'var(--bd)' : 'var(--dngrBd)'}`
+              }}
+            >
+              REQUIRED
+            </span>
+          </div>
           <input
             id="plan-reason"
             value={reason}
             onChange={event => setReason(event.target.value)}
-            placeholder="Recorded in the audit log"
-            style={{ ...input, height: '30px', fontSize: '12px', flex: '1 1 auto', minWidth: 0 }}
+            placeholder="Why is this plan changing?"
+            style={{
+              ...input,
+              height: '34px',
+              fontSize: '12.5px',
+              border: `1px solid ${reasonOk ? 'var(--bd2)' : 'var(--dngrBd)'}`
+            }}
           />
+          <p style={{ margin: '5px 0 0', fontSize: '11px', color: 'var(--tx3)' }}>
+            Written verbatim to the audit log against your staff account.
+          </p>
         </div>
       </div>
 
-      </div>
-
       <div hidden={tab !== 'limits'}>
-      {/*
-        Two columns, not nine stacked rows.
-
-        The form carries fourteen fields and the dialog is bounded by the
-        viewport, so on a short window the body became a 90px slot scrolling
-        through a very long list - technically correct and miserable to use.
-        Halving the height is the fix that helps at every window size, rather
-        than trying to win more height from a viewport that does not have it.
-      */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-          columnGap: '14px'
-        }}
-      >
-        {DIMENSIONS.map(dimension => (
-          <QuotaField
-            key={dimension.key}
-            id={`plan-${dimension.key}`}
-            name={dimension.label}
-            value={draft[dimension.key]}
-            onChange={value => set(dimension.key, value)}
-          />
-        ))}
-      </div>
-
+        <p style={{ margin: '0 0 10px', fontSize: '11.5px', lineHeight: 1.5, color: 'var(--tx2)' }}>
+          <strong style={{ color: 'var(--tx)' }}>Default</strong> inherits the fallback in our
+          source. <strong style={{ color: 'var(--tx)' }}>Unlimited</strong> removes the ceiling.{' '}
+          <strong style={{ color: 'var(--tx)' }}>Value</strong> sets an explicit number for this
+          plan.
+        </p>
+        {/*
+          Two columns rather than the design's single stack. Nine of these in one
+          column is roughly 490px, which does not fit the window this console is
+          actually used in; the row itself is unchanged.
+        */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+            gap: '7px'
+          }}
+        >
+          {DIMENSIONS.map(dimension => (
+            <QuotaField
+              key={dimension.key}
+              id={`plan-${dimension.key}`}
+              name={dimension.label}
+              unit={dimension.unit}
+              codeDefault={dimension.codeDefault}
+              value={draft[dimension.key]}
+              onChange={value => set(dimension.key, value)}
+            />
+          ))}
+        </div>
       </div>
 
       {error && (

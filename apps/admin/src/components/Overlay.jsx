@@ -115,6 +115,16 @@ export function Modal({
   busy = false,
   footer = null,
   width = 520,
+  /**
+   * A floor on the dialog's height, for forms that would otherwise size to a
+   * body smaller than their content and scroll for no good reason.
+   *
+   * `min(<this>, 100%)` rather than a bare number, so it can never beat
+   * `maxHeight: 100%` and push the footer under the fold on a short window -
+   * the failure this component exists to prevent. Opt-in: a two-line
+   * confirmation should stay two lines tall rather than become an empty box.
+   */
+  minHeight: floor = null,
 }) {
   const dialogRef = useRef(null);
   const titleId = useId();
@@ -235,6 +245,7 @@ export function Modal({
           width: `min(${width}px, 100%)`,
           // Bounded, and a flex column so the three parts can be told apart.
           maxHeight: '100%',
+          ...(floor === null ? {} : { height: `min(${floor}px, 100%)` }),
           display: 'flex',
           flexDirection: 'column',
           // Belt and braces with maxHeight: a flex item's default min-height is

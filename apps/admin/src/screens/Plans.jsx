@@ -526,6 +526,9 @@ function PlanEditor({
       destructive={false}
       busy={busy}
       width={860}
+      // Tall enough that neither tab scrolls on an ordinary window, and
+      // capped at the viewport on a short one.
+      minHeight={520}
       footer={
         canRetire ? (
           <button

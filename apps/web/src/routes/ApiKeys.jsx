@@ -160,30 +160,33 @@ export default function ApiKeys() {
       // It was one; the word is the whole point.
       render: r => (
         <span onClick={e => e.stopPropagation()}>
-          <Button
-            size="sm"
-            variant="danger-outline"
-            // A blocked key is still revocable. It reported as "active" before
-            // `blocked` existed, so testing for `active` here would quietly take
-            // away the ability to permanently kill a key whose agent happens to
-            // be off — the moment you most want it gone.
-            disabled={!canWrite || r.status === 'revoked' || r.status === 'expired'}
-            onClick={() => { setTarget(r); setDialog('revoke'); }}
-          >
-            Revoke
-          </Button>
           {/*
             Revocation is a one-way kill switch, matching every other product
             that issues credentials, and that is a deliberate design rather than
             a missing feature. A disabled button with no explanation reads as the
-            second one — so the reason sits next to it, where somebody hunting
-            for a reactivate control will actually find it.
+            second one — so on a revoked key the button is gone entirely and only
+            the reason stays, where somebody hunting for a reactivate control
+            will actually find it. The Status column already says Revoked; a
+            dead red button beside it repeats that and reads as a live control.
           */}
           {r.status === 'revoked' ? (
-            <span className="ad-meta" style={{ display: 'block', marginTop: 'var(--s-2)' }}>
+            <span className="ad-meta" style={{ display: 'block' }}>
               Revoked keys can&apos;t be reactivated — mint a new key when you need one.
             </span>
-          ) : null}
+          ) : (
+            <Button
+              size="sm"
+              variant="danger-outline"
+              // A blocked key is still revocable. It reported as "active" before
+              // `blocked` existed, so testing for `active` here would quietly take
+              // away the ability to permanently kill a key whose agent happens to
+              // be off — the moment you most want it gone.
+              disabled={!canWrite || r.status === 'expired'}
+              onClick={() => { setTarget(r); setDialog('revoke'); }}
+            >
+              Revoke
+            </Button>
+          )}
         </span>
       )
     }

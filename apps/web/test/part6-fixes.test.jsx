@@ -304,13 +304,15 @@ describe('API keys → revocation permanence', () => {
       entry: `/w/${fixture.slug}/keys`
     });
 
-  it('explains the disabled Revoke button on an already-revoked key', async () => {
+  it('replaces the Revoke button with the reason on an already-revoked key', async () => {
     mountKeys(BUSY);
     const row = (await screen.findByText('old one')).closest('tr');
     expect(
       within(row).getByText(/Revoked keys can't be reactivated/).textContent
     ).toContain('mint a new key');
-    expect(within(row).getByRole('button', { name: 'Revoke' }).disabled).toBe(true);
+    // No dead control: the Status column already says Revoked, so a disabled
+    // red button beside it says the same thing twice and looks operable.
+    expect(within(row).queryByRole('button', { name: 'Revoke' })).toBeNull();
   });
 
   it('says nothing of the kind beside a key that is still usable', async () => {

@@ -27,6 +27,21 @@
 -- so the rebuild is cheap; what matters is that it is done in one transaction
 -- with the foreign keys deferred, which wrangler's migration runner provides.
 
+-- ── This goes FIRST, and the order is the whole bug ────────────────────────
+-- `staff_sessions` carries a foreign key to `staff_users(id)`. Dropping the
+-- parent while a child table still references it violates that constraint, and
+-- D1 enforces it - so rebuilding staff_users before this line fails the whole
+-- migration. The repository already has this rule written down: clear inbound
+-- foreign keys before deleting a subtree.
+--
+-- It cost a failed deploy to rediscover, because the test runtime applies
+-- migrations without enforcing foreign keys and the suite was perfectly green.
+--
+-- The table itself has nothing left to hold: a Firebase ID token is the
+-- session. Revocation is `disabled_at` on the row below, checked per request,
+-- which takes effect strictly faster than revoking a four-hour session did.
+DROP TABLE IF EXISTS staff_sessions;
+
 CREATE TABLE staff_users_new (
   id TEXT PRIMARY KEY,
 
@@ -61,12 +76,6 @@ SELECT id, LOWER(email), role, disabled_at, last_login_at, created_at, NULL FROM
 
 DROP TABLE staff_users;
 ALTER TABLE staff_users_new RENAME TO staff_users;
-
--- A Firebase ID token is the session, so there is nothing left for this table
--- to hold. Revocation is `disabled_at` on the row above, checked per request -
--- which is strictly faster to take effect than revoking a four-hour session
--- was.
-DROP TABLE IF EXISTS staff_sessions;
 
 -- The first administrator.
 --

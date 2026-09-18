@@ -385,7 +385,7 @@ function QuotaField({ id, name, value, onChange }) {
         display: 'flex',
         alignItems: 'center',
         gap: '8px',
-        marginBottom: '8px',
+        marginBottom: '5px',
         minWidth: 0
       }}
     >
@@ -415,7 +415,7 @@ function QuotaField({ id, name, value, onChange }) {
           // readable while it IS the answer.
           flex: mode === 'value' ? '0 0 78px' : '1 1 auto',
           width: 'auto',
-          height: '30px',
+          height: '28px',
           padding: '0 6px',
           fontSize: '12px'
         }}
@@ -437,7 +437,7 @@ function QuotaField({ id, name, value, onChange }) {
             flex: '1 1 auto',
             width: 'auto',
             minWidth: 0,
-            height: '30px',
+            height: '28px',
             padding: '0 6px',
             fontSize: '12px'
           }}
@@ -548,7 +548,7 @@ function PlanEditor({
     >
       <div
         role="tablist"
-        style={{ display: 'flex', gap: '2px', borderBottom: '1px solid var(--bd)', marginBottom: '12px' }}
+        style={{ display: 'flex', gap: '2px', borderBottom: '1px solid var(--bd)', marginBottom: '10px' }}
       >
         {[
           { key: 'plan', label: 'Plan' },
@@ -564,7 +564,7 @@ function PlanEditor({
               background: 'transparent',
               border: 'none',
               borderBottom: `2px solid ${tab === item.key ? 'var(--acc)' : 'transparent'}`,
-              padding: '6px 12px',
+              padding: '5px 11px',
               cursor: 'pointer',
               fontFamily: 'var(--font)',
               fontSize: '12.5px',

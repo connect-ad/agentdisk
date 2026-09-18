@@ -209,7 +209,11 @@ export function Modal({
         zIndex: Z.modal,
         display: 'grid',
         placeItems: 'center',
-        padding: 24,
+        // 12, not 24. On a short window every pixel here is one the body does
+        // not get, and the scrim only has to read as a margin rather than a
+        // comfortable one. Contract point 1 still holds: the dialog cannot
+        // exceed the viewport minus this.
+        padding: 12,
         background: 'rgba(0,0,0,.55)',
       }}
       onMouseDown={event => {
@@ -253,16 +257,16 @@ export function Modal({
             display: 'flex',
             alignItems: 'flex-start',
             gap: 12,
-            padding: '16px 18px 12px',
+            padding: '12px 16px 10px',
             borderBottom: `1px solid ${palette.hairline}`,
           }}
         >
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h2 id={titleId} style={{ font: '600 16px/1.35 system-ui', margin: 0 }}>
+            <h2 id={titleId} style={{ font: '600 15px/1.3 var(--font)', margin: 0 }}>
               {title}
             </h2>
             {description ? (
-              <p id={descriptionId} style={{ margin: '5px 0 0', fontSize: 13, color: palette.muted }}>
+              <p id={descriptionId} style={{ margin: '3px 0 0', fontSize: 12, lineHeight: 1.4, color: palette.muted }}>
                 {description}
               </p>
             ) : null}
@@ -295,7 +299,7 @@ export function Modal({
         */}
         <div
           data-dialog-body=""
-          style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '14px 18px' }}
+          style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '12px 16px' }}
         >
           {children}
         </div>
@@ -307,7 +311,7 @@ export function Modal({
             display: 'flex',
             alignItems: 'center',
             gap: 10,
-            padding: '12px 18px 14px',
+            padding: '10px 16px 11px',
             borderTop: `1px solid ${palette.hairline}`,
             background: palette.surfaceAlt,
             borderRadius: '0 0 10px 10px',

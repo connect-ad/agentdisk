@@ -318,6 +318,20 @@ were not touched. See `backlog/002`.
   instant and reversible, so it is the right first move in every scenario ending
   in deletion, and it gives the customer a chance to notice. A user row is
   scrubbed, never removed — it is what an `audit_events` actor id resolves to.
+- **The plan catalogue has exactly one writer: the staff console.** The four
+  products were created once in Stripe (18 Sept 2026) and
+  `infra/stripe-catalogue/` was deleted the same day. That was not tidying:
+  Terraform held no state for those products, so an apply would have created a
+  SECOND set of four carrying the same `package_id`s, and the sync takes
+  whichever was written last. Production is populated by hand from the Stripe
+  dashboard, deliberately — one declaration, edited in one place, no pipeline to
+  keep in step.
+- **A product is ours only if its `package_id` starts with `agentdisk-`.** The
+  Stripe account is shared with another product line, and the earlier rule
+  accepted any `package_id` at all — so a sync would have written
+  `amardrive-pro` into this product's entitlement table. Presence is not
+  ownership, and `plan_id` cannot be used to claim a product that failed the
+  prefix test.
 - **A staff plan edit writes Stripe first and D1 second.** If the push throws,
   the local row is never touched. A local-only save produces a pricing table
   that says one thing while Stripe charges another, and nothing surfaces the

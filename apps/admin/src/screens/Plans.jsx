@@ -116,27 +116,6 @@ export function Plans({ role, onToast }) {
 
   return (
     <div style={paneIn}>
-      {/*
-        Stated on every render rather than left to be discovered. Terraform still
-        declares these products, so an apply after an edit here reverts it.
-      */}
-      {resource.data?.catalogueOwner === 'terraform' && (
-        <div
-          style={{
-            border: '1px solid var(--warnBd)',
-            background: 'var(--warnSoft)',
-            borderRadius: '10px',
-            padding: '11px 14px',
-            marginBottom: '14px',
-            fontSize: '12.5px',
-            lineHeight: 1.55,
-            color: 'var(--warnTx)'
-          }}
-        >
-          <strong>Terraform still owns this catalogue.</strong> {resource.data.catalogueNote}
-        </div>
-      )}
-
       <div
         style={{
           display: 'flex',
@@ -161,7 +140,7 @@ export function Plans({ role, onToast }) {
           disabled={!canEdit || busy}
           onClick={() =>
             act(
-              () => staffApi.syncCatalogue('Reconciling the catalogue after a Terraform apply'),
+              () => staffApi.syncCatalogue('Reconciling every plan against Stripe'),
               'Catalogue reconciled from Stripe.'
             )
           }

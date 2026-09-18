@@ -22,12 +22,17 @@
  * The modal warns before saving; `repriced` in the result is what it warns
  * from.
  *
- * ── Terraform still owns this catalogue ─────────────────────────────────────
- * `infra/stripe-catalogue/` declares the same products, so a `terraform apply`
- * after an edit made here reverts it — making Stripe match the .tf is
- * Terraform's whole job. That is accepted until launch, when the Terraform root
- * is deleted and this becomes the only writer. The Plans screen says so on
- * every render rather than leaving it to be discovered.
+ * ── This is the only writer ─────────────────────────────────────────────────
+ * `infra/stripe-catalogue/` used to declare the same products, which meant an
+ * apply after an edit here silently reverted it. That root was deleted on
+ * 18 September 2026 once the products existed in Stripe: Terraform held no
+ * state for them, so an apply would have created a SECOND set of four products
+ * carrying the same `package_id`s, and the sync would have taken whichever was
+ * written last. Removing it was the fix, not the tidying.
+ *
+ * The products are now created once and edited here. Production is populated
+ * from the Stripe dashboard by hand, deliberately — there is no pipeline to
+ * keep in step and no second declaration to drift from.
  */
 
 import { AuditedStaffAccess } from "./audited";

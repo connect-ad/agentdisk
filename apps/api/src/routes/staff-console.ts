@@ -390,15 +390,10 @@ export async function staffBilling(request: Request, deps: StaffDeps): Promise<R
 
 export async function staffListPlans(request: Request, deps: StaffDeps): Promise<Response> {
   const staff = await requireStaff(request, deps);
-  return json({
-    plans: await area(StaffPlanAccess, staff, deps).list(),
-    // Stated on every render rather than left to be discovered. Terraform still
-    // declares these products, so an apply after an edit here reverts it.
-    catalogueOwner: "terraform",
-    catalogueNote:
-      "infra/stripe-catalogue/ still declares these products. A terraform apply will revert " +
-      "edits made here until that root is removed at launch.",
-  });
+  // The console owns the catalogue outright as of 18 Sept 2026. The Terraform
+  // root that used to declare these products is deleted, so nothing reverts an
+  // edit made here and there is no second writer to warn about.
+  return json({ plans: await area(StaffPlanAccess, staff, deps).list() });
 }
 
 const planFields = {

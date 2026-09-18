@@ -142,20 +142,27 @@ reconciled across the repo.
   entitlements; `customer.subscription.deleted` owns that.
 - **Free is the absence of a subscription, not a $0 one.**
 
-## Handover: Terraform → admin panel
+## The catalogue now lives in Stripe, and the console edits it
 
-**Terraform owns the catalogue, and the admin panel must not edit plans, until
-this root is deleted.** There is no way to have two owners: an `apply` after an
-admin edit reverts that edit, because making Stripe match the `.tf` is
-Terraform's entire job.
+**Done, 18 September 2026.** The four products exist in Stripe test mode with
+their entitlements in `metadata`, created once with the Stripe CLI:
 
-Ownership transfers in one step — delete `infra/stripe-catalogue/` **and**
-`.github/workflows/stripe-catalogue.yml` together. Removing the resources from
-config while keeping the workflow would make Terraform plan a *destroy*;
-`prevent_destroy` refuses it, but as a confusing error rather than a clean exit.
-A `removed { ... lifecycle { destroy = false } }` block first is the tidy way.
+| Plan | Product | Price |
+|---|---|---|
+| AgentDisk Free | `prod_VHbKJBmoxIrLcy` | none, by design |
+| AgentDisk Basic | `prod_VHbKuvJ0oi9ssa` | `price_1UH281…` · $9 |
+| AgentDisk Pro | `prod_VHbKEmWxthP44Z` | `price_1UH282…` · $20 |
+| AgentDisk Team | `prod_VHbKOYpz9qtJzo` | `price_1UH283…` · $80 |
 
-**The admin plan editor is not a prerequisite.** The moment Terraform stops
-owning the catalogue, the Stripe dashboard becomes the editing surface — edit a
-product's metadata, `product.updated` fires, and the sync mirrors it into D1.
-That path is already built and tested.
+`infra/stripe-catalogue/` and `.github/workflows/stripe-catalogue.yml` are
+**deleted**. Terraform held no state for these products, so an apply would have
+created a second set of four carrying the same `package_id`s and the sync would
+have taken whichever was written last. Removing the root was the fix rather than
+housekeeping.
+
+**Production is populated by hand from the Stripe dashboard**, by the owner's
+decision. There is no prod pipeline for the catalogue and none is wanted: one
+declaration, edited in one place.
+
+Creating a product is a one-time act. The script that did it was a throwaway and
+was never committed.

@@ -1,8 +1,7 @@
 # 002 · Staff admin panel
 
-**Status:** Built, not yet proven against the live environment
-**Priority: HIGH** — below [001](001-billing-module.md), because the plan editor
-here is untestable until the Stripe catalogue actually exists.
+**Status:** Live on dev. Sign-in works; the plan editor is one sync from usable.
+**Priority: HIGH** — below [001](001-billing-module.md).
 **Brief:** `Claude outputs/agentdisk-admin-panel-build-prompt.md`
 **Design:** Claude Design project `0d71f84d-2555-4ca8-991b-50be0d7fd1d1`,
 file `AgentDisk Admin.html`
@@ -25,30 +24,36 @@ draw.
 
 ## Remaining, in the order it has to happen
 
-### 1. Run the bootstrap pipeline · *nothing else can be verified first*
+### 1. Sign in · *done*
 
-`.github/workflows/staff-bootstrap.yml`, `workflow_dispatch`, environment `dev`,
-role `super_admin`, for `kernelv5@gmail.com`. **The run log will contain both
-authentication factors** — enrol, then delete the run. The workflow prints the
-link.
+Staff auth is Firebase (migration `0014`). `kernelv5@gmail.com` is seeded as
+`super_admin` and signs in with Google at `admin-dev.agentdisk.io`. There is no
+password, no TOTP, no provisioning script and no bootstrap pipeline — all of
+them were deleted, because under this scheme an admin IS an email address in
+`staff_users` and there is no credential to mint.
 
-Then delete the workflow itself once a super_admin exists: every further account
-comes from the console, which shows the QR once and records who created whom.
+**One manual step remains if the Google popup refuses:**
+`admin-dev.agentdisk.io` must be in the Firebase project's authorised domains
+(Console → Authentication → Settings). The login screen names this explicitly
+when it happens.
 
-### 2. Prove the role matrix against live dev · *32 PART 11, Phase 2 DoD*
+### 2. Prove the role matrix against live dev
 
-Provision three accounts, one per role, and log in as each. The matrix has unit
-coverage (`staff-console.test.ts` calls every gated endpoint with a lower role
-and expects 403), but the DoD asks for it against the real deployment and that
-has not been done.
+Add two more addresses under Staff Accounts, one `support` and one `admin`, and
+sign in as each. The matrix has server-side coverage already —
+`staff-console.test.ts` calls every gated endpoint with a lower role and expects
+403 — but the DoD asks for it against the real deployment.
 
-### 3. Verify the plan editor against real Stripe · *blocked on 001*
+### 3. Verify the plan editor against real Stripe
 
-The editor pushes to Stripe before writing D1, and every test of that is against
-a stub. Until `infra/stripe-catalogue/` has actually been applied, `Edit` on any
-plan answers `CONFLICT — this plan is not in Stripe yet`, correctly. Sequence:
-apply the catalogue, run **Reconcile all**, then edit a price in dev and confirm
-a new Stripe Price is minted and the old one archived.
+The four products now exist in Stripe test mode and the `product.created`
+webhook has already linked their ids into D1. **Prices are still NULL**, because
+each product was created before its price and `price.created` is not one of the
+ten subscribed events — so one **Reconcile all** finishes the wiring.
+
+Then edit a price in dev and confirm a new Stripe Price is minted and the old
+one archived, which is the behaviour every test of this so far has only asserted
+against a stub.
 
 ### 4. Turn the purge sweep on · *not before a full window*
 
@@ -79,21 +84,26 @@ reaches across every workspace that person ever created a key in, including
 other customers'. Tighter than spec is never an incident; looser might be.
 **Confirm or reverse this deliberately.**
 
-**A pending staff account can sign in.** 32 PART 4 asks for pending accounts to
-be unable to authenticate at all. Read literally that produces an account that
-can never be used: enrolment is scanning a QR, there is no separate confirm
-step, and presenting a valid code is the only proof it was scanned. So
-`totp_confirmed_at` is set by the first successful login and *pending* means
-created-but-never-signed-in. The distinction PART 4 wants is preserved, because
-enrolled-without-TOTP remains impossible.
+**Staff sign in with Firebase, not with their own password and TOTP.** The brief
+(§1) is emphatic that staff auth stays independent of Firebase, so that a
+Firebase outage cannot lock the team out of the tool they would use to
+investigate it. Overruled by the owner: one sign-in for every surface.
 
-## One thing softened, narrowly
+The property given up, recorded so nobody has to reconstruct it: a staff
+credential and a customer credential are no longer structurally incapable of
+reaching each other's routes. One token reaches both, and the ONLY thing
+separating them is the `staff_users` lookup. `staff.test.ts` asserts that
+explicitly, so reintroducing the separation later reads as a decision rather
+than a bug fix.
 
-`CLAUDE.md` records: *the first staff account cannot come from the API, and that
-is the design*. `POST /v1/staff/users` still returns 501 and is untouched. The
-new `POST /v1/staff/accounts` requires an authenticated super_admin, so it
-cannot bootstrap anything — which is what that rule is about. The first account
-still comes from the script.
+## The rule this dissolved
+
+`CLAUDE.md` recorded: *the first staff account cannot come from the API, and
+that is the design* — because an endpoint that mints a working staff credential
+can be tricked into minting one. Under Firebase SSO nothing mints a credential
+at all: a staff account is an email address and a role. The rule did not need
+softening; its subject stopped existing. The first row is seeded by migration
+`0014`.
 
 ## Legal follow-up, outside the code
 

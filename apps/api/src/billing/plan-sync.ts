@@ -37,6 +37,9 @@
 import type { Stripe } from "./stripe";
 import { invalidateCatalogue } from "./catalogue";
 
+/** Every product of ours carries this prefix in `package_id`. Nothing else is ours. */
+const PACKAGE_PREFIX = "agentdisk-";
+
 /** What a metadata key can say, and what it means in the column. */
 const UNLIMITED_COLUMN = -1;
 
@@ -81,12 +84,28 @@ function flag(metadata: Stripe.Metadata, key: string): number {
 export function planIdOf(product: Stripe.Product): string | null {
   const metadata = product.metadata ?? {};
   const packageId = metadata["package_id"];
-  if (packageId === undefined || packageId === "") return null;
 
+  // The prefix is the ownership test, not decoration.
+  //
+  // This used to accept ANY package_id and return it unchanged when it lacked
+  // the prefix. The comment above said a product without one "is not ours and
+  // is ignored entirely" - but the check was for PRESENCE, not ownership, and
+  // the two came apart the moment a real account was looked at: this Stripe
+  // account also holds a sibling product's catalogue, four live products keyed
+  // `amardrive-*`. Under the old rule a sync would have written plan rows called
+  // `amardrive-pro` into this product's entitlement table, and the Plans screen
+  // would have offered them.
+  //
+  // A shared Stripe account is the normal case, not an edge one. Anything that
+  // is not explicitly ours is somebody else's.
+  if (packageId === undefined || !packageId.startsWith(PACKAGE_PREFIX)) return null;
+
+  // `plan_id` names the plan within our own namespace; it cannot be used to
+  // claim a product that failed the test above.
   const explicit = metadata["plan_id"];
   if (explicit !== undefined && explicit !== "") return explicit;
 
-  return packageId.startsWith("agentdisk-") ? packageId.slice("agentdisk-".length) : packageId;
+  return packageId.slice(PACKAGE_PREFIX.length);
 }
 
 /** The monthly recurring price this product can currently be sold at. */

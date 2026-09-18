@@ -93,6 +93,19 @@ describe("planIdOf", () => {
     expect(planIdOf(product({ package_id: "agentdisk-team" }))).toBe("team");
   });
 
+  it("refuses a product belonging to a different product line in the same account", () => {
+    // Not hypothetical. The Stripe account this runs against also holds
+    // amardrive's catalogue - four live products keyed `amardrive-*` - and the
+    // earlier rule accepted any package_id, so a sync would have written plan
+    // rows called "amardrive-pro" into this product's entitlement table.
+    expect(planIdOf(product({ package_id: "amardrive-pro" }))).toBeNull();
+    expect(planIdOf(product({ package_id: "amardrive-free" }))).toBeNull();
+
+    // And plan_id cannot be used to claim one. It names a plan inside our
+    // namespace; it does not confer membership of it.
+    expect(planIdOf(product({ package_id: "amardrive-pro", plan_id: "pro" }))).toBeNull();
+  });
+
   it("returns null for a product that is not ours", () => {
     // package_id is the join key. Without it the product belongs to somebody
     // else's purpose in the same Stripe account - a one-off charge, say - and

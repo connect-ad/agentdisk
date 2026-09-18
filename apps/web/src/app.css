@@ -529,10 +529,15 @@
 .mk__bandsub{font-size:var(--t-14);line-height:var(--lh-loose);color:var(--ink-2)}
 
 /* pricing */
-.mk__prices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+/* Four tiers since the Basic plan joined the catalogue. The two existing
+   breakpoints already carry it: 1350px drops to two columns, 875px to one. */
+.mk__prices{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
   gap:var(--s-6);margin-top:var(--s-9)}
+/* The per-account counting note, under the cards. */
+.mk__pricenote{margin-top:var(--s-7);font-size:var(--t-13);color:var(--ink-3);
+  text-align:center}
 .mk__plan{background:var(--surface);border:1px solid var(--line);
-  border-radius:var(--r-4);padding:var(--s-7);display:flex;
+  border-radius:var(--r-4);padding:var(--s-6);display:flex;
   flex-direction:column;gap:var(--s-6);min-width:0}
 .mk__plan--pop{border-color:var(--accent-line);background:var(--accent-soft)}
 .mk__planhead{display:flex;align-items:center;justify-content:space-between;

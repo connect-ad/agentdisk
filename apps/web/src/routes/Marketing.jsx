@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Button, Icon } from '../components/index.js';
 import { useAuth } from '../lib/auth.jsx';
-import { PLANS, OVERAGES } from '../lib/pricing.js';
+import { PLANS, OVERAGES, FREE_SUMMARY, COUNTING_NOTE } from '../lib/pricing.js';
 import Logo from '../components-local/Logo.jsx';
 
 /**
@@ -226,8 +226,7 @@ export function Landing() {
             <div className="mk__bandtext">
               <h2 className="mk__h2">Give an agent a disk in four minutes.</h2>
               <p className="mk__bandsub">
-                The free tier is {PLANS[0].lines[0]} and {PLANS[0].lines[1]}.
-                No card, no sales call.
+                The free tier is {FREE_SUMMARY}. No card, no sales call.
               </p>
             </div>
             <Button size="lg" as={Link} to="/signup">Create a workspace</Button>
@@ -249,9 +248,12 @@ export function Pricing() {
       <div className="mk__wrap">
 
         <section className="mk__hero mk__hero--single">
-          <h1 className="mk__h1">Pay for storage and requests. Nothing else.</h1>
+          {/* Requests are unlimited on every plan, so the old headline — "Pay
+              for storage and requests" — named a meter that does not exist. */}
+          <h1 className="mk__h1">Pay for storage. Nothing else.</h1>
           <p className="mk__lead">
-            Every plan includes the MCP server, webhooks and the full audit log.
+            Every plan includes the MCP server, webhooks, path-scoped keys and the
+            full audit log, with unlimited requests and egress.
           </p>
 
           <div className="mk__prices">
@@ -284,6 +286,11 @@ export function Pricing() {
               </div>
             ))}
           </div>
+
+          {/* Said once here rather than on four cards: every count on them is an
+              account-wide total, and a reader who assumes per-workspace will be
+              surprised by the first refusal rather than by the page. */}
+          <p className="mk__pricenote">{COUNTING_NOTE}</p>
         </section>
 
         {/*

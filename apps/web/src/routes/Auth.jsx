@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Icon, Alert } from '../components/index.js';
 import { useAuth, describeAuthError } from '../lib/auth.jsx';
 import { BASE_URL } from '../lib/api.js';
+import { FREE_SUMMARY } from '../lib/pricing.js';
 import Logo from '../components-local/Logo.jsx';
 
 /**
@@ -24,8 +25,10 @@ import Logo from '../components-local/Logo.jsx';
  * the codebase. The Auth file is a mockup and its copy invents freely, so most
  * of what follows is a correction rather than a preference:
  *
- *  - "5 GB and 50,000 requests a month" is not the free tier. `plans.ts` says
- *    2 GB and 100,000 requests, and that file is what the API enforces.
+ *  - "5 GB and 50,000 requests a month" is not the free tier. The number is
+ *    read from `lib/pricing.js` rather than restated here: this panel carried
+ *    its own copy, and when the catalogue was finalised the pricing page moved
+ *    and the signup page went on advertising the old allowance.
  *  - The login brand panel lists "3 workspaces · Kessler Labs, Nightshift
  *    Research, Personal sandbox", "4 agent identities", and a LAST SESSION card
  *    reading "15 Sep 2026, 18:22 UTC · Berlin, DE · Chrome 141". That is
@@ -85,7 +88,7 @@ const BRAND = {
     head: 'A disk for every agent you run.',
     body: 'Create a workspace, scope a key, and your agent has persistent storage in about four minutes.',
     points: [
-      { title: 'Free tier, no card', note: '2 GB and 100,000 requests a month' },
+      { title: 'Free tier, no card', note: FREE_SUMMARY },
       { title: 'Scoped by default', note: 'Every key carries explicit operations and an optional path prefix' },
       { title: 'MCP and REST', note: 'Ten MCP tools, or the same operations over HTTP' }
     ],

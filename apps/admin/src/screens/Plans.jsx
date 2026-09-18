@@ -47,7 +47,21 @@ import {
  * resolution here bills real customers the wrong amount.
  */
 
-const COLS = 'minmax(0,1fr) 84px 92px 74px 74px 76px minmax(0,140px) 86px';
+/**
+ * The last track is the one that used to force a horizontal scrollbar.
+ *
+ * It was 86px and holds a status pill plus Edit and Retire, so the content
+ * overflowed its track and widened the row - a grid track does not shrink what
+ * is inside it. The Plan column was taking the slack as `1fr` while the actions
+ * spilled past the edge.
+ *
+ * So Plan is bounded rather than greedy, the numeric columns are sized to their
+ * actual contents, and the Stripe price takes what is left and truncates - it
+ * is a 30-character opaque id nobody reads in full, and the row expands to show
+ * it on demand elsewhere.
+ */
+const COLS =
+  'minmax(120px,1.1fr) 68px 82px 58px 68px 84px minmax(80px,1fr) 176px';
 
 const DIMENSIONS = [
   { key: 'storage_bytes', label: 'Storage', format: bytes, unit: 'bytes' },
@@ -62,8 +76,8 @@ const DIMENSIONS = [
 ];
 
 function syncState(plan) {
-  if (!plan.stripe_product_id) return { tone: pills.warn, text: 'not in stripe' };
-  if (!plan.last_synced_at) return { tone: pills.neutral, text: 'never synced' };
+  if (!plan.stripe_product_id) return { tone: pills.warn, text: 'no product' };
+  if (!plan.last_synced_at) return { tone: pills.neutral, text: 'not synced' };
   return plan.last_synced_direction === 'inbound'
     ? { tone: pills.neutral, text: 'from stripe' }
     : { tone: pills.ok, text: 'pushed' };
@@ -169,7 +183,7 @@ export function Plans({ role, onToast }) {
       ) : (
         <div style={card}>
           <div style={{ overflowX: 'auto' }}>
-            <div style={{ minWidth: '900px' }}>
+            <div style={{ minWidth: '760px' }}>
               <div style={headRow(COLS)}>
                 <span style={th}>Plan</span>
                 <span style={thR}>Price</span>
@@ -209,7 +223,15 @@ export function Plans({ role, onToast }) {
                     <span style={{ ...mono, fontSize: '10.5px', color: 'var(--tx3)', ...ellipsis }}>
                       {plan.stripe_price_id ?? '—'}
                     </span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        minWidth: 0,
+                        justifyContent: 'flex-end'
+                      }}
+                    >
                       <span style={state.tone}>{state.text}</span>
                       {canEdit && (
                         <button

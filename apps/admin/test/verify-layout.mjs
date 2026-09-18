@@ -111,6 +111,112 @@ async function assertEnterSubmits(page) {
   check('[short] Enter from the name field submits', submitted);
 }
 
+/**
+ * The plan editor, at the window it is actually used in.
+ *
+ * `admin-dev` showed the dialog grown to fit all nine limit rows, with its own
+ * header and tab strip pushed off the top of the screen. Two separate things
+ * have to hold for that not to come back, and neither is visible to jsdom:
+ *
+ *   - the dialog is bounded by the WINDOW. It was bounded by
+ *     `calc(100vh - 24px)` while `:root` carries `zoom: 1.25`, and `vh` does not
+ *     participate in zoom - so the cap was a quarter larger than the window and
+ *     never bound anything.
+ *   - the dialog is bounded by its own HEIGHT. Even a correct viewport cap only
+ *     engages on a short window; on a tall one a content-sized dialog shows all
+ *     nine rows, and then the first short window somebody opens it on loses the
+ *     last four with no scrollbar to find them by.
+ *
+ * So this asserts the outcome rather than either mechanism: five rows above the
+ * fold, a sixth partly visible, and the rest reachable by scrolling.
+ */
+async function assertPlanEditor(page, label, viewport) {
+  await page.setViewportSize(viewport);
+  await page.goto(planEditorUrl);
+  await page.waitForSelector('[role="dialog"]');
+  await page.waitForFunction(
+    () => document.querySelector('[role="tab"][aria-selected="true"]')?.textContent === 'Limits'
+  );
+
+  const g = await page.evaluate(() => {
+    const dialog = document.querySelector('[role="dialog"]');
+    const body = dialog.querySelector('[data-dialog-body]');
+    const head = dialog.querySelector('header');
+    const strip = dialog.querySelector('[role="tab"]').parentElement;
+    const foot = dialog.querySelector('footer');
+    const view = body.getBoundingClientRect();
+
+    // A limit row is the element wrapping a mode radiogroup.
+    const rows = Array.from(body.querySelectorAll('[role="radiogroup"]'))
+      .map(group => group.parentElement.getBoundingClientRect());
+
+    return {
+      viewportHeight: window.innerHeight,
+      dialogTop: Math.round(dialog.getBoundingClientRect().top),
+      dialogBottom: Math.round(dialog.getBoundingClientRect().bottom),
+      headTop: Math.round(head.getBoundingClientRect().top),
+      stripTop: Math.round(strip.getBoundingClientRect().top),
+      footBottom: Math.round(foot.getBoundingClientRect().bottom),
+      totalRows: rows.length,
+      // Fully inside the body's visible box, with a pixel of tolerance.
+      rowsFullyVisible: rows.filter(r => r.top >= view.top - 1 && r.bottom <= view.bottom + 1).length,
+      rowsPartlyVisible: rows.filter(r => r.top < view.bottom - 1 && r.bottom > view.top + 1).length,
+      bodyScroll: body.scrollHeight,
+      bodyClient: body.clientHeight,
+    };
+  });
+
+  check(
+    `[plans ${label}] the dialog is inside the window`,
+    g.dialogTop >= -1 && g.dialogBottom <= g.viewportHeight + 1,
+    `${g.dialogTop}–${g.dialogBottom} / viewport ${g.viewportHeight}`
+  );
+
+  check(
+    `[plans ${label}] the header and tab strip are on screen`,
+    g.headTop >= -1 && g.stripTop >= -1,
+    `header ${g.headTop}, tabs ${g.stripTop}`
+  );
+
+  check(
+    `[plans ${label}] the footer is on screen`,
+    g.footBottom <= g.viewportHeight + 1,
+    `footer bottom ${g.footBottom} / viewport ${g.viewportHeight}`
+  );
+
+  check(
+    `[plans ${label}] the body scrolls rather than the dialog growing`,
+    g.bodyScroll > g.bodyClient + 1,
+    `content ${g.bodyScroll} > visible ${g.bodyClient}`
+  );
+
+  check(
+    `[plans ${label}] five limit rows are above the fold`,
+    g.rowsFullyVisible === 5,
+    `${g.rowsFullyVisible} of ${g.totalRows} fully visible, ${g.rowsPartlyVisible} touched`
+  );
+
+  // And the other four are reachable. Five visible rows is only the right
+  // answer if scrolling gets to the ninth; a body that clips what it cannot
+  // show would pass every check above it.
+  const lastRowReachable = await page.evaluate(() => {
+    const body = document.querySelector('[data-dialog-body]');
+    body.scrollTop = body.scrollHeight;
+    const groups = body.querySelectorAll('[role="radiogroup"]');
+    const last = groups[groups.length - 1].parentElement.getBoundingClientRect();
+    const view = body.getBoundingClientRect();
+    return {
+      ok: last.top >= view.top - 1 && last.bottom <= view.bottom + 1,
+      label: groups[groups.length - 1].getAttribute('aria-label'),
+    };
+  });
+  check(
+    `[plans ${label}] scrolling reaches the last row`,
+    lastRowReachable.ok,
+    lastRowReachable.label
+  );
+}
+
 async function assertFocus(page) {
   await page.setViewportSize(VIEWPORT);
   await page.reload();
@@ -145,6 +251,7 @@ await server.listen();
 
 const { port } = server.httpServer.address();
 const url = `http://localhost:${port}/test/fixtures/overlay-harness.html`;
+const planEditorUrl = `http://localhost:${port}/test/fixtures/plan-editor-harness.html`;
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: VIEWPORT });
@@ -155,6 +262,11 @@ try {
   await assertContract(page, 'short');
   await assertEnterSubmits(page);
   await assertFocus(page);
+  // Tall and short. The tall one is the case admin-dev was broken in: a window
+  // with room to grow is exactly where a content-sized dialog stops scrolling.
+  await assertPlanEditor(page, 'tall', { width: 1512, height: 982 });
+  await assertPlanEditor(page, '1366x768', VIEWPORT);
+  await assertPlanEditor(page, 'short', SHORT);
 } finally {
   await browser.close();
   await server.close();

@@ -161,14 +161,18 @@ describe('the modal-scroll contract', () => {
     const dialog = screen.getByRole('dialog');
     const body = dialog.querySelector('[data-dialog-body]');
 
-    // Point 1: bounded — by the viewport, in vh.
+    // Point 1: bounded — as a percentage of the scrim, and NOT in vh.
     //
-    // Was pinned to '100%'. As a grid item that percentage resolved against a
-    // containing block that did not behave: the dialog overflowed its own
-    // max-height and grew a 776px body around a single input. What the
-    // assertion is for is that a bound EXISTS and is tied to the viewport, not
-    // which unit expresses it.
-    expect(dialog.style.maxHeight).toBe('calc(100vh - 24px)');
+    // The unit is the assertion here, which it usually would not be. `app.css`
+    // puts `zoom: 1.25` on :root and `vh` does not participate in zoom, so
+    // `calc(100vh - 24px)` permitted a dialog a quarter taller than the window:
+    // the cap never bound, the body never overflowed, `overflowY` never
+    // engaged, and the plan editor grew past the screen with its own header and
+    // tab strip off the top. The scrim is `position: fixed; inset: 0`, so a
+    // percentage of it is the window minus the inset under any zoom factor,
+    // without this file having to know the factor.
+    expect(dialog.style.maxHeight).toBe('100%');
+    expect(dialog.style.maxHeight).not.toMatch(/vh/);
     expect(dialog.style.display).toBe('flex');
     expect(dialog.style.flexDirection).toBe('column');
 

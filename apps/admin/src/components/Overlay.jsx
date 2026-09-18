@@ -123,6 +123,20 @@ export function Modal({
    */
   tabs = null,
   width = 520,
+  /**
+   * The height the dialog takes when the window allows it.
+   *
+   * Opt-in, and the mechanism that makes the body scroll rather than the dialog
+   * grow. Without it the column is as tall as its content, so on an ordinary
+   * window a nine-row form simply becomes a nine-row dialog and `overflowY`
+   * never engages — which is the whole failure this component exists to
+   * prevent, arriving by a different route than the customer app's.
+   *
+   * `min(<this>, 100%)` so it can never beat the cap below and push the footer
+   * under the fold on a short window. A two-line confirmation passes nothing
+   * and stays two lines tall rather than becoming an empty box.
+   */
+  height = null,
 }) {
   const dialogRef = useRef(null);
   const titleId = useId();
@@ -248,18 +262,24 @@ export function Modal({
         onMouseDown={event => event.stopPropagation()}
         style={{
           width: `min(${width}px, 100%)`,
-          // Bounded by the viewport, in vh rather than a percentage: as a grid
-          // item the percentage resolved against a containing block that did not
-          // behave, and the dialog both overflowed its own max-height and grew a
-          // body of 776px around a single input.
+          // A percentage of the scrim, NOT a vh calc.
           //
-          // The 24 is the scrim's padding doubled, so the dialog stops exactly
-          // where the scrim's inset does and the footer cannot leave the screen.
+          // `app.css` puts `zoom: 1.25` on :root, and `vh` does not participate
+          // in zoom: `100vh` still evaluates to the window's height, and that
+          // number is then laid out inside a coordinate space scaled by 1.25.
+          // `calc(100vh - 24px)` therefore permitted a dialog about a quarter
+          // taller than the window it was meant to fit inside, so the column
+          // never reached its cap, the body never overflowed, `overflowY` never
+          // engaged, and the dialog grew past the screen - centred, so the
+          // header and the tab strip went off the top where they cannot be
+          // reached.
           //
-          // There is deliberately NO explicit height. The dialog is as tall as
-          // its content, capped here - which is how the design behaves, and it
-          // removes a mechanism that was fighting the layout rather than helping.
-          maxHeight: 'calc(100vh - 24px)',
+          // The scrim is `position: fixed; inset: 0` and so is itself measured
+          // in the zoomed space; `box-sizing: border-box` and its 12px padding
+          // mean 100% of its content box is exactly the window minus the inset.
+          // The bound is correct under any zoom without knowing the factor.
+          maxHeight: '100%',
+          ...(height === null ? {} : { height: `min(${height}px, 100%)` }),
           display: 'flex',
           flexDirection: 'column',
           // Belt and braces with maxHeight: a flex item's default min-height is

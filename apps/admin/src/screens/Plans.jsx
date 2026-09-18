@@ -519,7 +519,11 @@ function QuotaField({ id, name, unit, codeDefault, value, onChange }) {
   );
 }
 
-function PlanEditor({
+// Exported for `test/fixtures/plan-editor-harness.jsx`. The row count this
+// dialog shows is a layout outcome, and jsdom does not lay out - so the check
+// that it shows five and scrolls has to drive the real editor in a real
+// browser, not a stand-in with approximately the same rows in it.
+export function PlanEditor({
   plan,
   open,
   creating = false,
@@ -580,6 +584,19 @@ function PlanEditor({
       destructive={false}
       busy={busy}
       width={620}
+      // The dialog is this tall when the window allows it, and the body scrolls
+      // inside it - it does not grow to fit nine limit rows.
+      //
+      // Deliberate, and the design's own behaviour: the Limits tab shows five
+      // rows with the sixth cut off at the fold, which is what tells somebody
+      // there are more. A dialog sized to its content shows all nine with no
+      // scrollbar on a tall window and silently loses the last four on a short
+      // one, because nothing is left to absorb the difference.
+      //
+      // 556 = the chrome (header, tab strip, footer) plus a body holding the
+      // intro and five 44px rows at an 11px gap. Measured in
+      // `test/verify-layout.mjs`, not estimated.
+      height={556}
       // Between the header and the body, so scrolling the content cannot carry
       // the way back to the other tab off the screen with it.
       tabs={[

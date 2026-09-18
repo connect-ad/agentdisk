@@ -21,7 +21,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { StaffPlanAccess } from "../src/staff/plans-access";
 import { metadataForPlan, syncProductToPlan } from "../src/billing/plan-sync";
 import { invalidateCatalogue } from "../src/billing/catalogue";
-import { ApiError } from "../src/lib/errors";
 import type { StaffUser } from "../src/staff/access";
 import type { Stripe } from "../src/billing/stripe";
 

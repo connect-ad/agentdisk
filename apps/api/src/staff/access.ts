@@ -22,7 +22,7 @@
  */
 
 import { newId } from "../lib/ids";
-import { ApiError, forbidden } from "../lib/errors";
+import { ApiError } from "../lib/errors";
 import { AuditedStaffAccess } from "./audited";
 
 export type StaffRole = "support" | "admin" | "super_admin";

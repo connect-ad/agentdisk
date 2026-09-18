@@ -64,6 +64,18 @@ const COLS =
   'minmax(120px,1.1fr) 68px 84px 58px 70px 86px minmax(90px,1fr) 160px 76px';
 
 /**
+ * See the `height` prop on the editor's Modal.
+ *
+ * 498 is the exact fit for the Plan tab as measured; the extra six are for
+ * `--font`, which falls back to `system-ui` with nothing loaded, so line
+ * heights differ by a pixel or two between operating systems. An exact fit
+ * would turn that into a two-pixel scrollbar on the tab the design says never
+ * scrolls. Six pixels is invisible on Plan and moves the Limits fold by less
+ * than a row's gap.
+ */
+const PLAN_EDITOR_HEIGHT = 504;
+
+/**
  * The nine limits, with the two things the design asks each row to state.
  *
  * `unit` is what the number means, shown beside the field so nobody has to
@@ -519,11 +531,7 @@ function QuotaField({ id, name, unit, codeDefault, value, onChange }) {
   );
 }
 
-// Exported for `test/fixtures/plan-editor-harness.jsx`. The row count this
-// dialog shows is a layout outcome, and jsdom does not lay out - so the check
-// that it shows five and scrolls has to drive the real editor in a real
-// browser, not a stand-in with approximately the same rows in it.
-export function PlanEditor({
+function PlanEditor({
   plan,
   open,
   creating = false,
@@ -587,16 +595,17 @@ export function PlanEditor({
       // The dialog is this tall when the window allows it, and the body scrolls
       // inside it - it does not grow to fit nine limit rows.
       //
-      // Deliberate, and the design's own behaviour: the Limits tab shows five
-      // rows with the sixth cut off at the fold, which is what tells somebody
-      // there are more. A dialog sized to its content shows all nine with no
-      // scrollbar on a tall window and silently loses the last four on a short
-      // one, because nothing is left to absorb the difference.
+      // The design: one height for both tabs, and it is the Plan tab's. Plan
+      // fills it exactly with nothing to scroll; Limits shows Storage through
+      // Members whole and Workspaces cut off at the fold, which is what tells
+      // somebody there are more. A dialog sized to its content shows all nine
+      // with no scrollbar on a tall window and silently loses the last four on
+      // a short one, because nothing is left to absorb the difference.
       //
-      // 556 = the chrome (header, tab strip, footer) plus a body holding the
-      // intro and five 44px rows at an 11px gap. Measured in
-      // `test/verify-layout.mjs`, not estimated.
-      height={556}
+      // The number is the chrome (header, tab strip, footer) plus the Plan tab's
+      // body, measured in `test/verify-layout.mjs` rather than estimated - and
+      // pinned there both ways: Plan must not scroll, Limits must.
+      height={PLAN_EDITOR_HEIGHT}
       // Between the header and the body, so scrolling the content cannot carry
       // the way back to the other tab off the screen with it.
       tabs={[

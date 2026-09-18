@@ -43,7 +43,24 @@ export const card = {
   overflow: 'hidden'
 };
 
-export const paneIn = { animation: 'adminPaneIn .18s ease both' };
+/**
+ * `backwards`, never `both`.
+ *
+ * Every screen wraps itself in this, and every dialog in the console is
+ * rendered INSIDE the screen that opened it. With `both`, the final keyframe -
+ * `transform: translateY(0)` - stays applied after the 180ms are over, and a
+ * transform, even the identity one, makes the pane the containing block for
+ * every `position: fixed` descendant. So a dialog's scrim was sized to the
+ * card it opened from rather than to the window: a `vh` cap ignored that and
+ * let the plan editor grow off the top of the screen, and a `%` cap obeyed it
+ * and collapsed the same dialog to a 185px pane. `backwards` holds the first
+ * keyframe until the animation starts and then leaves the element alone.
+ *
+ * `verify-layout.mjs` asserts the scrim is window-sized from inside the real
+ * shell, so an ancestor that starts trapping it again fails a check rather
+ * than a customer.
+ */
+export const paneIn = { animation: 'adminPaneIn .18s ease backwards' };
 
 export function btn(bg, color, border) {
   return {

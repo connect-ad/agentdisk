@@ -150,12 +150,13 @@ export function Plans({ role, onToast }) {
           flexWrap: 'wrap'
         }}
       >
-        <span style={{ flex: 1, minWidth: '180px', fontSize: '12.5px', color: 'var(--tx2)' }}>
-          Plans are synced with Stripe both ways. Pulling in is always a diff you confirm field by
-          field.
+        <span style={{ flex: 1, minWidth: '180px', fontSize: '12.5px', lineHeight: 1.5, color: 'var(--tx2)' }}>
+          <strong style={{ color: 'var(--tx)' }}>Compare</strong> shows what differs and lets you
+          take it field by field. <strong style={{ color: 'var(--tx)' }}>Pull everything</strong>{' '}
+          overwrites every plan from Stripe with no confirmation.
         </span>
         <button type="button" style={canEdit ? secondaryBtn : disabledBtn} disabled={!canEdit || busy} onClick={openDiff}>
-          {busy ? 'Working…' : 'Sync from Stripe'}
+          {busy ? 'Working…' : 'Compare with Stripe'}
         </button>
         <button
           type="button"
@@ -167,9 +168,9 @@ export function Plans({ role, onToast }) {
               'Catalogue reconciled from Stripe.'
             )
           }
-          title="Replays the same product→plan upsert the webhook uses, for every product in Stripe."
+          title="Overwrites every plan row from its Stripe product, with no confirmation step. The same upsert the webhook runs."
         >
-          Reconcile all
+          Pull everything
         </button>
         {canCreate && (
           <button type="button" style={primaryBtn} onClick={() => setCreating(true)}>
@@ -279,24 +280,6 @@ export function Plans({ role, onToast }) {
                           Edit
                         </button>
                       )}
-                      {canCreate && plan.is_public === 1 && (
-                        <button
-                          type="button"
-                          onClick={() => setRetiring(plan)}
-                          title="Hides it from new signups. Existing subscribers keep the plan and keep being billed."
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            padding: 0,
-                            color: 'var(--tx3)',
-                            cursor: 'pointer',
-                            fontSize: '12px',
-                            fontFamily: 'var(--font)'
-                          }}
-                        >
-                          Retire
-                        </button>
-                      )}
                     </span>
                   </div>
                 );
@@ -311,6 +294,16 @@ export function Plans({ role, onToast }) {
         open={Boolean(editing)}
         busy={busy}
         error={actionError}
+        // Retire lives in here now rather than on the row. It is a rare,
+        // consequential act and it was sitting one stray click from Edit in a
+        // dense table; inside the dialog the plan is already named and the
+        // consequence can be spelled out beside the button.
+        canRetire={canCreate && editing?.is_public === 1}
+        onRetire={() => {
+          const plan = editing;
+          setEditing(null);
+          setRetiring(plan);
+        }}
         onCancel={() => {
           setEditing(null);
           setActionError(null);
@@ -408,7 +401,17 @@ function QuotaField({ id, name, value, onChange }) {
   );
 }
 
-function PlanEditor({ plan, open, creating = false, busy, error, onCancel, onSubmit }) {
+function PlanEditor({
+  plan,
+  open,
+  creating = false,
+  busy,
+  error,
+  onCancel,
+  onSubmit,
+  canRetire = false,
+  onRetire
+}) {
   const [draft, setDraft] = useState({});
   const [reason, setReason] = useState('');
   const [initialised, setInitialised] = useState(null);
@@ -456,6 +459,25 @@ function PlanEditor({ plan, open, creating = false, busy, error, onCancel, onSub
       destructive={false}
       busy={busy}
       width={620}
+      footer={
+        canRetire ? (
+          <button
+            type="button"
+            onClick={onRetire}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              color: 'var(--dngrTx)',
+              cursor: 'pointer',
+              fontSize: '12.5px',
+              fontFamily: 'var(--font)'
+            }}
+          >
+            Retire this plan
+          </button>
+        ) : null
+      }
     >
       {creating && (
         <>
@@ -471,28 +493,39 @@ function PlanEditor({ plan, open, creating = false, busy, error, onCancel, onSub
         </>
       )}
 
-      <label htmlFor="plan-name" style={label}>
-        Name
-      </label>
-      <input
-        id="plan-name"
-        value={draft.name ?? ''}
-        onChange={event => set('name', event.target.value)}
-        style={{ ...input, marginBottom: '12px' }}
-      />
-
-      <label htmlFor="plan-price" style={label}>
-        Price, in cents per month
-      </label>
-      <input
-        id="plan-price"
-        type="number"
-        min="0"
-        step="1"
-        value={draft.amount_cents ?? 0}
-        onChange={event => set('amount_cents', Number(event.target.value))}
-        style={{ ...input, ...mono, marginBottom: repriced ? '8px' : '12px' }}
-      />
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(200px, 2fr) minmax(140px, 1fr)',
+          columnGap: '14px'
+        }}
+      >
+        <div>
+          <label htmlFor="plan-name" style={label}>
+            Name
+          </label>
+          <input
+            id="plan-name"
+            value={draft.name ?? ''}
+            onChange={event => set('name', event.target.value)}
+            style={{ ...input, marginBottom: '12px' }}
+          />
+        </div>
+        <div>
+          <label htmlFor="plan-price" style={label}>
+            Price, cents / month
+          </label>
+          <input
+            id="plan-price"
+            type="number"
+            min="0"
+            step="1"
+            value={draft.amount_cents ?? 0}
+            onChange={event => set('amount_cents', Number(event.target.value))}
+            style={{ ...input, ...mono, marginBottom: repriced ? '8px' : '12px' }}
+          />
+        </div>
+      </div>
 
       {repriced && (
         <div
@@ -515,15 +548,32 @@ function PlanEditor({ plan, open, creating = false, busy, error, onCancel, onSub
 
       <div style={{ borderTop: '1px solid var(--bd)', margin: '6px 0 14px' }} />
 
-      {DIMENSIONS.map(dimension => (
-        <QuotaField
-          key={dimension.key}
-          id={`plan-${dimension.key}`}
-          name={dimension.label}
-          value={draft[dimension.key]}
-          onChange={value => set(dimension.key, value)}
-        />
-      ))}
+      {/*
+        Two columns, not nine stacked rows.
+
+        The form carries fourteen fields and the dialog is bounded by the
+        viewport, so on a short window the body became a 90px slot scrolling
+        through a very long list - technically correct and miserable to use.
+        Halving the height is the fix that helps at every window size, rather
+        than trying to win more height from a viewport that does not have it.
+      */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          columnGap: '14px'
+        }}
+      >
+        {DIMENSIONS.map(dimension => (
+          <QuotaField
+            key={dimension.key}
+            id={`plan-${dimension.key}`}
+            name={dimension.label}
+            value={draft[dimension.key]}
+            onChange={value => set(dimension.key, value)}
+          />
+        ))}
+      </div>
 
       <label style={{ ...label, display: 'flex', alignItems: 'center', gap: '8px', textTransform: 'none' }}>
         <input
@@ -592,8 +642,12 @@ function DiffDialog({ open, diffs, busy, error, onCancel, onApply }) {
       width={640}
     >
       {diffs.length === 0 ? (
-        <p style={{ margin: 0, fontSize: '13px', color: 'var(--tx2)' }}>
+        <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.6, color: 'var(--tx2)' }}>
           Nothing differs. Stripe and this database agree on every plan.
+          <br />
+          <span style={{ color: 'var(--tx3)' }}>
+            This was a comparison, so nothing was written and the sync time is unchanged.
+          </span>
         </p>
       ) : (
         diffs.map(diff => (

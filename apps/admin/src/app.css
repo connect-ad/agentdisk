@@ -55,6 +55,31 @@
   box-sizing: border-box;
 }
 
+/* -------------------------------------------------------------------------
+ * UI scale.
+ *
+ * The console is drawn in absolute pixels - the type scale runs 9.5px to 13px
+ * and lives inline on the components, not in a token - so there is no root
+ * font size to turn up and no rem ladder to multiply. `zoom` on the root
+ * element is the same operation the browser's own zoom control performs: it
+ * scales layout rather than painting a scaled bitmap, so text stays hinted and
+ * hit targets grow with what they target.
+ *
+ * It must sit on :root and nowhere else. The scrim, the dialog and the
+ * session-expired sheet are `position: fixed; inset: 0` and are NOT portalled
+ * out of #root, so zooming #root would scale their containing block too and
+ * push a centred dialog off-centre. Zooming the root element scales the
+ * viewport's coordinate space with everything in it, which is what keeps them
+ * placed correctly.
+ *
+ * This multiplies with browser zoom - at 125% in Chrome you are now seeing
+ * 156%. Reset the tab to 100% once.
+ * ------------------------------------------------------------------------- */
+
+:root {
+  zoom: 1.25;
+}
+
 body {
   margin: 0;
 }

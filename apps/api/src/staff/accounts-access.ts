@@ -1,48 +1,28 @@
 /**
- * Staff accounts, managed from the console — 32 PART 6 (Staff accounts).
+ * Staff accounts — 32 PART 6, as amended by migration 0014.
  *
- * ── This softens an existing "never", deliberately and narrowly ─────────────
- * `CLAUDE.md` records the rule: *the first staff account cannot come from the
- * API, and that is the design*, because an endpoint that mints a working staff
- * credential is an endpoint that can be tricked into minting one. That rule is
- * about BOOTSTRAP, and the reasoning is specific — at bootstrap there is no
- * staff credential in existence to gate the endpoint on, so any such endpoint
- * is reachable by whoever can reach the API.
+ * ── An account is an email address and a role ──────────────────────────────
+ * There is no credential to mint any more. Staff sign in through Firebase like
+ * everybody else, so adding an administrator is adding a row here, and that row
+ * is the only thing that separates a staff member from any other signed-in
+ * customer. Nothing is shown once, because nothing secret is created.
  *
- * `POST /v1/staff/users` therefore still returns 501 and is left exactly as it
- * was. This is a different endpoint with a different precondition: it requires
- * an authenticated super_admin, so it cannot bootstrap anything — it can only
- * be used by somebody who already holds the highest credential in the system,
- * and every use writes an audit row naming who created whom. The first account
- * still comes from `scripts/provision-staff.mjs`.
- *
- * ── Pending enrolment, and why a pending account can still log in ──────────
- * 32 PART 4 asks for a pending account to be "unable to authenticate at all
- * until enrolment completes". Read literally that produces an account that can
- * never be used: enrolment here is scanning a QR, there is no separate confirm
- * step, and the only way to prove the code was scanned is to present a valid
- * one. So `totp_confirmed_at` is set by the first successful login, and pending
- * means *created but never signed in*. The distinction PART 4 actually wants —
- * pending-enrolment versus enrolled-without-TOTP — is preserved, because the
- * second state remains impossible: TOTP is mandatory at login for every row.
+ * That also dissolves the rule `CLAUDE.md` recorded - *the first staff account
+ * cannot come from the API* - rather than softening it. The rule existed
+ * because an endpoint that mints a working staff credential can be tricked into
+ * minting one. This endpoint mints nothing: it grants an existing, independently
+ * authenticated identity a role. The first row is seeded by the migration,
+ * which is the only place it could come from now.
  *
  * ── Never deleted, only disabled ───────────────────────────────────────────
- * There is no delete method here and there should not be one. The audit log has
- * to keep resolving a historical actor, and `staff_actions` deliberately has no
- * foreign key to this table so that a log row survives whatever happens to the
- * account — but a disabled row is what keeps the *email and role at the time*
- * meaningful when somebody reads the log a year later.
+ * Unchanged, and for the unchanged reason: the audit log has to keep resolving
+ * a historical actor, and `staff_actions` denormalises the email and role *at
+ * the time* precisely so a later edit here cannot rewrite what somebody did.
  */
 
 import { AuditedStaffAccess } from "./audited";
 import { ApiError, forbidden, validationError } from "../lib/errors";
 import { newId } from "../lib/ids";
-import {
-  encryptSecret,
-  generateTotpSecret,
-  hashPassword,
-  totpProvisioningUri,
-} from "./crypto";
 import { STAFF_ROLES, type StaffRole } from "./access";
 
 export interface StaffAccountRow {
@@ -50,30 +30,10 @@ export interface StaffAccountRow {
   email: string;
   role: string;
   disabledAt: number | null;
+  /** Set by requireStaff on every authenticated request, not by a login route. */
   lastLoginAt: number | null;
-  totpConfirmedAt: number | null;
   createdAt: number;
-}
-
-/** Shown exactly once, like an API key or a webhook secret. Never stored. */
-export interface StaffAccountSecret {
-  password: string;
-  totpSecret: string;
-  provisioningUri: string;
-}
-
-/**
- * A password generated rather than chosen.
- *
- * Same reasoning as the provisioning script: a staff password typed by a human
- * at creation time is a password that gets reused, and this is the credential
- * with cross-tenant reach. 30 characters from a 32-symbol alphabet is ~150
- * bits, which is far past anything PBKDF2's iteration count needs to defend.
- */
-function generatePassword(): string {
-  const alphabet = "abcdefghijkmnpqrstuvwxyz23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-  const bytes = crypto.getRandomValues(new Uint8Array(30));
-  return Array.from(bytes, byte => alphabet[byte % alphabet.length]).join("");
+  invitedBy: string | null;
 }
 
 export class StaffAccountAccess extends AuditedStaffAccess {
@@ -83,7 +43,7 @@ export class StaffAccountAccess extends AuditedStaffAccess {
     const rows = await this.db
       .prepare(
         `SELECT id, email, role, disabled_at AS disabledAt, last_login_at AS lastLoginAt,
-                totp_confirmed_at AS totpConfirmedAt, created_at AS createdAt
+                created_at AS createdAt, invited_by AS invitedBy
            FROM staff_users ORDER BY created_at ASC`
       )
       .all<StaffAccountRow>();
@@ -93,20 +53,27 @@ export class StaffAccountAccess extends AuditedStaffAccess {
   }
 
   /**
-   * Create a staff account, returning its credential once.
+   * Grant an email address a staff role.
    *
-   * The password and the TOTP secret are returned in this response and written
-   * nowhere else: the row holds a PBKDF2 hash and an AES-GCM ciphertext, and
-   * neither is usable on its own. If the caller loses this response the account
-   * has to be recreated, which is the same contract the customer-facing API key
-   * flow has.
+   * Whoever holds that address at this Firebase project becomes staff the next
+   * time they sign in - there is no invitation to accept and no credential to
+   * deliver. Two consequences worth being deliberate about:
+   *
+   * The address is stored lowercase, and matched lowercase, because it is now
+   * an authorisation key rather than a label. `Owner@x.com` and `owner@x.com`
+   * are one person to Google and must be one row here.
+   *
+   * The account need not exist yet. Adding an address nobody has registered is
+   * legitimate - it is how you onboard somebody before their first sign-in -
+   * but it does mean the row is a standing grant to whoever can prove that
+   * address to Firebase. Adding an address you do not control is the mistake
+   * this cannot detect, which is why it is super_admin-only and audited.
    */
   async create(
     email: string,
     role: string,
-    encryptionKey: string | undefined,
     reason: string
-  ): Promise<{ account: StaffAccountRow; secret: StaffAccountSecret }> {
+  ): Promise<StaffAccountRow> {
     await this.requireRole("super_admin", "create staff accounts");
 
     const normalised = email.trim().toLowerCase();
@@ -116,39 +83,23 @@ export class StaffAccountAccess extends AuditedStaffAccess {
     if (!STAFF_ROLES.includes(role as StaffRole)) {
       throw validationError(`A role must be one of ${STAFF_ROLES.join(", ")}.`);
     }
-    // No key, no refusal. Encryption at rest for this column is optional at the
-    // owner's direction; when a key IS configured the secret is still encrypted
-    // with it, and `readTotpSecret` accepts either form at login.
 
     const existing = await this.db
       .prepare(`SELECT id FROM staff_users WHERE email = ?`)
       .bind(normalised)
       .first<{ id: string }>();
     if (existing !== null) {
-      throw new ApiError("CONFLICT", "A staff account already exists for that address.");
+      throw new ApiError("CONFLICT", "That address already has a staff role.");
     }
 
     const id = newId("staffUser", this.now);
-    const password = generatePassword();
-    const totpSecret = generateTotpSecret();
-
     await this.db
       .prepare(
         `INSERT INTO staff_users
-           (id, email, password_hash, totp_secret, role, disabled_at, last_login_at,
-            created_at, totp_confirmed_at)
-         VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, NULL)`
+           (id, email, role, disabled_at, last_login_at, created_at, invited_by)
+         VALUES (?, ?, ?, NULL, NULL, ?, ?)`
       )
-      .bind(
-        id,
-        normalised,
-        await hashPassword(password),
-        encryptionKey === undefined || encryptionKey === ""
-          ? totpSecret
-          : await encryptSecret(totpSecret, encryptionKey),
-        role,
-        this.now
-      )
+      .bind(id, normalised, role, this.now, this.staff.id)
       .run();
 
     await this.recordFleet({
@@ -156,36 +107,27 @@ export class StaffAccountAccess extends AuditedStaffAccess {
       targetType: "staff",
       targetId: id,
       reason,
-      // The credential is never in the metadata. What is worth recording is who
-      // was granted what.
       metadata: { email: normalised, role },
     });
 
     return {
-      account: {
-        id,
-        email: normalised,
-        role,
-        disabledAt: null,
-        lastLoginAt: null,
-        totpConfirmedAt: null,
-        createdAt: this.now,
-      },
-      secret: {
-        password,
-        totpSecret,
-        provisioningUri: totpProvisioningUri(normalised, totpSecret),
-      },
+      id,
+      email: normalised,
+      role,
+      disabledAt: null,
+      lastLoginAt: null,
+      createdAt: this.now,
+      invitedBy: this.staff.id,
     };
   }
 
   /**
    * Disable or re-enable an account.
    *
-   * Disabling also revokes every live session for it. Without that, a disabled
-   * staff member keeps their cross-tenant reach for up to the remaining four
-   * hours of a session that was already open — which is the entire window in
-   * which somebody being removed for cause would use it.
+   * Takes effect on their very next request. `requireStaff` reads this column
+   * on every call, so there is no window at all — which is strictly better than
+   * the four-hour session this replaced, where a disable could not reach a
+   * session already open.
    */
   async setDisabled(staffId: string, disabled: boolean, reason: string): Promise<boolean> {
     await this.requireRole("super_admin", "disable staff accounts");
@@ -207,16 +149,6 @@ export class StaffAccountAccess extends AuditedStaffAccess {
       .run();
 
     const changed = (result.meta.changes ?? 0) > 0;
-
-    if (changed && disabled) {
-      await this.db
-        .prepare(
-          `UPDATE staff_sessions SET revoked_at = ?
-            WHERE staff_user_id = ? AND revoked_at IS NULL`
-        )
-        .bind(this.now, staffId)
-        .run();
-    }
 
     await this.recordFleet({
       action: disabled ? "staff.disable" : "staff.enable",

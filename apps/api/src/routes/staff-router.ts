@@ -23,8 +23,6 @@ import {
   staffForcePasswordReset,
   staffGetWorkspace,
   staffListWorkspaces,
-  staffLogin,
-  staffLogout,
   staffOverview,
   staffRevokeKeys,
   staffSetWorkspaceStatus,
@@ -93,17 +91,24 @@ export async function handleStaffRoute(
     // Cloudflare sets this itself and a client cannot forge it. Read once here
     // so no handler has to remember to.
     sourceIp: request.headers.get("cf-connecting-ip"),
+    // The same verifier and the same project as the customer chain. Staff are
+    // told apart by their staff_users row, never by the credential.
+    // undefined rather than an empty projectId when unset, so requireStaff
+    // refuses with "not configured" instead of verifying every token against an
+    // audience of "" and reporting it as a bad credential.
+    firebase:
+      env.FIREBASE_PROJECT_ID === undefined || env.FIREBASE_PROJECT_ID === ""
+        ? undefined
+        : { cache: env.CACHE, projectId: env.FIREBASE_PROJECT_ID },
     stripeSecretKey: env.STRIPE_SECRET_KEY,
   };
 
   const [, , area, resourceId, action] = segments;
 
-  if (area === "login" && request.method === "POST") {
-    return await staffLogin(request, staffDeps);
-  }
-  if (area === "logout" && request.method === "POST") {
-    return await staffLogout(request, staffDeps);
-  }
+  // No login or logout route. A Firebase ID token IS the session (migration
+  // 0014), so signing in happens entirely in the browser against Firebase and
+  // signing out is discarding the token there. A server endpoint for either
+  // would be a thing that looks like it does something and does not.
   if (area === "whoami" && request.method === "GET") {
     return await staffWhoami(request, staffDeps);
   }

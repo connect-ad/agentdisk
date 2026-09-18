@@ -600,16 +600,15 @@ export async function staffCreateAccount(request: Request, deps: StaffDeps): Pro
   const parsed = createAccountSchema.safeParse(await body(request));
   if (!parsed.success) throw validationError("An email, a role and a reason are required.");
 
-  const created = await area(StaffAccountAccess, staff, deps).create(
+  const account = await area(StaffAccountAccess, staff, deps).create(
     parsed.data.email,
     parsed.data.role,
-    deps.encryptionKey,
     parsed.data.reason
   );
 
-  // Shown once, like an API key. The response is the only place this credential
-  // ever exists; nothing stores it and no later call can retrieve it.
-  return json(created, 201);
+  // No credential in the response, because none was created. Whoever holds this
+  // address at our Firebase project becomes staff on their next sign-in.
+  return json({ account }, 201);
 }
 
 const accountRoleSchema = z.object({ role: z.enum(["support", "admin", "super_admin"]), reason });

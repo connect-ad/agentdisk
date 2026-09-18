@@ -16,35 +16,11 @@
  */
 
 import { SELF, env } from "cloudflare:test";
-import { beforeEach, describe, expect, it } from "vitest";
-import { currentTotp, encryptSecret, hashPassword } from "../src/staff/crypto";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { asStaff, firebaseToken, installStaffJwks } from "./staff-auth";
 import { NOW, WORKSPACE_A, seedTwoWorkspaces } from "./helpers";
 
 const URL_BASE = "https://api-dev.agentdisk.io";
-const ENCRYPTION_KEY = "test-database-encryption-key";
-const TOTP_SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
-const PASSWORD = "a-long-staff-password";
-
-const currentCode = (): Promise<string> => currentTotp(TOTP_SECRET, Date.now());
-
-async function seedStaff(id: string, email: string, role: string): Promise<void> {
-  await env.DB.prepare(
-    `INSERT INTO staff_users
-       (id, email, password_hash, totp_secret, role, disabled_at, last_login_at,
-        created_at, totp_confirmed_at)
-     VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?)`
-  )
-    .bind(
-      id,
-      email,
-      await hashPassword(PASSWORD),
-      await encryptSecret(TOTP_SECRET, ENCRYPTION_KEY),
-      role,
-      NOW,
-      NOW
-    )
-    .run();
-}
 
 function call(
   method: string,
@@ -62,39 +38,25 @@ function call(
   });
 }
 
-async function login(email: string): Promise<string> {
-  const res = await SELF.fetch(`${URL_BASE}/v1/staff/login`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, password: PASSWORD, totp: await currentCode() }),
-  });
-  const body = (await res.json()) as { token?: string };
-  if (body.token === undefined) throw new Error(`login failed: ${JSON.stringify(body)}`);
-  return body.token;
-}
 
 let support = "";
 let admin = "";
 let superAdmin = "";
 
+beforeAll(installStaffJwks);
+
 beforeEach(async () => {
   await seedTwoWorkspaces();
-  for (const table of ["staff_sessions", "staff_users", "staff_actions", "audit_events"]) {
+  for (const table of ["staff_users", "staff_actions", "audit_events"]) {
     await env.DB.prepare(`DELETE FROM ${table}`).run();
   }
   await env.DB.prepare(`UPDATE workspaces SET status = 'active', deleted_at = NULL`).run();
   await env.DB.prepare(`UPDATE users SET deleted_at = NULL, disabled_at = NULL`).run();
-  for (const email of ["support@agentdisk.io", "admin@agentdisk.io", "super@agentdisk.io"]) {
-    await env.CACHE.delete(`staff:login:${email}`);
-  }
 
-  await seedStaff("stf_SUPPORT", "support@agentdisk.io", "support");
-  await seedStaff("stf_ADMIN", "admin@agentdisk.io", "admin");
-  await seedStaff("stf_SUPER", "super@agentdisk.io", "super_admin");
-
-  support = await login("support@agentdisk.io");
-  admin = await login("admin@agentdisk.io");
-  superAdmin = await login("super@agentdisk.io");
+  // A token proves an identity; the staff_users row is what makes it staff.
+  support = await asStaff("support@agentdisk.io", "support", { id: "stf_SUPPORT" });
+  admin = await asStaff("admin@agentdisk.io", "admin", { id: "stf_ADMIN" });
+  superAdmin = await asStaff("super@agentdisk.io", "super_admin", { id: "stf_SUPER" });
 });
 
 /* ---------------------------- the role matrix ---------------------------- */
@@ -167,7 +129,7 @@ describe("the role matrix, enforced server-side", () => {
     expect(denied.results?.[0]?.actor_role).toBe("support");
   });
 
-  it("refuses every console route without a session at all", async () => {
+  it("refuses every console route without a credential at all", async () => {
     for (const path of [
       "/v1/staff/plans",
       "/v1/staff/billing",
@@ -178,6 +140,48 @@ describe("the role matrix, enforced server-side", () => {
       const res = await SELF.fetch(`${URL_BASE}${path}`);
       expect(`${path} -> ${res.status}`).toBe(`${path} -> 401`);
     }
+  });
+
+  it("refuses a signed-in customer who is not staff", async () => {
+    // THE boundary, now that one Firebase token reaches both surfaces. This
+    // token is valid, its email is verified, and it belongs to somebody with no
+    // staff_users row - which must be indistinguishable from a forged one.
+    const outsider = await firebaseToken({ email: "customer@example.com" });
+
+    for (const path of ["/v1/staff/plans", "/v1/staff/workspaces", "/v1/staff/accounts"]) {
+      const res = await call("GET", path, outsider);
+      expect(`${path} -> ${res.status}`).toBe(`${path} -> 401`);
+    }
+  });
+
+  it("refuses a staff address whose email Firebase has not verified", async () => {
+    // Without this, anybody able to sign up naming a staff address would
+    // inherit that staff row.
+    const unverified = await firebaseToken({
+      email: "super@agentdisk.io",
+      emailVerified: false,
+    });
+    expect((await call("GET", "/v1/staff/accounts", unverified)).status).toBe(401);
+  });
+
+  it("refuses a token minted for another Firebase project", async () => {
+    const wrongAudience = await firebaseToken({
+      email: "super@agentdisk.io",
+      projectId: "some-other-project",
+    });
+    expect((await call("GET", "/v1/staff/accounts", wrongAudience)).status).toBe(401);
+  });
+
+  it("stops accepting a token the moment the staff row is disabled", async () => {
+    expect((await call("GET", "/v1/staff/workspaces", admin)).status).toBe(200);
+
+    await env.DB.prepare(`UPDATE staff_users SET disabled_at = ? WHERE id = 'stf_ADMIN'`)
+      .bind(Date.now())
+      .run();
+
+    // The same token, unexpired. Disable is read per request, so there is no
+    // window at all - which the four-hour session it replaced could not manage.
+    expect((await call("GET", "/v1/staff/workspaces", admin)).status).toBe(401);
   });
 });
 
@@ -323,26 +327,35 @@ describe("deleting a workspace", () => {
 describe("staff accounts", () => {
   const reason = "a reason long enough to be one";
 
-  it("creates one and shows the credential exactly once", async () => {
+  it("creates one as an email and a role, with no credential to show", async () => {
     const res = await call("POST", "/v1/staff/accounts", superAdmin, {
-      email: "new@agentdisk.io",
+      email: "New@AgentDisk.io",
       role: "admin",
       reason,
     });
     expect(res.status).toBe(201);
 
-    const created = (await res.json()) as {
-      account: { id: string; totpConfirmedAt: number | null };
-      secret: { password: string; provisioningUri: string };
-    };
-    expect(created.secret.password.length).toBeGreaterThan(20);
-    expect(created.secret.provisioningUri).toMatch(/^otpauth:\/\/totp\//);
-    // Created but never signed in. The first successful login sets this.
-    expect(created.account.totpConfirmedAt).toBeNull();
+    const created = (await res.json()) as { account: { id: string; email: string; role: string } };
+    // Lowercased on the way in: an address differing only in case is one person
+    // to Google and must be one row here.
+    expect(created.account.email).toBe("new@agentdisk.io");
+    expect(created.account.role).toBe("admin");
+    // Nothing secret was minted, so nothing secret comes back.
+    expect(JSON.stringify(created)).not.toMatch(/password|totp|secret/i);
+  });
 
-    // And nothing can retrieve it afterwards.
-    const list = await call("GET", "/v1/staff/accounts", superAdmin);
-    expect(await list.text()).not.toContain(created.secret.password);
+  it("lets the newly granted address sign in, and not before", async () => {
+    const theirToken = await firebaseToken({ email: "later@agentdisk.io" });
+    expect((await call("GET", "/v1/staff/workspaces", theirToken)).status).toBe(401);
+
+    await call("POST", "/v1/staff/accounts", superAdmin, {
+      email: "later@agentdisk.io",
+      role: "support",
+      reason,
+    });
+
+    // Same token, unchanged. The grant is a row, read fresh on every request.
+    expect((await call("GET", "/v1/staff/workspaces", theirToken)).status).toBe(200);
   });
 
   it("refuses to disable your own account", async () => {
@@ -363,60 +376,28 @@ describe("staff accounts", () => {
     expect(res.status).toBe(403);
   });
 
-  it("refuses to demote the last super_admin", async () => {
-    await call("POST", "/v1/staff/accounts", superAdmin, {
-      email: "second@agentdisk.io",
-      role: "super_admin",
+  it("cannot demote the last super_admin, because nobody may demote themselves", async () => {
+    // Worth stating plainly, because the guard inside setRole that counts
+    // remaining super_admins is unreachable through the API and looks like dead
+    // code until you work out why.
+    //
+    // Changing a role requires super_admin, and changing your OWN role is
+    // refused. So any caller who can demote a super_admin is themselves an
+    // active super_admin, which means the target was never the last one. The
+    // count guard is belt-and-braces behind that; this is the property that
+    // actually holds.
+    const res = await call("PATCH", "/v1/staff/accounts/stf_SUPER", superAdmin, {
+      role: "support",
       reason,
     });
-    const second = await env.DB.prepare(`SELECT id FROM staff_users WHERE email = ?`)
-      .bind("second@agentdisk.io")
-      .first<{ id: string }>();
+    expect(res.status).toBe(403);
 
-    // Two exist, so this one may be demoted.
-    expect(
-      (await call("PATCH", `/v1/staff/accounts/${second?.id}`, superAdmin, {
-        role: "support",
-        reason,
-      })).status
-    ).toBe(200);
-
-    // Now stf_SUPER is the last one, and it cannot demote itself anyway - so
-    // demote it as the other super_admin would have to. Re-promote second.
-    await call("PATCH", `/v1/staff/accounts/${second?.id}`, superAdmin, {
-      role: "super_admin",
-      reason,
-    });
-    const secondToken = await (async () => {
-      await env.DB.prepare(`UPDATE staff_users SET password_hash = ? WHERE id = ?`)
-        .bind(await hashPassword(PASSWORD), second?.id)
-        .run();
-      await env.DB.prepare(`UPDATE staff_users SET totp_secret = ? WHERE id = ?`)
-        .bind(await encryptSecret(TOTP_SECRET, ENCRYPTION_KEY), second?.id)
-        .run();
-      return login("second@agentdisk.io");
-    })();
-
-    // second demotes stf_SUPER: allowed, two super_admins exist.
-    expect(
-      (await call("PATCH", "/v1/staff/accounts/stf_SUPER", secondToken, {
-        role: "admin",
-        reason,
-      })).status
-    ).toBe(200);
+    // And the role really did not move.
+    const row = await env.DB.prepare(`SELECT role FROM staff_users WHERE id = 'stf_SUPER'`)
+      .first<{ role: string }>();
+    expect(row?.role).toBe("super_admin");
   });
 
-  it("revokes live sessions when an account is disabled", async () => {
-    // Without this a disabled staff member keeps cross-tenant reach for up to
-    // the remaining four hours of a session that was already open - which is
-    // the whole window somebody removed for cause would use.
-    await call("PATCH", "/v1/staff/accounts/stf_ADMIN/disable", superAdmin, {
-      disabled: true,
-      reason,
-    });
-
-    expect((await call("GET", "/v1/staff/workspaces", admin)).status).toBe(401);
-  });
 });
 
 /* -------------------------------- the audit ------------------------------ */

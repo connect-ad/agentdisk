@@ -1,44 +1,41 @@
 /**
- * `/v1/staff/*` — 14 PART 27.5.
+ * `/v1/staff/*` — 14 PART 27.5, as amended.
  *
  * The only place `StaffScopedAccess` is constructed, which is what keeps the
  * cross-tenant exception auditable by reading rather than by grepping.
  *
- * **TOTP is mandatory, every login, no exceptions.** Customer auth requires no
- * second factor; staff auth requires one always. That is not inconsistency, it
- * is proportionality — a staff credential is the one credential type in the
- * system with cross-tenant reach, so it gets the categorically higher bar.
+ * ── Authentication is Firebase; authorisation is this database ─────────────
+ * There is no staff password and no staff TOTP any more. Staff sign in through
+ * the same Firebase project as customers, and `staff_users` decides what that
+ * identity may do here. Migration 0014 carries the full reasoning, including
+ * what was traded away.
  *
- * **A staff session is never accepted on a customer route, and a customer
- * credential is never accepted here.** They are separate tables, separate token
- * shapes and separate code paths, so there is no path along which one could be
- * evaluated against the other's logic.
+ * The consequence worth holding in mind while reading anything below: **one
+ * token now reaches both the customer surface and this one.** Nothing about the
+ * credential distinguishes them. `requireStaff` is the entire boundary, and it
+ * is a row lookup - which is why the role is never read from a Firebase claim,
+ * where a demotion would linger in a token already issued.
+ *
+ * The email must be one Firebase has VERIFIED. Without that check, anybody able
+ * to create an account naming a staff address would inherit that staff row.
  */
 
 import { z } from "zod";
 import { ApiError, unauthorized, validationError } from "../lib/errors";
-import { DUMMY_PASSWORD_HASH, verifyPassword, verifyTotp, readTotpSecret } from "../staff/crypto";
 import { sendPasswordResetEmail, type EmailConfig } from "../lib/email";
 import {
   generatePasswordResetLink,
   type FirebaseAdminConfig,
 } from "../auth/firebase-admin";
 import {
-  createStaffSession,
-  resolveStaffSession,
-  revokeStaffSession,
+  findStaffByEmail,
+  touchStaffLogin,
   StaffScopedAccess,
   requireStaffRole,
   type StaffUser,
 } from "../staff/access";
+import { verifyFirebaseToken, type JwksCache } from "../auth/firebase";
 
-const loginSchema = z.object({
-  email: z.string().trim().toLowerCase().email(),
-  password: z.string().min(1),
-  // Required, not optional. A schema that allowed it to be absent would make
-  // "forgot to send a code" and "chose not to" the same request.
-  totp: z.string().trim().min(6).max(8),
-});
 
 export function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -73,115 +70,13 @@ export interface StaffDeps {
   sourceIp?: string | null;
   /** Stripe, for the plan screens. Absent means those endpoints refuse, naming why. */
   stripeSecretKey?: string;
+  /**
+   * The same Firebase verifier the customer chain uses, and deliberately the
+   * same project: one sign-in for every surface is the point of 0014.
+   */
+  firebase?: { cache: JwksCache; projectId: string };
 }
 
-/** Failed logins per email per window, before the account is refused outright. */
-const LOGIN_ATTEMPT_LIMIT = 5;
-const LOGIN_WINDOW_SECONDS = 900;
-
-async function countFailure(kv: KVNamespace, email: string): Promise<number> {
-  const key = `staff:login:${email}`;
-  const current = Number.parseInt((await kv.get(key)) ?? "0", 10);
-  const next = Number.isFinite(current) ? current + 1 : 1;
-  await kv.put(key, String(next), { expirationTtl: LOGIN_WINDOW_SECONDS });
-  return next;
-}
-
-async function isLockedOut(kv: KVNamespace, email: string): Promise<boolean> {
-  const current = Number.parseInt((await kv.get(`staff:login:${email}`)) ?? "0", 10);
-  return Number.isFinite(current) && current >= LOGIN_ATTEMPT_LIMIT;
-}
-
-/**
- * POST /v1/staff/login
- *
- * Every failure below returns the same body. Whether the email is unknown, the
- * password is wrong, the code is wrong or the account is disabled, the caller
- * learns only that the attempt failed — the alternative is an oracle that lets
- * somebody enumerate staff accounts and then work on one they know exists.
- */
-export async function staffLogin(request: Request, deps: StaffDeps): Promise<Response> {
-  if (deps.encryptionKey === undefined || deps.encryptionKey === "") {
-    // Without it the TOTP secret cannot be decrypted, so the second factor
-    // cannot be checked. Refusing to run is the only safe answer.
-    throw new ApiError("INTERNAL_ERROR", "Staff login is not configured.", {
-      internalReason: "DATABASE_ENCRYPTION_KEY is not set",
-    });
-  }
-
-  let body;
-  try {
-    body = loginSchema.parse(await request.json());
-  } catch {
-    throw validationError("Email, password and authenticator code are all required.");
-  }
-
-  if (await isLockedOut(deps.kv, body.email)) {
-    // Deliberately distinguishable from a bad password: somebody locked out
-    // needs to know waiting is the answer, and a lockout is not a secret - an
-    // attacker triggering it already knows they triggered it.
-    throw new ApiError("LIMIT_EXCEEDED", "Too many failed attempts. Try again in 15 minutes.");
-  }
-
-  const row = await deps.db
-    .prepare(
-      `SELECT id, email, role, password_hash AS passwordHash, totp_secret AS totpSecret,
-              disabled_at AS disabledAt
-         FROM staff_users WHERE email = ?`
-    )
-    .bind(body.email)
-    .first<{
-      id: string; email: string; role: string;
-      passwordHash: string; totpSecret: string; disabledAt: number | null;
-    }>();
-
-  const fail = async (reason: string): Promise<never> => {
-    await countFailure(deps.kv, body.email);
-    throw unauthorized(reason);
-  };
-
-  if (row === null) {
-    // Still hash something, so a missing account does not return measurably
-    // faster than a wrong password.
-    await verifyPassword(body.password, DUMMY_PASSWORD_HASH);
-    return fail(`no staff account for ${body.email}`);
-  }
-  if (row.disabledAt !== null) return fail(`staff account ${row.id} is disabled`);
-  if (!(await verifyPassword(body.password, row.passwordHash))) {
-    return fail(`wrong password for staff ${row.id}`);
-  }
-
-  const secret = await readTotpSecret(row.totpSecret, deps.encryptionKey);
-  if (secret === null) return fail(`TOTP secret for staff ${row.id} could not be read`);
-  if (!(await verifyTotp(secret, body.totp, deps.now))) {
-    return fail(`wrong TOTP code for staff ${row.id}`);
-  }
-
-  // Only a fully successful login clears the counter. Clearing it on a correct
-  // password but wrong code would let somebody who has the password brute-force
-  // the six digits indefinitely.
-  await deps.kv.delete(`staff:login:${body.email}`);
-
-  const session = await createStaffSession(deps.db, row.id, deps.now);
-  await deps.db
-    .prepare(`UPDATE staff_users SET last_login_at = ? WHERE id = ?`)
-    .bind(deps.now, row.id)
-    .run();
-
-  return json({
-    token: session.token,
-    expiresAt: new Date(session.expiresAt).toISOString(),
-    staff: { id: row.id, email: row.email, role: row.role },
-  });
-}
-
-export async function staffLogout(request: Request, deps: StaffDeps): Promise<Response> {
-  const token = bearer(request);
-  if (token !== null) await revokeStaffSession(deps.db, token, deps.now);
-  // Unconditionally 200: logging out something already logged out is the
-  // caller's intent satisfied, not a failure.
-  return json({ loggedOut: true });
-}
 
 function bearer(request: Request): string | null {
   const header = request.headers.get("authorization");
@@ -190,13 +85,46 @@ function bearer(request: Request): string | null {
   return match?.[1] ?? null;
 }
 
-/** Resolve the session or refuse. Used by every route below. */
+/**
+ * Resolve the caller to a staff member, or refuse.
+ *
+ * Three things have to hold, and each refusal is the same body as every other
+ * authentication failure - the reason goes to the log, never to the caller:
+ *
+ *   1. The Firebase token verifies against this deployment's project.
+ *   2. Firebase has VERIFIED the email. An unverified address would let anyone
+ *      who can type a staff address into a signup form inherit that staff row.
+ *   3. A `staff_users` row exists for it and is not disabled.
+ *
+ * `last_login_at` is touched on the way through. It is the Staff Accounts
+ * screen's "last seen", and with no session table there is nowhere else it
+ * could come from.
+ */
 export async function requireStaff(request: Request, deps: StaffDeps): Promise<StaffUser> {
   const token = bearer(request);
-  if (token === null) throw unauthorized("no staff session token");
+  if (token === null) throw unauthorized("no staff credential");
 
-  const staff = await resolveStaffSession(deps.db, token, deps.now);
-  if (staff === null) throw unauthorized("staff session is not valid");
+  if (deps.firebase === undefined) {
+    throw new ApiError("INTERNAL_ERROR", "Staff sign-in is not configured here.", {
+      internalReason: "no Firebase project configured for the staff routes",
+    });
+  }
+
+  const claims = await verifyFirebaseToken(token, {
+    cache: deps.firebase.cache,
+    projectId: deps.firebase.projectId,
+    now: deps.now,
+  });
+
+  if (claims.email === null || !claims.emailVerified) {
+    throw unauthorized(`staff token for ${claims.uid} carries no verified email`);
+  }
+
+  const staff = await findStaffByEmail(deps.db, claims.email);
+  if (staff === null) throw unauthorized(`${claims.email} is not a staff account`);
+  if (staff.disabledAt !== null) throw unauthorized(`staff account ${staff.id} is disabled`);
+
+  await touchStaffLogin(deps.db, staff.id, deps.now);
   return staff;
 }
 

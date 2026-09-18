@@ -40,80 +40,45 @@ export interface StaffUser {
   disabledAt: number | null;
 }
 
-/** Four hours (27.2), not thirty days. A stolen staff session is the worst case. */
-export const STAFF_SESSION_MS = 4 * 60 * 60 * 1000;
-
-export async function hashToken(token: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
-  return Array.from(new Uint8Array(digest))
-    .map(b => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-export function generateSessionToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-export async function createStaffSession(
-  db: D1Database,
-  staffUserId: string,
-  now: number
-): Promise<{ token: string; expiresAt: number }> {
-  const token = generateSessionToken();
-  const expiresAt = now + STAFF_SESSION_MS;
-
-  await db
-    .prepare(
-      `INSERT INTO staff_sessions (id, staff_user_id, token_hash, expires_at, revoked_at, created_at)
-       VALUES (?, ?, ?, ?, NULL, ?)`
-    )
-    .bind(newId("staffSession", now), staffUserId, await hashToken(token), expiresAt, now)
-    .run();
-
-  return { token, expiresAt };
-}
-
 /**
- * Resolve a session token to a staff user, or nothing.
+ * Resolve a staff member from a verified Firebase email.
  *
- * Every failure returns null rather than a distinguishable error, for the same
- * reason customer authentication does: a response that says *why* is an oracle.
+ * This is the whole of staff authentication now. Firebase says WHO somebody is;
+ * this row says WHAT they are, and a missing row means "not staff" rather than
+ * "no permissions" - the two are the same answer here and that is deliberate.
+ *
+ * **Never a Firebase custom claim.** A claim is minted into a token once and
+ * stays true for that token's lifetime, so a demotion or a disable would not
+ * take effect until it expired. A row is read on every request, so both are
+ * immediate. Since one token now reaches both the customer and the staff
+ * surface, that immediacy is the thing standing between them.
+ *
+ * The email is lowercased on both sides. An address differing only in case is
+ * the same person to Google and would otherwise be a different staff member to
+ * us - an authorisation gap, not a cosmetic one.
  */
-export async function resolveStaffSession(
+export async function findStaffByEmail(
   db: D1Database,
-  token: string,
-  now: number
+  email: string
 ): Promise<StaffUser | null> {
-  const row = await db
+  return db
     .prepare(
-      `SELECT u.id, u.email, u.role, u.disabled_at AS disabledAt
-         FROM staff_sessions s
-         JOIN staff_users u ON u.id = s.staff_user_id
-        WHERE s.token_hash = ?
-          AND s.revoked_at IS NULL
-          AND s.expires_at > ?`
+      `SELECT id, email, role, disabled_at AS disabledAt
+         FROM staff_users WHERE email = ?`
     )
-    .bind(await hashToken(token), now)
-    .first<{ id: string; email: string; role: string; disabledAt: number | null }>();
-
-  if (row === null) return null;
-  // A disabled account's live sessions stop working immediately, rather than
-  // lasting until they expire. Disabling somebody is usually urgent.
-  if (row.disabledAt !== null) return null;
-  if (!isStaffRole(row.role)) return null;
-
-  return { id: row.id, email: row.email, role: row.role, disabledAt: row.disabledAt };
+    .bind(email.trim().toLowerCase())
+    .first<StaffUser>();
 }
 
-export async function revokeStaffSession(
+/** Record that they were here, for the Staff Accounts screen's "last seen". */
+export async function touchStaffLogin(
   db: D1Database,
-  token: string,
+  staffId: string,
   now: number
 ): Promise<void> {
   await db
-    .prepare(`UPDATE staff_sessions SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL`)
-    .bind(now, await hashToken(token))
+    .prepare(`UPDATE staff_users SET last_login_at = ? WHERE id = ?`)
+    .bind(now, staffId)
     .run();
 }
 

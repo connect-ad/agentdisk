@@ -22,29 +22,29 @@ import {
 /**
  * Staff accounts. super_admin only, all of it.
  *
- * ── Two states, not three ──────────────────────────────────────────────────
- * TOTP is mandatory for every account, so a row can be *pending enrolment* —
- * created, credential shown once, never signed in — but never
- * *enrolled-without-TOTP*. The design's "2FA: OFF" is a state that cannot
- * exist here, and showing it would suggest it could.
+ * ── An account is an address and a role ────────────────────────────────────
+ * Nothing secret is created here, so nothing is shown once. Adding somebody
+ * grants an email address a role; they sign in with Google like everybody else
+ * and the API reads this row to decide what they may do. That also means a row
+ * can exist for an address that has never signed in — which is how you onboard
+ * somebody before their first day, and equally how you could grant access to an
+ * address you do not control. Hence super_admin only, and audited.
  *
- * A pending account CAN sign in: enrolment is scanning the QR, there is no
- * separate confirm step, and presenting a valid code is the only proof it was
- * scanned. The first successful login flips the row to enrolled. Refusing a
- * pending account outright — which one reading of the brief asks for — would
- * produce an account that can never be used at all.
+ * ── No 2FA column ──────────────────────────────────────────────────────────
+ * The design has one. Firebase owns authentication now, so whether a staff
+ * member has two-factor set up is a fact about their Google account and not
+ * something this database knows. Showing a column we cannot fill would be
+ * exactly the invented data the rest of this console refuses to render.
  *
  * ── Never deleted, only disabled ───────────────────────────────────────────
- * And the footer says so, truthfully: the audit log has to keep resolving a
- * historical actor, so the row survives whatever happens to the person.
+ * Unchanged: the audit log has to keep resolving a historical actor.
  */
 
-const COLS = 'minmax(0,1.5fr) 110px 130px 140px 100px 130px';
+const COLS = 'minmax(0,1.6fr) 110px 150px 110px 130px';
 
 export function StaffAccounts({ currentStaffId, onToast }) {
   const resource = useResource(() => staffApi.listAccounts(), []);
   const [creating, setCreating] = useState(false);
-  const [created, setCreated] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -94,8 +94,7 @@ export function StaffAccounts({ currentStaffId, onToast }) {
               <div style={headRow(COLS)}>
                 <span style={th}>Staff member</span>
                 <span style={th}>Role</span>
-                <span style={th}>2FA</span>
-                <span style={th}>Last sign-in</span>
+                <span style={th}>Last seen</span>
                 <span style={th}>Status</span>
                 <span style={th}>Actions</span>
               </div>
@@ -121,11 +120,8 @@ export function StaffAccounts({ currentStaffId, onToast }) {
                       </span>
                     </span>
                     <span style={pills.accent}>{account.role}</span>
-                    <span style={account.totpConfirmedAt ? pills.ok : pills.warn}>
-                      {account.totpConfirmedAt ? 'enrolled' : 'pending enrolment'}
-                    </span>
                     <span style={{ fontSize: '12px', color: 'var(--tx2)', ...ellipsis }}>
-                      {account.lastLoginAt ? dateTime(account.lastLoginAt) : 'never'}
+                      {account.lastLoginAt ? dateTime(account.lastLoginAt) : 'never signed in'}
                     </span>
                     <span style={account.disabledAt ? pills.danger : pills.ok}>
                       {account.disabledAt ? 'disabled' : 'active'}
@@ -197,23 +193,10 @@ export function StaffAccounts({ currentStaffId, onToast }) {
           setCreating(false);
           setError(null);
         }}
-        onSubmit={async (email, role, reason) => {
-          setBusy(true);
-          setError(null);
-          try {
-            const result = await staffApi.createAccount(email, role, reason);
-            setCreating(false);
-            setCreated(result);
-            await resource.refresh();
-          } catch (err) {
-            setError(err);
-          } finally {
-            setBusy(false);
-          }
-        }}
+        onSubmit={(email, role, reason) =>
+          act(() => staffApi.createAccount(email, role, reason), `${email} can now sign in as ${role}.`)
+        }
       />
-
-      <CredentialOnce created={created} onClose={() => setCreated(null)} />
 
       <ConfirmModal
         open={dialog?.kind === 'disable'}
@@ -264,10 +247,10 @@ function InviteDialog({ open, busy, error, onCancel, onSubmit }) {
     <Modal
       open={open}
       title="Invite a staff member"
-      description="Creates the account and shows its password and TOTP enrolment code once. Nothing stores them and no later call can retrieve them."
+      description="Grants an email address a staff role. They sign in with Google like everybody else — there is no invitation to send and no credential to deliver."
       onClose={onCancel}
       onSubmit={() => onSubmit(email.trim(), role, reason.trim())}
-      submitLabel="Create account"
+      submitLabel="Grant access"
       submitDisabled={!email.includes('@') || reason.trim().length < 3}
       destructive={false}
       busy={busy}
@@ -312,76 +295,6 @@ function InviteDialog({ open, busy, error, onCancel, onSubmit }) {
           <ErrorState error={error} />
         </div>
       )}
-    </Modal>
-  );
-}
-
-/**
- * The credential, shown once.
- *
- * Same contract as a customer API key: this response is the only place it ever
- * exists. There is no "show again", because there is nowhere to show it from —
- * the row holds a PBKDF2 hash and an AES-GCM ciphertext.
- */
-function CredentialOnce({ created, onClose }) {
-  const [acknowledged, setAcknowledged] = useState(false);
-
-  if (!created) return null;
-
-  const box = {
-    ...mono,
-    fontSize: '12.5px',
-    color: 'var(--codeTx)',
-    background: 'var(--code)',
-    border: '1px solid var(--bd)',
-    borderRadius: '8px',
-    padding: '10px 12px',
-    marginBottom: '12px',
-    wordBreak: 'break-all'
-  };
-
-  return (
-    <Modal
-      open
-      title="Shown once"
-      description="Copy both of these now and send them to the new staff member through a channel you trust. Nothing here can show them again."
-      onClose={() => {
-        setAcknowledged(false);
-        onClose();
-      }}
-      onSubmit={() => {
-        setAcknowledged(false);
-        onClose();
-      }}
-      submitLabel="I have copied them"
-      submitDisabled={!acknowledged}
-      destructive={false}
-      width={560}
-    >
-      <label style={label}>Account</label>
-      <div style={box}>
-        {created.account.email} · {created.account.role}
-      </div>
-
-      <label style={label}>Password</label>
-      <div style={box}>{created.secret.password}</div>
-
-      <label style={label}>TOTP enrolment</label>
-      <div style={box}>{created.secret.provisioningUri}</div>
-      <div style={{ fontSize: '11.5px', color: 'var(--tx3)', marginBottom: '14px' }}>
-        Or type the secret manually: <span style={mono}>{created.secret.totpSecret}</span>
-      </div>
-
-      <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <input
-          type="checkbox"
-          checked={acknowledged}
-          onChange={event => setAcknowledged(event.target.checked)}
-        />
-        <span style={{ fontSize: '12.5px', color: 'var(--tx)' }}>
-          I have copied these and understand they cannot be shown again.
-        </span>
-      </label>
     </Modal>
   );
 }

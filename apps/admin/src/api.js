@@ -1,27 +1,27 @@
 /**
  * The staff API client.
  *
- * Deliberately separate from `apps/web`'s: this speaks `/v1/staff/*` with a
- * staff session token, and that token must never end up on a customer route or
- * in the customer dashboard's storage. Sharing a client between the two apps
- * would make that a matter of care rather than of structure.
+ * Speaks `/v1/staff/*` with a Firebase ID token — the same credential the
+ * customer dashboard uses, because migration 0014 made staff auth Firebase and
+ * left authorisation to the `staff_users` row behind it.
  *
- * The token lives in `sessionStorage`, not `localStorage`. A staff session is
- * four hours and the single highest-value credential in the system; closing the
- * tab should end it, and it should not sit on disk waiting for the next person
- * to use that machine.
+ * ── Nothing here stores a token ────────────────────────────────────────────
+ * The previous version kept a staff session token in `sessionStorage`. There is
+ * nothing to keep now: the Firebase SDK holds the refresh token and mints a
+ * fresh ID token on demand, so every request asks for the current one. A token
+ * cached by this module would be the one thing capable of outliving a sign-out.
  *
  * ── The 401 subscription ───────────────────────────────────────────────────
- * A four-hour session with no refresh rotation means staff WILL hit expiry
- * mid-task. Every 401 from a call that carried a token is published to
- * `onSessionLost`, so the shell can raise a re-authentication prompt that keeps
- * the current route rather than redirecting and losing the operator's place.
- * Handled here rather than at each call site because there are sixty call sites
- * and one of them would be forgotten.
+ * A 401 no longer means only "expired". It also means "your staff row was
+ * removed or disabled", which takes effect on the very next request. Either way
+ * the shell needs to know, so every 401 from a call that carried a token is
+ * published to `onSessionLost`. Handled here rather than at sixty call sites,
+ * one of which would be forgotten.
  */
 
+import { currentIdToken } from './lib/firebase.js';
+
 const BASE = import.meta.env.VITE_API_BASE ?? 'https://api-dev.agentdisk.io';
-const TOKEN_KEY = 'agentdisk.staff.token';
 
 export class StaffApiError extends Error {
   constructor(status, code, message, requestId, details) {
@@ -34,22 +34,6 @@ export class StaffApiError extends Error {
   }
 }
 
-export function storedToken() {
-  try {
-    return window.sessionStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function storeToken(token) {
-  try {
-    if (token) window.sessionStorage.setItem(TOKEN_KEY, token);
-    else window.sessionStorage.removeItem(TOKEN_KEY);
-  } catch {
-    /* Storage blocked. The session then lasts as long as the page does. */
-  }
-}
 
 const sessionLostListeners = new Set();
 
@@ -60,7 +44,7 @@ export function onSessionLost(listener) {
 }
 
 async function request(path, { method = 'GET', body, token, raw = false } = {}) {
-  const auth = token ?? storedToken();
+  const auth = token ?? (await currentIdToken());
 
   const res = await fetch(new URL(path, BASE), {
     method,
@@ -88,9 +72,8 @@ async function request(path, { method = 'GET', body, token, raw = false } = {}) 
       /* Non-JSON error. The status is all there is. */
     }
 
-    // Only when we actually presented a credential. A 401 on the login call
-    // itself is a wrong password, not an expired session, and raising the
-    // re-authentication prompt there would be nonsense.
+    // Only when we actually presented a credential. A 401 with no token is
+    // simply "not signed in yet", which the shell already knows.
     if (res.status === 401 && auth) {
       for (const listener of sessionLostListeners) listener();
     }
@@ -112,10 +95,11 @@ const query = params => {
 };
 
 export const staffApi = {
-  /* ------------------------------- session ------------------------------- */
-  login: (email, password, totp) =>
-    request('/v1/staff/login', { method: 'POST', body: { email, password, totp } }),
-  logout: () => request('/v1/staff/logout', { method: 'POST' }),
+  /* ------------------------------- session -------------------------------
+   * No login or logout call. Signing in happens in the browser against
+   * Firebase; signing out is discarding the token there. `whoami` is how the
+   * console asks whether this identity is staff at all, and what role it holds.
+   */
   whoami: () => request('/v1/staff/whoami'),
 
   /* ------------------------------- overview ------------------------------ */
@@ -208,6 +192,7 @@ export const staffApi = {
 
   /* ---------------------------- staff accounts --------------------------- */
   listAccounts: () => request('/v1/staff/accounts'),
+  /** Grants an address a role. Mints nothing — there is no credential to show. */
   createAccount: (email, role, reason) =>
     request('/v1/staff/accounts', { method: 'POST', body: { email, role, reason } }),
   setAccountRole: (id, role, reason) =>

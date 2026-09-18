@@ -24,8 +24,8 @@
  */
 
 import { SELF, env } from "cloudflare:test";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { currentTotp, encryptSecret, hashPassword } from "../src/staff/crypto";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { asStaff, installStaffJwks } from "./staff-auth";
 import { NOW, seedTwoWorkspaces } from "./helpers";
 
 const URL_BASE = "https://api-dev.agentdisk.io";
@@ -40,15 +40,6 @@ const USER_EMAIL = "test@example.com";
 const RESET_LINK =
   "https://agentdisk-dev.firebaseapp.com/__/auth/action?mode=resetPassword&oobCode=SECRET_OOB_CODE";
 
-async function seedStaff(id: string, email: string, role: string): Promise<void> {
-  await env.DB.prepare(
-    `INSERT INTO staff_users
-       (id, email, password_hash, totp_secret, role, disabled_at, last_login_at, created_at)
-     VALUES (?, ?, ?, ?, ?, NULL, NULL, ?)`
-  )
-    .bind(id, email, await hashPassword(PASSWORD), await encryptSecret(TOTP_SECRET, ENCRYPTION_KEY), role, NOW)
-    .run();
-}
 
 function post(path: string, body?: unknown, token?: string): Promise<Response> {
   return SELF.fetch(`${URL_BASE}${path}`, {
@@ -61,16 +52,6 @@ function post(path: string, body?: unknown, token?: string): Promise<Response> {
   });
 }
 
-async function login(email: string): Promise<string> {
-  const res = await post("/v1/staff/login", {
-    email,
-    password: PASSWORD,
-    totp: await currentTotp(TOTP_SECRET, Date.now()),
-  });
-  const body = (await res.json()) as { token?: string };
-  if (body.token === undefined) throw new Error(`login failed: ${JSON.stringify(body)}`);
-  return body.token;
-}
 
 interface StubOptions {
   /** What Identity Toolkit answers. `missing` is its EMAIL_NOT_FOUND shape. */
@@ -156,13 +137,15 @@ async function fleetRows(): Promise<
   return rows.results ?? [];
 }
 
+let supportToken = "";
+let adminToken = "";
+
+beforeAll(installStaffJwks);
+
 beforeEach(async () => {
   await seedTwoWorkspaces();
-  for (const table of ["staff_sessions", "staff_users", "staff_actions", "audit_events"]) {
+  for (const table of ["staff_users", "staff_actions", "audit_events"]) {
     await env.DB.prepare(`DELETE FROM ${table}`).run();
-  }
-  for (const email of ["support@agentdisk.io", "admin@agentdisk.io"]) {
-    await env.CACHE.delete(`staff:login:${email}`);
   }
   // The access token is cached across requests by design; left in place it
   // would make the "mints a token" assertion pass or fail on test order.
@@ -180,8 +163,8 @@ beforeEach(async () => {
     .bind("mem_TESTMEMBER", "org_TESTORG", USER_ID, "owner", NOW)
     .run();
 
-  await seedStaff("stf_SUPPORT", "support@agentdisk.io", "support");
-  await seedStaff("stf_ADMIN", "admin@agentdisk.io", "admin");
+  supportToken = await asStaff("support@agentdisk.io", "support", { id: "stf_SUPPORT" });
+  adminToken = await asStaff("admin@agentdisk.io", "admin", { id: "stf_ADMIN" });
 });
 
 afterEach(() => {
@@ -191,7 +174,7 @@ afterEach(() => {
 describe("staff password reset", () => {
   it("sends the link to the customer and never returns it", async () => {
     const outbound = stubOutbound();
-    const token = await login("support@agentdisk.io");
+    const token = supportToken;
 
     const res = await post(
       `/v1/staff/users/${USER_ID}/password-reset`,
@@ -228,7 +211,7 @@ describe("staff password reset", () => {
     // instead of a Web API key. Without it Firebase sends its own mail, from a
     // second sender identity, with wording nobody in this repo can edit.
     const outbound = stubOutbound();
-    const token = await login("support@agentdisk.io");
+    const token = supportToken;
 
     await post(`/v1/staff/users/${USER_ID}/password-reset`, { reason: "Ticket 4471." }, token);
 
@@ -242,7 +225,7 @@ describe("staff password reset", () => {
 
   it("records the attempt in the fleet log, without the link", async () => {
     stubOutbound();
-    const token = await login("support@agentdisk.io");
+    const token = supportToken;
 
     await post(
       `/v1/staff/users/${USER_ID}/password-reset`,
@@ -265,7 +248,7 @@ describe("staff password reset", () => {
 
   it("also writes a workspace-scoped row the customer can see", async () => {
     stubOutbound();
-    const token = await login("support@agentdisk.io");
+    const token = supportToken;
 
     await post(`/v1/staff/users/${USER_ID}/password-reset`, { reason: "Ticket 4471." }, token);
 
@@ -287,7 +270,7 @@ describe("staff password reset", () => {
     // nothing. A support engineer who is told the mail went has told a customer
     // the same thing.
     stubOutbound({ mail: "rejected" });
-    const token = await login("support@agentdisk.io");
+    const token = supportToken;
 
     const res = await post(`/v1/staff/users/${USER_ID}/password-reset`, { reason: "Ticket 4471." }, token);
     expect(res.status).toBe(500);
@@ -299,7 +282,7 @@ describe("staff password reset", () => {
 
   it("accepts an address Firebase has no identity for, and says so only in the log", async () => {
     const outbound = stubOutbound({ identity: "missing" });
-    const token = await login("support@agentdisk.io");
+    const token = supportToken;
 
     const res = await post(`/v1/staff/users/${USER_ID}/password-reset`, { reason: "Ticket 4471." }, token);
     expect(res.status).toBe(200);
@@ -314,7 +297,7 @@ describe("staff password reset", () => {
 
   it("refuses without a reason", async () => {
     stubOutbound();
-    const token = await login("support@agentdisk.io");
+    const token = supportToken;
 
     const res = await post(`/v1/staff/users/${USER_ID}/password-reset`, { reason: "  " }, token);
     expect(res.status).toBe(400);
@@ -323,7 +306,7 @@ describe("staff password reset", () => {
 
   it("refuses an unknown user before sending anything", async () => {
     const outbound = stubOutbound();
-    const token = await login("support@agentdisk.io");
+    const token = supportToken;
 
     const res = await post("/v1/staff/users/usr_NOSUCHUSER/password-reset", { reason: "Ticket." }, token);
     expect(res.status).toBe(404);
@@ -343,9 +326,6 @@ describe("staff password reset", () => {
     // engineer performs on the phone, and it grants the staff member nothing -
     // the link goes to the customer's address, never to them.
     stubOutbound();
-    const supportToken = await login("support@agentdisk.io");
-    const adminToken = await login("admin@agentdisk.io");
-
     for (const token of [supportToken, adminToken]) {
       const res = await post(`/v1/staff/users/${USER_ID}/password-reset`, { reason: "Ticket." }, token);
       expect(res.status).toBe(200);
@@ -354,7 +334,7 @@ describe("staff password reset", () => {
 
   it("caches the access token across requests", async () => {
     const outbound = stubOutbound();
-    const token = await login("support@agentdisk.io");
+    const token = supportToken;
 
     await post(`/v1/staff/users/${USER_ID}/password-reset`, { reason: "One." }, token);
     await post(`/v1/staff/users/${USER_ID}/password-reset`, { reason: "Two." }, token);

@@ -311,15 +311,18 @@ jobs:
             exit 1
           fi
 
-          if [ "$APP" = "web" ]; then
-            if [ -z "${VITE_TURNSTILE_SITE_KEY:-}" ]; then
-              echo "::error::No Turnstile site key from Terraform; /sandbox could not create a workspace."
-              exit 1
-            fi
+          if [ "$APP" = "web" ] && [ -z "${VITE_TURNSTILE_SITE_KEY:-}" ]; then
+            echo "::error::No Turnstile site key from Terraform; /sandbox could not create a workspace."
+            exit 1
+          fi
 
-            # Fatal rather than a warning. The build succeeds without these and
-            # ships a dashboard whose every sign-in button fails at runtime - a
-            # deploy that looks green and is not.
+          # Both apps now, not just the dashboard. Migration 0014 made the staff
+          # console sign in through the same Firebase project, so a console built
+          # without these ships a Sign in with Google button that throws - a
+          # deploy that looks green and is not, which is exactly what this check
+          # exists to prevent for apps/web.
+          if [ "$APP" = "web" ] || [ "$APP" = "admin" ]; then
+            # Fatal rather than a warning.
             missing=""
             for name in VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_APP_ID; do
               [ -z "${!name:-}" ] && missing="$missing $name"

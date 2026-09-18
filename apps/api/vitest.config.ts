@@ -41,8 +41,6 @@ export default defineConfig(async () => {
             TURNSTILE_SECRET_KEY: "test-turnstile-secret",
             // Billing refuses to run without both, so the webhook tests
             // would never reach the signature check they exist to exercise.
-            // Staff login refuses to run without it, because it decrypts
-            // the TOTP secret and an unverifiable second factor is not one.
             DATABASE_ENCRYPTION_KEY: "test-database-encryption-key",
             STRIPE_SECRET_KEY: "sk_test_dummy",
             STRIPE_WEBHOOK_SECRET: "whsec_test_secret",

@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { onSessionLost, staffApi, storeToken, storedToken } from './api.js';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { auth, firebaseConfigured } from './lib/firebase.js';
+import { onSessionLost, staffApi } from './api.js';
 import { Shell, holds } from './components/Shell.jsx';
 import { SessionExpired } from './components/States.jsx';
 import { ToastDock } from './components/Overlay.jsx';
@@ -23,12 +25,17 @@ import { freshnessLabel } from './lib/useResource.js';
  * matching nine strings. Deep links work, Back works, and no route reloads the
  * page — which is the whole of what the design asks for.
  *
- * ── An expired session keeps your place ────────────────────────────────────
- * A four-hour session with no rotation means staff will hit expiry mid-task.
- * Every 401 raises a re-authentication prompt over the current route rather
- * than a redirect, so signing back in puts the operator exactly where they
- * were — the design has no such state and this is the commonest thing that
- * will happen to a real user of it.
+ * ── Two different "signed out" states, and they are not the same ───────────
+ * **Not signed in** shows the Google button. **Signed in but not staff** shows
+ * the same screen with the address named and an explanation, because that is
+ * what happens when somebody's staff row is removed, or when they use their
+ * personal Google account by mistake. Collapsing the two would present a
+ * sign-in button to somebody already signed in, which reads as broken.
+ *
+ * A 401 mid-task now means either an expired token or a staff row that was just
+ * disabled — disable takes effect on the very next request. Either way the
+ * prompt keeps the current route, so signing back in returns to the same
+ * screen rather than losing the operator's place.
  *
  * ── Role gating happens here AND on the server ─────────────────────────────
  * A route the session's role cannot reach renders a refusal rather than a blank
@@ -127,7 +134,8 @@ const ROUTE_ROLE = { staff: 'super_admin' };
 
 export default function App() {
   const [staff, setStaff] = useState(null);
-  const [checking, setChecking] = useState(Boolean(storedToken()));
+  const [identity, setIdentity] = useState(null);
+  const [checking, setChecking] = useState(firebaseConfigured);
   const [expired, setExpired] = useState(false);
   const [toasts, setToasts] = useState([]);
   const [counts, setCounts] = useState({});
@@ -140,23 +148,37 @@ export default function App() {
     window.setTimeout(() => setToasts(current => current.filter(item => item.id !== id)), 6000);
   }, []);
 
-  // Resume a session that survived a reload.
+  /**
+   * Follow Firebase, then ask the API whether this identity is staff.
+   *
+   * Two questions, deliberately in that order and deliberately not merged. The
+   * SDK answers the first locally and instantly; only the API can answer the
+   * second, and it is the one that matters.
+   */
   useEffect(() => {
-    if (!storedToken()) return;
-    let alive = true;
-    (async () => {
+    if (!auth) return undefined;
+    return onAuthStateChanged(auth, async user => {
+      if (!user) {
+        setIdentity(null);
+        setStaff(null);
+        setChecking(false);
+        return;
+      }
+
+      setIdentity(user.email ?? null);
+      setChecking(true);
       try {
         const result = await staffApi.whoami();
-        if (alive) setStaff(result.staff);
+        setStaff(result.staff);
+        setExpired(false);
       } catch {
-        storeToken(null);
+        // Authenticated, but not staff — or no longer staff. Not an error to
+        // report; it is one of the two signed-out states.
+        setStaff(null);
       } finally {
-        if (alive) setChecking(false);
+        setChecking(false);
       }
-    })();
-    return () => {
-      alive = false;
-    };
+    });
   }, []);
 
   // One subscription for every 401 in the app.
@@ -182,34 +204,30 @@ export default function App() {
           fontSize: '13px'
         }}
       >
-        Restoring your session…
+        Checking your staff access…
       </div>
     );
   }
 
   if (!staff) {
-    return (
-      <Login
-        onSignedIn={signedIn => {
-          setStaff(signedIn);
-          setExpired(false);
-        }}
-      />
-    );
+    // `identity` present means signed in but not staff, which the screen says
+    // in those words rather than looping them back to a button.
+    return <Login notStaff={identity} />;
   }
 
   const route = describe(path);
   const needed = ROUTE_ROLE[route.key];
   const permitted = !needed || holds(staff.role, needed);
 
-  async function signOut() {
+  async function endSession() {
+    // Signing out IS discarding the Firebase token; there is no server call.
     try {
-      await staffApi.logout();
+      if (auth) await signOut(auth);
     } catch {
-      /* The session is ending either way. */
+      /* The local state is cleared regardless. */
     }
-    storeToken(null);
     setStaff(null);
+    setIdentity(null);
     navigate('/');
   }
 
@@ -287,7 +305,7 @@ export default function App() {
         counts={counts}
         attention={attention}
         onNavigate={navigate}
-        onSignOut={signOut}
+        onSignOut={endSession}
         title={route.title}
         subtitle={route.subtitle}
       >
@@ -298,7 +316,6 @@ export default function App() {
         <SessionExpired
           onReauthenticate={() => {
             // The path is untouched, so signing in returns to this same screen.
-            storeToken(null);
             setStaff(null);
             setExpired(false);
           }}

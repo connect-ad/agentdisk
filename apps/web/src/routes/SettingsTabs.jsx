@@ -367,7 +367,9 @@ export function PrivacyTab() {
       </Panel>
 
       <section aria-label="Danger zone">
-        <Panel title="Delete my account">
+        {/* Same stack as the two other danger zones — alerts sitting directly on
+            a destructive button — so it takes the same spacing class. */}
+        <Panel title="Delete my account" className="danger-zone">
           <Alert tone="danger" title="This is separate from deleting a workspace">
             Deleting your account removes your profile, sessions and personal data.
           </Alert>

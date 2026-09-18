@@ -1189,3 +1189,13 @@
    it inherited the 14px body default where the reference draws it at 12.5/500
    — the largest single type mismatch in the band. */
 .shell__stripname{font-size:var(--t-12-5);font-weight:var(--w-med);color:var(--ink)}
+
+/* --- danger zone (routes/Settings.jsx, routes/AgentDetails.jsx) ---
+   `.panel__body` is padding and nothing else, so a panel that stacks more than
+   one child leaves them touching. Every other panel in the product happens to
+   stack fields, which carry their own margins; the danger zones stack an Alert
+   directly on a Button, and the red alert box and the red-outlined button met
+   edge to edge and read as one malformed control. The class was already on both
+   panels and had never matched a rule. The gap is the body's own 16px padding,
+   so the space between the two boxes equals the space around them. */
+.danger-zone .panel__body{display:flex;flex-direction:column;gap:var(--s-6)}

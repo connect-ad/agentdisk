@@ -1,60 +1,106 @@
 import React from 'react';
 import { PageHead, Panel, Meter, Button, Icon, Badge, Alert, EmptyState } from '../components/index.js';
+import { useResource } from '../lib/useResource.js';
 
 /**
  * 8.19 Usage — MVP-0 (numbers) / MVP-1 (time-series charts).
  * URL: /w/{ws}/usage
  *
- * States: normal | warning (>=80%) | critical (>=95%) | limit (100%).
- * The limit state mirrors the 429 the API would actually return, so the UI never
- * claims capacity the API would deny.
+ * Every number here is real, read from `GET /v1/whoami`, which returns the
+ * workspace's counters alongside the limits of its plan. Nothing on this screen
+ * is computed in the browser — the API is the thing that will actually refuse a
+ * request at the limit, so it has to be the thing that says where the limit is.
+ * A dashboard that disagreed with it would be worse than one that showed
+ * nothing.
  */
 
-const PLAN = 'Pro';
-const RESET_DAYS = 12;
+const loadUsage = (api, workspaceId) => api.whoami(workspaceId);
 
-const METRICS = {
-  normal:   [4.1, 3120, 22.4, 48902],
-  warning:  [8.4, 8600, 41.2, 84300],
-  critical: [9.7, 9700, 47.6, 96800],
-  limit:    [10, 10000, 50, 100000]
-};
+/** Bytes to something a person reads, at the precision the size deserves. */
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes)) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value >= 10 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
+}
 
-const LIMITS = [
-  { key: 'Storage', limit: 10, unit: 'GB', fmt: v => `${v} GB` },
-  { key: 'Assets', limit: 10000, unit: '', fmt: v => v.toLocaleString() },
-  { key: 'Egress this period', limit: 50, unit: 'GB', fmt: v => `${v} GB` },
-  { key: 'Requests this period', limit: 100000, unit: '', fmt: v => v.toLocaleString() }
-];
+const formatCount = n => (Number.isFinite(n) ? n.toLocaleString() : '—');
 
-export default function Usage({ state = 'normal' }) {
-  const values = METRICS[state] || METRICS.normal;
-  const atLimit = LIMITS.filter((m, i) => values[i] >= m.limit);
+function daysUntil(iso) {
+  if (!iso) return null;
+  const ms = new Date(iso).getTime() - Date.now();
+  if (!Number.isFinite(ms)) return null;
+  return Math.max(0, Math.ceil(ms / 86400000));
+}
+
+export default function Usage() {
+  const { status, data, error, reload } = useResource(loadUsage);
+
+  if (status === 'loading') {
+    return (
+      <>
+        <PageHead title="Usage" />
+        <Panel><p className="ad-meta" aria-live="polite">Loading usage…</p></Panel>
+      </>
+    );
+  }
+
+  if (status === 'failed') {
+    return (
+      <>
+        <PageHead title="Usage" />
+        <Alert
+          tone="danger"
+          title="Could not load your usage"
+          actions={<Button size="sm" onClick={reload}>Try again</Button>}
+        >
+          {error?.message}{error?.requestId ? ` (request ${error.requestId})` : ''}
+        </Alert>
+      </>
+    );
+  }
+
+  const plan = data?.workspace?.plan ?? 'free';
+  const usage = data?.usage ?? {};
+  const resetDays = daysUntil(usage.periodResetAt);
+
+  const metrics = [
+    { key: 'Storage', used: usage.storageBytes?.used, limit: usage.storageBytes?.max, fmt: formatBytes },
+    { key: 'Files', used: usage.files?.used, limit: usage.files?.max, fmt: formatCount },
+    { key: 'Egress this period', used: usage.egressBytes?.used, limit: usage.egressBytes?.max, fmt: formatBytes },
+    { key: 'Requests this period', used: usage.requests?.used, limit: usage.requests?.max, fmt: formatCount }
+  ].filter(m => Number.isFinite(m.limit) && m.limit > 0);
+
+  const atLimit = metrics.filter(m => (m.used ?? 0) >= m.limit);
 
   return (
     <>
       <PageHead
         title="Usage"
-        subtitle={`Resets in ${RESET_DAYS} days.`}
-        meta={<Badge tone="accent">{PLAN}</Badge>}
-        actions={<Button variant="secondary">Upgrade plan</Button>}
+        subtitle={resetDays === null ? undefined : `Resets in ${resetDays} day${resetDays === 1 ? '' : 's'}.`}
+        meta={<Badge tone="accent">{plan}</Badge>}
       />
 
       {atLimit.length > 0 ? (
-        <Alert
-          tone="danger"
-          title={`You've reached your ${atLimit[0].key.toLowerCase()} limit for the ${PLAN} plan.`}
-          actions={<Button size="sm">Upgrade plan</Button>}
-        >
-          Further requests against this metric are refused with a 429 until the period resets.
+        <Alert tone="danger" title={`You've reached your ${atLimit[0].key.toLowerCase()} limit on the ${plan} plan.`}>
+          Further requests against this metric are refused until the period resets.
         </Alert>
       ) : null}
 
-      <Panel title="Plan" subtitle={`${PLAN} — resets in ${RESET_DAYS} days`} actions={<Button size="sm" variant="secondary">Compare plans</Button>}>
+      <Panel
+        title="Plan"
+        subtitle={resetDays === null ? plan : `${plan} — resets in ${resetDays} day${resetDays === 1 ? '' : 's'}`}
+      >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s-7)' }}>
-          {LIMITS.map((m, i) => {
-            const used = values[i];
-            const pct = Math.round((used / m.limit) * 100);
+          {metrics.map(m => {
+            const used = m.used ?? 0;
+            const pct = Math.min(100, Math.round((used / m.limit) * 100));
             return (
               <div key={m.key} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s-3)' }}>
                 <div className="row" style={{ gap: 'var(--s-4)' }}>
@@ -62,7 +108,10 @@ export default function Usage({ state = 'normal' }) {
                     {m.key} — {m.fmt(used)} of {m.fmt(m.limit)}
                   </span>
                   {/* Text equivalent alongside the bar — never bar-only (spec: Accessibility). */}
-                  <span className="ad-mono-sm" style={{ color: pct >= 95 ? 'var(--danger)' : pct >= 80 ? 'var(--warn)' : 'var(--ink-3)' }}>
+                  <span
+                    className="ad-mono-sm"
+                    style={{ color: pct >= 95 ? 'var(--danger)' : pct >= 80 ? 'var(--warn)' : 'var(--ink-3)' }}
+                  >
                     {pct}%
                   </span>
                 </div>
@@ -74,11 +123,7 @@ export default function Usage({ state = 'normal' }) {
       </Panel>
 
       <Panel title="History">
-        <EmptyState
-          compact
-          icon={<Icon name="chart" size={19} />}
-          title="Daily usage charts arrive in MVP-1"
-        >
+        <EmptyState compact icon={<Icon name="chart" size={19} />} title="Daily usage charts are not built yet">
           A 30-day time series per metric, at daily granularity.
         </EmptyState>
       </Panel>

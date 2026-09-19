@@ -1,0 +1,18 @@
+{
+  "name": "agentdisk-regression-tests",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Live-site regression suite. Runs against a deployed AgentDisk dashboard and asserts behaviour, not appearance, so a re-theme cannot make it pass or fail for cosmetic reasons.",
+  "scripts": {
+    "login": "node scripts/login.mjs",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report",
+    "install-browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "dotenv": "^16.4.5"
+  }
+}

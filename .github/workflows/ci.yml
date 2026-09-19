@@ -7,6 +7,9 @@ on:
     branches: [main]
   push:
     branches: [dev]
+  # Lets a plan be run on demand against any branch, so infrastructure changes
+  # can be reviewed before anything is applied.
+  workflow_dispatch:
 
 # A newer push supersedes an in-flight run on the same ref.
 concurrency:
@@ -18,9 +21,17 @@ permissions:
 
 env:
   TERRAFORM_VERSION: "1.16.1"
+  # Keeps `init` off the registry on a warm runner. Provider downloads
+  # 504ing from github.com is a routine flake, and it has already failed a
+  # frontend-only change once.
+  TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.tf-plugin-cache
 
 jobs:
-  # ---------------------------------------------------------------- app ---
+  # ---------------------------------------------------------------- api ---
+  # The job id and directory say apps/api; the display name does not, and must
+  # not change - branch protection on main requires this check BY NAME, and a
+  # required check that never reports leaves every PR unmergeable. Rename it
+  # only together with the branch protection rule.
   app:
     name: App (lint, typecheck, test, build)
     runs-on: ubuntu-latest
@@ -52,6 +63,57 @@ jobs:
       - name: Build
         run: npm run build
 
+  # ------------------------------------------------------------ frontend ---
+  # apps/web and apps/admin had NO coverage here at all: the only app job was
+  # apps/api, so the dashboard's tests ran nowhere until a deploy built it, and
+  # the console's build was checked nowhere else either.
+  #
+  # Neither is a required check yet, so a failure here annotates a PR rather
+  # than blocking it. Add them to branch protection on main to make them gates.
+  #
+  # Both run without credentials, so they work on fork PRs. The build needs no
+  # Firebase or Turnstile values - those are asserted at deploy time, where a
+  # missing one would actually ship something broken.
+  web:
+    name: Dashboard (test, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      # --if-present because the script set differs per app and is still
+      # growing (backlog 010). New scripts start running the day they exist.
+      - run: npm run lint --if-present
+      - run: npm run test --if-present
+      - run: npm run build
+
+  admin:
+    name: Console (test, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/admin
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/admin/package-lock.json
+      - run: npm ci
+      - run: npm run lint --if-present
+      - run: npm run test --if-present
+      - run: npm run build
+
   # --------------------------------------------------- terraform static ---
   # Needs no credentials, so it runs on fork PRs too. This plus `app` are the
   # required status checks: making a credentialed job required would leave fork
@@ -71,6 +133,15 @@ jobs:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
+      - name: Prepare provider cache
+        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-plugins-${{ runner.os }}-${{ hashFiles('infra/terraform/.terraform.lock.hcl') }}
+          restore-keys: tf-plugins-${{ runner.os }}-
+
       - name: Format check
         run: terraform fmt -check -recursive -diff
 
@@ -84,9 +155,26 @@ jobs:
   # Skipped for fork PRs, which by design receive no secrets.
   terraform-plan:
     name: Terraform plan (${{ matrix.workspace }})
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    # Not on pushes any more. A plan on a push to dev was redundant with
+    # infra-dev.yml, which applies and reports the same thing when infra
+    # actually changed - and because this job has no path filter, it made every
+    # frontend push wait on a credentialed Terraform plan of BOTH environments.
+    # That is what a dashboard change was failing on. A plan earns its place on
+    # a PR into main, where it is the review artifact, and on demand.
+    #
+    # Fork PRs are skipped: they receive no secrets by design, so a credentialed
+    # plan there would always fail.
+    if: >-
+      github.event_name != 'push' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
-    environment: Development
+    # Deliberately NOT scoped to a GitHub Environment. Everything a plan needs
+    # - the Terraform token, the R2 state credentials, the account/zone/domain
+    # - lives at repository level, so the plan runs on any branch. Declaring
+    # `environment: dev` here would subject it to that environment's deployment
+    # branch policy and block plans from feature branches, which is exactly
+    # where a plan is most useful.
     strategy:
       fail-fast: false
       matrix:
@@ -96,11 +184,12 @@ jobs:
         working-directory: infra/terraform
         shell: bash
     env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_R2_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_R2_SECRET_ACCESS_KEY }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      TF_VAR_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      TF_VAR_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_STATE_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.TERRAFORM_CF_ACCESS_TOKEN }}
+      TF_VAR_account_id: ${{ vars.CF_ACCOUNT_ID }}
+      TF_VAR_zone_id: ${{ vars.CF_ZONE_ID }}
+      TF_VAR_root_domain: ${{ vars.DOMAIN_NAME }}
     steps:
       - uses: actions/checkout@v4
 
@@ -109,12 +198,22 @@ jobs:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
+      - name: Prepare provider cache
+        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-plugins-${{ runner.os }}-${{ hashFiles('infra/terraform/.terraform.lock.hcl') }}
+          restore-keys: tf-plugins-${{ runner.os }}-
+
       - name: Write backend config
         run: |
           set -euo pipefail
           cat > backend.hcl <<EOF
+          bucket = "${{ vars.TFSTATE_BUCKET }}"
           endpoints = {
-            s3 = "https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+            s3 = "https://${{ vars.CF_ACCOUNT_ID }}.r2.cloudflarestorage.com"
           }
           EOF
 
@@ -124,5 +223,32 @@ jobs:
       - name: Select workspace
         run: terraform workspace select -or-create ${{ matrix.workspace }}
 
+      # -lock-timeout alone is not enough, and it is worth saying why.
+      #
+      # It covers a lock that is HELD: wait, retry, proceed. It does not cover
+      # the race between two processes both trying to CREATE the lock. The S3
+      # backend takes the lock with a conditional PUT; the loser gets 412, then
+      # reads the lock file to report who holds it - and if the winner has
+      # already finished, that read 404s. Terraform treats "cannot describe the
+      # lock" as fatal rather than retryable, so a plan dies in about two
+      # seconds having never actually waited.
+      #
+      # That happens here because the plan and the deploy are separate
+      # workflows on separate concurrency groups, which is deliberate: sharing
+      # a group would let GitHub drop a queued deploy. So the plan retries.
       - name: Plan
-        run: terraform plan -input=false -lock-timeout=5m -no-color
+        run: |
+          set -uo pipefail
+          for attempt in 1 2 3; do
+            if terraform plan -input=false -lock-timeout=5m -no-color 2>&1 | tee plan.out; then
+              exit 0
+            fi
+            if ! grep -q "Error acquiring the state lock" plan.out; then
+              echo "::error::terraform plan failed for a reason other than lock contention."
+              exit 1
+            fi
+            echo "::notice::State lock contended (attempt $attempt/3); a deploy is probably mid-apply. Retrying in 30s."
+            sleep 30
+          done
+          echo "::error::Could not acquire the state lock after 3 attempts."
+          exit 1

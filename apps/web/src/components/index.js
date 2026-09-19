@@ -1,4 +1,4 @@
-// AgentDrive design system — public surface.
+// AgentDisk design system — public surface.
 // GENERATED from design-system/_ds_manifest.json. Do not hand-edit.
 // Import components from this file only: _adherence.oxlintrc.json forbids
 // reaching into component internals.

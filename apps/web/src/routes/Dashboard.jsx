@@ -1,48 +1,102 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
-  PageHead, StatTile, Panel, DataTable, FileCell, Button, Icon,
-  EmptyState, CodeBlock, Alert, Badge
+  Panel, DataTable, FileCell, Button, Icon,
+  EmptyState, CodeBlock, Alert
 } from '../components/index.js';
+import { useResource } from '../lib/useResource.js';
+import { useWorkspace } from '../lib/workspace.jsx';
 
 /**
  * 8.8 Dashboard / Overview — MVP-0
  * URL: /w/{workspaceId}
  *
- * Spec states: Loading (skeleton tiles + rows) -> Populated -> Empty workspace
- * (Quick-start panel replaces Recent Files) -> Quota warning (>=80% warn,
- * >=95% danger + inline Upgrade link).
- *
- * `state` is a prop purely so every specified state stays reachable and
- * reviewable before the API exists. Wire to real data by dropping the prop.
+ * Every figure comes from the API: quotas and plan from `GET /v1/whoami`,
+ * recent files from `GET /v1/files`, the agent count from `GET /v1/agents`.
+ * None of them is decorative, and none may become so — a dashboard with one
+ * made-up number is worse than one with a gap in it, because you cannot tell
+ * which of the others to trust. The agents tile read a fixed "Not built yet"
+ * for long enough that a workspace with a live agent and a workspace with none
+ * rendered identically; if a figure ever loses its endpoint again, say so in
+ * the tile rather than leaving a plausible digit behind.
  */
 
-const PLAN = 'Pro';
-const STORAGE_LIMIT_GB = 10;
-const REQUEST_LIMIT = 100000;
+const API_BASE = import.meta.env.VITE_API_BASE ?? 'https://api-dev.agentdisk.io';
 
-const RECENT_FILES = [
-  { id: 1, name: 'market-sizing.pdf', meta: '/research/2026-q1', type: 'application/pdf', size: '4.2 MB', modified: '12 minutes ago', agent: true },
-  { id: 2, name: 'competitors.json', meta: '/research/2026-q1', type: 'application/json', size: '88 KB', modified: '1 hour ago', agent: true },
-  { id: 3, name: 'interviews', kind: 'folder', meta: '18 files', type: 'folder', size: '240 MB', modified: '2 hours ago' },
-  { id: 4, name: 'pricing-notes.md', meta: '/research', type: 'text/markdown', size: '12 KB', modified: 'Yesterday, 18:40' },
-  { id: 5, name: 'transcript-03.txt', meta: '/interviews', type: 'text/plain', size: '64 KB', modified: '3 Mar 2026', agent: true }
-];
+const QUICK_START = `curl -X POST ${API_BASE}/v1/files \\
+  -H "Authorization: Bearer $AGENTDISK_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"path":"/notes.md","mimeType":"text/markdown","mode":"inline","content":"<base64>"}'`;
 
-const QUICK_START = `curl -X POST https://api.agentdrive.ai/v1/files \\
-  -H "Authorization: Bearer ad_live_••••••••••••" \\
-  -d '{"path":"notes.md","size":128}'`;
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes)) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit += 1; }
+  return `${value >= 10 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
+}
 
-export default function Dashboard({ state = 'populated' }) {
+function relativeTime(iso) {
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return '—';
+  const seconds = Math.round((Date.now() - then) / 1000);
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
+  if (seconds < 172800) return 'yesterday';
+  return new Date(then).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+const loadOverview = async (api, workspaceId) => {
+  const [me, files, agents] = await Promise.all([
+    api.whoami(workspaceId),
+    api.listFiles(workspaceId, { limit: '5' }),
+    api.listAgents(workspaceId)
+  ]);
+  return { me, files: files.files ?? [], agents: agents.agents ?? [] };
+};
+
+export default function Dashboard() {
   const { ws } = useParams();
+  const { canWrite, workspaceId } = useWorkspace();
   const root = `/w/${ws}`;
-  const loading = state === 'loading';
-  const empty = state === 'empty';
+  const { status, data, error, reload } = useResource(loadOverview);
 
-  // Storage figure drives the quota-warning state, so one number moves the whole UI.
-  const usedGb = state === 'quota-danger' ? 9.7 : state === 'quota-warn' ? 8.4 : 4.1;
-  const pct = Math.round((usedGb / STORAGE_LIMIT_GB) * 100);
-  const requests = 48902;
+  const loading = status === 'loading';
+  const usage = data?.me?.usage ?? {};
+  const plan = data?.me?.workspace?.plan ?? '—';
+  const files = data?.files ?? [];
+
+  const storageUsed = usage.storageBytes?.used ?? 0;
+  const storageMax = usage.storageBytes?.max ?? 0;
+  const storagePct = storageMax > 0 ? Math.round((storageUsed / storageMax) * 100) : 0;
+  const requestsUsed = usage.requests?.used ?? 0;
+  const requestsMax = usage.requests?.max ?? 0;
+  const fileCount = usage.files?.used ?? 0;
+
+  // `GET /v1/agents` has existed all along; this tile just never called it and
+  // read "Not built yet" on a workspace with a live agent in it.
+  const agents = data?.agents ?? [];
+  const agentCount = agents.length;
+  const activeAgents = agents.filter(a => a.status === 'active').length;
+
+  const empty = status === 'loaded' && fileCount === 0;
+
+  const rows = useMemo(
+    () =>
+      files.map(f => ({
+        id: f.id,
+        name: f.name,
+        meta: f.path?.replace(/\/[^/]*$/, '') || '/',
+        type: f.mimeType ?? 'application/octet-stream',
+        size: formatBytes(f.sizeBytes),
+        modified: relativeTime(f.updatedAt),
+        agent: typeof f.createdBy === 'string' && f.createdBy.startsWith('agt_')
+      })),
+    [files]
+  );
 
   const columns = [
     {
@@ -63,86 +117,80 @@ export default function Dashboard({ state = 'populated' }) {
 
   return (
     <>
-      <PageHead
-        title="Dashboard"
-        subtitle="Storage, agents and everything they did to your files."
-        meta={<Badge tone="accent">{PLAN}</Badge>}
-        actions={
-          <>
-            <Button variant="secondary" icon={<Icon name="upload" size={14} />}>Upload files</Button>
-            <Button icon={<Icon name="agent" size={14} />}>Connect an agent</Button>
-          </>
-        }
-      />
+      {/*
+        No page head here.
 
-      {pct >= 95 && !empty && !loading ? (
+        The design goes straight from the tab bar to the content, because the
+        strip above already names the workspace, shows the ws_... ID with its
+        copy button, and carries the plan. Repeating all three in a heading was
+        the same identifier twice on one screen, each with its own copy button —
+        which invites the question of which one is the real value.
+
+        The upload action moves to Files, which is where uploading happens and
+        where the design puts it.
+      */}
+      {status === 'failed' ? (
         <Alert
           tone="danger"
-          title={`You're at ${pct}% of your ${PLAN} plan storage`}
-          actions={<Button size="sm" variant="secondary">Upgrade plan</Button>}
+          title="Could not load this workspace"
+          actions={<Button size="sm" onClick={reload}>Try again</Button>}
         >
-          Uploads are refused at the limit. Free space by deleting files, or move to a larger plan.
+          {error?.message}{error?.requestId ? ` (request ${error.requestId})` : ''}
         </Alert>
       ) : null}
 
-      {/* Stat tiles are real links so they are keyboard-reachable (spec: Accessibility). */}
-      <div className="grid-stats">
-        <Link to={`${root}/usage`} style={{ textDecoration: 'none', color: 'inherit' }}>
-          <StatTile
-            label="Storage used"
-            icon={<Icon name="database" size={13} />}
-            value={usedGb}
-            unit="GB"
-            meter={usedGb}
-            meterMax={STORAGE_LIMIT_GB}
-            sub={`of ${STORAGE_LIMIT_GB} GB on ${PLAN}`}
-            loading={loading}
-          />
-        </Link>
-        <Link to={`${root}/files`} style={{ textDecoration: 'none', color: 'inherit' }}>
-          <StatTile
-            label="Files"
-            icon={<Icon name="file" size={13} />}
-            value={empty ? '0' : '12,481'}
-            sub={empty ? 'Nothing stored yet' : '1,204 written by agents'}
-            loading={loading}
-          />
-        </Link>
-        <Link to={`${root}/agents`} style={{ textDecoration: 'none', color: 'inherit' }}>
-          <StatTile
-            label="Agents"
-            icon={<Icon name="agent" size={13} />}
-            value={empty ? '0' : '3'}
-            sub={empty ? 'No agents connected' : '1 credential expiring'}
-            loading={loading}
-          />
-        </Link>
-        <Link to={`${root}/usage`} style={{ textDecoration: 'none', color: 'inherit' }}>
-          <StatTile
-            label="Requests this month"
-            icon={<Icon name="bolt" size={13} />}
-            value={empty ? '0' : requests.toLocaleString()}
-            meter={empty ? 0 : requests}
-            meterMax={REQUEST_LIMIT}
-            sub={`of ${REQUEST_LIMIT.toLocaleString()} this month`}
-            loading={loading}
-          />
-        </Link>
+      {/*
+        The design warns at 78%, well before the limit, because the point of
+        the warning is to be seen while there is still time to act — at 95% the
+        next upload is already likely to fail. Tone follows severity, and the
+        percentage is in the text, so the warning never rests on colour alone.
+      */}
+      {storagePct >= 75 && !loading ? (
+        <Alert
+          tone={storagePct >= 90 ? 'danger' : 'warn'}
+          title={`Storage is at ${storagePct}% of your ${plan} plan limit`}
+          actions={<Button size="sm" variant="secondary" as={Link} to={`${root}/usage`}>Review usage</Button>}
+        >
+          Agents receive <code className="inline">507 Insufficient Storage</code> once the
+          quota is reached. Free space by deleting files, or move to a larger plan.
+        </Alert>
+      ) : null}
+
+      {/*
+        The four headline figures moved into the shell (Layer 2 of the
+        design), so they sit above the tab bar and are present on every screen
+        rather than only here. WorkspaceStats fetches whoami once for all tabs,
+        which is one round trip fewer than this screen used to make.
+      */}
+
+      {/*
+        Quick start, from the design. Three cards rather than one code block.
+        They are links to the screens that actually do each step, so every one
+        goes somewhere real.
+      */}
+      <div>
+        <h2 className="ds__h2">Quick start</h2>
+        <div className="ds__quick">
+          {[
+            { n: '1', title: 'Create a scoped key', body: 'Read, write, list or delete — optionally locked to one path prefix.', cta: 'Create key', to: `${root}/keys` },
+            { n: '2', title: 'Connect over MCP', body: 'Paste one config block into Claude Desktop, VS Code or the CLI.', cta: 'View setup', to: `${root}/mcp` },
+            { n: '3', title: 'Give an agent a folder', body: 'Scope it to a path prefix and watch the audit log fill in.', cta: 'Open Files', to: `${root}/files` },
+          ].map(q => (
+            <Link key={q.n} to={q.to} className="ds__qcard">
+              <span className="ds__qnum">{q.n}</span>
+              <span className="ds__qtitle">{q.title}</span>
+              <span className="ds__qbody">{q.body}</span>
+              <span className="ds__qcta">{q.cta}<Icon name="chevronRight" size={13} /></span>
+            </Link>
+          ))}
+        </div>
       </div>
 
       {empty ? (
-        <Panel title="Quick start">
-          <EmptyState
-            icon={<Icon name="folder" size={19} />}
-            title="Nothing here yet"
-            actions={
-              <>
-                <Button icon={<Icon name="agent" size={13} />}>Create an agent</Button>
-                <Button variant="secondary" icon={<Icon name="upload" size={13} />}>Upload a file</Button>
-              </>
-            }
-          >
-            Create your first agent and give it a key, or drop a file in below.
+        <Panel title="Your first file">
+          <EmptyState icon={<Icon name="folder" size={19} />} title="Nothing here yet">
+            Mint an API key, then have an agent write its first file. Everything it does will show
+            up here.
           </EmptyState>
           <CodeBlock filename="Upload your first file" code={QUICK_START} />
         </Panel>
@@ -152,15 +200,18 @@ export default function Dashboard({ state = 'populated' }) {
           title="Recent files"
           actions={<Button size="sm" variant="link" as={Link} to={`${root}/files`}>View all</Button>}
         >
-          <DataTable
-            columns={columns}
-            rows={loading ? [] : RECENT_FILES}
-            loading={loading}
-            skeletonRows={5}
-            onRowClick={() => {}}
-          />
+          <DataTable columns={columns} rows={loading ? [] : rows} loading={loading} skeletonRows={5} />
         </Panel>
       )}
+
+      {/*
+        The design also draws a "Storage by type" breakdown here. There is no
+        endpoint that returns storage grouped by mime type, and this screen's
+        rule — stated at the top of this file — is that every figure comes from
+        the API. A plausible-looking breakdown of invented proportions is
+        exactly the decorative number that rule exists to prevent, so the panel
+        is left out until the data exists rather than filled in.
+      */}
     </>
   );
 }

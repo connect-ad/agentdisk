@@ -13,6 +13,7 @@ import { Billing } from './screens/Billing.jsx';
 import { Plans, SyncHistory } from './screens/Plans.jsx';
 import { Audit } from './screens/Audit.jsx';
 import { StaffAccounts } from './screens/StaffAccounts.jsx';
+import { EmailSettings } from './screens/EmailSettings.jsx';
 import { freshnessLabel } from './lib/useResource.js';
 
 /**
@@ -125,6 +126,13 @@ function describe(path) {
   }
   if (path === '/staff') {
     return { key: 'staff', title: 'Staff accounts', subtitle: 'Internal accounts and their roles.' };
+  }
+  if (path === '/settings/email') {
+    return {
+      key: 'email',
+      title: 'Email delivery',
+      subtitle: 'The channel this product sends its own mail through. Firebase sends its own.'
+    };
   }
   return { key: 'overview', title: 'Not found', subtitle: null };
 }
@@ -298,6 +306,7 @@ export default function App() {
     if (path === '/plans/sync-history') return <SyncHistory />;
     if (path === '/audit') return <Audit onToast={toast} />;
     if (path === '/staff') return <StaffAccounts currentStaffId={staff.id} onToast={toast} />;
+    if (path === '/settings/email') return <EmailSettings role={staff.role} onToast={toast} />;
 
     return (
       <div style={{ color: 'var(--tx2)', fontSize: '13px' }}>

@@ -163,6 +163,10 @@ export const staffApi = {
   /* -------------------------------- billing ------------------------------ */
   billing: filter => request(`/v1/staff/billing${query({ filter })}`),
 
+  /* --------------------------------- email ------------------------------- */
+  emailSettings: () => request('/v1/staff/settings/email'),
+  testEmail: () => request('/v1/staff/settings/email/test', { method: 'POST' }),
+
   /* --------------------------------- plans ------------------------------- */
   listPlans: () => request('/v1/staff/plans'),
   updatePlan: (id, patch) => request(`/v1/staff/plans/${id}`, { method: 'PATCH', body: patch }),

@@ -7,7 +7,8 @@
 # drifts from it. Never paste real IDs here by hand.
 #
 # Secrets (DATABASE_ENCRYPTION_KEY, SESSION_SIGNING_KEY, STRIPE_*,
-# MAILERSEND_API_TOKEN, FIREBASE_SERVICE_ACCOUNT_JSON) are deliberately absent:
+# MAILJET_API_KEY, MAILJET_SECRET_KEY, FIREBASE_SERVICE_ACCOUNT_JSON) are
+# deliberately absent:
 # they are pushed with `wrangler secret put` in CI from GitHub secrets. See
 # docs/design/12-deployment-roadmap-agentdisk-io.md step 18.
 #

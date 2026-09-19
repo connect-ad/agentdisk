@@ -60,6 +60,7 @@ import {
   staffUpdatePlan,
   staffWorkspaceBlastRadius,
 } from "./staff-console";
+import { staffGetEmailSettings, staffTestEmail } from "./staff-settings";
 // Type-only, so it is erased at compile time and the index <-> router cycle
 // never exists at runtime.
 import type { Env } from "../index";
@@ -255,6 +256,19 @@ export async function handleStaffRoute(
 
   if (area === "keys" && resourceId !== undefined && request.method === "DELETE") {
     return await staffRevokeKey(request, staffDeps, resourceId);
+  }
+
+  // `email` and `test` are literal segments, named explicitly rather than
+  // matched as a `:id`. There is no settings resource with an id today, and
+  // writing one in would invite the `workspaces/needs-attention` mistake the
+  // moment there is.
+  if (area === "settings" && resourceId === "email") {
+    if (action === undefined && request.method === "GET") {
+      return await staffGetEmailSettings(request, staffDeps);
+    }
+    if (action === "test" && request.method === "POST") {
+      return await staffTestEmail(request, staffDeps);
+    }
   }
 
   throw new ApiError("NOT_FOUND", "No such route.");

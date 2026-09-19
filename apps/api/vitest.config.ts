@@ -51,11 +51,13 @@ export default defineConfig(async () => {
             // upload and download routes would go untested.
             R2_ACCESS_KEY_ID: "test-access-key-id",
             R2_SECRET_ACCESS_KEY: "test-secret-access-key",
-            // Staff password reset refuses without both, so every test of it
-            // would assert the refusal and none would reach the send. The
+            // Staff password reset refuses without these, so every test of
+            // it would assert the refusal and none would reach the send. The
             // outbound calls are stubbed per-test; these only have to be
-            // present and well-formed.
-            MAILERSEND_API_TOKEN: "test-mailersend-token",
+            // present and well-formed. Both Mailjet halves, because
+            // readEmailConfig treats a half-set pair as not configured.
+            MAILJET_API_KEY: "test-mailjet-api-key",
+            MAILJET_SECRET_KEY: "test-mailjet-secret-key",
             FIREBASE_SERVICE_ACCOUNT_JSON: serviceAccountJson,
           },
         },

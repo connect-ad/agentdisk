@@ -46,7 +46,7 @@ type Ctor<T> = new (
 ) => T;
 
 /** One way to build any area's access object, so none of them can drift. */
-function area<T>(Cls: Ctor<T>, staff: StaffUser, deps: StaffDeps): T {
+export function area<T>(Cls: Ctor<T>, staff: StaffUser, deps: StaffDeps): T {
   return new Cls(deps.db, staff, deps.requestId, deps.now, deps.sourceIp ?? null);
 }
 

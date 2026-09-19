@@ -255,7 +255,7 @@ export async function staffForcePasswordReset(
   // alternative shape - reporting success for a message nobody will receive.
   if (deps.email === null) {
     throw new ApiError("INTERNAL_ERROR", "Email delivery is not configured.", {
-      internalReason: "MAILERSEND_API_TOKEN is not set",
+      internalReason: "MAILJET_API_KEY / MAILJET_SECRET_KEY are not both set",
     });
   }
   if (deps.firebaseAdmin === null) {

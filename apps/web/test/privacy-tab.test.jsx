@@ -112,7 +112,7 @@ describe('Privacy → statements of fact', () => {
   it('names the transactional email provider that is actually configured', async () => {
     mount(REALISTIC);
 
-    await screen.findByText('MailerSend');
+    await screen.findByText('Mailjet');
     // Resend was simply the wrong vendor -- naming it was the false statement.
     expect(screen.queryByText('Resend')).toBeNull();
   });

@@ -273,7 +273,7 @@ const SUBPROCESSORS = [
   { name: 'Cloudflare', purpose: 'Object storage (R2), database (D1), compute (Workers), CDN', region: 'Global edge' },
   { name: 'Google (Firebase Authentication)', purpose: 'Sign-in, password storage, and session tokens', region: 'US / Global' },
   { name: 'Stripe', purpose: 'Payment processing and invoicing', region: 'US / EU' },
-  { name: 'MailerSend', purpose: 'Transactional email (notifications, address verification)', region: 'US' }
+  { name: 'Mailjet', purpose: 'Transactional email (account and support notifications)', region: 'EU' }
 ];
 
 /**

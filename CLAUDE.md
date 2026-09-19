@@ -21,7 +21,7 @@ task.
 | `apps/admin/` | The internal staff console, at `admin-dev.agentdisk.io` | Its own origin on purpose: 14 PART 27.2 scopes the staff session cookie to it, so a staff and a customer credential cannot reach each other in a browser. Deliberately does not import `design-system/` — looking different from the customer dashboard is how a support engineer knows which one they are in; it carries its own palette in `src/app.css`, from the AgentDisk Admin design file, and those tokens must not be reconciled with the dashboard's. Nine screens under `src/screens/`, one shell, routing by the History API rather than a router library. |
 | `apps/web/` | The dashboard SPA, live at `app-dev.agentdisk.io` | `src/components/` is vendored from `design-system/`; `src/components/index.js` is generated. Hand-written code lives in `src/routes/` and `src/components-local/`. Two vendored files deliberately diverge, all awaiting the same upstream trip: `src/components/AppShell.jsx` for three reasons — `backlog/015`, `backlog/016` and `backlog/026` — `src/components/Modal/Modal.jsx` plus `src/components/Button/Button.jsx`, which together gain Enter-to-submit, the one part of the modal contract that cannot be done from `app.css` — `Button` has to default to `type="button"` or an untyped Cancel inside the new `<form>` submits the dialog it exists to dismiss (`backlog/031`); and `src/components/ApiKeyDisplay/ApiKeyDisplay.jsx`, whose `prefix` defaulted to `ad_live` — a prefix this API has never issued. Deployed as a Workers static-assets Worker, not Pages — see `backlog/013`. |
 | `Skill/` | Reusable how-to knowledge, `<N> <Name>.md` | Procedures, commands and their calibration. Not the specification — that is `docs/design/`. |
-| `backlog/` | Outstanding tasks, `NNN-<slug>.md` | **Two items: the billing module, and the staff admin panel built on top of it.** The previous 31 were deleted 18 Sept 2026 and live at the tag `pre-billing-module`. Status lives in each file. |
+| `backlog/` | Outstanding tasks, `NNN-<slug>.md` | **Four items: the billing module, the staff admin panel built on top of it, and two small ones left by the 19 Sept Mailjet swap.** The previous 31 were deleted 18 Sept 2026 and live at the tag `pre-billing-module`. Status lives in each file. |
 | `docs/superpowers/specs/` | The design rebuild's specs, `YYYY-MM-DD-<slug>.md` | Replaced `.design-sync/`, which described the old vendored mirror and lost its subject when that mirror went. The `.dc.html` artboards in `design-system/` are hand-exported from Claude Design; when a design file has no local copy, record its numbers in a spec here and ask for the export — never reconstruct one from a transcript. |
 | `.claude/commands/` | Custom slash commands, `<name>.md` | [`cpack`](.claude/commands/cpack.md) persists session knowledge into the docs below; [`cpush`](.claude/commands/cpush.md) commits and tags. Both are auto-discovered by Claude Code; no registration step. |
 | `summary.md` | External code audit, 8 Sept 2026 | Read-only record of one review, with file:line evidence for every claim. Its open work is tracked as `backlog/017`–`backlog/025`; the backlog is where that work lives, not here. |
@@ -421,12 +421,15 @@ provenance), `ApiKeyDisplay` (show-once), `PermissionSelector` (least privilege)
 
 ### Backlog — [backlog/](backlog/)
 
-Two items. The second is built on the first and cannot be finished before it.
+Four items. 002 is built on 001 and cannot be finished before it; 003 and 004
+are independent of both and of each other.
 
 | # | Item | Status |
 |---|---|---|
 | 001 | [Billing module](backlog/001-billing-module.md) | **TOP** — 8 of 12 tasks shipped; Stripe catalogue, checkout, the ten webhook events and the plan editor are in. Enforcement and the pricing page are not, and **nothing has touched real Stripe yet** |
 | 002 | [Staff admin panel](backlog/002-admin-panel.md) | **HIGH** — built end to end, not yet proven against live dev. Start with the bootstrap pipeline; the plan editor is untestable until 001's catalogue is applied |
+| 003 | [Google consent support email](backlog/003-google-consent-support-email.md) | **MEDIUM** — `firebase.json` shows the sibling product's address on the Google sign-in consent screen. One line, plus the `firebase deploy --only auth` trap |
+| 004 | [Customer email sender identity](backlog/004-customer-email-sender-identity.md) | **LOW** — Firebase still sends customer mail from `noreply@…firebaseapp.com`. Fixed by pointing Firebase's SMTP at Mailjet; no code |
 
 **Items 001–031 were deleted on 18 September 2026**, deliberately, so that the
 billing module is the whole backlog. They are recoverable in full from git at

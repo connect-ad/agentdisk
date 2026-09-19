@@ -125,6 +125,41 @@ describe('the current page is drawn as a shape, not only a colour', () => {
     expect(css).toContain(`@keyframes ${anim[1]}`);
   });
 
+  /**
+   * "Bigger" and "bolder" are comparisons, so the tokens are resolved to their
+   * numbers and compared. Asserting the literal `var(--t-14)` would pass just
+   * as happily on the day someone redefines --t-14 as smaller than --t-13.
+   */
+  const tokens = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
+  const tokenValue = name => {
+    const m = tokens.match(new RegExp(`--${name}:([^;}]+)`));
+    expect(m, `--${name} is not defined`).not.toBeNull();
+    return parseFloat(m[1]);
+  };
+  /** The winning value of `prop`, taking the last declaration as CSS does. */
+  const declared = (rules, prop) => {
+    const found = rules.flatMap(r => [...r.body.matchAll(new RegExp(`${prop}:var\\(--([a-z0-9-]+)\\)`, 'g'))]);
+    expect(found.length, `no ${prop} declared`).toBeGreaterThan(0);
+    return found[found.length - 1][1];
+  };
+  const base = () => RULES.filter(r => r.selector === '.mk__navlink');
+
+  it('sets the current label heavier than the rest', () => {
+    const on = tokenValue(declared(active, 'font-weight'));
+    const off = tokenValue(declared(base(), 'font-weight'));
+    expect(on).toBeGreaterThan(off);
+    expect(on).toBe(700);
+  });
+
+  it('sets the current label larger than the rest, but never larger than the wordmark', () => {
+    const on = tokenValue(declared(active, 'font-size'));
+    const off = tokenValue(declared(base(), 'font-size'));
+    const wordmark = tokenValue(declared(blocksMentioning('.mk__wordmark'), 'font-size'));
+    expect(on).toBeGreaterThan(off);
+    // The brand stays the biggest thing in the bar.
+    expect(on).toBeLessThan(wordmark);
+  });
+
   it('never re-introduces the underline the vendored sheet puts on every link', () => {
     for (const b of blocksMentioning('.mk__navlink')) {
       expect(b.body, `${b.selector} underlines`).not.toContain('text-decoration:underline');

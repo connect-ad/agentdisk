@@ -471,8 +471,20 @@
   transition:color var(--d-2) var(--ease),background-color var(--d-2) var(--ease),
     border-color var(--d-2) var(--ease)}
 .mk__navlink:hover{color:var(--ink);text-decoration:none}
+/* The current label is also bold and a step larger. The pill alone was still
+   being missed on a dark bar, and weight plus size are the two signals that
+   survive at a glance and in peripheral vision, where a 38%-opacity border
+   does not. One step, 13 to 14: the AgentDisk wordmark beside it is 16, and a
+   nav link at that size stops the brand being the biggest thing in the bar.
+
+   It makes the current label a few pixels wider than its neighbours. The
+   group is right-aligned, so the three sit fractionally further left on one
+   page than another -- but never while you hover or click, only across a
+   navigation that repaints the whole page anyway, so there is nothing to see
+   move. Pinning the width would cost an invisible copy of every label. */
 .mk__navlink--on,.mk__navlink--on:hover{color:var(--accent);
-  font-weight:var(--w-semi);cursor:default;background-color:var(--accent-soft);
+  font-size:var(--t-14);font-weight:var(--w-bold);cursor:default;
+  background-color:var(--accent-soft);
   border-color:color-mix(in srgb,var(--accent) 38%,transparent)}
 /* The pill arrives rather than appearing: it scales up from 90%, overshoots a
    little and settles. Nav is remounted per route, so this plays on each page

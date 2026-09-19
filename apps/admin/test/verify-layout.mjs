@@ -325,27 +325,77 @@ async function assertShellFitsWindow(page, shellUrl, viewport) {
   );
 }
 
-/** And the opposite: content taller than the window must still be reachable. */
-async function assertTallContentStillScrolls(page, shellUrl) {
+/**
+ * The other half of the contract: WHICH box scrolls when there is too much.
+ *
+ * The content pane scrolls. The sidebar and the top bar do not move, because
+ * they are how you leave the screen you are on -- a console that scrolls its
+ * own navigation out of reach makes you scroll back up to go anywhere, and the
+ * longer the table the further back up. The sidebar keeps its own scrollbar
+ * for when the nav itself is taller than the window; that is a separate
+ * scroller, not this one.
+ *
+ * Checked by scrolling and then reading positions, rather than by reading
+ * declarations. `overflow-y: auto` was on this pane throughout the phantom
+ * scrollbar bug and never engaged once, because the pane had no bounded height
+ * to overflow.
+ */
+async function assertOnlyThePaneScrolls(page, shellUrl) {
   await page.setViewportSize(VIEWPORT);
   await page.goto(shellUrl);
   await page.waitForSelector('[data-fixture-content]');
 
-  const reachable = await page.evaluate(async () => {
+  const geometry = await page.evaluate(async () => {
     const probe = document.createElement('div');
     probe.style.cssText = 'height:2400px';
     probe.innerHTML = '<div id="probe-end" style="height:20px">end</div>';
     document.querySelector('[data-fixture-content]').appendChild(probe);
     await new Promise(requestAnimationFrame);
-    // Whichever box owns the overflow, the last pixel has to be reachable.
-    const end = document.getElementById('probe-end');
-    end.scrollIntoView({ block: 'end' });
+
+    const pane = document.querySelector('main');
+    const nav = document.querySelector('nav[aria-label="Console sections"]');
+    const bar = document.querySelector('header');
+    const before = { nav: nav.getBoundingClientRect().top, bar: bar.getBoundingClientRect().top };
+
+    // Drive the pane to its bottom, the way a person with a wheel would.
+    pane.scrollTop = pane.scrollHeight;
+    window.scrollTo(0, 99999);
+    const windowScrolled = window.scrollY;
     await new Promise(requestAnimationFrame);
-    const box = end.getBoundingClientRect();
-    return box.bottom <= window.innerHeight + 2 && box.top >= 0;
+
+    const end = document.getElementById('probe-end');
+    return {
+      paneScrolled: pane.scrollTop,
+      paneCanScroll: pane.scrollHeight > pane.clientHeight + 1,
+      windowScrolled,
+      navMoved: Math.abs(nav.getBoundingClientRect().top - before.nav),
+      barMoved: Math.abs(bar.getBoundingClientRect().top - before.bar),
+      navVisible: nav.getBoundingClientRect().bottom > 0,
+      endReached: end.getBoundingClientRect().bottom <= window.innerHeight + 2,
+    };
   });
 
-  check('[shell] content past the fold is still reachable', reachable);
+  check(
+    '[shell] the content pane is the thing that scrolls',
+    geometry.paneCanScroll && geometry.paneScrolled > 0,
+    `pane scrolled ${Math.round(geometry.paneScrolled)}px`
+  );
+  check(
+    '[shell] the window itself does not scroll, however much content there is',
+    geometry.windowScrolled === 0,
+    `window scrolled ${geometry.windowScrolled}px`
+  );
+  check(
+    '[shell] the sidebar stays where it is',
+    geometry.navMoved <= 1 && geometry.navVisible,
+    `sidebar moved ${Math.round(geometry.navMoved)}px`
+  );
+  check(
+    '[shell] the top bar stays where it is',
+    geometry.barMoved <= 1,
+    `top bar moved ${Math.round(geometry.barMoved)}px`
+  );
+  check('[shell] the last row is still reachable', geometry.endReached);
 }
 
 async function assertFocus(page) {
@@ -412,7 +462,7 @@ try {
   await assertShellFitsWindow(page, shellUrl, { width: 1512, height: 982 });
   await assertShellFitsWindow(page, shellUrl, VIEWPORT);
   await assertShellFitsWindow(page, shellUrl, { width: 1366, height: 620 });
-  await assertTallContentStillScrolls(page, shellUrl);
+  await assertOnlyThePaneScrolls(page, shellUrl);
 } finally {
   await browser.close();
   await server.close();

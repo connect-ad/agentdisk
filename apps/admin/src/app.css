@@ -111,8 +111,11 @@ body {
  * moves.
  *
  * `height`, not `min-height`, so that 100% has a definite parent to resolve
- * against at each step. Taller content still scrolls: it overflows these boxes
- * and extends the document, which was verified rather than assumed.
+ * against at each step -- and so the shell can be exactly the window rather
+ * than merely at least it. That is what gives the content pane a bound to
+ * overflow, so a long table scrolls the pane and leaves the sidebar and the
+ * top bar in place. Verified in a browser, not assumed: see
+ * `test/verify-layout.mjs`.
  */
 html,
 body,

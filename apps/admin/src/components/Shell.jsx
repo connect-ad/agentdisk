@@ -322,7 +322,13 @@ export function Shell({
   useDocumentTitle(title);
 
   return (
-    <div style={{ minHeight: '100%', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
+    // `height`, not `min-height`. The shell is exactly the window, so the row
+    // beneath the bar has a bounded height, and the content pane -- which has
+    // carried `overflow-y: auto` all along -- finally has something to
+    // overflow. With `min-height` the shell grew instead, the pane never
+    // reached a limit, and a long table scrolled the whole document, carrying
+    // the sidebar and the top bar off the screen with it.
+    <div style={{ height: '100%', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
       <header
         style={{
           height: '46px',

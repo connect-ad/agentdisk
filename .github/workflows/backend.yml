@@ -377,19 +377,34 @@ jobs:
             HAVE_EMAIL=0
           fi
 
-          # Email, and the credential that generates what it sends. Both or
-          # neither, for the same reason Stripe is both or neither: with only
-          # the Mailjet keys, staff password reset fails at the point a support
-          # engineer has already told a customer the mail is coming; with only
-          # the Firebase key, a link is minted and then dropped - which is
-          # worse, because a live reset credential was created for nobody.
-          # Every other route is unaffected either way.
-          if [ "$HAVE_EMAIL" = "1" ] && [ -n "${FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]; then
+          # Each credential is pushed on its own merit. These two were paired
+          # once - both or neither, the way Stripe's are - back when staff
+          # password reset was the only thing that sent mail and genuinely
+          # needed both halves. That coupling is wrong now and it cost a
+          # deployment to learn: the console's test-send button needs the
+          # channel and NOTHING else, so pairing them withheld the Mailjet
+          # credential from the one feature built to check the Mailjet
+          # credential. A missing Firebase key must not be able to disable
+          # email; it can only disable what actually depends on it.
+          if [ "$HAVE_EMAIL" = "1" ]; then
             push_env MAILJET_API_KEY    MAILJET_API_KEY
             push_env MAILJET_SECRET_KEY MAILJET_SECRET_KEY
+          fi
+
+          if [ -n "${FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]; then
             push_env FIREBASE_SERVICE_ACCOUNT_JSON FIREBASE_SERVICE_ACCOUNT_JSON
+          fi
+
+          # The warning still earns its place, because the DEPENDENCY is real
+          # even though the coupling was not: staff password reset needs a
+          # channel to send through and a credential to mint the link with.
+          # With only the channel it fails after a support engineer has told a
+          # customer the mail is coming; with only the Firebase key a live reset
+          # credential is minted for nobody, which is worse.
+          if [ "$HAVE_EMAIL" = "1" ] && [ -n "${FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]; then
+            :
           elif [ "$HAVE_EMAIL" = "1" ] || [ -n "${FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]; then
-            echo "::warning::Only one of the Mailjet keys / FIREBASE_SERVICE_ACCOUNT_JSON is available for $ENVIRONMENT_NAME. Staff password reset refuses; everything else deploys."
+            echo "::warning::Only one of the Mailjet keys / FIREBASE_SERVICE_ACCOUNT_JSON is available for $ENVIRONMENT_NAME. Staff password reset refuses; whatever was present was still pushed, and everything else deploys."
           elif [ "$WORKSPACE" = "dev" ]; then
             echo "::warning::No email credentials for dev. Staff password reset refuses; everything else deploys."
           else

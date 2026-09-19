@@ -119,10 +119,17 @@ export function EmailSettings({ role, onToast, api }) {
             {configured ? 'Configured' : 'Not configured'}
           </span>
           {!configured && (
+            /* Says what it knows and stops. The screen sees one boolean from
+               the Worker; it cannot tell a secret that was never set from one
+               the deploy declined to push, and an earlier version of this copy
+               asserted the first — sending somebody to check repository secrets
+               that were sitting there correctly all along. The deploy log is
+               where the reason actually is, so that is where it points. */
             <div style={{ fontSize: '12.5px', lineHeight: 1.6, color: 'var(--tx2)', marginTop: '7px' }}>
-              This deployment has no Mailjet credentials, so every send refuses. They are pushed by
-              CI with <span style={mono}>wrangler secret put</span>; a half-set key pair counts as
-              absent, because the Send API uses the two as one credential.
+              This deployment has no Mailjet credentials, so every send refuses. They reach the
+              Worker only via <span style={mono}>wrangler secret put</span> in the backend deploy —
+              check that run&rsquo;s log for the reason, and{' '}
+              <span style={mono}>wrangler secret list</span> for what the Worker currently holds.
             </div>
           )}
         </Row>

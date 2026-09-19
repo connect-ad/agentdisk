@@ -442,6 +442,48 @@
 .mk__wordmark{font-family:var(--font-display);font-size:var(--t-16);
   font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink)}
 .mk__navlinks{display:flex;align-items:center;gap:var(--s-7);margin-left:auto}
+/* The three page links sit in their own group at the design's tight 2px gap,
+   because each one is a pill with its own padding -- the 20px above would put
+   32px of air between two adjacent pills and stop them reading as one set.
+   The group keeps its distance from Sign in / Start free, which are actions
+   rather than pages and must not look like a fourth tab. */
+.mk__pages{display:flex;align-items:center;gap:var(--s-1)}
+
+/* Page links. From the design's navLink(): muted at rest, accent when it is
+   the page you are on. The vendored sheet underlines every <a> on hover; a
+   nav is a set of tabs, not prose, so that is switched off here.
+
+   The current page is a filled pill with a border. An underline was the first
+   attempt and it was too quiet -- at 2px under 13px text it read as a hover
+   artefact rather than as state, which is the whole thing this has to say.
+   A bordered pill is the selected-tab affordance people already know, and it
+   is a shape, so colour is not carrying the meaning alone; NavLink also sets
+   aria-current="page" for anything not reading pixels.
+
+   Every link carries a transparent 1px border at rest so gaining the real one
+   cannot shift the row by 2px. Pointer stays default on the current page --
+   it goes nowhere, and that is the point. */
+.mk__navlink{position:relative;display:inline-flex;align-items:center;
+  height:var(--s-9);padding:0 var(--s-5);border-radius:var(--r-2);
+  border:1px solid transparent;
+  font-size:var(--t-13);font-weight:var(--w-med);color:var(--ink-2);
+  text-decoration:none;white-space:nowrap;
+  transition:color var(--d-2) var(--ease),background-color var(--d-2) var(--ease),
+    border-color var(--d-2) var(--ease)}
+.mk__navlink:hover{color:var(--ink);text-decoration:none}
+.mk__navlink--on,.mk__navlink--on:hover{color:var(--accent);
+  font-weight:var(--w-semi);cursor:default;background-color:var(--accent-soft);
+  border-color:color-mix(in srgb,var(--accent) 38%,transparent)}
+/* The pill arrives rather than appearing: it scales up from 90%, overshoots a
+   little and settles. Nav is remounted per route, so this plays on each page
+   change and pulls the eye to where you have landed. The global
+   prefers-reduced-motion rule in styles.css collapses it to nothing. */
+.mk__navlink--on{animation:mk-navon var(--d-3) var(--ease-out)}
+@keyframes mk-navon{
+  from{background-color:transparent;border-color:transparent;transform:scale(.9)}
+  60%{transform:scale(1.03)}
+  to{transform:none}
+}
 .mk__wrap{margin:0 auto;padding:0 var(--gutter);width:100%}
 
 /* hero */

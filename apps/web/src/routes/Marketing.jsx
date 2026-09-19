@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import { Button, Icon } from '../components/index.js';
 import { useAuth } from '../lib/auth.jsx';
 import { PLANS, OVERAGES, FREE_SUMMARY, COUNTING_NOTE } from '../lib/pricing.js';
@@ -86,6 +86,25 @@ const STEPS = [
 
 /* ── shared chrome ────────────────────────────────────────────────────────── */
 
+/**
+ * The three page links.
+ *
+ * The absence of `end` on Docs is load-bearing: it is what keeps Docs marked
+ * on a future `/docs/<section>`, and adding one turns that off. `end` on
+ * Product is not — react-router 7 matches whole path segments, so `/` already
+ * fails to claim `/pricing`. It is stated anyway, because the root link is the
+ * one place where that is not obvious to the next reader, and the only place a
+ * basename change could make it matter.
+ */
+const NAV_PAGES = [
+  { to: '/', label: 'Product', end: true },
+  { to: '/pricing', label: 'Pricing' },
+  { to: '/docs', label: 'Docs' },
+];
+
+const navLinkClass = ({ isActive }) =>
+  isActive ? 'mk__navlink mk__navlink--on' : 'mk__navlink';
+
 export function Nav() {
   const { user } = useAuth();
   return (
@@ -95,14 +114,26 @@ export function Nav() {
         <span className="mk__wordmark">AgentDisk</span>
       </Link>
       <span className="mk__navlinks">
-        <Link to="/">Product</Link>
-        <Link to="/pricing">Pricing</Link>
-        <Link to="/docs">Docs</Link>
+        {/* NavLink marks the current page with `aria-current="page"`, and the
+            class carries the visible state -- a bordered pill, see app.css.
+            Before this the three rendered identically in the accent, so
+            nothing said which page you were on and clicking the one you were
+            already reading did nothing visible.
+
+            They are grouped so the pills read as one set of tabs and keep
+            their distance from Sign in / Start free, which are actions. */}
+        <span className="mk__pages">
+          {NAV_PAGES.map(p => (
+            <NavLink key={p.to} to={p.to} end={p.end} className={navLinkClass}>
+              {p.label}
+            </NavLink>
+          ))}
+        </span>
         {user ? (
           <Button size="sm" as={Link} to="/app">Open dashboard</Button>
         ) : (
           <>
-            <Link to="/login">Sign in</Link>
+            <Link to="/login" className="mk__navlink">Sign in</Link>
             <Button size="sm" as={Link} to="/signup">Start free</Button>
           </>
         )}

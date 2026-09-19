@@ -285,6 +285,69 @@ async function assertPlanEditor(page, label, viewport) {
   check(`[plans ${label}] scrolling reaches the last row`, last.ok, last.name);
 }
 
+/**
+ * A shell with one line in it must not scroll.
+ *
+ * `:root` carries `zoom: 1.25` and `vh` ignores zoom, so `min-height: 100vh`
+ * laid out one window tall and painted 1.25 windows tall. Every screen in the
+ * console carried a permanent scrollbar with no content in it. The check is
+ * run at several window heights because the overflow is a *proportion* of the
+ * window -- a single viewport could be passed by a shell that is wrong by a
+ * fixed number of pixels instead.
+ */
+async function assertShellFitsWindow(page, shellUrl, viewport) {
+  const label = `${viewport.width}x${viewport.height}`;
+  await page.setViewportSize(viewport);
+  await page.goto(shellUrl);
+  await page.waitForSelector('[data-fixture-content]');
+
+  const geometry = await page.evaluate(() => {
+    const shell = document.getElementById('root').firstElementChild;
+    // Ask the engine to scroll rather than comparing heights: this is the one
+    // question the user asked, and scrollHeight reports it inconsistently
+    // under zoom -- documentElement said 900 while the page scrolled 225.
+    const start = window.scrollY;
+    window.scrollTo(0, 99999);
+    const maxScroll = window.scrollY;
+    window.scrollTo(0, start);
+    return { maxScroll, painted: Math.round(shell.getBoundingClientRect().height), window: window.innerHeight };
+  });
+
+  check(
+    `[shell ${label}] a nearly empty console does not scroll`,
+    geometry.maxScroll === 0,
+    `scrolls ${geometry.maxScroll}px`
+  );
+  check(
+    `[shell ${label}] the shell paints exactly one window tall`,
+    Math.abs(geometry.painted - geometry.window) <= 1,
+    `painted ${geometry.painted} / window ${geometry.window}`
+  );
+}
+
+/** And the opposite: content taller than the window must still be reachable. */
+async function assertTallContentStillScrolls(page, shellUrl) {
+  await page.setViewportSize(VIEWPORT);
+  await page.goto(shellUrl);
+  await page.waitForSelector('[data-fixture-content]');
+
+  const reachable = await page.evaluate(async () => {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'height:2400px';
+    probe.innerHTML = '<div id="probe-end" style="height:20px">end</div>';
+    document.querySelector('[data-fixture-content]').appendChild(probe);
+    await new Promise(requestAnimationFrame);
+    // Whichever box owns the overflow, the last pixel has to be reachable.
+    const end = document.getElementById('probe-end');
+    end.scrollIntoView({ block: 'end' });
+    await new Promise(requestAnimationFrame);
+    const box = end.getBoundingClientRect();
+    return box.bottom <= window.innerHeight + 2 && box.top >= 0;
+  });
+
+  check('[shell] content past the fold is still reachable', reachable);
+}
+
 async function assertFocus(page) {
   await page.setViewportSize(VIEWPORT);
   await page.reload();
@@ -320,6 +383,7 @@ await server.listen();
 const { port } = server.httpServer.address();
 const url = `http://localhost:${port}/test/fixtures/overlay-harness.html`;
 const consoleUrl = `http://localhost:${port}/test/fixtures/console-plans-harness.html`;
+const shellUrl = `http://localhost:${port}/test/fixtures/shell-harness.html`;
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: VIEWPORT });
@@ -344,6 +408,11 @@ try {
   await assertPlanEditor(page, 'tall', { width: 1512, height: 982 });
   await assertPlanEditor(page, '1366x768', VIEWPORT);
   await assertPlanEditor(page, 'short', SHORT);
+  // Three heights, because the phantom scroll was a proportion of the window.
+  await assertShellFitsWindow(page, shellUrl, { width: 1512, height: 982 });
+  await assertShellFitsWindow(page, shellUrl, VIEWPORT);
+  await assertShellFitsWindow(page, shellUrl, { width: 1366, height: 620 });
+  await assertTallContentStillScrolls(page, shellUrl);
 } finally {
   await browser.close();
   await server.close();

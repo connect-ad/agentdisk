@@ -57,7 +57,8 @@ export function Login({ notStaff = null, error: upstreamError = null, onSignedIn
   return (
     <div
       style={{
-        minHeight: '100vh',
+        // Percentage, never `100vh` -- app.css's full-height chain says why.
+        minHeight: '100%',
         background: 'var(--bg)',
         display: 'flex',
         alignItems: 'center',

@@ -94,6 +94,33 @@ body {
 }
 
 /*
+ * The full-height chain, and why it is percentages rather than `100vh`.
+ *
+ * `vh` does not participate in zoom. `100vh` keeps evaluating to the window's
+ * own height, and that number is then laid out in a coordinate space scaled by
+ * the 1.25 above -- so a `min-height: 100vh` shell painted 1.25 windows tall
+ * and every screen in the console carried a permanent vertical scrollbar, at
+ * every window size, with no content in it at all. Measured at a 900px window:
+ * 1125px of shell, 225px of scroll, on a page showing one table.
+ *
+ * `Overlay.jsx` hit the same trap and states the rule: bound a thing to the
+ * window with a percentage of something already measured in the zoomed space,
+ * never with a `vh` calc. This is that rule for the page itself. A percentage
+ * chain needs no zoom factor, so it cannot fall out of step with the line
+ * above -- `calc(100vh / 1.25)` would work today and break the day that number
+ * moves.
+ *
+ * `height`, not `min-height`, so that 100% has a definite parent to resolve
+ * against at each step. Taller content still scrolls: it overflows these boxes
+ * and extends the document, which was verified rather than assumed.
+ */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/*
  * A visible focus ring on everything focusable. Keyboard operation is not a
  * nicety in a console whose dialogs gate destructive actions - point 4 of the
  * modal contract exists for the same reason.

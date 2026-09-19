@@ -322,7 +322,7 @@ export function Shell({
   useDocumentTitle(title);
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100%', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
       <header
         style={{
           height: '46px',

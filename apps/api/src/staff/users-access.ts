@@ -398,6 +398,27 @@ export class StaffUserAccess extends AuditedStaffAccess {
       }
     }
 
+    if (deleted) {
+      // Share links are deleted rather than marked, because there is no
+      // revoked state to mark — see migration 0016. A share link is
+      // anonymous and never reaches resolveVerifiedUser, so without this a
+      // deleted account's files stay publicly downloadable for the whole
+      // grace period while its owner is locked out. Unconditional on
+      // `deleted` alone, not on `options.revokeKeys` - whether the operator
+      // also revokes this person's API keys is a separate choice, but an
+      // already-public link must not survive an account deletion either way.
+      const affectedShares = await this.db
+        .prepare(`SELECT DISTINCT workspace_id AS workspaceId FROM share_links WHERE created_by = ?`)
+        .bind(userId)
+        .all<{ workspaceId: string }>();
+
+      await this.db.prepare(`DELETE FROM share_links WHERE created_by = ?`).bind(userId).run();
+
+      for (const row of affectedShares.results ?? []) {
+        await this.record(row.workspaceId, "share.revoked", { reason: "account deleted" });
+      }
+    }
+
     await this.recordFleet({
       action: "user.delete",
       targetType: "user",

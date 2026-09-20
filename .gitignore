@@ -49,3 +49,6 @@ Claude outputs/
 
 # Machine-specific hook config: pins an absolute path to a local binary
 .claude/settings.json
+
+# Worktrees created for isolated plan execution. Scratch, never committed.
+.claude/worktrees/

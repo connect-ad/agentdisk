@@ -18,6 +18,13 @@ import type { AuthContext } from "../middleware/auth";
 export async function whoami(ctx: AuthContext): Promise<Response> {
   const { identity, workspace, limits } = ctx;
 
+  // Counted live, the same way `POST /v1/shares` counts before deciding
+  // whether to refuse — a stale "shares used" number here would let the
+  // dashboard say a plan allows one more link when the create call is about
+  // to say otherwise. Cheap: `share_links` is small per workspace and this is
+  // a single indexed COUNT, not a listing.
+  const shareLinksUsed = await ctx.db.shares.countLive(ctx.now);
+
   const scopes = {
     ops: identity.scope.ops,
     pathPrefix: identity.scope.pathPrefix === "" ? "/*" : `${identity.scope.pathPrefix}/*`,
@@ -60,6 +67,14 @@ export async function whoami(ctx: AuthContext): Promise<Response> {
       files: { used: workspace.file_count, max: limits.fileCount },
       egressBytes: { used: workspace.egress_bytes_period, max: limits.egressBytesPerPeriod },
       requests: { used: workspace.requests_period, max: limits.requestsPerPeriod },
+      /**
+       * The one entitlement the dashboard has to gate a *button* on before any
+       * request is made — the other three only ever explain a number after the
+       * fact. Zero on the free plan is a wall, not a warning, so the create
+       * dialog can honestly disable itself instead of offering a control the
+       * server would refuse.
+       */
+      shareLinks: { used: shareLinksUsed, max: limits.shareLinks },
       periodResetAt: new Date(workspace.period_reset_at).toISOString(),
     },
   };

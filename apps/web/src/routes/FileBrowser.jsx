@@ -5,8 +5,10 @@ import {
   Badge, Modal, ConfirmModal, Toast, EmptyState, UploadItem, Checkbox, Alert
 } from '../components/index.js';
 import { Drawer } from '../components-local/Drawer.jsx';
+import ShareModal from '../components-local/ShareModal.jsx';
 import { useResource } from '../lib/useResource.js';
 import { useWorkspace } from '../lib/workspace.jsx';
+import { useWorkspaceUsage } from '../lib/usage.jsx';
 import { uploadFile } from '../lib/upload.js';
 
 /**
@@ -75,7 +77,13 @@ export default function FileBrowser() {
   const loading = status === 'loading';
   const failed = status === 'failed';
   const files = useMemo(() => (data?.files ?? []).map(toRow), [data]);
-  const { api, workspaceId, canWrite } = useWorkspace();
+  const { api, workspaceId, canWrite, workspaceSlug } = useWorkspace();
+  // The real entitlement, from `GET /v1/whoami` — never a hardcoded plan
+  // table. `usage` stays at its safe `loading` default outside a workspace
+  // shell (e.g. this screen under test on its own), which reads as "no share
+  // links" rather than crashing.
+  const usage = useWorkspaceUsage();
+  const shareLinksLimit = usage.data?.me?.usage?.shareLinks?.max ?? 0;
   // Uploads are transient state belonging to an upload in progress, not
   // something the server holds. The list is empty until somebody drops a file.
   const [uploads, setUploads] = useState([]);
@@ -98,6 +106,7 @@ export default function FileBrowser() {
   // The id of the file whose download link is being fetched, so only that one
   // button shows a spinner rather than every Download on the screen.
   const [downloading, setDownloading] = useState(null);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const rows = useMemo(() => {
     if (loading || failed) return [];
@@ -474,7 +483,7 @@ export default function FileBrowser() {
       <Drawer
         open={!!detail}
         title={detail ? detail.name : ''}
-        onClose={() => setDetail(null)}
+        onClose={() => { setDetail(null); setShareOpen(false); }}
         footer={
           <>
             <Button
@@ -485,6 +494,21 @@ export default function FileBrowser() {
             >
               Download
             </Button>
+            {/* The branch this came from also carried a Rename button here.
+                It is deliberately not taken: Rename was removed from this
+                drawer because it did nothing, and re-adding a control that
+                reports an action it never performs is the defect class that
+                removal existed to end. */}
+            {canWrite ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<Icon name="link" size={13} />}
+                onClick={() => setShareOpen(true)}
+              >
+                Share
+              </Button>
+            ) : null}
             <Button size="sm" variant="danger-outline" onClick={() => setDialog('delete')}>Delete</Button>
           </>
         }
@@ -523,6 +547,23 @@ export default function FileBrowser() {
           </>
         ) : null}
       </Drawer>
+
+      {/*
+        A sibling of the drawer, never a child of it. `Modal` paints its own
+        full-screen scrim wherever it sits in the tree — it is not a portal —
+        so nesting it inside the drawer would cap its stacking context at the
+        drawer's own, the same class of bug that once buried a confirmation
+        dialog under the file drawer (docs/ui-layering.md).
+      */}
+      <ShareModal
+        open={shareOpen}
+        target={detail ? { kind: 'file', id: detail.id, name: detail.name } : null}
+        limits={{ shareLinks: shareLinksLimit }}
+        onClose={() => setShareOpen(false)}
+        api={api}
+        workspaceId={workspaceId}
+        ws={workspaceSlug}
+      />
 
       {/* --- 8.11 New folder --- */}
       <Modal

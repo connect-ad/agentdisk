@@ -212,10 +212,14 @@ describe('Settings → Security', () => {
     });
     const user = await openSecurity();
     await user.type(screen.getByLabelText(/Current password/), 'old-secret');
-    await user.type(screen.getByLabelText(/^New password/), 'a-much-longer-one');
-    await user.type(screen.getByLabelText(/Confirm new password/), 'a-much-longer-one');
+    // Compliant with the Firebase password policy, which this form now applies
+    // before calling: see `password-policy.test.jsx`. The subject here is that
+    // the change reaches Firebase at all, so the password only has to be one
+    // the form will send.
+    await user.type(screen.getByLabelText(/^New password/), 'A-much-l0nger-one');
+    await user.type(screen.getByLabelText(/Confirm new password/), 'A-much-l0nger-one');
     await user.click(screen.getByRole('button', { name: 'Change password' }));
-    await waitFor(() => expect(changePassword).toHaveBeenCalledWith('old-secret', 'a-much-longer-one'));
+    await waitFor(() => expect(changePassword).toHaveBeenCalledWith('old-secret', 'A-much-l0nger-one'));
   });
 
   it('refuses a mismatched confirmation without calling Firebase', async () => {
@@ -225,8 +229,11 @@ describe('Settings → Security', () => {
     });
     const user = await openSecurity();
     await user.type(screen.getByLabelText(/Current password/), 'old-secret');
-    await user.type(screen.getByLabelText(/^New password/), 'one-thing');
-    await user.type(screen.getByLabelText(/Confirm new password/), 'another-thing');
+    // Both compliant with the password policy and different from each other:
+    // the subject here is the mismatch guard, so the passwords have to get past
+    // the policy gate to reach it.
+    await user.type(screen.getByLabelText(/^New password/), 'One-th1ng!');
+    await user.type(screen.getByLabelText(/Confirm new password/), 'Another-th1ng!');
     await user.click(screen.getByRole('button', { name: 'Change password' }));
     expect(changePassword).not.toHaveBeenCalled();
     expect(screen.getByRole('alert').textContent).toMatch(/do not match/);

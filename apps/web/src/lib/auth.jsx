@@ -34,6 +34,7 @@ import {
   EmailAuthProvider
 } from 'firebase/auth';
 import { auth, firebaseConfigured, googleProvider, githubProvider } from './firebase.js';
+import { POLICY_SENTENCE } from './password.js';
 
 const AuthContext = createContext(null);
 
@@ -75,8 +76,15 @@ export function describeAuthError(error, context = 'signin') {
       // Unavoidable on signup - the account cannot be created either way, and
       // saying nothing leaves the person stuck on a form that will never work.
       return 'That email already has an account. Try signing in instead.';
+    // Both of these are the password policy refusing, from either side of the
+    // upgrade: `weak-password` is the old minimum-length rejection,
+    // `password-does-not-meet-requirements` is what the configured policy
+    // returns. Neither can be collapsed into the generic failure — this is the
+    // one class of error the person can fix from the form they are looking at,
+    // and the default below would send them back to retype the same password.
     case 'auth/weak-password':
-      return 'Pick a password of at least 8 characters.';
+    case 'auth/password-does-not-meet-requirements':
+      return `That password does not meet the requirements. ${POLICY_SENTENCE}`;
     case 'auth/popup-closed-by-user':
     case 'auth/cancelled-popup-request':
       return null; // They changed their mind. Not an error worth showing.

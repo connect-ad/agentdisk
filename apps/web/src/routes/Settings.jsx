@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useWorkspace } from '../lib/workspace.jsx';
 import { useAuth, describeAuthError } from '../lib/auth.jsx';
+import { POLICY_SENTENCE, checkPassword } from '../lib/password.js';
 import React, { useState } from 'react';
 import {
   PageHead, Panel, Tabs, Input, Button, Icon, Badge,
@@ -56,9 +57,17 @@ function SecurityTab({ onToast }) {
   const hasPassword = providerIds.includes('password');
   const methods = providerIds.map(id => PROVIDER_LABEL[id] ?? id);
 
+  // Live, so the rules are visible while typing rather than only on rejection.
+  const policy = checkPassword(next);
+
   const submit = async () => {
     if (!current || !next) { setError('Fill in your current and new password.'); return; }
     if (next !== confirm) { setError('The two new passwords do not match.'); return; }
+    // This form checked nothing at all while its hint promised twelve
+    // characters. Firebase's policy applies to `updatePassword` exactly as it
+    // does to sign-up, so an unchecked field here is a form that reports a
+    // failure it could have predicted.
+    if (!policy.ok) { setError(`${policy.summary}.`); return; }
     setBusy(true); setError(null);
     try {
       await changePassword(current, next);
@@ -89,7 +98,12 @@ function SecurityTab({ onToast }) {
       <Panel
         title="Password"
         subtitle="Handled by Firebase. AgentDisk never receives or stores your password."
-        footer={hasPassword ? <Button onClick={submit} loading={busy}>Change password</Button> : null}
+        footer={hasPassword ? (
+          // Inactive until the new password meets the policy Firebase will
+          // apply. The field's hint is live, so what is missing is on screen
+          // beside the button that is waiting for it.
+          <Button onClick={submit} loading={busy} disabled={!policy.ok}>Change password</Button>
+        ) : null}
       >
         {/* No `role="alert"` wrapper: a danger-tone Alert already carries one,
             and nesting them announces the same sentence twice. */}
@@ -111,7 +125,7 @@ function SecurityTab({ onToast }) {
               type="password"
               required
               autoComplete="new-password"
-              hint="At least 12 characters. A passphrase beats complexity rules."
+              hint={next ? policy.summary : POLICY_SENTENCE}
               value={next}
               onChange={e => setNext(e.target.value)}
             />

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Icon, Alert } from '../components/index.js';
 import { useAuth, describeAuthError } from '../lib/auth.jsx';
+import { PASSWORD_RULES, checkPassword, strengthOf } from '../lib/password.js';
 import { BASE_URL } from '../lib/api.js';
 import { FREE_SUMMARY } from '../lib/pricing.js';
 import Logo from '../components-local/Logo.jsx';
@@ -322,15 +323,25 @@ function Submit({ busy, busyText, children, disabled, gap }) {
   );
 }
 
-/** The four strength bars, as a block, shared by signup and reset. */
+/**
+ * The strength block, shared by signup and reset: one bar per rule met, and
+ * under it the rules themselves, ticking as they are satisfied.
+ *
+ * The checklist renders from the first keystroke rather than on failure,
+ * because the point is to be told the rules while typing instead of after
+ * submitting — Firebase refuses a non-compliant password at `accounts:signUp`
+ * whatever this form does, so a person who only learns the rules from the
+ * rejection retypes the same password.
+ */
 function Strength({ pw }) {
   const st = strengthOf(pw);
+  const { met } = checkPassword(pw);
   if (!pw) return null;
   return (
     <div className="auth__strength">
       <div className="auth__bars">
-        {[0, 1, 2, 3].map(i => (
-          <span key={i} className={`auth__bar${i < st.score ? ' is-on' : ''}`} />
+        {PASSWORD_RULES.requirements.map((rule, i) => (
+          <span key={rule.id} className={`auth__bar${i < st.score ? ' is-on' : ''}`} />
         ))}
       </div>
       <div className="auth__strengthrow">
@@ -343,6 +354,25 @@ function Strength({ pw }) {
           {st.label}
         </span>
       </div>
+      {/* The gate, written out. `aria-live` is on the tag above rather than
+          here: announcing five list items on every keystroke would make the
+          field unusable with a screen reader, while the one-word verdict is
+          exactly the running commentary that helps. */}
+      <ul className="auth__reqs" data-testid="pw-requirements">
+        {PASSWORD_RULES.requirements.map(rule => {
+          const ok = met.includes(rule);
+          return (
+            <li key={rule.id} className={`auth__req${ok ? ' is-met' : ''}`}>
+              {/* A word, not only a tick and a colour. */}
+              <span className="auth__reqmark" aria-hidden="true">
+                {ok ? <Tick size={11} width={3} /> : <span className="auth__reqdot" />}
+              </span>
+              <span>{rule.label}</span>
+              <span className="sr-only">{ok ? ' — met' : ' — still needed'}</span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
@@ -437,36 +467,14 @@ function NotConfigured() {
 /* ------------------------------- 8.3 Signup ------------------------------- */
 
 /**
- * The reference's four strength bars, scored against the password actually
- * typed. Its caption — "14 characters, mixed case, one symbol" — is a
- * description of the password in the field, so it is computed rather than
- * printed: a fixed caption under a live meter is the same class of lie as a
- * hardcoded workspace ID.
+ * The reference draws four strength bars with the caption "14 characters, mixed
+ * case, one symbol". Both are kept, and both now read from `lib/password.js`:
+ * one bar per rule in the policy, and a caption computed from the password
+ * actually typed. A fixed caption under a live meter is the same class of lie
+ * as a hardcoded workspace ID — and a meter scoring by its own private rule,
+ * beside a button that accepted whatever it concluded, was the version of that
+ * lie this file used to carry.
  */
-export function strengthOf(pw) {
-  if (!pw) return { score: 0, label: '', tone: 'bad', note: '' };
-  const mixed = /[a-z]/.test(pw) && /[A-Z]/.test(pw);
-  const digit = /[0-9]/.test(pw);
-  const symbol = /[^A-Za-z0-9]/.test(pw);
-
-  let score = 0;
-  if (pw.length >= 8) score += 1;
-  if (pw.length >= 12) score += 1;
-  if (digit || symbol) score += 1;
-  if (mixed) score += 1;
-
-  const parts = [`${pw.length} character${pw.length === 1 ? '' : 's'}`];
-  if (mixed) parts.push('mixed case');
-  if (digit) parts.push('a number');
-  if (symbol) parts.push('one symbol');
-
-  return {
-    score,
-    label: score <= 1 ? 'WEAK' : score === 2 ? 'FAIR' : score === 3 ? 'GOOD' : 'STRONG',
-    tone: score <= 1 ? 'bad' : score === 2 ? 'warn' : 'ok',
-    note: parts.join(', ')
-  };
-}
 
 export function Signup() {
   const navigate = useNavigate();
@@ -486,7 +494,11 @@ export function Signup() {
     const next = {};
     if (!name.trim()) next.name = 'Enter the name you want on your account.';
     if (!EMAIL_RE.test(email)) next.email = 'Enter a valid email address.';
-    if (pw.length < 8) next.pw = 'Use at least 8 characters.';
+    // The same rules Firebase will apply, applied before the round-trip rather
+    // than after it. `summary` names what is outstanding; the checklist under
+    // the field has been showing it since the first keystroke.
+    const policy = checkPassword(pw);
+    if (!policy.ok) next.pw = `${policy.summary}.`;
     setFieldErr(next);
     if (Object.keys(next).length > 0) return;
 
@@ -561,7 +573,10 @@ export function Signup() {
 
             <Strength pw={pw} />
 
-            {/* A real gate, not a decoration: submit is blocked until it is on. */}
+            {/* Both gates are real, and both are visible before they bite: the
+                consent box is on screen, and the checklist above names every
+                rule still outstanding. A button that is dim for a reason
+                nobody can see is the version of this to avoid. */}
             <label className="auth__consent">
               <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} />
               <span className="auth__check"><Tick width={3.4} /></span>
@@ -571,7 +586,11 @@ export function Signup() {
               </span>
             </label>
 
-            <Submit busy={busy} busyText="Creating your account…" disabled={!agreed}>
+            <Submit
+              busy={busy}
+              busyText="Creating your account…"
+              disabled={!agreed || !checkPassword(pw).ok}
+            >
               Create account
             </Submit>
           </form>
@@ -787,8 +806,13 @@ export function ResetPassword() {
 
   const submit = async e => {
     e.preventDefault();
-    if (mismatch || pw.length < 8) {
-      setErr('Use at least 8 characters, typed the same twice.');
+    const policy = checkPassword(pw);
+    if (mismatch || !policy.ok) {
+      setErr(
+        mismatch
+          ? 'Type the same password in both fields.'
+          : `${policy.summary}.`
+      );
       return;
     }
     setErr(null); setBusy(true);
@@ -849,7 +873,9 @@ export function ResetPassword() {
           />
         </Field>
 
-        <Submit busy={busy} busyText="Saving…" disabled={mismatch}>Update password</Submit>
+        <Submit busy={busy} busyText="Saving…" disabled={mismatch || !checkPassword(pw).ok}>
+          Update password
+        </Submit>
       </form>
 
       <Alt prompt="Know your password?" to="/login" label="Back to log in" />

@@ -17,7 +17,7 @@
    is a question you must answer first. */
 :root{
   --z-base:1;       /* sticky table header */
-  --z-nav:30;       /* shell tabs, marketing nav */
+  --z-nav:30;       /* shell tabs, marketing nav, cookie notice */
   --z-topbar:40;    /* shell top bar */
   --z-progress:50;  /* route progress bar */
   --z-drawer:60;    /* drawer */
@@ -1273,3 +1273,72 @@
    panels and had never matched a rule. The gap is the body's own 16px padding,
    so the space between the two boxes equals the space around them. */
 .danger-zone .panel__body{display:flex;flex-direction:column;gap:var(--s-6)}
+
+/* --- cookie notice (components-local/CookieNotice.jsx) ---
+   From AgentDisk Site.dc.html § COOKIE BAR: a surface-coloured strip on the
+   bottom edge, lifted off the page by a shadow that points upward because the
+   thing it has to separate itself from is above it.
+
+   Fixed rather than the reference's sticky. The reference draws one scrolling
+   sheet, where sticky and fixed look identical; the product has screens with
+   their own scroll containers, and sticky inside one of those would park the
+   notice at the bottom of *that* box instead of the window.
+
+   It rides the --z-nav rung: sticky chrome, and below both the drawer and the
+   modal scrim, so a dialog — including its own two — covers it. See
+   docs/ui-layering.md §1. */
+.ckb{position:fixed;bottom:0;left:0;right:0;z-index:var(--z-nav);
+  background:var(--surface);border-top:1px solid var(--line-2);
+  box-shadow:0 -0.625rem 1.875rem var(--shadow-tint);
+  animation:ckb-in var(--d-3) var(--ease-out)}
+@keyframes ckb-in{from{transform:translateY(100%)}to{transform:none}}
+.ckb__inner{display:flex;align-items:center;gap:var(--s-6);
+  padding:var(--s-5) var(--gutter);max-width:var(--shell-w);margin:0 auto}
+.ckb__copy{flex:1;min-width:11.875rem}
+.ckb__title{margin:0 0 var(--s-2);font-size:var(--t-13-5);
+  font-weight:var(--w-semi);color:var(--ink)}
+.ckb__body{margin:0;font-size:var(--t-12-5);line-height:var(--lh-loose);
+  color:var(--ink-2);max-width:var(--measure)}
+/* flex:none so the four buttons are never the thing that gives way; the copy
+   above reflows instead. Four actions is one more than the reference draws, so
+   they wrap rather than squeeze. */
+.ckb__actions{display:flex;gap:var(--s-4);flex-wrap:wrap;flex:none}
+@media (max-width:875px){
+  .ckb__inner{flex-direction:column;align-items:flex-start}
+  .ckb__actions{width:100%}
+}
+
+/* --- its preferences dialog --- */
+.ckb__cats{display:flex;flex-direction:column;gap:var(--s-5)}
+.ckb__cat{display:flex;align-items:flex-start;gap:var(--s-5);
+  border:1px solid var(--line);border-radius:var(--r-2);
+  padding:var(--s-5) var(--s-6)}
+.ckb__cattext{flex:1;min-width:0}
+.ckb__catline{display:flex;align-items:center;gap:var(--s-4);flex-wrap:wrap}
+.ckb__cattitle{font-size:var(--t-13-5);font-weight:var(--w-semi);color:var(--ink)}
+.ckb__cattag{font-family:var(--font-mono);font-size:var(--t-9-5);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-caps);
+  padding:var(--s-1) var(--s-3);border-radius:var(--r-1);color:var(--ink-2);
+  background:var(--surface-3);border:1px solid var(--line)}
+.ckb__catbody{margin:var(--s-2) 0 0;font-size:var(--t-12-5);
+  line-height:var(--lh-normal);color:var(--ink-2)}
+/* Essential reads as an on switch and is not one: no input, nothing to focus,
+   nothing to click. The neutral track rather than the accent says it was not
+   chosen -- the reference does the same, in --bd2 against --acc. */
+.ckb__lockedswitch{width:2.25rem;height:1.25rem;flex:none;
+  border-radius:var(--r-full);background:var(--line-2);position:relative;
+  margin-top:var(--s-1)}
+.ckb__lockedswitch::after{content:"";position:absolute;top:0.125rem;
+  right:0.125rem;width:0.875rem;height:0.875rem;border-radius:var(--r-full);
+  background:var(--surface)}
+.ckb__foot{margin:var(--s-6) 0 0;font-size:var(--t-12-5);
+  line-height:var(--lh-normal);color:var(--ink-2)}
+
+/* --- its support dialog --- */
+.ckb__support{margin:0 0 var(--s-5);font-size:var(--t-13-5);
+  line-height:var(--lh-loose);color:var(--ink-2)}
+.ckb__support:last-child{margin-bottom:0}
+.ckb__addr{font-family:var(--font-mono);font-size:var(--t-12-5);
+  color:var(--ink);background:var(--surface-3);border:1px solid var(--line);
+  border-radius:var(--r-1);padding:var(--s-1) var(--s-3);
+  white-space:nowrap}

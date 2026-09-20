@@ -20,7 +20,7 @@ here first.
 | Token | Value | Layer | Why it sits there |
 |---|---|---|---|
 | `--z-base` | `1` | Sticky table header (`.tbl th`) | Lifts the header off scrolling rows, nothing more |
-| `--z-nav` | `30` | Shell tabs, marketing nav, in-context menus | Sticky chrome that page content scrolls under |
+| `--z-nav` | `30` | Shell tabs, marketing nav, in-context menus, the cookie notice (`.ckb`) | Sticky chrome that page content scrolls under. The notice is on this rung because a drawer and a dialog both ask a question that must be answered first, so both have to cover it |
 | `--z-topbar` | `40` | Shell top bar (`.shell__top`) | Must cover the tabs that stick beneath it |
 | `--z-progress` | `50` | Top progress bar (`.tprog`) | A route change must stay visible over all chrome |
 | `--z-drawer` | `60` | Drawer (`.dw`) | Above the page and its chrome — but **below** dialogs |

@@ -8,7 +8,7 @@ name: reset_dev_temporary
 # Destroys the dev environment and builds it back: R2 emptied, every Terraform
 # resource destroyed, re-applied, then code, secrets and migrations redeployed.
 # The fresh database gets its schema, its plan catalogue (migration 0012) and
-# its first staff administrator (migration 0014) back on its own, so nothing
+# its first administrator (migration 0014) back on its own, so nothing
 # has to be restored by hand.
 #
 # ── Why a tag and not a button ────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { staffApi } from '../api.js';
+import { adminApi } from '../api.js';
 import { useResource } from '../lib/useResource.js';
 import { ConfirmModal, Modal } from '../components/Overlay.jsx';
 import { EmptyState, ErrorState, Skeleton } from '../components/States.jsx';
@@ -20,7 +20,7 @@ import {
 } from '../lib/ui.js';
 
 /**
- * Staff accounts. super_admin only, all of it.
+ * Admin accounts. super_admin only, all of it.
  *
  * ── An account is an address and a role ────────────────────────────────────
  * Nothing secret is created here, so nothing is shown once. Adding somebody
@@ -31,7 +31,7 @@ import {
  * address you do not control. Hence super_admin only, and audited.
  *
  * ── No 2FA column ──────────────────────────────────────────────────────────
- * The design has one. Firebase owns authentication now, so whether a staff
+ * The design has one. Firebase owns authentication now, so whether a admin
  * member has two-factor set up is a fact about their Google account and not
  * something this database knows. Showing a column we cannot fill would be
  * exactly the invented data the rest of this console refuses to render.
@@ -42,8 +42,8 @@ import {
 
 const COLS = 'minmax(0,1.6fr) 110px 150px 110px 130px';
 
-export function StaffAccounts({ currentStaffId, onToast }) {
-  const resource = useResource(() => staffApi.listAccounts(), []);
+export function AdminAccounts({ currentAdminId, onToast }) {
+  const resource = useResource(() => adminApi.listAccounts(), []);
   const [creating, setCreating] = useState(false);
   const [dialog, setDialog] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -75,7 +75,7 @@ export function StaffAccounts({ currentStaffId, onToast }) {
     <div style={paneIn}>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '14px' }}>
         <button type="button" style={primaryBtn} onClick={() => setCreating(true)}>
-          Invite staff
+          Invite admin
         </button>
       </div>
 
@@ -86,20 +86,20 @@ export function StaffAccounts({ currentStaffId, onToast }) {
       )}
 
       {accounts.length === 0 ? (
-        <EmptyState title="No staff accounts" detail="This cannot normally happen — you are signed in as one." />
+        <EmptyState title="No admin accounts" detail="This cannot normally happen — you are signed in as one." />
       ) : (
         <div style={card}>
           <div style={{ overflowX: 'auto' }}>
             <div style={{ minWidth: '840px' }}>
               <div style={headRow(COLS)}>
-                <span style={th}>Staff member</span>
+                <span style={th}>Admin member</span>
                 <span style={th}>Role</span>
                 <span style={th}>Last seen</span>
                 <span style={th}>Status</span>
                 <span style={th}>Actions</span>
               </div>
               {accounts.map(account => {
-                const self = account.id === currentStaffId;
+                const self = account.id === currentAdminId;
                 return (
                   <div key={account.id} style={dataRow(COLS, false)}>
                     <span style={{ minWidth: 0 }}>
@@ -179,7 +179,7 @@ export function StaffAccounts({ currentStaffId, onToast }) {
               color: 'var(--tx3)'
             }}
           >
-            Staff accounts are never deleted, only disabled — the audit log has to keep resolving a
+            Admin accounts are never deleted, only disabled — the audit log has to keep resolving a
             historical actor.
           </div>
         </div>
@@ -194,7 +194,7 @@ export function StaffAccounts({ currentStaffId, onToast }) {
           setError(null);
         }}
         onSubmit={(email, role, reason) =>
-          act(() => staffApi.createAccount(email, role, reason), `${email} can now sign in as ${role}.`)
+          act(() => adminApi.createAccount(email, role, reason), `${email} can now sign in as ${role}.`)
         }
       />
 
@@ -209,7 +209,7 @@ export function StaffAccounts({ currentStaffId, onToast }) {
         description={
           dialog?.account?.disabledAt
             ? 'They can sign in again with the same password and TOTP.'
-            : 'Every live session for this account ends immediately — without that, a disabled staff member keeps cross-tenant reach for the remaining hours of a session already open.'
+            : 'Every live session for this account ends immediately — without that, a disabled admin member keeps cross-tenant reach for the remaining hours of a session already open.'
         }
         requireReason
         confirmLabel={dialog?.account?.disabledAt ? 'Re-enable' : 'Disable'}
@@ -218,7 +218,7 @@ export function StaffAccounts({ currentStaffId, onToast }) {
         onConfirm={reason =>
           act(
             () =>
-              staffApi.setAccountDisabled(dialog.account.id, !dialog.account.disabledAt, reason),
+              adminApi.setAccountDisabled(dialog.account.id, !dialog.account.disabledAt, reason),
             dialog.account.disabledAt ? 'Account re-enabled.' : 'Account disabled and signed out.'
           )
         }
@@ -231,7 +231,7 @@ export function StaffAccounts({ currentStaffId, onToast }) {
         error={error}
         onCancel={() => setDialog(null)}
         onSubmit={(role, reason) =>
-          act(() => staffApi.setAccountRole(dialog.account.id, role, reason), 'Role changed.')
+          act(() => adminApi.setAccountRole(dialog.account.id, role, reason), 'Role changed.')
         }
       />
     </div>
@@ -246,8 +246,8 @@ function InviteDialog({ open, busy, error, onCancel, onSubmit }) {
   return (
     <Modal
       open={open}
-      title="Invite a staff member"
-      description="Grants an email address a staff role. They sign in with Google like everybody else — there is no invitation to send and no credential to deliver."
+      title="Invite a admin member"
+      description="Grants an email address a admin role. They sign in with Google like everybody else — there is no invitation to send and no credential to deliver."
       onClose={onCancel}
       onSubmit={() => onSubmit(email.trim(), role, reason.trim())}
       submitLabel="Grant access"
@@ -256,7 +256,7 @@ function InviteDialog({ open, busy, error, onCancel, onSubmit }) {
       busy={busy}
     >
       <label htmlFor="invite-email" style={label}>
-        Staff email
+        Admin email
       </label>
       <input
         id="invite-email"
@@ -277,7 +277,7 @@ function InviteDialog({ open, busy, error, onCancel, onSubmit }) {
       >
         <option value="support">support — read everything, act on agents and keys</option>
         <option value="admin">admin — also suspend, override quotas, edit plans</option>
-        <option value="super_admin">super_admin — also delete, and manage staff</option>
+        <option value="super_admin">super_admin — also delete, and manage admin</option>
       </select>
 
       <label htmlFor="invite-reason" style={label}>

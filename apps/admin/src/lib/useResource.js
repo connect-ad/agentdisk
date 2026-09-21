@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * Fetch on activation, cache for the session, never poll.
  *
  * The design's own note — "Refreshed on activation, not polled" — as behaviour.
- * A staff console watched by a handful of people has no reason to hold open a
+ * A admin console watched by a handful of people has no reason to hold open a
  * request loop against the customer database, and a number that changes under
  * somebody's cursor while they are reading it is worse than a slightly stale
  * one with a visible refresh button and a timestamp saying when it was taken.

@@ -1,14 +1,14 @@
 /**
- * The 30-day sweep behind staff-initiated deletion — 32 PART 7 and 11.
+ * The 30-day sweep behind admin-initiated deletion — 32 PART 7 and 11.
  *
- * `DELETE /v1/staff/users/:id` and `DELETE /v1/staff/workspaces/:id` set a
- * timestamp and stop. Nothing irreversible happens inline, on purpose: a staff
+ * `DELETE /v1/admin/users/:id` and `DELETE /v1/admin/workspaces/:id` set a
+ * timestamp and stop. Nothing irreversible happens inline, on purpose: a admin
  * member deleting somebody ELSE's data is exactly where the absence of a grace
  * period hurts most, and the restore endpoints have to have something left to
  * restore. This is the job that eventually makes it real.
  *
  * ── It reports by default, and that default is not timidity ────────────────
- * `dryRun` defaults to true and only `STAFF_PURGE_ENABLED = "true"` turns on
+ * `dryRun` defaults to true and only `ADMIN_PURGE_ENABLED = "true"` turns on
  * real deletion — the same shape as `expireUnclaimedWorkspaces`, for the same
  * reason it was needed there. Dev already holds weeks of test data, and a sweep
  * with no "only what was deleted after this shipped" guard would take all of it
@@ -31,9 +31,9 @@
 import { deleteWorkspaceCascade } from "../db/workspace-cascade";
 
 /** Thirty days, in ms. The window both delete endpoints promise. */
-export const STAFF_PURGE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+export const ADMIN_PURGE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
-export interface StaffPurgeResult {
+export interface AdminPurgeResult {
   dryRun: boolean;
   /** Workspaces past their window, whether or not anything was done to them. */
   workspaceCandidates: number;
@@ -59,14 +59,14 @@ function tombstoneEmail(userId: string): string {
   return `deleted-${userId}@deleted.invalid`;
 }
 
-export async function purgeStaffDeleted(
+export async function purgeAdminDeleted(
   db: D1Database,
   files: R2Bucket,
   now: number,
   dryRun = true
-): Promise<StaffPurgeResult> {
-  const cutoff = now - STAFF_PURGE_WINDOW_MS;
-  const result: StaffPurgeResult = {
+): Promise<AdminPurgeResult> {
+  const cutoff = now - ADMIN_PURGE_WINDOW_MS;
+  const result: AdminPurgeResult = {
     dryRun,
     workspaceCandidates: 0,
     workspacesPurged: 0,
@@ -109,7 +109,7 @@ export async function purgeStaffDeleted(
       console.log(
         JSON.stringify({
           level: "warn",
-          message: "staff purge skipped: live billing",
+          message: "admin purge skipped: live billing",
           workspaceId: workspace.id,
           orgId: workspace.orgId,
           billingStatus: workspace.billingStatus,
@@ -122,7 +122,7 @@ export async function purgeStaffDeleted(
       console.log(
         JSON.stringify({
           level: "info",
-          message: "staff purge candidate (workspace)",
+          message: "admin purge candidate (workspace)",
           workspaceId: workspace.id,
           name: workspace.name,
         })
@@ -141,7 +141,7 @@ export async function purgeStaffDeleted(
       console.log(
         JSON.stringify({
           level: "error",
-          message: "staff purge failed (workspace)",
+          message: "admin purge failed (workspace)",
           workspaceId: workspace.id,
           reason: err instanceof Error ? err.message : String(err),
         })
@@ -172,7 +172,7 @@ export async function purgeStaffDeleted(
       console.log(
         JSON.stringify({
           level: "warn",
-          message: "staff purge skipped: live billing",
+          message: "admin purge skipped: live billing",
           userId: user.id,
         })
       );
@@ -183,7 +183,7 @@ export async function purgeStaffDeleted(
       console.log(
         JSON.stringify({
           level: "info",
-          message: "staff purge candidate (user)",
+          message: "admin purge candidate (user)",
           userId: user.id,
         })
       );
@@ -208,7 +208,7 @@ export async function purgeStaffDeleted(
       console.log(
         JSON.stringify({
           level: "error",
-          message: "staff purge failed (user)",
+          message: "admin purge failed (user)",
           userId: user.id,
           reason: err instanceof Error ? err.message : String(err),
         })

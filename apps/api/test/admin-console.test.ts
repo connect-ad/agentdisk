@@ -17,7 +17,7 @@
 
 import { SELF, env } from "cloudflare:test";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { asStaff, firebaseToken, installStaffJwks } from "./staff-auth";
+import { asAdmin, firebaseToken, installAdminJwks } from "./admin-auth";
 import { NOW, WORKSPACE_A, WORKSPACE_B, seedTwoWorkspaces } from "./helpers";
 
 const URL_BASE = "https://api-dev.agentdisk.io";
@@ -43,20 +43,20 @@ let support = "";
 let admin = "";
 let superAdmin = "";
 
-beforeAll(installStaffJwks);
+beforeAll(installAdminJwks);
 
 beforeEach(async () => {
   await seedTwoWorkspaces();
-  for (const table of ["staff_users", "staff_actions", "audit_events"]) {
+  for (const table of ["admin_users", "admin_actions", "audit_events"]) {
     await env.DB.prepare(`DELETE FROM ${table}`).run();
   }
   await env.DB.prepare(`UPDATE workspaces SET status = 'active', deleted_at = NULL`).run();
   await env.DB.prepare(`UPDATE users SET deleted_at = NULL, disabled_at = NULL`).run();
 
-  // A token proves an identity; the staff_users row is what makes it staff.
-  support = await asStaff("support@agentdisk.io", "support", { id: "stf_SUPPORT" });
-  admin = await asStaff("admin@agentdisk.io", "admin", { id: "stf_ADMIN" });
-  superAdmin = await asStaff("super@agentdisk.io", "super_admin", { id: "stf_SUPER" });
+  // A token proves an identity; the admin_users row is what makes it admin.
+  support = await asAdmin("support@agentdisk.io", "admin", { id: "stf_SUPPORT" });
+  admin = await asAdmin("admin@agentdisk.io", "admin", { id: "stf_ADMIN" });
+  superAdmin = await asAdmin("super@agentdisk.io", "admin", { id: "stf_SUPER" });
 });
 
 /* ---------------------------- the role matrix ---------------------------- */
@@ -69,99 +69,96 @@ describe("the role matrix, enforced server-side", () => {
     // on reads: support is exactly who needs to see WHY a customer's writes are
     // blocked, and being unable to look up the plan is what turns a one-minute
     // answer into an escalation.
-    expect((await call("GET", "/v1/staff/plans", support)).status).toBe(200);
-    expect((await call("GET", "/v1/staff/billing", support)).status).toBe(200);
-    expect((await call("GET", "/v1/staff/audit", support)).status).toBe(200);
-    expect((await call("GET", "/v1/staff/workspaces", support)).status).toBe(200);
+    expect((await call("GET", "/v1/admin/plans", support)).status).toBe(200);
+    expect((await call("GET", "/v1/admin/billing", support)).status).toBe(200);
+    expect((await call("GET", "/v1/admin/audit", support)).status).toBe(200);
+    expect((await call("GET", "/v1/admin/workspaces", support)).status).toBe(200);
   });
 
-  it("refuses support the admin-only writes", async () => {
-    expect(
-      (await call("PATCH", "/v1/staff/plans/pro", support, { agents: 5, reason })).status
-    ).toBe(403);
-    expect(
-      (
-        await call("PATCH", `/v1/staff/workspaces/${WORKSPACE_A}/plan-override`, support, {
-          planId: "pro",
-          reason,
-        })
-      ).status
-    ).toBe(403);
+  // ── What used to be here ──────────────────────────────────────────────
+  // Five tests pinning a three-tier matrix: support could not do admin writes,
+  // admin could not do super_admin writes, and a refusal was recorded as
+  // `admin.denied`. The console now has ONE role, so nothing refuses anybody
+  // and none of that can be asserted - a test expecting 403 would be asserting
+  // the opposite of the model.
+  //
+  // Stated plainly, because it is a real reduction: **every console operator
+  // can now do everything**, including deleting a workspace, editing the plan
+  // catalogue and granting console access to a new address. The only boundary
+  // left is the `admin_users` lookup - being in that table at all.
+  //
+  // `requireRole` and the `admin.denied` audit path are deliberately still in
+  // the source. They cannot fire today; they are what restores the gate
+  // everywhere at once if a tier ever comes back.
+
+  it("opens what used to be super_admin-only to the one role", async () => {
+    // 200 where the matrix above expected 403. Read as the record of a
+    // deliberate collapse, not as coverage of a permission model. Listing
+    // console accounts was the most privileged read there was.
+    expect((await call("GET", "/v1/admin/accounts", admin)).status).toBe(200);
   });
 
-  it("refuses admin the super_admin-only writes", async () => {
-    expect((await call("GET", "/v1/staff/accounts", admin)).status).toBe(403);
-    expect(
-      (await call("POST", "/v1/staff/plans", admin, { id: "scale", reason })).status
-    ).toBe(403);
-    expect(
-      (await call("POST", "/v1/staff/plans/basic/retire", admin, { reason })).status
-    ).toBe(403);
-    expect(
-      (
-        await call("DELETE", `/v1/staff/workspaces/${WORKSPACE_A}`, admin, {
-          confirmName: "Workspace A",
-          reason,
-        })
-      ).status
-    ).toBe(403);
+  it("still writes an audit row for a console action", async () => {
+    // The half of the discipline that survives, and the half worth keeping: an
+    // action reaching the console is recorded whether or not a role gated it.
+    // An action that actually lands. The agent PATCH above 404s before doing
+    // anything, and a lookup that found nothing has nothing to record.
+    const res = await call("PATCH", `/v1/admin/workspaces/${WORKSPACE_A}/plan-override`, admin, {
+      planId: "pro",
+      reason,
+    });
+    expect(res.status).toBe(200);
+
+    const rows = await env.DB.prepare(
+      `SELECT actor_role FROM admin_actions`
+    ).all<Record<string, unknown>>();
+
+    expect(rows.results?.length).toBeGreaterThan(0);
+    expect(rows.results?.every(r => r.actor_role === "admin")).toBe(true);
   });
 
-  it("lets support do the abuse-response actions", async () => {
-    // Disabling an agent and revoking a key are reversible and urgent. Waiting
-    // for an admin is the wrong trade when something is actively misbehaving.
-    const res = await call("PATCH", "/v1/staff/agents/agt_NOPE", support, {
+  it("lets the console do the abuse-response actions", async () => {
+    const res = await call("PATCH", "/v1/admin/agents/agt_NOPE", admin, {
       disabled: true,
       reason,
     });
-    // 404 rather than 403: the role passed, the agent does not exist.
+    // 404 rather than 403: the credential passed, the agent does not exist.
     expect(res.status).toBe(404);
-  });
-
-  it("records a refusal, not just the successes", async () => {
-    await call("PATCH", "/v1/staff/plans/pro", support, { agents: 5, reason });
-
-    const denied = await env.DB.prepare(
-      `SELECT action, result, actor_role FROM staff_actions WHERE result = 'denied'`
-    ).all<Record<string, unknown>>();
-
-    expect(denied.results?.length).toBeGreaterThan(0);
-    expect(denied.results?.[0]?.actor_role).toBe("support");
   });
 
   it("refuses every console route without a credential at all", async () => {
     for (const path of [
-      "/v1/staff/plans",
-      "/v1/staff/billing",
-      "/v1/staff/audit",
-      "/v1/staff/accounts",
-      "/v1/staff/users?email=nobody@example.com",
+      "/v1/admin/plans",
+      "/v1/admin/billing",
+      "/v1/admin/audit",
+      "/v1/admin/accounts",
+      "/v1/admin/users?email=nobody@example.com",
     ]) {
       const res = await SELF.fetch(`${URL_BASE}${path}`);
       expect(`${path} -> ${res.status}`).toBe(`${path} -> 401`);
     }
   });
 
-  it("refuses a signed-in customer who is not staff", async () => {
+  it("refuses a signed-in customer who is not admin", async () => {
     // THE boundary, now that one Firebase token reaches both surfaces. This
     // token is valid, its email is verified, and it belongs to somebody with no
-    // staff_users row - which must be indistinguishable from a forged one.
+    // admin_users row - which must be indistinguishable from a forged one.
     const outsider = await firebaseToken({ email: "customer@example.com" });
 
-    for (const path of ["/v1/staff/plans", "/v1/staff/workspaces", "/v1/staff/accounts"]) {
+    for (const path of ["/v1/admin/plans", "/v1/admin/workspaces", "/v1/admin/accounts"]) {
       const res = await call("GET", path, outsider);
       expect(`${path} -> ${res.status}`).toBe(`${path} -> 401`);
     }
   });
 
-  it("refuses a staff address whose email Firebase has not verified", async () => {
-    // Without this, anybody able to sign up naming a staff address would
-    // inherit that staff row.
+  it("refuses a admin address whose email Firebase has not verified", async () => {
+    // Without this, anybody able to sign up naming a admin address would
+    // inherit that admin row.
     const unverified = await firebaseToken({
       email: "super@agentdisk.io",
       emailVerified: false,
     });
-    expect((await call("GET", "/v1/staff/accounts", unverified)).status).toBe(401);
+    expect((await call("GET", "/v1/admin/accounts", unverified)).status).toBe(401);
   });
 
   it("refuses a token minted for another Firebase project", async () => {
@@ -169,19 +166,19 @@ describe("the role matrix, enforced server-side", () => {
       email: "super@agentdisk.io",
       projectId: "some-other-project",
     });
-    expect((await call("GET", "/v1/staff/accounts", wrongAudience)).status).toBe(401);
+    expect((await call("GET", "/v1/admin/accounts", wrongAudience)).status).toBe(401);
   });
 
-  it("stops accepting a token the moment the staff row is disabled", async () => {
-    expect((await call("GET", "/v1/staff/workspaces", admin)).status).toBe(200);
+  it("stops accepting a token the moment the admin row is disabled", async () => {
+    expect((await call("GET", "/v1/admin/workspaces", admin)).status).toBe(200);
 
-    await env.DB.prepare(`UPDATE staff_users SET disabled_at = ? WHERE id = 'stf_ADMIN'`)
+    await env.DB.prepare(`UPDATE admin_users SET disabled_at = ? WHERE id = 'stf_ADMIN'`)
       .bind(Date.now())
       .run();
 
     // The same token, unexpired. Disable is read per request, so there is no
     // window at all - which the four-hour session it replaced could not manage.
-    expect((await call("GET", "/v1/staff/workspaces", admin)).status).toBe(401);
+    expect((await call("GET", "/v1/admin/workspaces", admin)).status).toBe(401);
   });
 });
 
@@ -191,10 +188,10 @@ describe("literal paths are not swallowed by :id patterns", () => {
   it("routes plans/stripe-diff and plans/sync-from-stripe as themselves", async () => {
     // Without the ordering these would look up a plan named "stripe-diff" and
     // answer 404 - which reads like a data problem, not a routing one.
-    const diff = await call("GET", "/v1/staff/plans/stripe-diff", admin);
+    const diff = await call("GET", "/v1/admin/plans/stripe-diff", admin);
     expect(diff.status).not.toBe(404);
 
-    const sync = await call("POST", "/v1/staff/plans/sync-from-stripe", admin, {
+    const sync = await call("POST", "/v1/admin/plans/sync-from-stripe", admin, {
       selections: [{ planId: "pro", fields: ["agents"] }],
       reason: "a reason long enough",
     });
@@ -202,13 +199,13 @@ describe("literal paths are not swallowed by :id patterns", () => {
   });
 
   it("routes workspaces/needs-attention as itself", async () => {
-    const res = await call("GET", "/v1/staff/workspaces/needs-attention", support);
+    const res = await call("GET", "/v1/admin/workspaces/needs-attention", support);
     expect(res.status).toBe(200);
     expect(await res.json()).toHaveProperty("workspaces");
   });
 
-  it("still 404s a genuinely unknown staff path", async () => {
-    expect((await call("GET", "/v1/staff/nothing-here", superAdmin)).status).toBe(404);
+  it("still 404s a genuinely unknown admin path", async () => {
+    expect((await call("GET", "/v1/admin/nothing-here", superAdmin)).status).toBe(404);
   });
 });
 
@@ -216,29 +213,29 @@ describe("literal paths are not swallowed by :id patterns", () => {
 
 describe("looking a customer up", () => {
   it("finds an account by its exact address and records the lookup", async () => {
-    const res = await call("GET", "/v1/staff/users?email=owner@example.com", support);
+    const res = await call("GET", "/v1/admin/users?email=owner@example.com", support);
     expect(res.status).toBe(200);
 
     const recorded = await env.DB.prepare(
-      `SELECT action, target_id FROM staff_actions WHERE action = 'user.lookup'`
+      `SELECT action, target_id FROM admin_actions WHERE action = 'user.lookup'`
     ).all<Record<string, unknown>>();
     expect(recorded.results?.length).toBe(1);
   });
 
   it("records a lookup that found nobody", async () => {
-    // A lookup that missed is still a staff member asking after a named
+    // A lookup that missed is still a admin member asking after a named
     // individual, which is the fact the log exists to hold.
-    await call("GET", "/v1/staff/users?email=stranger@example.com", support);
+    await call("GET", "/v1/admin/users?email=stranger@example.com", support);
     const recorded = await env.DB.prepare(
-      `SELECT metadata FROM staff_actions WHERE action = 'user.lookup'`
+      `SELECT metadata FROM admin_actions WHERE action = 'user.lookup'`
     ).first<{ metadata: string }>();
     expect(recorded?.metadata).toContain('"found":false');
   });
 
   it("refuses a partial address rather than searching for it", async () => {
-    // A staff tool that can search %@gmail.com is a staff tool that can
+    // A admin tool that can search %@gmail.com is a admin tool that can
     // enumerate the customer base.
-    expect((await call("GET", "/v1/staff/users?email=owner", support)).status).toBe(400);
+    expect((await call("GET", "/v1/admin/users?email=owner", support)).status).toBe(400);
   });
 });
 
@@ -251,7 +248,7 @@ describe("deleting a workspace", () => {
     // Suspension is instant, reversible and cuts off access, so it is the right
     // first move in every scenario ending in deletion - and it gives the
     // customer a chance to notice before a 30-day countdown starts.
-    const res = await call("DELETE", `/v1/staff/workspaces/${WORKSPACE_A}`, superAdmin, {
+    const res = await call("DELETE", `/v1/admin/workspaces/${WORKSPACE_A}`, superAdmin, {
       confirmName: "Workspace A",
       reason,
     });
@@ -263,7 +260,7 @@ describe("deleting a workspace", () => {
       .bind(WORKSPACE_A)
       .run();
 
-    const res = await call("DELETE", `/v1/staff/workspaces/${WORKSPACE_A}`, superAdmin, {
+    const res = await call("DELETE", `/v1/admin/workspaces/${WORKSPACE_A}`, superAdmin, {
       confirmName: "Not The Name",
       reason,
     });
@@ -278,7 +275,7 @@ describe("deleting a workspace", () => {
       .bind(WORKSPACE_A)
       .run();
 
-    const res = await call("DELETE", `/v1/staff/workspaces/${WORKSPACE_A}`, superAdmin, {
+    const res = await call("DELETE", `/v1/admin/workspaces/${WORKSPACE_A}`, superAdmin, {
       confirmName: workspace?.name,
       reason,
     });
@@ -303,12 +300,12 @@ describe("deleting a workspace", () => {
     await env.DB.prepare(`UPDATE workspaces SET status = 'suspended' WHERE id = ?`)
       .bind(WORKSPACE_A)
       .run();
-    await call("DELETE", `/v1/staff/workspaces/${WORKSPACE_A}`, superAdmin, {
+    await call("DELETE", `/v1/admin/workspaces/${WORKSPACE_A}`, superAdmin, {
       confirmName: workspace?.name,
       reason,
     });
 
-    const res = await call("POST", `/v1/staff/workspaces/${WORKSPACE_A}/restore`, superAdmin, {
+    const res = await call("POST", `/v1/admin/workspaces/${WORKSPACE_A}/restore`, superAdmin, {
       reason,
     });
     expect(res.status).toBe(200);
@@ -322,13 +319,13 @@ describe("deleting a workspace", () => {
   });
 });
 
-/* ---------------------------- staff accounts ----------------------------- */
+/* ---------------------------- admin accounts ----------------------------- */
 
-describe("staff accounts", () => {
+describe("admin accounts", () => {
   const reason = "a reason long enough to be one";
 
   it("creates one as an email and a role, with no credential to show", async () => {
-    const res = await call("POST", "/v1/staff/accounts", superAdmin, {
+    const res = await call("POST", "/v1/admin/accounts", superAdmin, {
       email: "New@AgentDisk.io",
       role: "admin",
       reason,
@@ -344,37 +341,57 @@ describe("staff accounts", () => {
     expect(JSON.stringify(created)).not.toMatch(/password|totp|secret/i);
   });
 
-  it("refuses an admin the creation of one", async () => {
-    // Granting a role is the one thing only super_admin may do, and this is
-    // where that is proved now: it used to be asserted against
-    // `POST /v1/staff/users`, the pre-SSO provisioning endpoint, which has been
-    // removed. The rule outlived the route.
-    const res = await call("POST", "/v1/staff/accounts", admin, {
+  it("lets any console operator grant console access", async () => {
+    // This used to assert 403 - granting a role was the one thing only
+    // super_admin could do. With one role there is nobody to refuse, so the
+    // meaningful property is what is left: anyone already in `admin_users` can
+    // put somebody else in it. That is the escalation path now, and it is
+    // recorded rather than prevented.
+    const res = await call("POST", "/v1/admin/accounts", admin, {
+      email: "granted-by-peer@agentdisk.io",
+      role: "admin",
+      reason,
+    });
+    expect(res.status).toBe(201);
+
+    const row = await env.DB.prepare(
+      `SELECT action, actor_role FROM admin_actions WHERE action = 'admin.create'`
+    ).first<{ action: string; actor_role: string }>();
+    expect(row?.actor_role).toBe("admin");
+  });
+
+  it("refuses a role that is not the one role", async () => {
+    // "super_admin" was valid for months and is still the obvious thing to
+    // type. It must be rejected at the edge rather than written into a column
+    // whose value nothing in the authorization chain would recognise.
+    const res = await call("POST", "/v1/admin/accounts", admin, {
       email: "escalation@agentdisk.io",
       role: "super_admin",
       reason,
     });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(400);
   });
 
   it("lets the newly granted address sign in, and not before", async () => {
     const theirToken = await firebaseToken({ email: "later@agentdisk.io" });
-    expect((await call("GET", "/v1/staff/workspaces", theirToken)).status).toBe(401);
+    expect((await call("GET", "/v1/admin/workspaces", theirToken)).status).toBe(401);
 
-    await call("POST", "/v1/staff/accounts", superAdmin, {
+    await call("POST", "/v1/admin/accounts", admin, {
       email: "later@agentdisk.io",
-      role: "support",
+      role: "admin",
       reason,
     });
 
-    // Same token, unchanged. The grant is a row, read fresh on every request.
-    expect((await call("GET", "/v1/staff/workspaces", theirToken)).status).toBe(200);
+    // Same token, unchanged. The grant is a row, read fresh on every request -
+    // which is why it takes effect without re-authentication, and why a
+    // disable does too.
+    expect((await call("GET", "/v1/admin/workspaces", theirToken)).status).toBe(200);
   });
 
   it("refuses to disable your own account", async () => {
     // It removes the only role that can re-enable anyone, and there may be no
     // other super_admin. The way back would be the provisioning script.
-    const res = await call("PATCH", "/v1/staff/accounts/stf_SUPER/disable", superAdmin, {
+    const res = await call("PATCH", "/v1/admin/accounts/stf_SUPER/disable", superAdmin, {
       disabled: true,
       reason,
     });
@@ -382,33 +399,19 @@ describe("staff accounts", () => {
   });
 
   it("refuses to change your own role", async () => {
-    const res = await call("PATCH", "/v1/staff/accounts/stf_SUPER", superAdmin, {
-      role: "support",
-      reason,
-    });
-    expect(res.status).toBe(403);
-  });
-
-  it("cannot demote the last super_admin, because nobody may demote themselves", async () => {
-    // Worth stating plainly, because the guard inside setRole that counts
-    // remaining super_admins is unreachable through the API and looks like dead
-    // code until you work out why.
-    //
-    // Changing a role requires super_admin, and changing your OWN role is
-    // refused. So any caller who can demote a super_admin is themselves an
-    // active super_admin, which means the target was never the last one. The
-    // count guard is belt-and-braces behind that; this is the property that
-    // actually holds.
-    const res = await call("PATCH", "/v1/staff/accounts/stf_SUPER", superAdmin, {
-      role: "support",
+    // Survives the collapse unchanged, and is the one self-protection left.
+    // There is only one role to change to, so this currently refuses a no-op -
+    // but it is the guard that stops a future tier being self-granted, and it
+    // is cheaper to keep than to remember to re-add.
+    const res = await call("PATCH", "/v1/admin/accounts/stf_SUPER", superAdmin, {
+      role: "admin",
       reason,
     });
     expect(res.status).toBe(403);
 
-    // And the role really did not move.
-    const row = await env.DB.prepare(`SELECT role FROM staff_users WHERE id = 'stf_SUPER'`)
+    const row = await env.DB.prepare(`SELECT role FROM admin_users WHERE id = 'stf_SUPER'`)
       .first<{ role: string }>();
-    expect(row?.role).toBe("super_admin");
+    expect(row?.role).toBe("admin");
   });
 
 });
@@ -417,21 +420,21 @@ describe("staff accounts", () => {
 
 describe("the audit log", () => {
   it("filters by action prefix, which is what Sync History is", async () => {
-    await call("GET", "/v1/staff/users?email=owner@example.com", support);
+    await call("GET", "/v1/admin/users?email=owner@example.com", support);
 
-    const res = await call("GET", "/v1/staff/audit?action=user.", support);
+    const res = await call("GET", "/v1/admin/audit?action=user.", support);
     const body = (await res.json()) as { rows: { action: string }[] };
     expect(body.rows.length).toBeGreaterThan(0);
     expect(body.rows.every(row => row.action.startsWith("user."))).toBe(true);
   });
 
   it("exports CSV, and records the export in the log it exported", async () => {
-    const res = await call("GET", "/v1/staff/audit/export", support);
+    const res = await call("GET", "/v1/admin/audit/export", support);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/csv");
 
     const recorded = await env.DB.prepare(
-      `SELECT action FROM staff_actions WHERE action = 'audit.export'`
+      `SELECT action FROM admin_actions WHERE action = 'audit.export'`
     ).first<{ action: string }>();
     expect(recorded?.action).toBe("audit.export");
   });
@@ -440,20 +443,20 @@ describe("the audit log", () => {
     // The reason field is free text an operator types, so it is exactly where a
     // payload would be planted for whoever opens the export in a spreadsheet.
     await env.DB.prepare(
-      `INSERT INTO staff_actions (id, actor_id, actor_email, actor_role, action, result, created_at, reason)
+      `INSERT INTO admin_actions (id, actor_id, actor_email, actor_role, action, result, created_at, reason)
        VALUES ('sac_X', 'stf_SUPPORT', 'support@agentdisk.io', 'support', 'user.lookup', 'success', ?, ?)`
     )
       .bind(NOW, "=cmd|'/c calc'!A1")
       .run();
 
-    const csv = await (await call("GET", "/v1/staff/audit/export", support)).text();
+    const csv = await (await call("GET", "/v1/admin/audit/export", support)).text();
     expect(csv).toContain(`"'=cmd`);
   });
 });
 
 /* ------------------------- the fleet list itself ------------------------- */
 
-describe("GET /v1/staff/workspaces", () => {
+describe("GET /v1/admin/workspaces", () => {
   const reason = "a reason long enough to be one";
 
   // The status test below seeds 60 filler workspaces to push the real ones off
@@ -468,7 +471,7 @@ describe("GET /v1/staff/workspaces", () => {
     // which SQLite reads as a two-character escape expression and rejects, so
     // every ?q= answered 500. Nothing in the suite passed a q at all, which is
     // how a green run covered a feature that could not work.
-    const res = await call("GET", "/v1/staff/workspaces?q=Workspace%20A", support);
+    const res = await call("GET", "/v1/admin/workspaces?q=Workspace%20A", support);
     expect(res.status).toBe(200);
 
     const body = (await res.json()) as { workspaces: { name: string }[] };
@@ -478,7 +481,7 @@ describe("GET /v1/staff/workspaces", () => {
   it("treats a LIKE wildcard in the search term as a literal", async () => {
     // The escaping is the reason the ESCAPE clause is there at all; with the
     // clause fixed, this is what it buys.
-    const res = await call("GET", "/v1/staff/workspaces?q=%25", support);
+    const res = await call("GET", "/v1/admin/workspaces?q=%25", support);
     expect(res.status).toBe(200);
     expect(((await res.json()) as { workspaces: unknown[] }).workspaces).toEqual([]);
   });
@@ -499,7 +502,7 @@ describe("GET /v1/staff/workspaces", () => {
       .bind(WORKSPACE_A)
       .run();
 
-    const res = await call("GET", "/v1/staff/workspaces?status=suspended", support);
+    const res = await call("GET", "/v1/admin/workspaces?status=suspended", support);
     expect(res.status).toBe(200);
 
     const body = (await res.json()) as { workspaces: { id: string }[] };
@@ -507,7 +510,7 @@ describe("GET /v1/staff/workspaces", () => {
   });
 
   it("refuses an unrecognised status instead of answering the wider question", async () => {
-    const res = await call("GET", "/v1/staff/workspaces?status=banana", support);
+    const res = await call("GET", "/v1/admin/workspaces?status=banana", support);
     expect(res.status).toBe(400);
   });
 
@@ -518,14 +521,14 @@ describe("GET /v1/staff/workspaces", () => {
     // the wrong plan for exactly these workspaces.
     expect(
       (
-        await call("PATCH", `/v1/staff/workspaces/${WORKSPACE_A}/plan-override`, admin, {
+        await call("PATCH", `/v1/admin/workspaces/${WORKSPACE_A}/plan-override`, admin, {
           planId: "basic",
           reason,
         })
       ).status
     ).toBe(200);
 
-    const listed = (await (await call("GET", "/v1/staff/workspaces", support)).json()) as {
+    const listed = (await (await call("GET", "/v1/admin/workspaces", support)).json()) as {
       workspaces: { id: string; plan: string; planOverride: string | null }[];
     };
     const row = listed.workspaces.find((w) => w.id === WORKSPACE_A);
@@ -533,7 +536,7 @@ describe("GET /v1/staff/workspaces", () => {
     expect(row?.planOverride).toBe("basic");
 
     const detail = (await (
-      await call("GET", `/v1/staff/workspaces/${WORKSPACE_A}`, support)
+      await call("GET", `/v1/admin/workspaces/${WORKSPACE_A}`, support)
     ).json()) as { workspace: { plan: string; planOverride: string | null } };
     expect(detail.workspace.plan).toBe("basic");
     expect(detail.workspace.planOverride).toBe("basic");
@@ -543,7 +546,7 @@ describe("GET /v1/staff/workspaces", () => {
     // null and "the same value as the org" have to stay distinguishable, or the
     // detail screen cannot say which of the two it is looking at.
     const detail = (await (
-      await call("GET", `/v1/staff/workspaces/${WORKSPACE_B}`, support)
+      await call("GET", `/v1/admin/workspaces/${WORKSPACE_B}`, support)
     ).json()) as { workspace: { plan: string; planOverride: string | null } };
     expect(detail.workspace.planOverride).toBeNull();
     expect(detail.workspace.plan).toBe("free");

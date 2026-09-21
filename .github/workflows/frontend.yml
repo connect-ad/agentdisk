@@ -1,7 +1,7 @@
 name: Frontend (reusable)
 
 # One static-assets app -> its own hostname. Called once per app per
-# environment: the dashboard (apps/web -> app-<env>.agentdisk.io) and the staff
+# environment: the dashboard (apps/web -> app-<env>.agentdisk.io) and the admin
 # console (apps/admin -> admin-<env>.agentdisk.io).
 #
 # This was two files. deploy-web-dev.yml and deploy-admin-dev.yml were 316 and
@@ -14,8 +14,8 @@ name: Frontend (reusable)
 #
 #   - which Terraform outputs name the Worker and its URL (`web_*` / `admin_*`)
 #   - which environment variables state those names independently
-#   - the console has no Turnstile key and no Firebase config. Staff
-#     authenticate against /v1/staff/* with a password and a TOTP code and hold
+#   - the console has no Turnstile key and no Firebase config. Admin
+#     authenticate against /v1/admin/* with a password and a TOTP code and hold
 #     no client credential at all, so its build takes only VITE_API_BASE.
 #
 # It reads Terraform, it does not apply it - see infra.yml for why, and for the
@@ -316,7 +316,7 @@ jobs:
             exit 1
           fi
 
-          # Both apps now, not just the dashboard. Migration 0014 made the staff
+          # Both apps now, not just the dashboard. Migration 0014 made the admin
           # console sign in through the same Firebase project, so a console built
           # without these ships a Sign in with Google button that throws - a
           # deploy that looks green and is not, which is exactly what this check

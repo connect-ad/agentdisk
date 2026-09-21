@@ -33,13 +33,13 @@ export interface UserRow {
   /** Unix ms. Tokens issued at or before this are refused (30.4). */
   session_revoked_after: number;
   /**
-   * Staff-initiated account removal, inside its 30-day restore window.
+   * Admin-initiated account removal, inside its 30-day restore window.
    * Carried on the row - rather than asked of Firebase - so that the auth
    * chain can refuse a deleted account without depending on a third party's
    * side effect having succeeded. See migration 0013.
    */
   deleted_at: number | null;
-  /** Staff-initiated for-cause block. Reversible, with no window. */
+  /** Admin-initiated for-cause block. Reversible, with no window. */
   disabled_at: number | null;
 }
 
@@ -79,7 +79,7 @@ export async function linkFirebaseUidToEmail(
 ): Promise<UserRow | null> {
   const result = await db
     .prepare(
-      // `deleted_at IS NULL` alongside the uid guard: a row that staff have
+      // `deleted_at IS NULL` alongside the uid guard: a row that admin have
       // removed must not be claimable by signing up with its address again.
       // Without it, deletion of an invited-but-never-signed-in account would be
       // undone by the next person to type that email into the signup form.

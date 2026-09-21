@@ -1,19 +1,19 @@
 /**
  * The audit screen — 32 PART 6 (Audit log) and PART 9.
  *
- * Reads `staff_actions`, which is the fleet-wide record of what staff did. It
+ * Reads `admin_actions`, which is the fleet-wide record of what admin did. It
  * is NOT the same thing as a workspace's own `audit_events` tab: that one shows
- * every actor inside one workspace — the customer's activity log, which staff
+ * every actor inside one workspace — the customer's activity log, which admin
  * can also see — while this shows one class of actor across every workspace and
  * outside any. Keeping the two visibly distinct in the API is what stops
- * somebody reading a customer's own activity and believing it is the staff
+ * somebody reading a customer's own activity and believing it is the admin
  * trail, or the reverse.
  *
  * ── Sync History is this, filtered ─────────────────────────────────────────
  * There is no `plan_sync_events` table and there should not be one. Sync
  * History is `action LIKE 'plan.%'` over these rows, which already record who,
  * when, which fields and the result. The dotted vocabulary is what makes that
- * work, and `idx_staff_actions_action` leads on `action` for exactly this
+ * work, and `idx_admin_actions_action` leads on `action` for exactly this
  * prefix match — it is load-bearing, not cosmetic.
  *
  * ── Exporting the accountability log is itself accountable ─────────────────
@@ -22,9 +22,9 @@
  * needs to be in that record.
  */
 
-import { AuditedStaffAccess } from "./audited";
+import { AuditedAdminAccess } from "./audited";
 
-export interface StaffActionRow {
+export interface AdminActionRow {
   id: string;
   actorId: string;
   actorEmail: string;
@@ -63,7 +63,7 @@ function cell(value: unknown): string {
   return `"${guarded.replace(/"/g, '""')}"`;
 }
 
-export class StaffAuditAccess extends AuditedStaffAccess {
+export class AdminAuditAccess extends AuditedAdminAccess {
   private build(filter: AuditFilter): { sql: string; binds: (string | number)[] } {
     const clauses: string[] = [];
     const binds: (string | number)[] = [];
@@ -103,8 +103,8 @@ export class StaffAuditAccess extends AuditedStaffAccess {
     };
   }
 
-  async list(filter: AuditFilter = {}): Promise<{ rows: StaffActionRow[]; nextBefore: number | null }> {
-    await this.requireRole("support", "read the audit log");
+  async list(filter: AuditFilter = {}): Promise<{ rows: AdminActionRow[]; nextBefore: number | null }> {
+    await this.requireRole("admin", "read the audit log");
 
     const limit = Math.min(Math.max(filter.limit ?? 50, 1), 200);
     const { sql, binds } = this.build(filter);
@@ -115,11 +115,11 @@ export class StaffAuditAccess extends AuditedStaffAccess {
                 action, workspace_id AS workspaceId, target_type AS targetType,
                 target_id AS targetId, reason, result, source_ip AS sourceIp,
                 request_id AS requestId, metadata, created_at AS createdAt
-           FROM staff_actions ${sql}
+           FROM admin_actions ${sql}
           ORDER BY created_at DESC LIMIT ?`
       )
       .bind(...binds, limit + 1)
-      .all<StaffActionRow>();
+      .all<AdminActionRow>();
 
     const all = rows.results ?? [];
     // One more than asked for, so "is there another page" is answered without a
@@ -132,34 +132,34 @@ export class StaffAuditAccess extends AuditedStaffAccess {
 
   /** The distinct actions present, for the filter dropdown. Cheap; the index leads on action. */
   async actions(): Promise<string[]> {
-    await this.requireRole("support", "read the audit log");
+    await this.requireRole("admin", "read the audit log");
     const rows = await this.db
-      .prepare(`SELECT DISTINCT action FROM staff_actions ORDER BY action ASC`)
+      .prepare(`SELECT DISTINCT action FROM admin_actions ORDER BY action ASC`)
       .all<{ action: string }>();
     return (rows.results ?? []).map(row => row.action);
   }
 
-  /** The staff members who appear in the log, for the actor dropdown. */
+  /** The admin members who appear in the log, for the actor dropdown. */
   async actors(): Promise<{ actorId: string; actorEmail: string }[]> {
-    await this.requireRole("support", "read the audit log");
+    await this.requireRole("admin", "read the audit log");
     const rows = await this.db
       .prepare(
         `SELECT actor_id AS actorId, MAX(actor_email) AS actorEmail
-           FROM staff_actions GROUP BY actor_id ORDER BY actorEmail ASC`
+           FROM admin_actions GROUP BY actor_id ORDER BY actorEmail ASC`
       )
       .all<{ actorId: string; actorEmail: string }>();
     return rows.results ?? [];
   }
 
   async exportCsv(filter: AuditFilter = {}): Promise<string> {
-    await this.requireRole("support", "export the audit log");
+    await this.requireRole("admin", "export the audit log");
 
     const { sql, binds } = this.build(filter);
     const rows = await this.db
       .prepare(
         `SELECT created_at, actor_email, actor_role, action, workspace_id,
                 target_type, target_id, reason, result, source_ip, request_id
-           FROM staff_actions ${sql}
+           FROM admin_actions ${sql}
           ORDER BY created_at DESC LIMIT 10000`
       )
       .bind(...binds)
@@ -167,8 +167,8 @@ export class StaffAuditAccess extends AuditedStaffAccess {
 
     const header = [
       "timestamp_utc",
-      "staff_email",
-      "staff_role",
+      "admin_email",
+      "admin_role",
       "action",
       "workspace_id",
       "target_type",

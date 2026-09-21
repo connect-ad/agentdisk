@@ -1,8 +1,8 @@
 /**
- * Staff sessions, and the one class allowed to reach across tenants —
+ * Admin sessions, and the one class allowed to reach across tenants —
  * 14 PART 27.3/27.4.
  *
- * `StaffScopedAccess` is the deliberate exception to 06 PART 16.1. Every other
+ * `AdminScopedAccess` is the deliberate exception to 06 PART 16.1. Every other
  * data path in this codebase binds a workspace in a constructor so a handler
  * has no argument through which to name somebody else's. This one takes the
  * workspace as an argument on purpose, because a support engineer needs to look
@@ -11,7 +11,7 @@
  * Two things make that exception safe to have:
  *
  * **It is one class, in one file, with one way in.** The customer-facing model
- * keeps its "never" as an actual never rather than a "never, except for staff"
+ * keeps its "never" as an actual never rather than a "never, except for admin"
  * scattered through the same handlers — which is the failure mode 27.1 is
  * written to prevent.
  *
@@ -24,62 +24,73 @@
 import { newId } from "../lib/ids";
 import { ApiError } from "../lib/errors";
 import { escapeLikePattern } from "../lib/paths";
-import { AuditedStaffAccess } from "./audited";
+import { AuditedAdminAccess } from "./audited";
 
-export type StaffRole = "support" | "admin" | "super_admin";
+/**
+ * One role. `support` and `super_admin` are gone: everybody who can reach the
+ * console can do everything in it.
+ *
+ * Kept as a union of one rather than deleted outright, and every
+ * `requireRole(...)` call site left standing, because those calls are what
+ * record a refusal (`admin.denied`) and what documents which actions were once
+ * privileged. Re-introducing a tier is then adding a member here and a number
+ * in `requireAdminRole` - not re-deriving, from scratch, which of forty methods
+ * should have been gated.
+ */
+export type AdminRole = "admin";
 
-export const STAFF_ROLES: StaffRole[] = ["support", "admin", "super_admin"];
+export const ADMIN_ROLES: AdminRole[] = ["admin"];
 
-export function isStaffRole(value: string): value is StaffRole {
-  return (STAFF_ROLES as string[]).includes(value);
+export function isAdminRole(value: string): value is AdminRole {
+  return (ADMIN_ROLES as string[]).includes(value);
 }
 
-export interface StaffUser {
+export interface AdminUser {
   id: string;
   email: string;
-  role: StaffRole;
+  role: AdminRole;
   disabledAt: number | null;
 }
 
 /**
- * Resolve a staff member from a verified Firebase email.
+ * Resolve a admin member from a verified Firebase email.
  *
- * This is the whole of staff authentication now. Firebase says WHO somebody is;
- * this row says WHAT they are, and a missing row means "not staff" rather than
+ * This is the whole of admin authentication now. Firebase says WHO somebody is;
+ * this row says WHAT they are, and a missing row means "not admin" rather than
  * "no permissions" - the two are the same answer here and that is deliberate.
  *
  * **Never a Firebase custom claim.** A claim is minted into a token once and
  * stays true for that token's lifetime, so a demotion or a disable would not
  * take effect until it expired. A row is read on every request, so both are
- * immediate. Since one token now reaches both the customer and the staff
+ * immediate. Since one token now reaches both the customer and the admin
  * surface, that immediacy is the thing standing between them.
  *
  * The email is lowercased on both sides. An address differing only in case is
- * the same person to Google and would otherwise be a different staff member to
+ * the same person to Google and would otherwise be a different admin member to
  * us - an authorisation gap, not a cosmetic one.
  */
-export async function findStaffByEmail(
+export async function findAdminByEmail(
   db: D1Database,
   email: string
-): Promise<StaffUser | null> {
+): Promise<AdminUser | null> {
   return db
     .prepare(
       `SELECT id, email, role, disabled_at AS disabledAt
-         FROM staff_users WHERE email = ?`
+         FROM admin_users WHERE email = ?`
     )
     .bind(email.trim().toLowerCase())
-    .first<StaffUser>();
+    .first<AdminUser>();
 }
 
-/** Record that they were here, for the Staff Accounts screen's "last seen". */
-export async function touchStaffLogin(
+/** Record that they were here, for the Admin Accounts screen's "last seen". */
+export async function touchAdminLogin(
   db: D1Database,
-  staffId: string,
+  adminId: string,
   now: number
 ): Promise<void> {
   await db
-    .prepare(`UPDATE staff_users SET last_login_at = ? WHERE id = ?`)
-    .bind(now, staffId)
+    .prepare(`UPDATE admin_users SET last_login_at = ? WHERE id = ?`)
+    .bind(now, adminId)
     .run();
 }
 
@@ -106,13 +117,13 @@ export interface FleetWorkspace {
 }
 
 /**
- * Cross-tenant access, for staff, with a record of every use.
+ * Cross-tenant access, for admin, with a record of every use.
  *
- * Constructed only inside `/v1/staff/*` handlers. Nothing else in the codebase
+ * Constructed only inside `/v1/admin/*` handlers. Nothing else in the codebase
  * imports this file, and that is the property worth preserving: one import site
  * is auditable by reading, a dozen is not.
  */
-export class StaffScopedAccess extends AuditedStaffAccess {
+export class AdminScopedAccess extends AuditedAdminAccess {
   /**
    * Every workspace on the platform, newest first.
    *
@@ -181,7 +192,7 @@ export class StaffScopedAccess extends AuditedStaffAccess {
       .bind(workspaceId)
       .first<FleetWorkspace>();
 
-    if (row !== null) await this.record(workspaceId, "staff.workspace.viewed");
+    if (row !== null) await this.record(workspaceId, "admin.workspace.viewed");
     return row;
   }
 
@@ -201,7 +212,7 @@ export class StaffScopedAccess extends AuditedStaffAccess {
     if (changed) {
       // The reason is recorded because a suspension somebody has to explain
       // later is worth more than one they merely have to remember.
-      await this.record(workspaceId, `staff.workspace.${status}`, { reason });
+      await this.record(workspaceId, `admin.workspace.${status}`, { reason });
 
       if (status !== "active") {
         // Deleted by WORKSPACE, not by user - a suspended or deleted
@@ -230,14 +241,14 @@ export class StaffScopedAccess extends AuditedStaffAccess {
    * 30.4), which is the same mechanism a user's own "log out everywhere" uses.
    */
   async forceLogout(userId: string, workspaceId: string): Promise<boolean> {
-    await this.requireRole("support", "force logout");
+    await this.requireRole("admin", "force logout");
     const result = await this.db
       .prepare(`UPDATE users SET session_revoked_after = ?, updated_at = ? WHERE id = ?`)
       .bind(this.now, this.now, userId)
       .run();
 
     const changed = (result.meta.changes ?? 0) > 0;
-    if (changed) await this.record(workspaceId, "staff.user.force_logout", { userId });
+    if (changed) await this.record(workspaceId, "admin.user.force_logout", { userId });
     return changed;
   }
 
@@ -255,7 +266,7 @@ export class StaffScopedAccess extends AuditedStaffAccess {
    * Returns null when no such user row exists. `no_identity` is different: the
    * row exists but Firebase has no account for the address, which happens when
    * a user was created before sign-in moved to Firebase, or was removed there
-   * directly. The caller reports both as accepted, because telling staff which
+   * directly. The caller reports both as accepted, because telling admin which
    * of the two it was tells them nothing they can act on and the distinction
    * belongs in the log.
    *
@@ -268,7 +279,7 @@ export class StaffScopedAccess extends AuditedStaffAccess {
     reason: string,
     deliver: (email: string) => Promise<"sent" | "no_identity">
   ): Promise<"sent" | "no_identity" | null> {
-    await this.requireRole("support", "reset passwords");
+    await this.requireRole("admin", "reset passwords");
 
     const user = await this.db
       // No `deleted_at` filter: the column does not exist yet. Customer
@@ -296,7 +307,7 @@ export class StaffScopedAccess extends AuditedStaffAccess {
       outcome = await deliver(user.email);
     } catch (cause) {
       await this.recordFleet({
-        action: "staff.user.password_reset",
+        action: "admin.user.password_reset",
         targetType: "user",
         targetId: userId,
         reason,
@@ -309,7 +320,7 @@ export class StaffScopedAccess extends AuditedStaffAccess {
     }
 
     await this.recordFleet({
-      action: "staff.user.password_reset",
+      action: "admin.user.password_reset",
       targetType: "user",
       targetId: userId,
       reason,
@@ -317,10 +328,10 @@ export class StaffScopedAccess extends AuditedStaffAccess {
     });
 
     // And one row per workspace they belong to, so the owner of a workspace
-    // sees that staff acted on one of their members rather than learning it
+    // sees that admin acted on one of their members rather than learning it
     // from us later.
     for (const row of workspaces.results ?? []) {
-      await this.record(row.workspaceId, "staff.user.password_reset", { userId, outcome });
+      await this.record(row.workspaceId, "admin.user.password_reset", { userId, outcome });
     }
 
     return outcome;
@@ -349,7 +360,7 @@ export class StaffScopedAccess extends AuditedStaffAccess {
     // reading their own audit log should see that their keys were revoked, and
     // by whom - not have it recorded only somewhere they cannot see.
     for (const row of affected.results ?? []) {
-      await this.record(row.workspaceId, "staff.keys.revoked", { userId });
+      await this.record(row.workspaceId, "admin.keys.revoked", { userId });
     }
 
     // Share links are deleted rather than marked, because there is no revoked
@@ -383,7 +394,7 @@ export class StaffScopedAccess extends AuditedStaffAccess {
       .bind(workspaceId, limit)
       .all();
 
-    await this.record(workspaceId, "staff.activity.viewed");
+    await this.record(workspaceId, "admin.activity.viewed");
     return rows.results ?? [];
   }
 
@@ -441,7 +452,7 @@ export class StaffScopedAccess extends AuditedStaffAccess {
 
     const changed = (result.meta.changes ?? 0) > 0;
     if (changed) {
-      await this.record(workspaceId, "staff.plan_override", { planId });
+      await this.record(workspaceId, "admin.plan_override", { planId });
     }
     await this.recordFleet({
       action: "workspace.plan_override",
@@ -477,7 +488,7 @@ export class StaffScopedAccess extends AuditedStaffAccess {
     typedName: string,
     reason: string
   ): Promise<{ deleted: boolean; blastRadius: Record<string, number> }> {
-    await this.requireRole("super_admin", "delete workspaces");
+    await this.requireRole("admin", "delete workspaces");
 
     const workspace = await this.db
       .prepare(`SELECT id, name, status, deleted_at AS deletedAt FROM workspaces WHERE id = ?`)
@@ -504,7 +515,7 @@ export class StaffScopedAccess extends AuditedStaffAccess {
 
     const deleted = (result.meta.changes ?? 0) > 0;
     if (deleted) {
-      await this.record(workspaceId, "staff.workspace.deleted", { reason });
+      await this.record(workspaceId, "admin.workspace.deleted", { reason });
     }
     await this.recordFleet({
       action: "workspace.delete",
@@ -521,7 +532,7 @@ export class StaffScopedAccess extends AuditedStaffAccess {
 
   /** Undo a soft delete inside its window. The workspace comes back suspended, not active. */
   async restoreWorkspace(workspaceId: string, reason: string): Promise<boolean> {
-    await this.requireRole("super_admin", "restore workspaces");
+    await this.requireRole("admin", "restore workspaces");
 
     // Restored to 'suspended' rather than 'active' on purpose: whatever caused
     // the suspension that had to precede deletion has not been resolved by the
@@ -535,7 +546,7 @@ export class StaffScopedAccess extends AuditedStaffAccess {
       .run();
 
     const restored = (result.meta.changes ?? 0) > 0;
-    if (restored) await this.record(workspaceId, "staff.workspace.restored", { reason });
+    if (restored) await this.record(workspaceId, "admin.workspace.restored", { reason });
     await this.recordFleet({
       action: "workspace.restore",
       workspaceId,
@@ -571,7 +582,7 @@ export class StaffScopedAccess extends AuditedStaffAccess {
    * misbehaving. Reversible, which is what makes support+ defensible.
    */
   async setAgentStatus(agentId: string, disabled: boolean, reason: string): Promise<boolean> {
-    await this.requireRole("support", "disable agents");
+    await this.requireRole("admin", "disable agents");
 
     const agent = await this.db
       .prepare(`SELECT id, workspace_id AS workspaceId, name FROM agents WHERE id = ?`)
@@ -585,7 +596,7 @@ export class StaffScopedAccess extends AuditedStaffAccess {
       .run();
 
     const changed = (result.meta.changes ?? 0) > 0;
-    await this.record(agent.workspaceId, disabled ? "staff.agent.disabled" : "staff.agent.enabled", {
+    await this.record(agent.workspaceId, disabled ? "admin.agent.disabled" : "admin.agent.enabled", {
       agentId,
       name: agent.name,
     });
@@ -609,7 +620,7 @@ export class StaffScopedAccess extends AuditedStaffAccess {
    * customer-facing revoke beside it.
    */
   async revokeKey(keyId: string, reason: string): Promise<boolean> {
-    await this.requireRole("support", "revoke keys");
+    await this.requireRole("admin", "revoke keys");
 
     const key = await this.db
       .prepare(
@@ -627,7 +638,7 @@ export class StaffScopedAccess extends AuditedStaffAccess {
 
     const revoked = (result.meta.changes ?? 0) > 0;
     if (revoked) {
-      await this.record(key.workspaceId, "staff.key.revoked", { keyId, name: key.name });
+      await this.record(key.workspaceId, "admin.key.revoked", { keyId, name: key.name });
     }
     await this.recordFleet({
       action: "key.revoke",
@@ -697,9 +708,14 @@ export class StaffScopedAccess extends AuditedStaffAccess {
   }
 }
 
-export function requireStaffRole(staff: StaffUser, minimum: StaffRole): void {
-  const rank: Record<StaffRole, number> = { support: 0, admin: 1, super_admin: 2 };
-  if (rank[staff.role] < rank[minimum]) {
+/**
+ * Cannot currently refuse: there is one role and it outranks itself. The
+ * comparison is kept so that adding a tier restores the gate everywhere at
+ * once, rather than needing every call site found again.
+ */
+export function requireAdminRole(admin: AdminUser, minimum: AdminRole): void {
+  const rank: Record<AdminRole, number> = { admin: 0 };
+  if (rank[admin.role] < rank[minimum]) {
     throw new ApiError("FORBIDDEN", `This action needs the ${minimum} role.`);
   }
 }

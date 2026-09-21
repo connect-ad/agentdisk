@@ -1,19 +1,19 @@
 /**
- * Signing in as staff, in a test.
+ * Signing in as admin, in a test.
  *
- * Staff auth is Firebase now (migration 0014), so a test that wants to be a
- * staff member needs a token the Worker will actually verify — not a fixture it
+ * Admin auth is Firebase now (migration 0014), so a test that wants to be a
+ * admin member needs a token the Worker will actually verify — not a fixture it
  * trusts. This mints one with a real RSA key and pre-seeds the JWKS cache with
  * the matching public key, so `verifyFirebaseToken` runs its real code path and
  * nothing reaches Google.
  *
- * Shared rather than copied into each staff test file, because there are four
+ * Shared rather than copied into each admin test file, because there are four
  * of them and the signing details are exactly the sort of thing that drifts.
  *
  * The important consequence for anyone reading a test written with this: the
- * token proves an IDENTITY and nothing more. What makes it staff is the
- * `staff_users` row `asStaff` writes. Minting a token without that row is how
- * you test the "not staff" refusal, and that asymmetry is the whole of the new
+ * token proves an IDENTITY and nothing more. What makes it admin is the
+ * `admin_users` row `asAdmin` writes. Minting a token without that row is how
+ * you test the "not admin" refusal, and that asymmetry is the whole of the new
  * authorisation model.
  */
 
@@ -30,7 +30,7 @@ export const TEST_PROJECT_ID = "agentdisk-dev";
 
 /** The key the verifier caches. Versioned in firebase.ts; kept in step here. */
 const JWKS_CACHE_KEY = "firebase:jwks:v1";
-const KID = "staff-test-key";
+const KID = "admin-test-key";
 
 let keyPair: CryptoKeyPair | null = null;
 
@@ -50,7 +50,7 @@ const segment = (value: unknown): string =>
  * the verifier's cache-hit path is the one under test, which is also the path
  * production takes on all but the first request after a key rotation.
  */
-export async function installStaffJwks(): Promise<void> {
+export async function installAdminJwks(): Promise<void> {
   if (keyPair === null) {
     keyPair = (await crypto.subtle.generateKey(
       {
@@ -83,7 +83,7 @@ export interface TokenOptions {
 
 /** A Firebase ID token this deployment will accept. */
 export async function firebaseToken(options: TokenOptions): Promise<string> {
-  if (keyPair === null) await installStaffJwks();
+  if (keyPair === null) await installAdminJwks();
 
   const seconds = Math.floor(Date.now() / 1000) + (options.iatOffset ?? 0);
   const projectId = options.projectId ?? TEST_PROJECT_ID;
@@ -111,19 +111,19 @@ export async function firebaseToken(options: TokenOptions): Promise<string> {
 }
 
 /**
- * Give an address a staff role, and return a token for it.
+ * Give an address a admin role, and return a token for it.
  *
  * The two halves are deliberately separable: `firebaseToken` alone gives a
- * signed-in identity that is NOT staff, which is what the refusal tests need.
+ * signed-in identity that is NOT admin, which is what the refusal tests need.
  */
-export async function asStaff(
+export async function asAdmin(
   email: string,
-  role: "support" | "admin" | "super_admin",
+  role: "admin",
   options: { id?: string; disabled?: boolean } = {}
 ): Promise<string> {
   const id = options.id ?? `stf_${role.toUpperCase()}`;
   await env.DB.prepare(
-    `INSERT OR REPLACE INTO staff_users
+    `INSERT OR REPLACE INTO admin_users
        (id, email, role, disabled_at, last_login_at, created_at, invited_by)
      VALUES (?, ?, ?, ?, NULL, ?, NULL)`
   )

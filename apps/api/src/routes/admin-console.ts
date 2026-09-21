@@ -1,11 +1,11 @@
 /**
- * The staff console's handlers — 32 PART 6.
+ * The admin console's handlers — 32 PART 6.
  *
- * Separate from `staff.ts`, which holds session handling and the workspace
+ * Separate from `admin.ts`, which holds session handling and the workspace
  * screens that shipped first. Splitting on that line rather than merging keeps
  * either file readable, and there is no behaviour in the boundary: both build
- * their access object the same way, from the same `StaffDeps`, and both are
- * reachable only through `staff-router.ts`.
+ * their access object the same way, from the same `AdminDeps`, and both are
+ * reachable only through `admin-router.ts`.
  *
  * ── Every mutating handler takes a reason, and means it ────────────────────
  * The reason is not decoration. It is the column somebody reads a year later
@@ -23,13 +23,13 @@
 
 import { z } from "zod";
 import { ApiError, validationError } from "../lib/errors";
-import { json, requireStaff, type StaffDeps } from "./staff";
-import { StaffScopedAccess, type StaffUser } from "../staff/access";
-import { StaffUserAccess } from "../staff/users-access";
-import { StaffPlanAccess } from "../staff/plans-access";
-import { StaffBillingAccess } from "../staff/billing-access";
-import { StaffAuditAccess } from "../staff/audit-access";
-import { StaffAccountAccess } from "../staff/accounts-access";
+import { json, requireAdmin, type AdminDeps } from "./admin";
+import { AdminScopedAccess, type AdminUser } from "../admin/access";
+import { AdminUserAccess } from "../admin/users-access";
+import { AdminPlanAccess } from "../admin/plans-access";
+import { AdminBillingAccess } from "../admin/billing-access";
+import { AdminAuditAccess } from "../admin/audit-access";
+import { AdminAccountAccess } from "../admin/accounts-access";
 import { setFirebaseUserDisabled } from "../auth/firebase-admin";
 import { stripeClient } from "../billing/stripe";
 import { syncProductToPlan } from "../billing/plan-sync";
@@ -39,15 +39,15 @@ import { invalidateCatalogue } from "../billing/catalogue";
 
 type Ctor<T> = new (
   db: D1Database,
-  staff: StaffUser,
+  admin: AdminUser,
   requestId: string,
   now: number,
   sourceIp: string | null
 ) => T;
 
 /** One way to build any area's access object, so none of them can drift. */
-export function area<T>(Cls: Ctor<T>, staff: StaffUser, deps: StaffDeps): T {
-  return new Cls(deps.db, staff, deps.requestId, deps.now, deps.sourceIp ?? null);
+export function area<T>(Cls: Ctor<T>, admin: AdminUser, deps: AdminDeps): T {
+  return new Cls(deps.db, admin, deps.requestId, deps.now, deps.sourceIp ?? null);
 }
 
 async function body(request: Request): Promise<unknown> {
@@ -68,7 +68,7 @@ const reason = z.string().trim().min(3, "A reason is required.").max(500);
  * plan screens. Refusing here with the cause named beats a 500 from the SDK
  * that says only that something was undefined.
  */
-function stripeOf(deps: StaffDeps) {
+function stripeOf(deps: AdminDeps) {
   if (deps.stripeSecretKey === undefined || deps.stripeSecretKey === "") {
     throw new ApiError("INTERNAL_ERROR", "Stripe is not configured in this environment.", {
       internalReason: "STRIPE_SECRET_KEY is not set",
@@ -79,12 +79,12 @@ function stripeOf(deps: StaffDeps) {
 
 /* --------------------------------- users --------------------------------- */
 
-export async function staffFindUser(request: Request, deps: StaffDeps): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+export async function adminFindUser(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
   const email = new URL(request.url).searchParams.get("email");
   if (email === null) throw validationError("An email address is required.");
 
-  const users = area(StaffUserAccess, staff, deps);
+  const users = area(AdminUserAccess, admin, deps);
   const user = await users.findByEmail(email);
   if (user === null) return json({ user: null, memberships: [] });
 
@@ -95,13 +95,13 @@ export async function staffFindUser(request: Request, deps: StaffDeps): Promise<
   });
 }
 
-export async function staffGetUser(
+export async function adminGetUser(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   userId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
-  const users = area(StaffUserAccess, staff, deps);
+  const admin = await requireAdmin(request, deps);
+  const users = area(AdminUserAccess, admin, deps);
 
   const user = await users.getById(userId);
   if (user === null) throw new ApiError("NOT_FOUND", "No such user.");
@@ -115,16 +115,16 @@ export async function staffGetUser(
 
 const disableSchema = z.object({ disabled: z.boolean(), reason });
 
-export async function staffSetUserDisabled(
+export async function adminSetUserDisabled(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   userId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+  const admin = await requireAdmin(request, deps);
   const parsed = disableSchema.safeParse(await body(request));
   if (!parsed.success) throw validationError("A disabled flag and a reason are required.");
 
-  const users = area(StaffUserAccess, staff, deps);
+  const users = area(AdminUserAccess, admin, deps);
   const user = await users.getById(userId);
   if (user === null) throw new ApiError("NOT_FOUND", "No such user.");
 
@@ -154,13 +154,13 @@ export async function staffSetUserDisabled(
   return json({ changed, firebase });
 }
 
-export async function staffDeletionCheck(
+export async function adminDeletionCheck(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   userId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
-  return json(await area(StaffUserAccess, staff, deps).deletionCheck(userId));
+  const admin = await requireAdmin(request, deps);
+  return json(await area(AdminUserAccess, admin, deps).deletionCheck(userId));
 }
 
 const deleteUserSchema = z.object({
@@ -170,18 +170,18 @@ const deleteUserSchema = z.object({
   revokeKeys: z.boolean().default(true),
 });
 
-export async function staffDeleteUser(
+export async function adminDeleteUser(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   userId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+  const admin = await requireAdmin(request, deps);
   const parsed = deleteUserSchema.safeParse(await body(request));
   if (!parsed.success) {
     throw validationError("A reason and the account's email address are required.");
   }
 
-  const users = area(StaffUserAccess, staff, deps);
+  const users = area(AdminUserAccess, admin, deps);
   const user = await users.getById(userId);
   if (user === null) throw new ApiError("NOT_FOUND", "No such user.");
   if (parsed.data.confirmEmail.toLowerCase() !== user.email.toLowerCase()) {
@@ -211,16 +211,16 @@ export async function staffDeleteUser(
   return json({ ...result, firebase, restorableUntil: deps.now + 30 * 24 * 60 * 60 * 1000 });
 }
 
-export async function staffRestoreUser(
+export async function adminRestoreUser(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   userId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+  const admin = await requireAdmin(request, deps);
   const parsed = z.object({ reason }).safeParse(await body(request));
   if (!parsed.success) throw validationError("A reason is required.");
 
-  const users = area(StaffUserAccess, staff, deps);
+  const users = area(AdminUserAccess, admin, deps);
   const user = await users.getById(userId);
   if (user === null) throw new ApiError("NOT_FOUND", "No such user.");
 
@@ -247,16 +247,16 @@ export async function staffRestoreUser(
 
 const transferSchema = z.object({ userId: z.string().trim().min(1), reason });
 
-export async function staffTransferOwner(
+export async function adminTransferOwner(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   orgId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+  const admin = await requireAdmin(request, deps);
   const parsed = transferSchema.safeParse(await body(request));
   if (!parsed.success) throw validationError("A target user and a reason are required.");
 
-  await area(StaffUserAccess, staff, deps).transferOwner(
+  await area(AdminUserAccess, admin, deps).transferOwner(
     orgId,
     parsed.data.userId,
     parsed.data.reason
@@ -268,16 +268,16 @@ export async function staffTransferOwner(
 
 const overrideSchema = z.object({ planId: z.string().trim().min(1).nullable(), reason });
 
-export async function staffSetPlanOverride(
+export async function adminSetPlanOverride(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   workspaceId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+  const admin = await requireAdmin(request, deps);
   const parsed = overrideSchema.safeParse(await body(request));
   if (!parsed.success) throw validationError("A plan (or null) and a reason are required.");
 
-  const changed = await area(StaffScopedAccess, staff, deps).setPlanOverride(
+  const changed = await area(AdminScopedAccess, admin, deps).setPlanOverride(
     workspaceId,
     parsed.data.planId,
     parsed.data.reason
@@ -287,16 +287,16 @@ export async function staffSetPlanOverride(
 
 const deleteWorkspaceSchema = z.object({ confirmName: z.string().min(1), reason });
 
-export async function staffDeleteWorkspace(
+export async function adminDeleteWorkspace(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   workspaceId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+  const admin = await requireAdmin(request, deps);
   const parsed = deleteWorkspaceSchema.safeParse(await body(request));
   if (!parsed.success) throw validationError("The workspace name and a reason are required.");
 
-  const result = await area(StaffScopedAccess, staff, deps).softDeleteWorkspace(
+  const result = await area(AdminScopedAccess, admin, deps).softDeleteWorkspace(
     workspaceId,
     parsed.data.confirmName,
     parsed.data.reason
@@ -304,50 +304,50 @@ export async function staffDeleteWorkspace(
   return json({ ...result, restorableUntil: deps.now + 30 * 24 * 60 * 60 * 1000 });
 }
 
-export async function staffRestoreWorkspace(
+export async function adminRestoreWorkspace(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   workspaceId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+  const admin = await requireAdmin(request, deps);
   const parsed = z.object({ reason }).safeParse(await body(request));
   if (!parsed.success) throw validationError("A reason is required.");
 
-  const restored = await area(StaffScopedAccess, staff, deps).restoreWorkspace(
+  const restored = await area(AdminScopedAccess, admin, deps).restoreWorkspace(
     workspaceId,
     parsed.data.reason
   );
   return json({ restored });
 }
 
-export async function staffWorkspaceBlastRadius(
+export async function adminWorkspaceBlastRadius(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   workspaceId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
-  return json(await area(StaffScopedAccess, staff, deps).workspaceBlastRadius(workspaceId));
+  const admin = await requireAdmin(request, deps);
+  return json(await area(AdminScopedAccess, admin, deps).workspaceBlastRadius(workspaceId));
 }
 
-export async function staffNeedsAttention(request: Request, deps: StaffDeps): Promise<Response> {
-  const staff = await requireStaff(request, deps);
-  return json({ workspaces: await area(StaffScopedAccess, staff, deps).needsAttention() });
+export async function adminNeedsAttention(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
+  return json({ workspaces: await area(AdminScopedAccess, admin, deps).needsAttention() });
 }
 
 /* ---------------------------- agents and keys ---------------------------- */
 
 const agentSchema = z.object({ disabled: z.boolean(), reason });
 
-export async function staffSetAgentStatus(
+export async function adminSetAgentStatus(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   agentId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+  const admin = await requireAdmin(request, deps);
   const parsed = agentSchema.safeParse(await body(request));
   if (!parsed.success) throw validationError("A disabled flag and a reason are required.");
 
-  const changed = await area(StaffScopedAccess, staff, deps).setAgentStatus(
+  const changed = await area(AdminScopedAccess, admin, deps).setAgentStatus(
     agentId,
     parsed.data.disabled,
     parsed.data.reason
@@ -355,23 +355,23 @@ export async function staffSetAgentStatus(
   return json({ changed });
 }
 
-export async function staffRevokeKey(
+export async function adminRevokeKey(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   keyId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+  const admin = await requireAdmin(request, deps);
   const parsed = z.object({ reason }).safeParse(await body(request));
   if (!parsed.success) throw validationError("A reason is required.");
 
-  const revoked = await area(StaffScopedAccess, staff, deps).revokeKey(keyId, parsed.data.reason);
+  const revoked = await area(AdminScopedAccess, admin, deps).revokeKey(keyId, parsed.data.reason);
   return json({ revoked });
 }
 
 /* -------------------------------- billing -------------------------------- */
 
-export async function staffBilling(request: Request, deps: StaffDeps): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+export async function adminBilling(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
   const filter = new URL(request.url).searchParams.get("filter");
   const chosen = filter === "past_due" || filter === "canceled" ? filter : "all";
 
@@ -383,17 +383,17 @@ export async function staffBilling(request: Request, deps: StaffDeps): Promise<R
       ? null
       : stripeClient(deps.stripeSecretKey);
 
-  return json(await area(StaffBillingAccess, staff, deps).list(stripe, chosen));
+  return json(await area(AdminBillingAccess, admin, deps).list(stripe, chosen));
 }
 
 /* --------------------------------- plans --------------------------------- */
 
-export async function staffListPlans(request: Request, deps: StaffDeps): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+export async function adminListPlans(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
   // The console owns the catalogue outright as of 18 Sept 2026. The Terraform
   // root that used to declare these products is deleted, so nothing reverts an
   // edit made here and there is no second writer to warn about.
-  return json({ plans: await area(StaffPlanAccess, staff, deps).list() });
+  return json({ plans: await area(AdminPlanAccess, admin, deps).list() });
 }
 
 const planFields = {
@@ -417,17 +417,17 @@ const planFields = {
 
 const updatePlanSchema = z.object({ ...planFields, reason });
 
-export async function staffUpdatePlan(
+export async function adminUpdatePlan(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   planId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+  const admin = await requireAdmin(request, deps);
   const parsed = updatePlanSchema.safeParse(await body(request));
   if (!parsed.success) throw validationError("Those plan values are not valid.");
 
   const { reason: why, ...patch } = parsed.data;
-  const result = await area(StaffPlanAccess, staff, deps).update(
+  const result = await area(AdminPlanAccess, admin, deps).update(
     stripeOf(deps),
     planId,
     patch,
@@ -444,32 +444,32 @@ const createPlanSchema = z.object({
   reason,
 });
 
-export async function staffCreatePlan(request: Request, deps: StaffDeps): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+export async function adminCreatePlan(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
   const parsed = createPlanSchema.safeParse(await body(request));
   if (!parsed.success) throw validationError("Those plan values are not valid.");
 
   const { reason: why, ...input } = parsed.data;
-  return json({ plan: await area(StaffPlanAccess, staff, deps).create(stripeOf(deps), input, why) }, 201);
+  return json({ plan: await area(AdminPlanAccess, admin, deps).create(stripeOf(deps), input, why) }, 201);
 }
 
-export async function staffRetirePlan(
+export async function adminRetirePlan(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   planId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+  const admin = await requireAdmin(request, deps);
   const parsed = z.object({ reason }).safeParse(await body(request));
   if (!parsed.success) throw validationError("A reason is required.");
 
   return json({
-    plan: await area(StaffPlanAccess, staff, deps).retire(stripeOf(deps), planId, parsed.data.reason),
+    plan: await area(AdminPlanAccess, admin, deps).retire(stripeOf(deps), planId, parsed.data.reason),
   });
 }
 
-export async function staffStripeDiff(request: Request, deps: StaffDeps): Promise<Response> {
-  const staff = await requireStaff(request, deps);
-  return json({ diffs: await area(StaffPlanAccess, staff, deps).stripeDiff(stripeOf(deps)) });
+export async function adminStripeDiff(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
+  return json({ diffs: await area(AdminPlanAccess, admin, deps).stripeDiff(stripeOf(deps)) });
 }
 
 const syncSchema = z.object({
@@ -479,8 +479,8 @@ const syncSchema = z.object({
   reason,
 });
 
-export async function staffSyncFromStripe(request: Request, deps: StaffDeps): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+export async function adminSyncFromStripe(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
   const parsed = syncSchema.safeParse(await body(request));
   if (!parsed.success) {
     // A one-click pull is not an acceptable implementation, so an empty
@@ -489,7 +489,7 @@ export async function staffSyncFromStripe(request: Request, deps: StaffDeps): Pr
   }
 
   return json({
-    applied: await area(StaffPlanAccess, staff, deps).syncFromStripe(
+    applied: await area(AdminPlanAccess, admin, deps).syncFromStripe(
       stripeOf(deps),
       parsed.data.selections,
       parsed.data.reason
@@ -507,12 +507,12 @@ export async function staffSyncFromStripe(request: Request, deps: StaffDeps): Pr
  * delivery, a dashboard edit and this manual reconcile all heal through
  * identical code rather than through two implementations that drift.
  */
-export async function staffSyncCatalogue(request: Request, deps: StaffDeps): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+export async function adminSyncCatalogue(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
   const parsed = z.object({ reason }).safeParse(await body(request));
   if (!parsed.success) throw validationError("A reason is required.");
 
-  const access = area(StaffPlanAccess, staff, deps);
+  const access = area(AdminPlanAccess, admin, deps);
   // Gated at the same level as the other inbound sync: it can change what every
   // customer is entitled to.
   await access.stripeDiff(stripeOf(deps));
@@ -549,27 +549,27 @@ function auditFilterFrom(url: URL) {
   };
 }
 
-export async function staffAudit(request: Request, deps: StaffDeps): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+export async function adminAudit(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
   const url = new URL(request.url);
-  return json(await area(StaffAuditAccess, staff, deps).list(auditFilterFrom(url)));
+  return json(await area(AdminAuditAccess, admin, deps).list(auditFilterFrom(url)));
 }
 
-export async function staffAuditFilters(request: Request, deps: StaffDeps): Promise<Response> {
-  const staff = await requireStaff(request, deps);
-  const audit = area(StaffAuditAccess, staff, deps);
+export async function adminAuditFilters(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
+  const audit = area(AdminAuditAccess, admin, deps);
   return json({ actions: await audit.actions(), actors: await audit.actors() });
 }
 
-export async function staffAuditExport(request: Request, deps: StaffDeps): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+export async function adminAuditExport(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
   const url = new URL(request.url);
-  const csv = await area(StaffAuditAccess, staff, deps).exportCsv(auditFilterFrom(url));
+  const csv = await area(AdminAuditAccess, admin, deps).exportCsv(auditFilterFrom(url));
 
   return new Response(csv, {
     headers: {
       "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename="staff-audit-${deps.now}.csv"`,
+      "content-disposition": `attachment; filename="admin-audit-${deps.now}.csv"`,
       // The export is a bulk pull of customer-adjacent data. Nothing should
       // hold a copy of it on the way back.
       "cache-control": "no-store",
@@ -577,61 +577,61 @@ export async function staffAuditExport(request: Request, deps: StaffDeps): Promi
   });
 }
 
-/* ----------------------------- staff accounts ---------------------------- */
+/* ----------------------------- admin accounts ---------------------------- */
 
-export async function staffListAccounts(request: Request, deps: StaffDeps): Promise<Response> {
-  const staff = await requireStaff(request, deps);
-  return json({ accounts: await area(StaffAccountAccess, staff, deps).list() });
+export async function adminListAccounts(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
+  return json({ accounts: await area(AdminAccountAccess, admin, deps).list() });
 }
 
 const createAccountSchema = z.object({
   email: z.string().trim().min(3),
-  role: z.enum(["support", "admin", "super_admin"]),
+  role: z.enum(["admin"]),
   reason,
 });
 
-export async function staffCreateAccount(request: Request, deps: StaffDeps): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+export async function adminCreateAccount(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
   const parsed = createAccountSchema.safeParse(await body(request));
   if (!parsed.success) throw validationError("An email, a role and a reason are required.");
 
-  const account = await area(StaffAccountAccess, staff, deps).create(
+  const account = await area(AdminAccountAccess, admin, deps).create(
     parsed.data.email,
     parsed.data.role,
     parsed.data.reason
   );
 
   // No credential in the response, because none was created. Whoever holds this
-  // address at our Firebase project becomes staff on their next sign-in.
+  // address at our Firebase project becomes admin on their next sign-in.
   return json({ account }, 201);
 }
 
-const accountRoleSchema = z.object({ role: z.enum(["support", "admin", "super_admin"]), reason });
+const accountRoleSchema = z.object({ role: z.enum(["admin"]), reason });
 
-export async function staffSetAccountRole(
+export async function adminSetAccountRole(
   request: Request,
-  deps: StaffDeps,
-  staffId: string
+  deps: AdminDeps,
+  adminId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+  const admin = await requireAdmin(request, deps);
   const parsed = accountRoleSchema.safeParse(await body(request));
   if (!parsed.success) throw validationError("A role and a reason are required.");
 
-  await area(StaffAccountAccess, staff, deps).setRole(staffId, parsed.data.role, parsed.data.reason);
+  await area(AdminAccountAccess, admin, deps).setRole(adminId, parsed.data.role, parsed.data.reason);
   return json({ changed: true });
 }
 
-export async function staffSetAccountDisabled(
+export async function adminSetAccountDisabled(
   request: Request,
-  deps: StaffDeps,
-  staffId: string
+  deps: AdminDeps,
+  adminId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+  const admin = await requireAdmin(request, deps);
   const parsed = disableSchema.safeParse(await body(request));
   if (!parsed.success) throw validationError("A disabled flag and a reason are required.");
 
-  const changed = await area(StaffAccountAccess, staff, deps).setDisabled(
-    staffId,
+  const changed = await area(AdminAccountAccess, admin, deps).setDisabled(
+    adminId,
     parsed.data.disabled,
     parsed.data.reason
   );

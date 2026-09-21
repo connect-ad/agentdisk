@@ -148,19 +148,19 @@ export async function deleteWorkspaceCascade(
     // Only the rows naming this workspace. An org-wide membership has a NULL
     // workspace_id and grants the other workspaces on the same bill.
     db.prepare(`DELETE FROM memberships WHERE workspace_id = ?`).bind(workspaceId),
-    // staff_actions.workspace_id is TEXT REFERENCES workspaces(id) with no ON
+    // admin_actions.workspace_id is TEXT REFERENCES workspaces(id) with no ON
     // DELETE clause (migration 0011), and nothing ever cleared it - so any
-    // workspace a staff member had ever acted on could not be deleted at all:
+    // workspace a admin member had ever acted on could not be deleted at all:
     // the DELETE below raised a foreign-key violation and the batch rolled
     // back over objects this function had already removed from R2.
     //
-    // Guaranteed to fire on the staff path, because a workspace must be
-    // suspended before staff may delete it and the suspension writes exactly
+    // Guaranteed to fire on the admin path, because a workspace must be
+    // suspended before admin may delete it and the suspension writes exactly
     // such a row. NULL rather than DELETE is the point: the fleet log keeps
-    // the record that staff acted and loses only the pointer to a workspace
+    // the record that admin acted and loses only the pointer to a workspace
     // that no longer exists, which is the case 0011's nullable column was
     // written for.
-    db.prepare(`UPDATE staff_actions SET workspace_id = NULL WHERE workspace_id = ?`).bind(
+    db.prepare(`UPDATE admin_actions SET workspace_id = NULL WHERE workspace_id = ?`).bind(
       workspaceId
     ),
     db.prepare(`DELETE FROM workspaces WHERE id = ?`).bind(workspaceId),

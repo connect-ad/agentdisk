@@ -1,18 +1,18 @@
 /**
- * The staff API client.
+ * The admin API client.
  *
- * Speaks `/v1/staff/*` with a Firebase ID token — the same credential the
- * customer dashboard uses, because migration 0014 made staff auth Firebase and
- * left authorisation to the `staff_users` row behind it.
+ * Speaks `/v1/admin/*` with a Firebase ID token — the same credential the
+ * customer dashboard uses, because migration 0014 made admin auth Firebase and
+ * left authorisation to the `admin_users` row behind it.
  *
  * ── Nothing here stores a token ────────────────────────────────────────────
- * The previous version kept a staff session token in `sessionStorage`. There is
+ * The previous version kept a admin session token in `sessionStorage`. There is
  * nothing to keep now: the Firebase SDK holds the refresh token and mints a
  * fresh ID token on demand, so every request asks for the current one. A token
  * cached by this module would be the one thing capable of outliving a sign-out.
  *
  * ── The 401 subscription ───────────────────────────────────────────────────
- * A 401 no longer means only "expired". It also means "your staff row was
+ * A 401 no longer means only "expired". It also means "your admin row was
  * removed or disabled", which takes effect on the very next request. Either way
  * the shell needs to know, so every 401 from a call that carried a token is
  * published to `onSessionLost`. Handled here rather than at sixty call sites,
@@ -23,10 +23,10 @@ import { currentIdToken } from './lib/firebase.js';
 
 const BASE = import.meta.env.VITE_API_BASE ?? 'https://api-dev.agentdisk.io';
 
-export class StaffApiError extends Error {
+export class AdminApiError extends Error {
   constructor(status, code, message, requestId, details) {
     super(message);
-    this.name = 'StaffApiError';
+    this.name = 'AdminApiError';
     this.status = status;
     this.code = code;
     this.requestId = requestId ?? null;
@@ -78,7 +78,7 @@ async function request(path, { method = 'GET', body, token, raw = false } = {}) 
       for (const listener of sessionLostListeners) listener();
     }
 
-    throw new StaffApiError(res.status, code, message, requestId, details);
+    throw new AdminApiError(res.status, code, message, requestId, details);
   }
 
   if (raw) return res;
@@ -94,17 +94,17 @@ const query = params => {
   return text ? `?${text}` : '';
 };
 
-export const staffApi = {
+export const adminApi = {
   /* ------------------------------- session -------------------------------
    * No login or logout call. Signing in happens in the browser against
    * Firebase; signing out is discarding the token there. `whoami` is how the
-   * console asks whether this identity is staff at all, and what role it holds.
+   * console asks whether this identity is admin at all, and what role it holds.
    */
-  whoami: () => request('/v1/staff/whoami'),
+  whoami: () => request('/v1/admin/whoami'),
 
   /* ------------------------------- overview ------------------------------ */
-  overview: () => request('/v1/staff/overview'),
-  needsAttention: () => request('/v1/staff/workspaces/needs-attention'),
+  overview: () => request('/v1/admin/overview'),
+  needsAttention: () => request('/v1/admin/workspaces/needs-attention'),
 
   /* ------------------------------ workspaces ----------------------------- */
   /**
@@ -112,81 +112,81 @@ export const staffApi = {
    * 50 in the browser answers "suspended among the newest 50" while looking
    * like it answered "suspended".
    */
-  listWorkspaces: (q, status) => request(`/v1/staff/workspaces${query({ q, status })}`),
-  getWorkspace: id => request(`/v1/staff/workspaces/${id}`),
-  workspaceActivity: id => request(`/v1/staff/workspaces/${id}/activity`),
-  workspaceBlastRadius: id => request(`/v1/staff/workspaces/${id}/blast-radius`),
+  listWorkspaces: (q, status) => request(`/v1/admin/workspaces${query({ q, status })}`),
+  getWorkspace: id => request(`/v1/admin/workspaces/${id}`),
+  workspaceActivity: id => request(`/v1/admin/workspaces/${id}/activity`),
+  workspaceBlastRadius: id => request(`/v1/admin/workspaces/${id}/blast-radius`),
   setWorkspaceStatus: (id, status, reason) =>
-    request(`/v1/staff/workspaces/${id}/status`, { method: 'POST', body: { status, reason } }),
+    request(`/v1/admin/workspaces/${id}/status`, { method: 'POST', body: { status, reason } }),
   setPlanOverride: (id, planId, reason) =>
-    request(`/v1/staff/workspaces/${id}/plan-override`, {
+    request(`/v1/admin/workspaces/${id}/plan-override`, {
       method: 'PATCH',
       body: { planId, reason }
     }),
   deleteWorkspace: (id, confirmName, reason) =>
-    request(`/v1/staff/workspaces/${id}`, { method: 'DELETE', body: { confirmName, reason } }),
+    request(`/v1/admin/workspaces/${id}`, { method: 'DELETE', body: { confirmName, reason } }),
   restoreWorkspace: (id, reason) =>
-    request(`/v1/staff/workspaces/${id}/restore`, { method: 'POST', body: { reason } }),
+    request(`/v1/admin/workspaces/${id}/restore`, { method: 'POST', body: { reason } }),
 
   /* --------------------------------- users ------------------------------- */
-  findUser: email => request(`/v1/staff/users${query({ email })}`),
-  getUser: id => request(`/v1/staff/users/${id}`),
+  findUser: email => request(`/v1/admin/users${query({ email })}`),
+  getUser: id => request(`/v1/admin/users/${id}`),
   setUserDisabled: (id, disabled, reason) =>
-    request(`/v1/staff/users/${id}/disable`, { method: 'PATCH', body: { disabled, reason } }),
-  deletionCheck: id => request(`/v1/staff/users/${id}/deletion-check`),
+    request(`/v1/admin/users/${id}/disable`, { method: 'PATCH', body: { disabled, reason } }),
+  deletionCheck: id => request(`/v1/admin/users/${id}/deletion-check`),
   deleteUser: (id, confirmEmail, reason, revokeKeys) =>
-    request(`/v1/staff/users/${id}`, {
+    request(`/v1/admin/users/${id}`, {
       method: 'DELETE',
       body: { confirmEmail, reason, revokeKeys }
     }),
   restoreUser: (id, reason) =>
-    request(`/v1/staff/users/${id}/restore`, { method: 'POST', body: { reason } }),
+    request(`/v1/admin/users/${id}/restore`, { method: 'POST', body: { reason } }),
   forceLogout: (userId, workspaceId) =>
-    request(`/v1/staff/users/${userId}/force-logout${query({ workspaceId })}`, { method: 'POST' }),
-  revokeUserKeys: userId => request(`/v1/staff/users/${userId}/revoke-keys`, { method: 'POST' }),
+    request(`/v1/admin/users/${userId}/force-logout${query({ workspaceId })}`, { method: 'POST' }),
+  revokeUserKeys: userId => request(`/v1/admin/users/${userId}/revoke-keys`, { method: 'POST' }),
 
   /**
    * Send the customer a password-reset link.
    *
    * The link is never in the response and must never be asked for: it is a
    * bearer credential equal to "own this account", and it goes to the account
-   * holder's address, never to the staff member who started it. The reason is
+   * holder's address, never to the admin member who started it. The reason is
    * mandatory server-side; it is sent here so the audit row means something.
    */
   forcePasswordReset: (userId, reason) =>
-    request(`/v1/staff/users/${userId}/password-reset`, { method: 'POST', body: { reason } }),
+    request(`/v1/admin/users/${userId}/password-reset`, { method: 'POST', body: { reason } }),
 
   transferOwner: (orgId, userId, reason) =>
-    request(`/v1/staff/orgs/${orgId}/owner`, { method: 'PATCH', body: { userId, reason } }),
+    request(`/v1/admin/orgs/${orgId}/owner`, { method: 'PATCH', body: { userId, reason } }),
 
   /* --------------------------- agents and keys --------------------------- */
   setAgentDisabled: (id, disabled, reason) =>
-    request(`/v1/staff/agents/${id}`, { method: 'PATCH', body: { disabled, reason } }),
+    request(`/v1/admin/agents/${id}`, { method: 'PATCH', body: { disabled, reason } }),
   revokeKey: (id, reason) =>
-    request(`/v1/staff/keys/${id}`, { method: 'DELETE', body: { reason } }),
+    request(`/v1/admin/keys/${id}`, { method: 'DELETE', body: { reason } }),
 
   /* -------------------------------- billing ------------------------------ */
-  billing: filter => request(`/v1/staff/billing${query({ filter })}`),
+  billing: filter => request(`/v1/admin/billing${query({ filter })}`),
 
   /* --------------------------------- email ------------------------------- */
-  emailSettings: () => request('/v1/staff/settings/email'),
-  testEmail: () => request('/v1/staff/settings/email/test', { method: 'POST' }),
+  emailSettings: () => request('/v1/admin/settings/email'),
+  testEmail: () => request('/v1/admin/settings/email/test', { method: 'POST' }),
 
   /* --------------------------------- plans ------------------------------- */
-  listPlans: () => request('/v1/staff/plans'),
-  updatePlan: (id, patch) => request(`/v1/staff/plans/${id}`, { method: 'PATCH', body: patch }),
-  createPlan: input => request('/v1/staff/plans', { method: 'POST', body: input }),
+  listPlans: () => request('/v1/admin/plans'),
+  updatePlan: (id, patch) => request(`/v1/admin/plans/${id}`, { method: 'PATCH', body: patch }),
+  createPlan: input => request('/v1/admin/plans', { method: 'POST', body: input }),
   retirePlan: (id, reason) =>
-    request(`/v1/staff/plans/${id}/retire`, { method: 'POST', body: { reason } }),
-  stripeDiff: () => request('/v1/staff/plans/stripe-diff'),
+    request(`/v1/admin/plans/${id}/retire`, { method: 'POST', body: { reason } }),
+  stripeDiff: () => request('/v1/admin/plans/stripe-diff'),
   syncFromStripe: (selections, reason) =>
-    request('/v1/staff/plans/sync-from-stripe', { method: 'POST', body: { selections, reason } }),
-  syncCatalogue: reason => request('/v1/staff/plans/sync', { method: 'POST', body: { reason } }),
+    request('/v1/admin/plans/sync-from-stripe', { method: 'POST', body: { selections, reason } }),
+  syncCatalogue: reason => request('/v1/admin/plans/sync', { method: 'POST', body: { reason } }),
 
   /* --------------------------------- audit ------------------------------- */
-  audit: filter => request(`/v1/staff/audit${query(filter ?? {})}`),
-  auditFilters: () => request('/v1/staff/audit/filters'),
-  auditExportUrl: filter => new URL(`/v1/staff/audit/export${query(filter ?? {})}`, BASE).toString(),
+  audit: filter => request(`/v1/admin/audit${query(filter ?? {})}`),
+  auditFilters: () => request('/v1/admin/audit/filters'),
+  auditExportUrl: filter => new URL(`/v1/admin/audit/export${query(filter ?? {})}`, BASE).toString(),
   /**
    * The CSV, fetched rather than linked.
    *
@@ -195,17 +195,17 @@ export const staffApi = {
    * without one. So it is fetched and handed to the browser as a blob.
    */
   auditExport: async filter => {
-    const res = await request(`/v1/staff/audit/export${query(filter ?? {})}`, { raw: true });
+    const res = await request(`/v1/admin/audit/export${query(filter ?? {})}`, { raw: true });
     return res.text();
   },
 
-  /* ---------------------------- staff accounts --------------------------- */
-  listAccounts: () => request('/v1/staff/accounts'),
+  /* ---------------------------- admin accounts --------------------------- */
+  listAccounts: () => request('/v1/admin/accounts'),
   /** Grants an address a role. Mints nothing — there is no credential to show. */
   createAccount: (email, role, reason) =>
-    request('/v1/staff/accounts', { method: 'POST', body: { email, role, reason } }),
+    request('/v1/admin/accounts', { method: 'POST', body: { email, role, reason } }),
   setAccountRole: (id, role, reason) =>
-    request(`/v1/staff/accounts/${id}`, { method: 'PATCH', body: { role, reason } }),
+    request(`/v1/admin/accounts/${id}`, { method: 'PATCH', body: { role, reason } }),
   setAccountDisabled: (id, disabled, reason) =>
-    request(`/v1/staff/accounts/${id}/disable`, { method: 'PATCH', body: { disabled, reason } })
+    request(`/v1/admin/accounts/${id}/disable`, { method: 'PATCH', body: { disabled, reason } })
 };

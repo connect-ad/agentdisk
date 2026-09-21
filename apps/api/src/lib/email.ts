@@ -3,8 +3,8 @@
  *
  * This module is deliberately generic. It knows how to send a message and it
  * owns the wording of the templates it ships, and it knows nothing about who is
- * asking or why — no staff assumptions, no customer assumptions, no imports
- * from `staff/` or `auth/`. Callers pass an address and the facts; the module
+ * asking or why — no admin assumptions, no customer assumptions, no imports
+ * from `admin/` or `auth/`. Callers pass an address and the facts; the module
  * decides nothing about authorization. That is what lets a second caller adopt
  * it without first having to unpick the first caller's context.
  *
@@ -287,7 +287,7 @@ export interface TestEmail {
  * nothing that stops being true.
  *
  * It does name who caused it, because an unexplained message from a product's
- * verified sender is indistinguishable from a compromised one, and a staff team
+ * verified sender is indistinguishable from a compromised one, and a admin team
  * that cannot tell the difference is trained to ignore both.
  */
 export async function sendTestEmail(
@@ -295,10 +295,10 @@ export async function sendTestEmail(
   options: TestEmail
 ): Promise<SendResult> {
   const opening =
-    "Someone signed in to the AgentDisk staff console asked for a test message. This is it.";
+    "Someone signed in to the AgentDisk admin console asked for a test message. This is it.";
   const closing =
     "Nothing about any account changed and there is nothing to do. If you did not ask for this, " +
-    "say so to the rest of the staff team — it means somebody holding super_admin ran the check.";
+    "say so to the rest of the admin team — it means somebody holding super_admin ran the check.";
 
   const html = layout(
     "Email delivery is working",

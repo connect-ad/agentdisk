@@ -1,12 +1,12 @@
 /**
- * Staff-initiated password reset — doc 32 PART 6, and the reversal of
+ * Admin-initiated password reset — doc 32 PART 6, and the reversal of
  * Amendment 4.
  *
  * Three things here are worth more than the rest, because getting them wrong is
  * severe and invisible from the outside:
  *
  * **The reset link never leaves the server except by email.** It is a bearer
- * credential equal to "own this account". A staff member who could read it back
+ * credential equal to "own this account". A admin member who could read it back
  * out of the response, or find it later in an audit row, would hold that
  * credential for a customer they are merely supporting. The tests below assert
  * its absence in both places rather than assuming it.
@@ -18,20 +18,20 @@
  * once (backlog/023) and is the reason the quota warning is computed on the
  * request path rather than in the dashboard.
  *
- * **Every attempt lands in the fleet log.** `staff_actions` exists because these
+ * **Every attempt lands in the fleet log.** `admin_actions` exists because these
  * actions are not workspace-scoped; an unrecorded one is precisely the
- * cross-tenant reach the whole staff model is built to keep reviewable.
+ * cross-tenant reach the whole admin model is built to keep reviewable.
  */
 
 import { SELF, env } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { asStaff, installStaffJwks } from "./staff-auth";
+import { asAdmin, installAdminJwks } from "./admin-auth";
 import { NOW, seedTwoWorkspaces } from "./helpers";
 
 const URL_BASE = "https://api-dev.agentdisk.io";
 const ENCRYPTION_KEY = "test-database-encryption-key";
 const TOTP_SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
-const PASSWORD = "a-long-staff-password";
+const PASSWORD = "a-long-admin-password";
 
 const USER_ID = "usr_TESTUSER";
 const USER_EMAIL = "test@example.com";
@@ -151,7 +151,7 @@ async function fleetRows(): Promise<
 > {
   const rows = await env.DB.prepare(
     `SELECT action, actor_id AS actorId, target_id AS targetId, reason, result, metadata
-       FROM staff_actions ORDER BY created_at`
+       FROM admin_actions ORDER BY created_at`
   ).all<{ action: string; actorId: string; targetId: string; reason: string; result: string; metadata: string }>();
   return rows.results ?? [];
 }
@@ -159,11 +159,11 @@ async function fleetRows(): Promise<
 let supportToken = "";
 let adminToken = "";
 
-beforeAll(installStaffJwks);
+beforeAll(installAdminJwks);
 
 beforeEach(async () => {
   await seedTwoWorkspaces();
-  for (const table of ["staff_users", "staff_actions", "audit_events"]) {
+  for (const table of ["admin_users", "admin_actions", "audit_events"]) {
     await env.DB.prepare(`DELETE FROM ${table}`).run();
   }
   // The access token is cached across requests by design; left in place it
@@ -173,7 +173,7 @@ beforeEach(async () => {
   // seedTwoWorkspaces() builds the user, the org and both workspaces but no
   // membership - nothing else in the suite needs one. This path does: the
   // workspace-scoped rows are found by walking memberships, which is what makes
-  // a workspace owner able to see that staff acted on one of their members.
+  // a workspace owner able to see that admin acted on one of their members.
   // The org id is the one seedTwoWorkspaces uses.
   await env.DB.prepare(
     `INSERT OR IGNORE INTO memberships (id, org_id, user_id, role, created_at)
@@ -182,21 +182,21 @@ beforeEach(async () => {
     .bind("mem_TESTMEMBER", "org_TESTORG", USER_ID, "owner", NOW)
     .run();
 
-  supportToken = await asStaff("support@agentdisk.io", "support", { id: "stf_SUPPORT" });
-  adminToken = await asStaff("admin@agentdisk.io", "admin", { id: "stf_ADMIN" });
+  supportToken = await asAdmin("support@agentdisk.io", "admin", { id: "stf_SUPPORT" });
+  adminToken = await asAdmin("admin@agentdisk.io", "admin", { id: "stf_ADMIN" });
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("staff password reset", () => {
+describe("admin password reset", () => {
   it("sends the link to the customer and never returns it", async () => {
     const outbound = stubOutbound();
     const token = supportToken;
 
     const res = await post(
-      `/v1/staff/users/${USER_ID}/password-reset`,
+      `/v1/admin/users/${USER_ID}/password-reset`,
       { reason: "Caller verified by support ticket 4471." },
       token
     );
@@ -205,7 +205,7 @@ describe("staff password reset", () => {
     const raw = await res.text();
     expect(JSON.parse(raw)).toEqual({ userId: USER_ID, passwordResetSent: true });
 
-    // The assertion that matters. A staff member holding this link holds the
+    // The assertion that matters. A admin member holding this link holds the
     // customer's account, so its absence from the response is the control, not
     // the shape of the JSON around it.
     expect(raw).not.toContain("oobCode");
@@ -235,7 +235,7 @@ describe("staff password reset", () => {
     const outbound = stubOutbound();
     const token = supportToken;
 
-    await post(`/v1/staff/users/${USER_ID}/password-reset`, { reason: "Ticket 4471." }, token);
+    await post(`/v1/admin/users/${USER_ID}/password-reset`, { reason: "Ticket 4471." }, token);
 
     expect(outbound.identityBodies).toHaveLength(1);
     expect(at(outbound.identityBodies, 0)).toMatchObject({
@@ -250,14 +250,14 @@ describe("staff password reset", () => {
     const token = supportToken;
 
     await post(
-      `/v1/staff/users/${USER_ID}/password-reset`,
+      `/v1/admin/users/${USER_ID}/password-reset`,
       { reason: "Caller verified by support ticket 4471." },
       token
     );
 
     const rows = await fleetRows();
     expect(rows).toHaveLength(1);
-    expect(at(rows, 0).action).toBe("staff.user.password_reset");
+    expect(at(rows, 0).action).toBe("admin.user.password_reset");
     expect(at(rows, 0).actorId).toBe("stf_SUPPORT");
     expect(at(rows, 0).targetId).toBe(USER_ID);
     expect(at(rows, 0).reason).toBe("Caller verified by support ticket 4471.");
@@ -272,18 +272,18 @@ describe("staff password reset", () => {
     stubOutbound();
     const token = supportToken;
 
-    await post(`/v1/staff/users/${USER_ID}/password-reset`, { reason: "Ticket 4471." }, token);
+    await post(`/v1/admin/users/${USER_ID}/password-reset`, { reason: "Ticket 4471." }, token);
 
     // The seeded user is a member of one org that owns two workspaces, so both
-    // owners learn that staff acted rather than only the fleet log knowing.
+    // owners learn that admin acted rather than only the fleet log knowing.
     const rows = await env.DB.prepare(
       `SELECT workspace_id AS workspaceId, actor_type AS actorType
-         FROM audit_events WHERE action = 'staff.user.password_reset'`
+         FROM audit_events WHERE action = 'admin.user.password_reset'`
     ).all<{ workspaceId: string; actorType: string }>();
 
     expect(rows.results ?? []).toHaveLength(2);
     for (const row of rows.results ?? []) {
-      expect(row.actorType).toBe("staff");
+      expect(row.actorType).toBe("admin");
     }
   });
 
@@ -294,7 +294,7 @@ describe("staff password reset", () => {
     stubOutbound({ mail: "rejected" });
     const token = supportToken;
 
-    const res = await post(`/v1/staff/users/${USER_ID}/password-reset`, { reason: "Ticket 4471." }, token);
+    const res = await post(`/v1/admin/users/${USER_ID}/password-reset`, { reason: "Ticket 4471." }, token);
     expect(res.status).toBe(500);
 
     const rows = await fleetRows();
@@ -313,7 +313,7 @@ describe("staff password reset", () => {
     const token = supportToken;
 
     const res = await post(
-      `/v1/staff/users/${USER_ID}/password-reset`,
+      `/v1/admin/users/${USER_ID}/password-reset`,
       { reason: "Ticket 4471." },
       token
     );
@@ -328,7 +328,7 @@ describe("staff password reset", () => {
     const outbound = stubOutbound({ identity: "missing" });
     const token = supportToken;
 
-    const res = await post(`/v1/staff/users/${USER_ID}/password-reset`, { reason: "Ticket 4471." }, token);
+    const res = await post(`/v1/admin/users/${USER_ID}/password-reset`, { reason: "Ticket 4471." }, token);
     expect(res.status).toBe(200);
 
     // Nothing was sent, because there was nothing to send.
@@ -343,7 +343,7 @@ describe("staff password reset", () => {
     stubOutbound();
     const token = supportToken;
 
-    const res = await post(`/v1/staff/users/${USER_ID}/password-reset`, { reason: "  " }, token);
+    const res = await post(`/v1/admin/users/${USER_ID}/password-reset`, { reason: "  " }, token);
     expect(res.status).toBe(400);
     expect(await fleetRows()).toHaveLength(0);
   });
@@ -352,7 +352,7 @@ describe("staff password reset", () => {
     const outbound = stubOutbound();
     const token = supportToken;
 
-    const res = await post("/v1/staff/users/usr_NOSUCHUSER/password-reset", { reason: "Ticket." }, token);
+    const res = await post("/v1/admin/users/usr_NOSUCHUSER/password-reset", { reason: "Ticket." }, token);
     expect(res.status).toBe(404);
     expect(outbound.mailjetBodies).toHaveLength(0);
     expect(await fleetRows()).toHaveLength(0);
@@ -360,18 +360,18 @@ describe("staff password reset", () => {
 
   it("refuses an unauthenticated caller", async () => {
     stubOutbound();
-    const res = await post(`/v1/staff/users/${USER_ID}/password-reset`, { reason: "Ticket." });
+    const res = await post(`/v1/admin/users/${USER_ID}/password-reset`, { reason: "Ticket." });
     expect(res.status).toBe(401);
     expect(await fleetRows()).toHaveLength(0);
   });
 
   it("is available to support, not only to admin", async () => {
     // Deliberate, per the doc 32 role matrix: this is the action a support
-    // engineer performs on the phone, and it grants the staff member nothing -
+    // engineer performs on the phone, and it grants the admin member nothing -
     // the link goes to the customer's address, never to them.
     stubOutbound();
     for (const token of [supportToken, adminToken]) {
-      const res = await post(`/v1/staff/users/${USER_ID}/password-reset`, { reason: "Ticket." }, token);
+      const res = await post(`/v1/admin/users/${USER_ID}/password-reset`, { reason: "Ticket." }, token);
       expect(res.status).toBe(200);
     }
   });
@@ -380,8 +380,8 @@ describe("staff password reset", () => {
     const outbound = stubOutbound();
     const token = supportToken;
 
-    await post(`/v1/staff/users/${USER_ID}/password-reset`, { reason: "One." }, token);
-    await post(`/v1/staff/users/${USER_ID}/password-reset`, { reason: "Two." }, token);
+    await post(`/v1/admin/users/${USER_ID}/password-reset`, { reason: "One." }, token);
+    await post(`/v1/admin/users/${USER_ID}/password-reset`, { reason: "Two." }, token);
 
     // One RSA signature and one round trip to Google, not two. The token is
     // good for an hour and minting it is the expensive half of this path.

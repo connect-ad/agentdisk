@@ -438,10 +438,10 @@ const shellUrl = `http://localhost:${port}/test/fixtures/shell-harness.html`;
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: VIEWPORT });
 
-// The console harness loads its data through the real `staffApi`, which
+// The console harness loads its data through the real `adminApi`, which
 // would reach api-dev. Answer it here instead; nothing else is intercepted.
-await page.route('**/v1/staff/**', route =>
-  route.request().url().includes('/v1/staff/plans')
+await page.route('**/v1/admin/**', route =>
+  route.request().url().includes('/v1/admin/plans')
     ? route.fulfill({ json: { plans: [PLAN] } })
     : route.fulfill({ json: {} })
 );

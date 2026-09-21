@@ -175,12 +175,12 @@ describe("sweepPendingDeletions", () => {
     expect(row?.last_error).toMatch(/R2 said no/);
   });
 
-  it("records the staff actor when a person triggers it", async () => {
-    await queue("fil_STAFF", NOW - 1);
+  it("records the admin actor when a person triggers it", async () => {
+    await queue("fil_ADMIN", NOW - 1);
 
     const result = await sweepPendingDeletions(env.DB, env.FILES, NOW, {
       dryRun: false,
-      trigger: "staff",
+      trigger: "admin",
       actorId: "stf_ABC",
       actorEmail: "ops@example.com",
     });
@@ -189,7 +189,7 @@ describe("sweepPendingDeletions", () => {
       .bind(result.runId)
       .first<{ trigger: string; actor_id: string; actor_email: string }>();
 
-    expect(run?.trigger).toBe("staff");
+    expect(run?.trigger).toBe("admin");
     expect(run?.actor_id).toBe("stf_ABC");
     expect(run?.actor_email).toBe("ops@example.com");
   });

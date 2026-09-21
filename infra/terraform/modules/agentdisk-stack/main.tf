@@ -17,8 +17,8 @@ locals {
   # would need paid Advanced Certificate Manager. Doc 12's subdomain table.
   web_hostname = "app${var.subdomain_suffix}.${var.root_domain}"
 
-  # The internal staff console (14 PART 28.1). Its own origin, deliberately -
-  # a staff session cookie and a customer session cookie can then never share a
+  # The internal admin console (14 PART 28.1). Its own origin, deliberately -
+  # a admin session cookie and a customer session cookie can then never share a
   # cookie scope, which makes "these cannot be confused" true at the browser
   # level rather than by naming convention.
   # "securepanel" rather than "admin": the hostname is the one part of this
@@ -219,11 +219,11 @@ resource "cloudflare_workers_custom_domain" "web" {
   service    = cloudflare_workers_script.web.script_name
 }
 
-# The staff console (apps/admin), same shape as the dashboard above: an
+# The admin console (apps/admin), same shape as the dashboard above: an
 # assets-only Worker on its own hostname.
 #
 # Its own origin is the point, not an accident of layout. 14 PART 27.2 gives
-# staff a separate session cookie scoped to this hostname alone, so a staff
+# admin a separate session cookie scoped to this hostname alone, so a admin
 # credential and a customer credential cannot reach each other in a browser
 # even if some future handler were careless. Same-origin would make that a
 # matter of naming discipline; a separate origin makes it a matter of the

@@ -1,88 +1,88 @@
 /**
- * Staff route dispatch.
+ * Admin route dispatch.
  *
  * Lifted verbatim out of `index.ts`, where it was the one block two people
  * could not edit at the same time. Nothing about the routing changed: the same
- * segments are matched in the same order, and an unmatched staff path still
+ * segments are matched in the same order, and an unmatched admin path still
  * throws NOT_FOUND here rather than falling through to the customer chain
  * below it.
  *
  * Keeping it in its own file also states the boundary the block already had.
- * Staff use a separate table, a separate token shape and a separate code path
+ * Admin use a separate table, a separate token shape and a separate code path
  * from every customer route, so there is no path along which a customer
- * credential could be evaluated against staff logic, or the reverse. This
- * module is the only place `StaffScopedAccess` is reachable.
+ * credential could be evaluated against admin logic, or the reverse. This
+ * module is the only place `AdminScopedAccess` is reachable.
  */
 
 import { ApiError } from "../lib/errors";
 import { readEmailConfig } from "../lib/email";
 import { readFirebaseAdminConfig } from "../auth/firebase-admin";
 import {
-  staffForceLogout,
-  staffForcePasswordReset,
-  staffGetWorkspace,
-  staffListWorkspaces,
-  staffOverview,
-  staffRevokeKeys,
-  staffSetWorkspaceStatus,
-  staffWhoami,
-  staffWorkspaceActivity,
-} from "./staff";
+  adminForceLogout,
+  adminForcePasswordReset,
+  adminGetWorkspace,
+  adminListWorkspaces,
+  adminOverview,
+  adminRevokeKeys,
+  adminSetWorkspaceStatus,
+  adminWhoami,
+  adminWorkspaceActivity,
+} from "./admin";
 import {
-  staffAudit,
-  staffAuditExport,
-  staffAuditFilters,
-  staffBilling,
-  staffCreateAccount,
-  staffCreatePlan,
-  staffDeleteUser,
-  staffDeleteWorkspace,
-  staffDeletionCheck,
-  staffFindUser,
-  staffGetUser,
-  staffListAccounts,
-  staffListPlans,
-  staffNeedsAttention,
-  staffRestoreUser,
-  staffRestoreWorkspace,
-  staffRetirePlan,
-  staffRevokeKey,
-  staffSetAccountDisabled,
-  staffSetAccountRole,
-  staffSetAgentStatus,
-  staffSetPlanOverride,
-  staffSetUserDisabled,
-  staffStripeDiff,
-  staffSyncCatalogue,
-  staffSyncFromStripe,
-  staffTransferOwner,
-  staffUpdatePlan,
-  staffWorkspaceBlastRadius,
-} from "./staff-console";
-import { staffGetEmailSettings, staffTestEmail } from "./staff-settings";
+  adminAudit,
+  adminAuditExport,
+  adminAuditFilters,
+  adminBilling,
+  adminCreateAccount,
+  adminCreatePlan,
+  adminDeleteUser,
+  adminDeleteWorkspace,
+  adminDeletionCheck,
+  adminFindUser,
+  adminGetUser,
+  adminListAccounts,
+  adminListPlans,
+  adminNeedsAttention,
+  adminRestoreUser,
+  adminRestoreWorkspace,
+  adminRetirePlan,
+  adminRevokeKey,
+  adminSetAccountDisabled,
+  adminSetAccountRole,
+  adminSetAgentStatus,
+  adminSetPlanOverride,
+  adminSetUserDisabled,
+  adminStripeDiff,
+  adminSyncCatalogue,
+  adminSyncFromStripe,
+  adminTransferOwner,
+  adminUpdatePlan,
+  adminWorkspaceBlastRadius,
+} from "./admin-console";
+import { adminGetEmailSettings, adminTestEmail } from "./admin-settings";
 // Type-only, so it is erased at compile time and the index <-> router cycle
 // never exists at runtime.
 import type { Env } from "../index";
 
 /**
- * Dispatch one `/v1/staff/...` request. The caller has already established the
+ * Dispatch one `/v1/admin/...` request. The caller has already established the
  * prefix; `segments` is the whole split path, so the indices below match what
  * they matched in `index.ts`.
  */
-export async function handleStaffRoute(
+export async function handleAdminRoute(
   request: Request,
   env: Env,
   segments: string[],
   requestId: string
 ): Promise<Response> {
-  const staffDeps = {
+  const adminDeps = {
     db: env.DB,
     kv: env.CACHE,
     encryptionKey: env.DATABASE_ENCRYPTION_KEY,
     requestId,
     now: Date.now(),
     // Resolved here, once, so the handlers receive a config object rather
-    // than the environment - there is no path from a staff handler to the
+    // than the environment - there is no path from a admin handler to the
     // raw token. Null means "not configured here", which the handlers
     // that need it turn into a refusal naming the feature.
     email: readEmailConfig(env),
@@ -91,9 +91,9 @@ export async function handleStaffRoute(
     // Cloudflare sets this itself and a client cannot forge it. Read once here
     // so no handler has to remember to.
     sourceIp: request.headers.get("cf-connecting-ip"),
-    // The same verifier and the same project as the customer chain. Staff are
-    // told apart by their staff_users row, never by the credential.
-    // undefined rather than an empty projectId when unset, so requireStaff
+    // The same verifier and the same project as the customer chain. Admin are
+    // told apart by their admin_users row, never by the credential.
+    // undefined rather than an empty projectId when unset, so requireAdmin
     // refuses with "not configured" instead of verifying every token against an
     // audience of "" and reporting it as a bad credential.
     firebase:
@@ -110,72 +110,72 @@ export async function handleStaffRoute(
   // signing out is discarding the token there. A server endpoint for either
   // would be a thing that looks like it does something and does not.
   if (area === "whoami" && request.method === "GET") {
-    return await staffWhoami(request, staffDeps);
+    return await adminWhoami(request, adminDeps);
   }
   if (area === "overview" && request.method === "GET") {
-    return await staffOverview(request, staffDeps);
+    return await adminOverview(request, adminDeps);
   }
   if (area === "workspaces") {
     if (resourceId === undefined && request.method === "GET") {
-      return await staffListWorkspaces(request, staffDeps);
+      return await adminListWorkspaces(request, adminDeps);
     }
     // Before the `:id` GET below, or this reads as a workspace whose id is the
     // literal string "needs-attention" and answers 404 - which looks like a
     // data problem rather than the routing one it is.
     if (resourceId === "needs-attention" && request.method === "GET") {
-      return await staffNeedsAttention(request, staffDeps);
+      return await adminNeedsAttention(request, adminDeps);
     }
     if (resourceId !== undefined && action === undefined && request.method === "GET") {
-      return await staffGetWorkspace(request, staffDeps, resourceId);
+      return await adminGetWorkspace(request, adminDeps, resourceId);
     }
     if (resourceId !== undefined && action === "activity" && request.method === "GET") {
-      return await staffWorkspaceActivity(request, staffDeps, resourceId);
+      return await adminWorkspaceActivity(request, adminDeps, resourceId);
     }
     if (resourceId !== undefined && action === "status" && request.method === "POST") {
-      return await staffSetWorkspaceStatus(request, staffDeps, resourceId);
+      return await adminSetWorkspaceStatus(request, adminDeps, resourceId);
     }
     if (resourceId !== undefined && action === "plan-override" && request.method === "PATCH") {
-      return await staffSetPlanOverride(request, staffDeps, resourceId);
+      return await adminSetPlanOverride(request, adminDeps, resourceId);
     }
     if (resourceId !== undefined && action === "blast-radius" && request.method === "GET") {
-      return await staffWorkspaceBlastRadius(request, staffDeps, resourceId);
+      return await adminWorkspaceBlastRadius(request, adminDeps, resourceId);
     }
     if (resourceId !== undefined && action === "restore" && request.method === "POST") {
-      return await staffRestoreWorkspace(request, staffDeps, resourceId);
+      return await adminRestoreWorkspace(request, adminDeps, resourceId);
     }
     if (resourceId !== undefined && action === undefined && request.method === "DELETE") {
-      return await staffDeleteWorkspace(request, staffDeps, resourceId);
+      return await adminDeleteWorkspace(request, adminDeps, resourceId);
     }
   }
 
   if (area === "users" && resourceId === undefined && request.method === "GET") {
-    return await staffFindUser(request, staffDeps);
+    return await adminFindUser(request, adminDeps);
   }
 
   if (area === "users" && resourceId !== undefined) {
     if (action === undefined && request.method === "GET") {
-      return await staffGetUser(request, staffDeps, resourceId);
+      return await adminGetUser(request, adminDeps, resourceId);
     }
     if (action === "disable" && request.method === "PATCH") {
-      return await staffSetUserDisabled(request, staffDeps, resourceId);
+      return await adminSetUserDisabled(request, adminDeps, resourceId);
     }
     if (action === "deletion-check" && request.method === "GET") {
-      return await staffDeletionCheck(request, staffDeps, resourceId);
+      return await adminDeletionCheck(request, adminDeps, resourceId);
     }
     if (action === "restore" && request.method === "POST") {
-      return await staffRestoreUser(request, staffDeps, resourceId);
+      return await adminRestoreUser(request, adminDeps, resourceId);
     }
     if (action === undefined && request.method === "DELETE") {
-      return await staffDeleteUser(request, staffDeps, resourceId);
+      return await adminDeleteUser(request, adminDeps, resourceId);
     }
     if (action === "force-logout" && request.method === "POST") {
-      return await staffForceLogout(request, staffDeps, resourceId);
+      return await adminForceLogout(request, adminDeps, resourceId);
     }
     if (action === "revoke-keys" && request.method === "POST") {
-      return await staffRevokeKeys(request, staffDeps, resourceId);
+      return await adminRevokeKeys(request, adminDeps, resourceId);
     }
     if (action === "password-reset" && request.method === "POST") {
-      return await staffForcePasswordReset(request, staffDeps, resourceId);
+      return await adminForcePasswordReset(request, adminDeps, resourceId);
     }
   }
 
@@ -190,67 +190,67 @@ export async function handleStaffRoute(
 
   if (area === "plans") {
     if (resourceId === undefined) {
-      if (request.method === "GET") return await staffListPlans(request, staffDeps);
-      if (request.method === "POST") return await staffCreatePlan(request, staffDeps);
+      if (request.method === "GET") return await adminListPlans(request, adminDeps);
+      if (request.method === "POST") return await adminCreatePlan(request, adminDeps);
     }
     if (resourceId === "stripe-diff" && request.method === "GET") {
-      return await staffStripeDiff(request, staffDeps);
+      return await adminStripeDiff(request, adminDeps);
     }
     if (resourceId === "sync-from-stripe" && request.method === "POST") {
-      return await staffSyncFromStripe(request, staffDeps);
+      return await adminSyncFromStripe(request, adminDeps);
     }
     if (resourceId === "sync" && request.method === "POST") {
-      return await staffSyncCatalogue(request, staffDeps);
+      return await adminSyncCatalogue(request, adminDeps);
     }
     if (resourceId !== undefined && action === undefined && request.method === "PATCH") {
-      return await staffUpdatePlan(request, staffDeps, resourceId);
+      return await adminUpdatePlan(request, adminDeps, resourceId);
     }
     if (resourceId !== undefined && action === "retire" && request.method === "POST") {
-      return await staffRetirePlan(request, staffDeps, resourceId);
+      return await adminRetirePlan(request, adminDeps, resourceId);
     }
   }
 
   if (area === "billing" && resourceId === undefined && request.method === "GET") {
-    return await staffBilling(request, staffDeps);
+    return await adminBilling(request, adminDeps);
   }
 
   if (area === "audit") {
     if (resourceId === undefined && request.method === "GET") {
-      return await staffAudit(request, staffDeps);
+      return await adminAudit(request, adminDeps);
     }
     if (resourceId === "filters" && request.method === "GET") {
-      return await staffAuditFilters(request, staffDeps);
+      return await adminAuditFilters(request, adminDeps);
     }
     if (resourceId === "export" && request.method === "GET") {
-      return await staffAuditExport(request, staffDeps);
+      return await adminAuditExport(request, adminDeps);
     }
   }
 
   if (area === "accounts") {
     if (resourceId === undefined && request.method === "GET") {
-      return await staffListAccounts(request, staffDeps);
+      return await adminListAccounts(request, adminDeps);
     }
     if (resourceId === undefined && request.method === "POST") {
-      return await staffCreateAccount(request, staffDeps);
+      return await adminCreateAccount(request, adminDeps);
     }
     if (resourceId !== undefined && action === undefined && request.method === "PATCH") {
-      return await staffSetAccountRole(request, staffDeps, resourceId);
+      return await adminSetAccountRole(request, adminDeps, resourceId);
     }
     if (resourceId !== undefined && action === "disable" && request.method === "PATCH") {
-      return await staffSetAccountDisabled(request, staffDeps, resourceId);
+      return await adminSetAccountDisabled(request, adminDeps, resourceId);
     }
   }
 
   if (area === "orgs" && resourceId !== undefined && action === "owner" && request.method === "PATCH") {
-    return await staffTransferOwner(request, staffDeps, resourceId);
+    return await adminTransferOwner(request, adminDeps, resourceId);
   }
 
   if (area === "agents" && resourceId !== undefined && request.method === "PATCH") {
-    return await staffSetAgentStatus(request, staffDeps, resourceId);
+    return await adminSetAgentStatus(request, adminDeps, resourceId);
   }
 
   if (area === "keys" && resourceId !== undefined && request.method === "DELETE") {
-    return await staffRevokeKey(request, staffDeps, resourceId);
+    return await adminRevokeKey(request, adminDeps, resourceId);
   }
 
   // `email` and `test` are literal segments, named explicitly rather than
@@ -259,10 +259,10 @@ export async function handleStaffRoute(
   // moment there is.
   if (area === "settings" && resourceId === "email") {
     if (action === undefined && request.method === "GET") {
-      return await staffGetEmailSettings(request, staffDeps);
+      return await adminGetEmailSettings(request, adminDeps);
     }
     if (action === "test" && request.method === "POST") {
-      return await staffTestEmail(request, staffDeps);
+      return await adminTestEmail(request, adminDeps);
     }
   }
 

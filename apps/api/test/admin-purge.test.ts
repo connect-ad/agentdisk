@@ -1,5 +1,5 @@
 /**
- * The 30-day sweep behind staff deletion — 32 PART 7 and 11.
+ * The 30-day sweep behind admin deletion — 32 PART 7 and 11.
  *
  * The first test is the one that matters most, and it is about a default rather
  * than a behaviour: this job reports and does not delete unless explicitly
@@ -11,11 +11,11 @@
 
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { STAFF_PURGE_WINDOW_MS, purgeStaffDeleted } from "../src/jobs/staff-purge";
+import { ADMIN_PURGE_WINDOW_MS, purgeAdminDeleted } from "../src/jobs/admin-purge";
 import { NOW, WORKSPACE_A, seedTwoWorkspaces } from "./helpers";
 
 const ORG_ID = "org_TESTORG";
-const LONG_AGO = NOW - STAFF_PURGE_WINDOW_MS - 1000;
+const LONG_AGO = NOW - ADMIN_PURGE_WINDOW_MS - 1000;
 const YESTERDAY = NOW - 24 * 60 * 60 * 1000;
 
 async function workspaceRow(id: string) {
@@ -41,7 +41,7 @@ describe("what it does by default", () => {
       .bind(LONG_AGO, WORKSPACE_A)
       .run();
 
-    const result = await purgeStaffDeleted(env.DB, env.FILES, NOW);
+    const result = await purgeAdminDeleted(env.DB, env.FILES, NOW);
 
     expect(result.dryRun).toBe(true);
     expect(result.workspaceCandidates).toBe(1);
@@ -55,7 +55,7 @@ describe("what it does by default", () => {
       .bind(YESTERDAY, WORKSPACE_A)
       .run();
 
-    const result = await purgeStaffDeleted(env.DB, env.FILES, NOW, false);
+    const result = await purgeAdminDeleted(env.DB, env.FILES, NOW, false);
 
     expect(result.workspaceCandidates).toBe(0);
     expect(await workspaceRow(WORKSPACE_A)).not.toBeNull();
@@ -76,7 +76,7 @@ describe("live billing stops it", () => {
       .bind(LONG_AGO, WORKSPACE_A)
       .run();
 
-    const result = await purgeStaffDeleted(env.DB, env.FILES, NOW, false);
+    const result = await purgeAdminDeleted(env.DB, env.FILES, NOW, false);
 
     expect(result.skippedForBilling).toBeGreaterThan(0);
     expect(result.workspacesPurged).toBe(0);
@@ -93,7 +93,7 @@ describe("live billing stops it", () => {
       .bind(LONG_AGO, WORKSPACE_A)
       .run();
 
-    const result = await purgeStaffDeleted(env.DB, env.FILES, NOW, false);
+    const result = await purgeAdminDeleted(env.DB, env.FILES, NOW, false);
 
     expect(result.workspacesPurged).toBe(1);
     expect(await workspaceRow(WORKSPACE_A)).toBeNull();
@@ -110,7 +110,7 @@ describe("a purged user", () => {
       .bind(NOW, NOW, LONG_AGO)
       .run();
 
-    const result = await purgeStaffDeleted(env.DB, env.FILES, NOW, false);
+    const result = await purgeAdminDeleted(env.DB, env.FILES, NOW, false);
     expect(result.usersScrubbed).toBe(1);
 
     const row = await env.DB.prepare(
@@ -139,7 +139,7 @@ describe("a purged user", () => {
       .bind(NOW, NOW, LONG_AGO)
       .run();
 
-    await purgeStaffDeleted(env.DB, env.FILES, NOW, false);
+    await purgeAdminDeleted(env.DB, env.FILES, NOW, false);
 
     const row = await env.DB.prepare(`SELECT email FROM users WHERE id = 'usr_GONE2'`).first<{
       email: string;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { staffApi } from '../api.js';
+import { adminApi } from '../api.js';
 import { useResource } from '../lib/useResource.js';
 import { ConfirmModal, Modal } from '../components/Overlay.jsx';
 import { EmptyState, ErrorState, Skeleton } from '../components/States.jsx';
@@ -116,7 +116,7 @@ function syncState(plan) {
 }
 
 export function Plans({ role, onToast }) {
-  const resource = useResource(() => staffApi.listPlans(), []);
+  const resource = useResource(() => adminApi.listPlans(), []);
   const [editing, setEditing] = useState(null);
   const [creating, setCreating] = useState(false);
   const [retiring, setRetiring] = useState(null);
@@ -149,7 +149,7 @@ export function Plans({ role, onToast }) {
     setBusy(true);
     setActionError(null);
     try {
-      const result = await staffApi.stripeDiff();
+      const result = await adminApi.stripeDiff();
       setDiff(result.diffs);
     } catch (err) {
       setActionError(err);
@@ -187,7 +187,7 @@ export function Plans({ role, onToast }) {
           disabled={!canEdit || busy}
           onClick={() =>
             act(
-              () => staffApi.syncCatalogue('Reconciling every plan against Stripe'),
+              () => adminApi.syncCatalogue('Reconciling every plan against Stripe'),
               'Catalogue reconciled from Stripe.'
             )
           }
@@ -336,7 +336,7 @@ export function Plans({ role, onToast }) {
         }}
         onSubmit={(patch, reason) =>
           act(
-            () => staffApi.updatePlan(editing.id, { ...patch, reason }),
+            () => adminApi.updatePlan(editing.id, { ...patch, reason }),
             'Plan saved and pushed to Stripe.'
           )
         }
@@ -353,7 +353,7 @@ export function Plans({ role, onToast }) {
           setActionError(null);
         }}
         onSubmit={(patch, reason) =>
-          act(() => staffApi.createPlan({ ...patch, reason }), 'Plan created in Stripe.')
+          act(() => adminApi.createPlan({ ...patch, reason }), 'Plan created in Stripe.')
         }
       />
 
@@ -365,7 +365,7 @@ export function Plans({ role, onToast }) {
         confirmLabel="Retire plan"
         busy={busy}
         onCancel={() => setRetiring(null)}
-        onConfirm={reason => act(() => staffApi.retirePlan(retiring.id, reason), 'Plan retired.')}
+        onConfirm={reason => act(() => adminApi.retirePlan(retiring.id, reason), 'Plan retired.')}
       />
 
       <DiffDialog
@@ -376,7 +376,7 @@ export function Plans({ role, onToast }) {
         onCancel={() => setDiff(null)}
         onApply={(selections, reason) =>
           act(async () => {
-            await staffApi.syncFromStripe(selections, reason);
+            await adminApi.syncFromStripe(selections, reason);
             setDiff(null);
           }, 'Selected fields pulled from Stripe.')
         }
@@ -814,7 +814,7 @@ function PlanEditor({
             }}
           />
           <p style={{ margin: '6px 0 0', fontSize: '11.5px', color: 'var(--tx3)' }}>
-            Written verbatim to the audit log against your staff account.
+            Written verbatim to the audit log against your admin account.
           </p>
         </div>
         </div>
@@ -979,13 +979,13 @@ function DiffDialog({ open, diffs, busy, error, onCancel, onApply }) {
 /**
  * Sync history.
  *
- * A saved filter over the staff audit log — `action LIKE 'plan.%'` — and not a
+ * A saved filter over the admin audit log — `action LIKE 'plan.%'` — and not a
  * table of its own. The audit rows already record who changed what, when, which
  * fields and the result, so a `plan_sync_events` table would be a second copy
  * of facts already held, kept in step by hand.
  */
 export function SyncHistory() {
-  const resource = useResource(() => staffApi.audit({ action: 'plan.', limit: 100 }), []);
+  const resource = useResource(() => adminApi.audit({ action: 'plan.', limit: 100 }), []);
   const rows = resource.data?.rows ?? [];
 
   if (resource.loading) return <Skeleton rows={6} />;
@@ -1009,7 +1009,7 @@ export function SyncHistory() {
           <div style={{ minWidth: '780px' }}>
             <div style={headRow(COLS_SYNC)}>
               <span style={th}>When (UTC)</span>
-              <span style={th}>Staff</span>
+              <span style={th}>Admin</span>
               <span style={th}>Action</span>
               <span style={th}>Plan &amp; fields</span>
               <span style={th}>Result</span>

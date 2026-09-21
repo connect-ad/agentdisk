@@ -7,8 +7,8 @@
  *
  * **The recipient is never chosen by the caller.** A test-send endpoint that
  * takes an address is an open relay with a friendly label, and it would be one
- * reachable by anybody holding a staff credential. The address comes from the
- * signed-in staff member's own row, and a body that supplies one is ignored
+ * reachable by anybody holding a admin credential. The address comes from the
+ * signed-in admin member's own row, and a body that supplies one is ignored
  * rather than rejected — rejecting it would tell a prober that the field is
  * read at all.
  *
@@ -19,10 +19,10 @@
 
 import { SELF, env } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { asStaff, installStaffJwks } from "./staff-auth";
+import { asAdmin, installAdminJwks } from "./admin-auth";
 
 const URL_BASE = "https://api-dev.agentdisk.io";
-const PATH = "/v1/staff/settings/email";
+const PATH = "/v1/admin/settings/email";
 
 const SUPPORT_EMAIL = "support@agentdisk.io";
 const SUPER_EMAIL = "super@agentdisk.io";
@@ -72,7 +72,7 @@ function stubMailjet(outcome: "accepted" | "rejected" = "accepted"): { bodies: u
 
 async function fleetRows(): Promise<{ action: string; result: string; metadata: string }[]> {
   const rows = await env.DB.prepare(
-    "SELECT action, result, metadata FROM staff_actions ORDER BY created_at"
+    "SELECT action, result, metadata FROM admin_actions ORDER BY created_at"
   ).all<{ action: string; result: string; metadata: string }>();
   return rows.results ?? [];
 }
@@ -80,20 +80,20 @@ async function fleetRows(): Promise<{ action: string; result: string; metadata: 
 let support = "";
 let superAdmin = "";
 
-beforeAll(installStaffJwks);
+beforeAll(installAdminJwks);
 
 beforeEach(async () => {
-  await env.DB.prepare("DELETE FROM staff_users").run();
-  await env.DB.prepare("DELETE FROM staff_actions").run();
-  support = await asStaff(SUPPORT_EMAIL, "support", { id: "stf_SUPPORT" });
-  superAdmin = await asStaff(SUPER_EMAIL, "super_admin", { id: "stf_SUPER" });
+  await env.DB.prepare("DELETE FROM admin_users").run();
+  await env.DB.prepare("DELETE FROM admin_actions").run();
+  support = await asAdmin(SUPPORT_EMAIL, "admin", { id: "stf_SUPPORT" });
+  superAdmin = await asAdmin(SUPER_EMAIL, "admin", { id: "stf_SUPER" });
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("GET /v1/staff/settings/email", () => {
+describe("GET /v1/admin/settings/email", () => {
   it("reports that this deployment can send, and from where", async () => {
     const response = await call("GET", PATH, support);
 
@@ -126,19 +126,21 @@ describe("GET /v1/staff/settings/email", () => {
   });
 });
 
-describe("POST /v1/staff/settings/email/test", () => {
-  it("refuses support, and writes down the refusal", async () => {
+describe("POST /v1/admin/settings/email/test", () => {
+  it("no longer refuses anybody who can reach the console", async () => {
+    // This pinned a 403 for support against a super_admin-only route. The
+    // console has one role now, so the send is open to every operator - and
+    // the refusal it used to record cannot be produced.
     stubMailjet();
 
     const response = await call("POST", `${PATH}/test`, support, {});
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(200);
 
     const denied = (await fleetRows()).filter((row) => row.result === "denied");
-    expect(denied).toHaveLength(1);
-    expect(denied[0]?.action).toBe("staff.denied");
+    expect(denied).toHaveLength(0);
   });
 
-  it("sends to the signed-in staff member's own address", async () => {
+  it("sends to the signed-in admin member's own address", async () => {
     const mailjet = stubMailjet();
 
     const response = await call("POST", `${PATH}/test`, superAdmin, {});

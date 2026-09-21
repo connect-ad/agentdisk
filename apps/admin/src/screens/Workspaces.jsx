@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { staffApi } from '../api.js';
+import { adminApi } from '../api.js';
 import { useResource } from '../lib/useResource.js';
 import { EmptyState, ErrorState, NotTracked, Skeleton } from '../components/States.jsx';
 import { ConfirmModal, Modal } from '../components/Overlay.jsx';
@@ -68,12 +68,12 @@ export function WorkspaceList({ view, onNavigate }) {
   const [applied, setApplied] = useState('');
 
   const resource = useResource(async () => {
-    if (view === 'needs-attention') return staffApi.needsAttention();
+    if (view === 'needs-attention') return adminApi.needsAttention();
     // The status filter goes to the server. Filtering here filtered one page,
     // so a suspended workspace outside the newest 50 produced "No suspended
     // workspaces" — a confident negative, the worst answer this screen can give.
-    if (view === 'suspended') return staffApi.listWorkspaces(undefined, 'suspended');
-    return staffApi.listWorkspaces(applied || undefined);
+    if (view === 'suspended') return adminApi.listWorkspaces(undefined, 'suspended');
+    return adminApi.listWorkspaces(applied || undefined);
   }, [view, applied]);
 
   const workspaces = resource.data?.workspaces ?? [];
@@ -245,12 +245,12 @@ export function WorkspaceDetail({ workspaceId, role, onNavigate, onToast }) {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState(null);
 
-  const resource = useResource(() => staffApi.getWorkspace(workspaceId), [workspaceId]);
+  const resource = useResource(() => adminApi.getWorkspace(workspaceId), [workspaceId]);
   const activity = useResource(
-    () => (tab === 'activity' ? staffApi.workspaceActivity(workspaceId) : Promise.resolve(null)),
+    () => (tab === 'activity' ? adminApi.workspaceActivity(workspaceId) : Promise.resolve(null)),
     [workspaceId, tab]
   );
-  const plans = useResource(() => staffApi.listPlans(), []);
+  const plans = useResource(() => adminApi.listPlans(), []);
 
   const workspace = resource.data?.workspace;
 
@@ -381,7 +381,7 @@ export function WorkspaceDetail({ workspaceId, role, onNavigate, onToast }) {
                   marginBottom: '12px'
                 }}
               >
-                STAFF ACTIONS
+                ADMIN ACTIONS
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
                 <button
@@ -488,7 +488,7 @@ export function WorkspaceDetail({ workspaceId, role, onNavigate, onToast }) {
               THIS WORKSPACE&apos;S OWN ACTIVITY LOG
             </span>
             <div style={{ fontSize: '11.5px', color: 'var(--tx3)', marginTop: '4px' }}>
-              Every actor — the customer&apos;s users, their agents, and staff. Not the staff audit
+              Every actor — the customer&apos;s users, their agents, and admin. Not the admin audit
               log, which is under Audit Log.
             </div>
           </div>
@@ -543,7 +543,7 @@ export function WorkspaceDetail({ workspaceId, role, onNavigate, onToast }) {
         onConfirm={reason =>
           act(
             () =>
-              staffApi.setWorkspaceStatus(
+              adminApi.setWorkspaceStatus(
                 workspace.id,
                 dialog === 'suspend' ? 'suspended' : 'active',
                 reason
@@ -575,7 +575,7 @@ export function WorkspaceDetail({ workspaceId, role, onNavigate, onToast }) {
         // checks it again, which is the one that counts.
         onConfirm={reason =>
           act(
-            () => staffApi.deleteWorkspace(workspace.id, workspace.name, reason),
+            () => adminApi.deleteWorkspace(workspace.id, workspace.name, reason),
             'Workspace deleted. Restorable for 30 days.'
           )
         }
@@ -591,7 +591,7 @@ export function WorkspaceDetail({ workspaceId, role, onNavigate, onToast }) {
         busy={busy}
         onCancel={() => setDialog(null)}
         onConfirm={reason =>
-          act(() => staffApi.restoreWorkspace(workspace.id, reason), 'Workspace restored, suspended.')
+          act(() => adminApi.restoreWorkspace(workspace.id, reason), 'Workspace restored, suspended.')
         }
       />
 
@@ -604,7 +604,7 @@ export function WorkspaceDetail({ workspaceId, role, onNavigate, onToast }) {
         onCancel={() => setDialog(null)}
         onSubmit={(planId, reason) =>
           act(
-            () => staffApi.setPlanOverride(workspace.id, planId, reason),
+            () => adminApi.setPlanOverride(workspace.id, planId, reason),
             planId ? `Override set to ${planId}.` : 'Override cleared.'
           )
         }

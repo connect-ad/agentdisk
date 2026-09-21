@@ -18,10 +18,10 @@ task.
 | `apps/api/` | The Cloudflare Worker: REST + MCP, one deployable | Both surfaces are built and share one authorization chain. MCP tools call the REST handlers rather than reimplementing them, so the two cannot drift — live testing once disputed this for `pathPrefix`, and retesting confirmed the code: both surfaces refuse a path outside the key's prefix, see `backlog/029`. |
 | `infra/terraform/` | All infrastructure as code | One root config, one module, **one workspace per environment** (`dev`, `prod`). No `environments/` directories — see the workspace note below. |
 | `.github/workflows/` | CI and deployment pipelines | **Three areas, split by what they own: `infra`, `backend`, `frontend`.** Each is one reusable engine plus thin per-environment callers, so prod can never drift from dev. Path filters mean an `apps/web` push moves nothing else. `frontend.yml` is called once per app (dashboard, console). `ci.yml` gates PRs and covers all three apps. `deploy-all-dev.yml` is the ordered manual full deploy. |
-| `apps/admin/` | The internal staff console, at `admin-dev.agentdisk.io` | Its own origin, though no longer for the reason 14 PART 27.2 gives: that doc scopes a staff session cookie to this host so a staff and a customer credential cannot reach each other in a browser, and migration `0014_staff_firebase_sso.sql` deleted that cookie. Staff sign in with the same Firebase identity as customers and one token now reaches both surfaces; the separate origin survives as a way to tell the two apps apart, not as an isolation boundary. **The boundary is the `staff_users` lookup on every request** — see the rule below. Deliberately does not import `design-system/` — looking different from the customer dashboard is how a support engineer knows which one they are in; it carries its own palette in `src/app.css`, from the AgentDisk Admin design file, and those tokens must not be reconciled with the dashboard's. Nine screens under `src/screens/`, one shell, routing by the History API rather than a router library. |
+| `apps/admin/` | The internal admin console, at `securepanel-dev.agentdisk.io` | Its own origin, though no longer for the reason 14 PART 27.2 gives: that doc scopes a admin session cookie to this host so a admin and a customer credential cannot reach each other in a browser, and migration `0014_admin_firebase_sso.sql` deleted that cookie. Admin sign in with the same Firebase identity as customers and one token now reaches both surfaces; the separate origin survives as a way to tell the two apps apart, not as an isolation boundary. **The boundary is the `admin_users` lookup on every request** — see the rule below. Deliberately does not import `design-system/` — looking different from the customer dashboard is how a support engineer knows which one they are in; it carries its own palette in `src/app.css`, from the AgentDisk Admin design file, and those tokens must not be reconciled with the dashboard's. Nine screens under `src/screens/`, one shell, routing by the History API rather than a router library. |
 | `apps/web/` | The dashboard SPA, live at `app-dev.agentdisk.io` | `src/components/` is vendored from `design-system/`; `src/components/index.js` is generated. Hand-written code lives in `src/routes/` and `src/components-local/`. Two vendored files deliberately diverge, all awaiting the same upstream trip: `src/components/AppShell.jsx` for three reasons — `backlog/015`, `backlog/016` and `backlog/026` — `src/components/Modal/Modal.jsx` plus `src/components/Button/Button.jsx`, which together gain Enter-to-submit, the one part of the modal contract that cannot be done from `app.css` — `Button` has to default to `type="button"` or an untyped Cancel inside the new `<form>` submits the dialog it exists to dismiss (`backlog/031`); and `src/components/ApiKeyDisplay/ApiKeyDisplay.jsx`, whose `prefix` defaulted to `ad_live` — a prefix this API has never issued. Deployed as a Workers static-assets Worker, not Pages — see `backlog/013`. |
 | `Skill/` | Reusable how-to knowledge, `<N> <Name>.md` | Procedures, commands and their calibration. Not the specification — that is `docs/design/`. |
-| `backlog/` | Outstanding tasks, `NNN-<slug>.md` | **Four items: the billing module, the staff admin panel built on top of it, and two small ones left by the 19 Sept Mailjet swap.** The previous 31 were deleted 18 Sept 2026 and live at the tag `pre-billing-module`. Status lives in each file. |
+| `backlog/` | Outstanding tasks, `NNN-<slug>.md` | **Four items: the billing module, the admin panel built on top of it, and two small ones left by the 19 Sept Mailjet swap.** The previous 31 were deleted 18 Sept 2026 and live at the tag `pre-billing-module`. Status lives in each file. |
 | `docs/superpowers/specs/` | The design rebuild's specs, `YYYY-MM-DD-<slug>.md` | Replaced `.design-sync/`, which described the old vendored mirror and lost its subject when that mirror went. The `.dc.html` artboards in `design-system/` are hand-exported from Claude Design; when a design file has no local copy, record its numbers in a spec here and ask for the export — never reconstruct one from a transcript. |
 | `.claude/commands/` | Custom slash commands, `<name>.md` | [`cpack`](.claude/commands/cpack.md) persists session knowledge into the docs below; [`cpush`](.claude/commands/cpush.md) commits and tags. Both are auto-discovered by Claude Code; no registration step. |
 | `summary.md` | External code audit, 8 Sept 2026 | Read-only record of one review, with file:line evidence for every claim. Its open work is tracked as `backlog/017`–`backlog/025`; the backlog is where that work lives, not here. |
@@ -152,30 +152,42 @@ were not touched. See `backlog/002`.
   destination, or a scoped key can write anywhere by moving a file it controls;
   copy needs read on the source, or it becomes a way to pull any file into your
   own scope and read it there.
-- **A staff account is an email address in a table, not a credential.** Migration
-  `0014_staff_firebase_sso.sql` reversed 0008 on the owner's call: staff sign in
-  through Firebase like everybody else, and `staff_users` decides who is an
-  admin. `password_hash`, `totp_secret` and `staff_sessions` are gone, along with
-  `scripts/provision-staff.mjs`, `src/staff/crypto.ts` and
-  `test/staff-crypto.test.ts` — **an earlier version of this file described all
+- **The console has one role, and the gate it removed is still in the source.**
+  `support` and `admin` and `super_admin` collapsed to `admin` alone, so
+  **everybody who can reach the console can do everything in it** — delete a
+  workspace, edit the plan catalogue, grant console access to a new address.
+  The only boundary left is being in `admin_users` at all. `requireRole`, the
+  `RANK` map and the `admin.denied` audit path are deliberately still there and
+  cannot fire: restoring a tier is adding a member to `ADMIN_ROLES` and a number
+  to `RANK`, not re-deriving which of forty methods should have been gated.
+  `admin-plans.test.ts` asserts that no `admin.denied` row is ever written, so
+  the day a tier comes back that test failing is the reminder the denial path is
+  live again. The tests that used to pin the matrix were rewritten rather than
+  deleted — they now record the collapse instead of a permission model.
+- **A admin account is an email address in a table, not a credential.** Migration
+  `0014_admin_firebase_sso.sql` reversed 0008 on the owner's call: admin sign in
+  through Firebase like everybody else, and `admin_users` decides who is an
+  admin. `password_hash`, `totp_secret` and `admin_sessions` are gone, along with
+  `scripts/provision-admin.mjs`, `src/admin/crypto.ts` and
+  `test/admin-crypto.test.ts` — **an earlier version of this file described all
   three as the provisioning path; they no longer exist.** The first administrator
   is seeded by that migration, because under this scheme there is no credential
   to mint and so nothing for a provisioning step to do. `apps/admin`'s login is
   one Google button and nothing else. The property traded away is stated in the
-  migration's header and is worth reading before touching staff auth: one
-  Firebase token now reaches both the customer and the staff surface, and the
-  `staff_users` lookup is the only thing separating them. That is why the role
+  migration's header and is worth reading before touching admin auth: one
+  Firebase token now reaches both the customer and the admin surface, and the
+  `admin_users` lookup is the only thing separating them. That is why the role
   lives in the row and never in a Firebase custom claim — a claim is minted once
   and goes stale in a token already issued, a row is read fresh every request and
   a disable takes effect immediately. **Creating one is `POST
-  /v1/staff/accounts`** — super_admin only, audited as `staff.create`, and it
+  /v1/admin/accounts`** — any console operator, audited as `admin.create`, and it
   shows nothing once because nothing secret is made. The pre-SSO
-  `POST /v1/staff/users` is gone: it answered 501 to avoid minting a credential,
+  `POST /v1/admin/users` is gone: it answered 501 to avoid minting a credential,
   which stopped being a risk when there was no credential, and its message
   instructed the caller to write a `password_hash` and a `totp_secret` into
-  dropped columns. `staff.test.ts` pins its absence at 404, and the rule it used
-  to carry — that an admin cannot create staff — moved to `staff-console.test.ts`
-  against the surviving route. **The rest of `/v1/staff/users` is customer-user
+  dropped columns. `admin.test.ts` pins its absence at 404, and the rule it used
+  to carry — that an admin cannot create admin — moved to `admin-console.test.ts`
+  against the surviving route. **The rest of `/v1/admin/users` is customer-user
   administration and is untouched**; the two are different things sharing a
   prefix, which is how the dead route stayed hidden.
 - **One overlay ladder, and a dialog always outranks a drawer.**
@@ -285,13 +297,13 @@ were not touched. See `backlog/002`.
   to know what it holds. **Egress and requests stay per workspace**, because
   they are period counters resetting on the workspace's own `period_reset_at`
   and there is no account-level period to reset them on. `plan_override` is
-  untouched — it answers "which limits", still a per-workspace question a staff
+  untouched — it answers "which limits", still a per-workspace question a admin
   operator may need; these columns answer "how much is used", which is not.
   The type is the guard: `assertWithinQuota` takes `WorkspaceRow &
   AccountUsage`, so a caller holding only a workspace row cannot call it at
   all. **Every surface that divides usage by a plan limit had to move with it**
   — `whoami`'s `usage` (the dashboard reads it, so `backlog/017` would
-  otherwise have recurred exactly), and the staff console's
+  otherwise have recurred exactly), and the admin console's
   `workspaces/needs-attention`, which was flagging at 95% of an allowance the
   workspace no longer had.
 - **The hard quota block and the soft sandbox warning are one call.** Every write
@@ -329,14 +341,14 @@ were not touched. See `backlog/002`.
   claiming one; pass `destructive={false}` there. Dressing additive actions in the
   danger treatment is how people learn to click through the red dialogs that
   matter.
-- **Staff audit discipline is inherited, never repeated.** `AuditedStaffAccess`
+- **Admin audit discipline is inherited, never repeated.** `AuditedAdminAccess`
   holds `record`, `recordFleet` and `requireRole` as protected members and every
-  staff area class extends it, so no area can perform an action without the
-  machinery that writes it down. The class was split out of `StaffScopedAccess`
+  admin area class extends it, so no area can perform an action without the
+  machinery that writes it down. The class was split out of `AdminScopedAccess`
   when the console grew six areas: one class holding all of them would have run
   past a thousand lines, which is the point at which nobody reads the audit
   methods again to check they are still unconditional. **A refusal is recorded
-  too** — `requireRole` writes a `staff.denied` row before throwing, because a
+  too** — `requireRole` writes a `admin.denied` row before throwing, because a
   log of only successful actions cannot show somebody repeatedly attempting what
   their role forbids.
 - **A deleted account is our own fact, checked before Firebase's.** Disabling a
@@ -370,15 +382,15 @@ were not touched. See `backlog/002`.
   screens disagreeing: signup and reset tested length only, Settings tested
   nothing while promising twelve characters, and a strength meter scored by a
   private fourth rule and let through whatever it concluded.
-- **Staff deletion sets a timestamp and stops.** Both delete endpoints are soft
-  with a 30-day window; the cascade belongs to `purgeStaffDeleted`, which
-  **defaults to reporting** and needs `STAFF_PURGE_ENABLED = "true"` to delete
+- **Admin deletion sets a timestamp and stops.** Both delete endpoints are soft
+  with a 30-day window; the cascade belongs to `purgeAdminDeleted`, which
+  **defaults to reporting** and needs `ADMIN_PURGE_ENABLED = "true"` to delete
   anything — the same shape as the sandbox sweep, for the same reason. A
   workspace must already be *suspended* before it can be deleted: suspension is
   instant and reversible, so it is the right first move in every scenario ending
   in deletion, and it gives the customer a chance to notice. A user row is
   scrubbed, never removed — it is what an `audit_events` actor id resolves to.
-- **The plan catalogue has exactly one writer: the staff console.** The four
+- **The plan catalogue has exactly one writer: the admin console.** The four
   products were created once in Stripe (18 Sept 2026) and
   `infra/stripe-catalogue/` was deleted the same day. That was not tidying:
   Terraform held no state for those products, so an apply would have created a
@@ -392,7 +404,7 @@ were not touched. See `backlog/002`.
   `amardrive-pro` into this product's entitlement table. Presence is not
   ownership, and `plan_id` cannot be used to claim a product that failed the
   prefix test.
-- **A staff plan edit writes Stripe first and D1 second.** If the push throws,
+- **A admin plan edit writes Stripe first and D1 second.** If the push throws,
   the local row is never touched. A local-only save produces a pricing table
   that says one thing while Stripe charges another, and nothing surfaces the
   disagreement until somebody is billed wrongly. The residual risk runs the
@@ -409,7 +421,7 @@ were not touched. See `backlog/002`.
   `workspaces/needs-attention` was swallowed by the `:id` GET above it and
   answered 404, which reads like a data problem rather than the routing one it
   is. Same for `plans/stripe-diff` and `plans/sync-from-stripe`.
-  `staff-console.test.ts` pins all three.
+  `admin-console.test.ts` pins all three.
 - **The console renders nothing it cannot source.** No regions, no card brand or
   last-4 (we are deliberately outside PCI scope), no overage row (pricing is
   hard-capped), no per-workspace MRR (billing is org-scoped, so that is the
@@ -418,7 +430,7 @@ were not touched. See `backlog/002`.
   stay distinguishable on screen as well as in the database: one is a gap that
   defers to the `lib/plans.ts` floor, the other is a decision.
 - **The role gate is checked twice and only the server's counts.** The console
-  hides what a role cannot do; every staff method re-checks. Billing and Plans
+  hides what a role cannot do; every admin method re-checks. Billing and Plans
   are **support-readable**, correcting the design — support is exactly who needs
   to see why a customer's writes are blocked.
 - **Settings → Privacy is a summary of `routes/Legal.jsx`, which is the
@@ -450,7 +462,7 @@ were not touched. See `backlog/002`.
 | 11 | [Backend implementation prompt](docs/design/11-backend-implementation-prompt.md) | Standalone backend-only build prompt |
 | 12 | [Deployment roadmap · agentdisk.io](docs/design/12-deployment-roadmap-agentdisk-io.md) | The 29-step plan: naming, phases A–G, open decisions |
 | 13 | [Infra & CI/CD prompt](docs/design/13-infra-cicd-implementation-prompt.md) | Executes doc 12 — Terraform, GitHub, Actions. Hands off to doc 11 |
-| 14 | [Admin panel & billing](docs/design/14-admin-panel-and-billing-design.md) | PART 27–29 — staff console, Stripe billing, plan limits |
+| 14 | [Admin panel & billing](docs/design/14-admin-panel-and-billing-design.md) | PART 27–29 — admin console, Stripe billing, plan limits |
 | 15 | [Frontend/admin/billing prompt](docs/design/15-frontend-admin-billing-implementation-prompt.md) | Standalone build prompt for doc 14 |
 | 16 | [Firebase auth & launch prompt](docs/design/16-firebase-auth-and-final-launch-prompt.md) | PART 30 — the auth model in force. Read before touching sign-in |
 | 17 | [Dev environment test findings](docs/design/17-dev-environment-live-test-findings.md) | 7 Sept 2026 live pass against `app-dev` |
@@ -487,7 +499,7 @@ are independent of both and of each other.
 | # | Item | Status |
 |---|---|---|
 | 001 | [Billing module](backlog/001-billing-module.md) | **TOP** — 8 of 12 tasks shipped; Stripe catalogue, checkout, the ten webhook events and the plan editor are in. Enforcement and the pricing page are not, and **nothing has touched real Stripe yet** |
-| 002 | [Staff admin panel](backlog/002-admin-panel.md) | **HIGH** — built end to end, not yet proven against live dev. Start with the bootstrap pipeline; the plan editor is untestable until 001's catalogue is applied |
+| 002 | [Admin panel](backlog/002-admin-panel.md) | **HIGH** — built end to end, not yet proven against live dev. Start with the bootstrap pipeline; the plan editor is untestable until 001's catalogue is applied |
 | 003 | [Google consent support email](backlog/003-google-consent-support-email.md) | **MEDIUM** — `firebase.json` shows the sibling product's address on the Google sign-in consent screen. One line, plus the `firebase deploy --only auth` trap |
 | 004 | [Customer email sender identity](backlog/004-customer-email-sender-identity.md) | **LOW** — Firebase still sends customer mail from `noreply@…firebaseapp.com`. Fixed by pointing Firebase's SMTP at Mailjet; no code |
 
@@ -496,7 +508,7 @@ billing module is the whole backlog. They are recoverable in full from git at
 the tag `pre-billing-module` — for example
 `git show pre-billing-module:backlog/025-authorization-hardening.md`. Six of them
 were open security or correctness work (025 authorization hardening, 019
-rate-limiting the authenticated surface, 028 staff-console security headers, 021
+rate-limiting the authenticated surface, 028 admin-console security headers, 021
 audit-trail gaps, 022 webhook gaps, 018 abandoned uploads); they are not fixed,
 merely no longer tracked here.
 
@@ -520,7 +532,7 @@ person can follow.
 
 ```
 apps/api    735 tests across 38 files · typecheck clean
-apps/web    267 tests across 21 files · build clean
+apps/web    268 tests across 21 files · build clean
 apps/admin   33 tests · build clean · 70 KiB gzipped
 Worker      226 KiB gzipped, against Cloudflare's 1 MB limit
 ```
@@ -543,7 +555,12 @@ never touch Firebase.
 
 One billing account owns many workspaces; membership is **per workspace**, so
 inviting somebody into one client's workspace does not hand them the one beside
-it on the same bill. Roles are owner / admin / reader.
+it on the same bill. Roles are **owner / reader** — "admin" was the middle
+role and is gone, because the word now means an operator of the internal
+console and nothing else. The consequence is real and worth knowing before you
+look for the missing role: **no invitable role can write.** Somebody invited
+into a workspace reads it; writing belongs to the owner and to the API keys
+they mint, which is where agent writes came from anyway.
 
 The REST surface covers files (both upload paths, move, copy, soft delete,
 restore), folders, search, agents, keys, members, webhooks, activity, billing,
@@ -569,7 +586,7 @@ reconciles the usage counters against the rows.
 
 ### What is not built
 
-- **Editable plans and pricing** (doc 14 PART 29.6). The staff console lists
+- **Editable plans and pricing** (doc 14 PART 29.6). The admin console lists
   plans; it cannot change one or push a price to Stripe.
 - **Multipart upload** and **signed permanent links**.
 - **Full-text search inside files.** Search covers names, paths, captions and

@@ -29,7 +29,7 @@
 -- ── What is authoritative ───────────────────────────────────────────────────
 -- Stripe is. These rows are a read cache so the request path never calls the
 -- Stripe API, and they are overwritten by `product.created`/`product.updated`
--- and by the staff sync, both of which replay the same upsert. The seed below
+-- and by the admin sync, both of which replay the same upsert. The seed below
 -- carries no Stripe ids on purpose: the catalogue has not been created in
 -- Stripe at migration time, and inventing ids here would mean D1 pointing at
 -- objects that do not exist.

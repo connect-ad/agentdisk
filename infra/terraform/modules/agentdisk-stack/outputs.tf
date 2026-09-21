@@ -101,11 +101,11 @@ output "r2_secret_access_key" {
 }
 
 output "admin_worker_name" {
-  description = "Wrangler deploys the staff console into this script."
+  description = "Wrangler deploys the admin console into this script."
   value       = cloudflare_workers_script.admin.script_name
 }
 
 output "admin_url" {
-  description = "Where the staff console is served."
+  description = "Where the admin console is served."
   value       = "https://${cloudflare_workers_custom_domain.admin.hostname}"
 }

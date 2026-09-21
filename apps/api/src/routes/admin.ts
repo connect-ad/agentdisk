@@ -1,23 +1,23 @@
 /**
- * `/v1/staff/*` — 14 PART 27.5, as amended.
+ * `/v1/admin/*` — 14 PART 27.5, as amended.
  *
- * The only place `StaffScopedAccess` is constructed, which is what keeps the
+ * The only place `AdminScopedAccess` is constructed, which is what keeps the
  * cross-tenant exception auditable by reading rather than by grepping.
  *
  * ── Authentication is Firebase; authorisation is this database ─────────────
- * There is no staff password and no staff TOTP any more. Staff sign in through
- * the same Firebase project as customers, and `staff_users` decides what that
+ * There is no admin password and no admin TOTP any more. Admin sign in through
+ * the same Firebase project as customers, and `admin_users` decides what that
  * identity may do here. Migration 0014 carries the full reasoning, including
  * what was traded away.
  *
  * The consequence worth holding in mind while reading anything below: **one
  * token now reaches both the customer surface and this one.** Nothing about the
- * credential distinguishes them. `requireStaff` is the entire boundary, and it
+ * credential distinguishes them. `requireAdmin` is the entire boundary, and it
  * is a row lookup - which is why the role is never read from a Firebase claim,
  * where a demotion would linger in a token already issued.
  *
  * The email must be one Firebase has VERIFIED. Without that check, anybody able
- * to create an account naming a staff address would inherit that staff row.
+ * to create an account naming a admin address would inherit that admin row.
  */
 
 import { z } from "zod";
@@ -28,12 +28,12 @@ import {
   type FirebaseAdminConfig,
 } from "../auth/firebase-admin";
 import {
-  findStaffByEmail,
-  touchStaffLogin,
-  StaffScopedAccess,
-  requireStaffRole,
-  type StaffUser,
-} from "../staff/access";
+  findAdminByEmail,
+  touchAdminLogin,
+  AdminScopedAccess,
+  requireAdminRole,
+  type AdminUser,
+} from "../admin/access";
 import { verifyFirebaseToken, type JwksCache } from "../auth/firebase";
 
 
@@ -44,7 +44,7 @@ export function json(body: unknown, status = 200): Response {
   });
 }
 
-export interface StaffDeps {
+export interface AdminDeps {
   db: D1Database;
   kv: KVNamespace;
   encryptionKey?: string;
@@ -86,27 +86,27 @@ function bearer(request: Request): string | null {
 }
 
 /**
- * Resolve the caller to a staff member, or refuse.
+ * Resolve the caller to a admin member, or refuse.
  *
  * Three things have to hold, and each refusal is the same body as every other
  * authentication failure - the reason goes to the log, never to the caller:
  *
  *   1. The Firebase token verifies against this deployment's project.
  *   2. Firebase has VERIFIED the email. An unverified address would let anyone
- *      who can type a staff address into a signup form inherit that staff row.
- *   3. A `staff_users` row exists for it and is not disabled.
+ *      who can type a admin address into a signup form inherit that admin row.
+ *   3. A `admin_users` row exists for it and is not disabled.
  *
- * `last_login_at` is touched on the way through. It is the Staff Accounts
+ * `last_login_at` is touched on the way through. It is the Admin Accounts
  * screen's "last seen", and with no session table there is nowhere else it
  * could come from.
  */
-export async function requireStaff(request: Request, deps: StaffDeps): Promise<StaffUser> {
+export async function requireAdmin(request: Request, deps: AdminDeps): Promise<AdminUser> {
   const token = bearer(request);
-  if (token === null) throw unauthorized("no staff credential");
+  if (token === null) throw unauthorized("no admin credential");
 
   if (deps.firebase === undefined) {
-    throw new ApiError("INTERNAL_ERROR", "Staff sign-in is not configured here.", {
-      internalReason: "no Firebase project configured for the staff routes",
+    throw new ApiError("INTERNAL_ERROR", "Admin sign-in is not configured here.", {
+      internalReason: "no Firebase project configured for the admin routes",
     });
   }
 
@@ -117,35 +117,35 @@ export async function requireStaff(request: Request, deps: StaffDeps): Promise<S
   });
 
   if (claims.email === null || !claims.emailVerified) {
-    throw unauthorized(`staff token for ${claims.uid} carries no verified email`);
+    throw unauthorized(`admin token for ${claims.uid} carries no verified email`);
   }
 
-  const staff = await findStaffByEmail(deps.db, claims.email);
-  if (staff === null) throw unauthorized(`${claims.email} is not a staff account`);
-  if (staff.disabledAt !== null) throw unauthorized(`staff account ${staff.id} is disabled`);
+  const admin = await findAdminByEmail(deps.db, claims.email);
+  if (admin === null) throw unauthorized(`${claims.email} is not a admin account`);
+  if (admin.disabledAt !== null) throw unauthorized(`admin account ${admin.id} is disabled`);
 
-  await touchStaffLogin(deps.db, staff.id, deps.now);
-  return staff;
+  await touchAdminLogin(deps.db, admin.id, deps.now);
+  return admin;
 }
 
-function access(staff: StaffUser, deps: StaffDeps): StaffScopedAccess {
-  return new StaffScopedAccess(deps.db, staff, deps.requestId, deps.now, deps.sourceIp ?? null);
+function access(admin: AdminUser, deps: AdminDeps): AdminScopedAccess {
+  return new AdminScopedAccess(deps.db, admin, deps.requestId, deps.now, deps.sourceIp ?? null);
 }
 
-export async function staffWhoami(request: Request, deps: StaffDeps): Promise<Response> {
-  const staff = await requireStaff(request, deps);
-  return json({ staff: { id: staff.id, email: staff.email, role: staff.role } });
+export async function adminWhoami(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
+  return json({ admin: { id: admin.id, email: admin.email, role: admin.role } });
 }
 
-export async function staffOverview(request: Request, deps: StaffDeps): Promise<Response> {
-  const staff = await requireStaff(request, deps);
-  return json({ summary: await access(staff, deps).fleetSummary() });
+export async function adminOverview(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
+  return json({ summary: await access(admin, deps).fleetSummary() });
 }
 
 const FLEET_STATUSES = ["active", "suspended", "deleted"];
 
-export async function staffListWorkspaces(request: Request, deps: StaffDeps): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+export async function adminListWorkspaces(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
   const url = new URL(request.url);
   const search = url.searchParams.get("q");
   const rawLimit = Number.parseInt(url.searchParams.get("limit") ?? "50", 10);
@@ -159,27 +159,27 @@ export async function staffListWorkspaces(request: Request, deps: StaffDeps): Pr
     throw validationError(`status must be one of ${FLEET_STATUSES.join(", ")}.`);
   }
 
-  return json({ workspaces: await access(staff, deps).listFleet(limit, search, rawStatus) });
+  return json({ workspaces: await access(admin, deps).listFleet(limit, search, rawStatus) });
 }
 
-export async function staffGetWorkspace(
+export async function adminGetWorkspace(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   workspaceId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
-  const workspace = await access(staff, deps).getWorkspace(workspaceId);
+  const admin = await requireAdmin(request, deps);
+  const workspace = await access(admin, deps).getWorkspace(workspaceId);
   if (workspace === null) throw new ApiError("NOT_FOUND", "No such workspace.");
   return json({ workspace });
 }
 
-export async function staffWorkspaceActivity(
+export async function adminWorkspaceActivity(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   workspaceId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
-  return json({ events: await access(staff, deps).workspaceActivity(workspaceId) });
+  const admin = await requireAdmin(request, deps);
+  return json({ events: await access(admin, deps).workspaceActivity(workspaceId) });
 }
 
 const statusSchema = z.object({
@@ -187,12 +187,12 @@ const statusSchema = z.object({
   reason: z.string().trim().min(1, "Say why. A suspension nobody can explain later is worse than none."),
 });
 
-export async function staffSetWorkspaceStatus(
+export async function adminSetWorkspaceStatus(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   workspaceId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+  const admin = await requireAdmin(request, deps);
 
   let body;
   try {
@@ -203,7 +203,7 @@ export async function staffSetWorkspaceStatus(
     );
   }
 
-  const changed = await access(staff, deps).setWorkspaceStatus(workspaceId, body.status, body.reason);
+  const changed = await access(admin, deps).setWorkspaceStatus(workspaceId, body.status, body.reason);
   if (!changed) throw new ApiError("NOT_FOUND", "No such workspace.");
 
   // Nothing else is needed to make this bite: step 5 of the authorization chain
@@ -212,46 +212,46 @@ export async function staffSetWorkspaceStatus(
   return json({ workspaceId, status: body.status });
 }
 
-export async function staffForceLogout(
+export async function adminForceLogout(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   userId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+  const admin = await requireAdmin(request, deps);
   const url = new URL(request.url);
   const workspaceId = url.searchParams.get("workspaceId") ?? "";
 
-  const done = await access(staff, deps).forceLogout(userId, workspaceId);
+  const done = await access(admin, deps).forceLogout(userId, workspaceId);
   if (!done) throw new ApiError("NOT_FOUND", "No such user.");
   return json({ userId, sessionsRevoked: true });
 }
 
 const passwordResetSchema = z.object({
   // Mandatory, and short-circuiting a reset on somebody else's account without
-  // one is the point. Every other staff mutation that reaches into a customer
+  // one is the point. Every other admin mutation that reaches into a customer
   // account takes a reason; this one reaches all the way to their credentials.
   reason: z.string().trim().min(1).max(500),
 });
 
 /**
- * POST /v1/staff/users/:id/password-reset — support and above.
+ * POST /v1/admin/users/:id/password-reset — support and above.
  *
  * Sends the customer a reset link. Support-level on purpose: this is the action
  * a support engineer performs on the phone, and it grants nothing — the link
- * goes to the account holder's address, never to the staff member, and the
- * response body deliberately does not contain it. A staff member who could read
+ * goes to the account holder's address, never to the admin member, and the
+ * response body deliberately does not contain it. A admin member who could read
  * the link back would hold a credential for that account.
  *
  * The response does not say whether Firebase had an identity for the address.
  * It says the reset was started, because that is the only fact the caller can
  * act on, and "no identity" is a detail for the log.
  */
-export async function staffForcePasswordReset(
+export async function adminForcePasswordReset(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   userId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+  const admin = await requireAdmin(request, deps);
 
   let body;
   try {
@@ -277,7 +277,7 @@ export async function staffForcePasswordReset(
   const emailConfig = deps.email;
   const adminConfig = deps.firebaseAdmin;
 
-  const outcome = await access(staff, deps).forcePasswordReset(
+  const outcome = await access(admin, deps).forcePasswordReset(
     userId,
     body.reason,
     async (address) => {
@@ -305,31 +305,31 @@ export async function staffForcePasswordReset(
   return json({ userId, passwordResetSent: true });
 }
 
-export async function staffRevokeKeys(
+export async function adminRevokeKeys(
   request: Request,
-  deps: StaffDeps,
+  deps: AdminDeps,
   userId: string
 ): Promise<Response> {
-  const staff = await requireStaff(request, deps);
-  const revoked = await access(staff, deps).revokeUserKeys(userId);
+  const admin = await requireAdmin(request, deps);
+  const revoked = await access(admin, deps).revokeUserKeys(userId);
   return json({ userId, keysRevoked: revoked });
 }
 
 /*
- * `staffCreate` — `POST /v1/staff/users` — was removed here.
+ * `adminCreate` — `POST /v1/admin/users` — was removed here.
  *
- * It answered 501 by design, from a time when a staff member had a password and
- * a TOTP secret of their own: an endpoint that mints a working staff credential
+ * It answered 501 by design, from a time when a admin member had a password and
+ * a TOTP secret of their own: an endpoint that mints a working admin credential
  * is an endpoint that can be tricked into minting one, so it deliberately did
  * nothing and told the operator to provision out of band.
  *
- * `0014_staff_firebase_sso.sql` removed the premise. Staff authenticate through
- * Firebase and `staff_users` holds only an address and a role, so creating one
+ * `0014_admin_firebase_sso.sql` removed the premise. Admin authenticate through
+ * Firebase and `admin_users` holds only an address and a role, so creating one
  * mints nothing and the refusal protects nothing. What survived was a route
  * whose response instructed the caller to write a `password_hash` and a
  * `totp_secret` into columns that no longer exist.
  *
- * Creating staff is `staffCreateAccount` — `POST /v1/staff/accounts` — which is
- * super_admin only, audits `staff.create`, and shows nothing once because
+ * Creating admin is `adminCreateAccount` — `POST /v1/admin/accounts` — which is
+ * super_admin only, audits `admin.create`, and shows nothing once because
  * nothing secret is made.
  */

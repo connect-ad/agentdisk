@@ -4,27 +4,27 @@ import { auth, firebaseConfigured, firebaseProjectId, googleProvider } from '../
 import { card, mono, primaryBtn } from '../lib/ui.js';
 
 /**
- * Staff sign-in.
+ * Admin sign-in.
  *
- * One button. There is no staff password and no staff TOTP any more — Firebase
- * owns authentication, and `staff_users` in D1 owns authorisation. Signing in
- * here proves only WHO you are; whether that identity is staff is decided by
+ * One button. There is no admin password and no admin TOTP any more — Firebase
+ * owns authentication, and `admin_users` in D1 owns authorisation. Signing in
+ * here proves only WHO you are; whether that identity is admin is decided by
  * the API on the first request afterwards.
  *
  * ── Signing in is not the same as being let in ─────────────────────────────
  * Anybody with a Google account can complete this. That is not a hole: they
- * arrive authenticated and immediately fail `requireStaff`, and the screen
+ * arrive authenticated and immediately fail `requireAdmin`, and the screen
  * below says so plainly rather than looping them back to a sign-in button that
- * appears not to work. The alternative — hiding the button from non-staff —
- * would require knowing who is staff before anybody has authenticated, which is
+ * appears not to work. The alternative — hiding the button from non-admin —
+ * would require knowing who is admin before anybody has authenticated, which is
  * the thing we cannot know.
  *
  * ── No signup, no password reset, no email link ────────────────────────────
- * All three belong to the customer dashboard. A staff member is an address
+ * All three belong to the customer dashboard. A admin member is an address
  * somebody with super_admin added to a table; there is nothing here to enrol
  * in or recover.
  */
-export function Login({ notStaff = null, error: upstreamError = null, onSignedIn }) {
+export function Login({ notAdmin = null, error: upstreamError = null, onSignedIn }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -35,7 +35,7 @@ export function Login({ notStaff = null, error: upstreamError = null, onSignedIn
     try {
       await signInWithPopup(auth, googleProvider());
       // The shell re-checks with the API; this screen deliberately does not
-      // decide whether they are staff.
+      // decide whether they are admin.
       onSignedIn?.();
     } catch (err) {
       if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
@@ -91,7 +91,7 @@ export function Login({ notStaff = null, error: upstreamError = null, onSignedIn
               padding: '2px 6px'
             }}
           >
-            STAFF
+            ADMIN
           </span>
         </div>
 
@@ -106,7 +106,7 @@ export function Login({ notStaff = null, error: upstreamError = null, onSignedIn
               color: 'var(--tx)'
             }}
           >
-            Staff sign-in
+            Admin sign-in
           </h1>
           <p style={{ margin: '0 0 22px', fontSize: '13px', lineHeight: 1.55, color: 'var(--tx2)' }}>
             Internal use only. Everything you do here is logged against your account.
@@ -132,10 +132,10 @@ export function Login({ notStaff = null, error: upstreamError = null, onSignedIn
 
           {/*
             The case that actually happens: somebody signs in with a perfectly
-            good Google account that has no staff row. Saying so is the whole
+            good Google account that has no admin row. Saying so is the whole
             point - the alternative is a button that appears not to work.
           */}
-          {notStaff && (
+          {notAdmin && (
             <div
               role="alert"
               style={{
@@ -149,16 +149,16 @@ export function Login({ notStaff = null, error: upstreamError = null, onSignedIn
                 color: 'var(--warnTx)'
               }}
             >
-              <strong>{notStaff}</strong> is signed in, but has no staff access.
+              <strong>{notAdmin}</strong> is signed in, but has no admin access.
               <div style={{ marginTop: '6px' }}>
-                Ask a super_admin to add this address under Staff Accounts, or sign in with a
+                Ask a super_admin to add this address under Admin Accounts, or sign in with a
                 different one.
               </div>
             </div>
           )}
 
           {/*
-            Distinct from `notStaff`: we could not ASK whether they are staff.
+            Distinct from `notAdmin`: we could not ASK whether they are admin.
             Saying so keeps somebody from hunting for a missing database row.
           */}
           {upstreamError && (
@@ -176,7 +176,7 @@ export function Login({ notStaff = null, error: upstreamError = null, onSignedIn
               }}
             >
               <strong>The API could not be reached.</strong> This is not a problem with your
-              account — your staff access could not be checked at all.
+              account — your admin access could not be checked at all.
               <div style={{ ...mono, marginTop: '6px', fontSize: '11px' }}>
                 {upstreamError.code ?? 'NETWORK'}
                 {upstreamError.status ? ` · ${upstreamError.status}` : ''}
@@ -192,7 +192,7 @@ export function Login({ notStaff = null, error: upstreamError = null, onSignedIn
               disabled={busy}
               style={{ ...primaryBtn, width: '100%', height: '44px', fontSize: '14px' }}
             >
-              {busy ? 'Opening Google…' : notStaff ? 'Sign in as someone else' : 'Sign in with Google'}
+              {busy ? 'Opening Google…' : notAdmin ? 'Sign in as someone else' : 'Sign in with Google'}
             </button>
           )}
 
@@ -223,7 +223,7 @@ export function Login({ notStaff = null, error: upstreamError = null, onSignedIn
               textAlign: 'center'
             }}
           >
-            Signing in proves who you are. What you may do here is decided by your staff record.
+            Signing in proves who you are. What you may do here is decided by your admin record.
           </p>
         </div>
       </div>

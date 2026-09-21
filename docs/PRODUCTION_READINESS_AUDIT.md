@@ -1,7 +1,7 @@
 # AgentDisk — Production Readiness Audit
 
 **Date:** 19 September 2026 · **Branch:** `dev` @ `4bf37fb` · **Repo:** `connect-ad/agentdisk` (**public**)
-**Method:** Five parallel audits (API, dashboard, staff console, infrastructure, documentation), each reading source in full and tracing every frontend call to the handler that serves it. All builds and test suites were executed. Every P0 in this report was independently re-verified by the coordinating session against the file and line cited.
+**Method:** Five parallel audits (API, dashboard, admin console, infrastructure, documentation), each reading source in full and tracing every frontend call to the handler that serves it. All builds and test suites were executed. Every P0 in this report was independently re-verified by the coordinating session against the file and line cited.
 
 **Working tree note:** 7 files carry uncommitted changes. Citations are against the **working tree as read**, and where HEAD differs it is called out explicitly — that difference is itself finding **B-01**.
 
@@ -39,7 +39,7 @@ Tests passing is **not** evidence of correctness for anything below. Several P0s
 | **B-04** | Sandbox discards the one-time claim URL → workspace permanently unclaimable, deleted after 7 days | Dashboard |
 | **B-05** | File Caption/Tags fields promise *"Saved when you click away"* and save nothing | Dashboard |
 | **B-06** | Fabricated webhook delivery failures rendered as live operational telemetry | Dashboard |
-| **B-07** | Staff console ships with **zero** security headers on the cross-tenant origin | Console / Infra |
+| **B-07** | Admin console ships with **zero** security headers on the cross-tenant origin | Console / Infra |
 | **B-08** | "Pull everything" overwrites the whole pricing catalogue on one click, no confirmation | Console |
 | **B-09** | That same catalogue overwrite writes **no audit record** | Console |
 | **B-10** | `main` carries an ungated `Deploy prod` workflow naming a GitHub Environment that does not exist | Infra |
@@ -56,8 +56,8 @@ Tests passing is **not** evidence of correctness for anything below. Several P0s
 
 ### Major unnecessary functionality
 
-- `POST /v1/staff/users` — a routed 501 whose body instructs an impossible action against columns dropped by migration 0014, using the one staff role-gate that writes no audit row on denial.
-- Four orphaned staff API methods with no UI: agent disable, single-key revoke, transfer-ownership, blast-radius.
+- `POST /v1/admin/users` — a routed 501 whose body instructs an impossible action against columns dropped by migration 0014, using the one admin role-gate that writes no audit row on denial.
+- Four orphaned admin API methods with no UI: agent disable, single-key revoke, transfer-ownership, blast-radius.
 - `AccentPicker`, the Agents row-action column, four dead admin exports, `react-router-dom` (unused).
 
 ---
@@ -66,11 +66,11 @@ Tests passing is **not** evidence of correctness for anything below. Several P0s
 
 ### `apps/api` — Cloudflare Worker (REST + MCP, one deployable)
 
-Hand-written structural segment routing in `src/index.ts` (880 lines) plus `src/routes/staff-router.ts` (36 staff routes). **No 405 anywhere** — a known route with the wrong method returns 404.
+Hand-written structural segment routing in `src/index.ts` (880 lines) plus `src/routes/admin-router.ts` (36 admin routes). **No 405 anywhere** — a known route with the wrong method returns 404.
 
 **11 routes bypass `withAuth`.** All were checked against the "one identical auth-failure body" invariant; all pass except `POST /v1/webhooks/stripe`, which returns two distinguishable 401 bodies (P3). The `backlog/029` 404-on-missing-credential bug at `GET /v1/workspaces` is **fixed** (`src/index.ts:322`).
 
-Surfaces: files (both upload paths, move, copy, soft delete, restore), folders, search, agents, keys, members, webhooks, activity, billing, workspaces, claim, staff (36), MCP (10 tools), 4 cron jobs.
+Surfaces: files (both upload paths, move, copy, soft delete, restore), folders, search, agents, keys, members, webhooks, activity, billing, workspaces, claim, admin (36), MCP (10 tools), 4 cron jobs.
 
 ### `apps/web` — dashboard SPA (`app-dev.agentdisk.io`)
 
@@ -85,11 +85,11 @@ Surfaces: files (both upload paths, move, copy, soft delete, restore), folders, 
 **Orphans:** `/sandbox` (zero inbound links — the product's stated differentiator has no entry point), `/dashboard`, `/403`, `AccentPicker`.
 **Unguarded:** `/account/profile` sits outside `RequireAuth`.
 
-### `apps/admin` — staff console (`admin-dev.agentdisk.io`)
+### `apps/admin` — admin console (`securepanel-dev.agentdisk.io`)
 
 Nine screens, one shell, History API routing, no router library. Separate origin by design. **Nothing orphaned or unreachable.** All 40 `api.js` methods resolve to live backend routes — the gaps run the other way (four backend capabilities with no UI).
 
-Auth is **Firebase ID token + a `staff_users` row** — there is no staff cookie, no password, no TOTP. CLAUDE.md's description of this is stale (see Documentation Mismatch).
+Auth is **Firebase ID token + a `admin_users` row** — there is no admin cookie, no password, no TOTP. CLAUDE.md's description of this is stale (see Documentation Mismatch).
 
 ---
 
@@ -179,11 +179,11 @@ A hardcoded string of three invented responses (`503 upstream connect error`, `5
 
 This is mock data presented as operational telemetry on the screen an engineer opens to debug a live integration.
 
-**Action:** Delete the constant and the panel; replace with "Delivery history is not recorded yet." (the staff console already words it this way).
+**Action:** Delete the constant and the panel; replace with "Delivery history is not recorded yet." (the admin console already words it this way).
 
 ---
 
-### B-07 · Staff console has no security headers · **P0**
+### B-07 · Admin console has no security headers · **P0**
 
 **Location:** `apps/admin/vite.config.js` (7 lines, no plugin); no `_headers` file exists anywhere under `apps/admin`.
 
@@ -201,10 +201,10 @@ export default defineConfig({ plugins: [react()], build: { outDir: 'dist', sourc
 
 ### B-08 / B-09 · One-click catalogue overwrite, unconfirmed and unaudited · **P0**
 
-**Location:** `apps/admin/src/screens/Plans.jsx:183-198` → `apps/api/src/routes/staff-console.ts:510-531`.
+**Location:** `apps/admin/src/screens/Plans.jsx:183-198` → `apps/api/src/routes/admin-console.ts:510-531`.
 
 ```jsx
-onClick={() => act(() => staffApi.syncCatalogue('Reconciling every plan against Stripe'),
+onClick={() => act(() => adminApi.syncCatalogue('Reconciling every plan against Stripe'),
                    'Catalogue reconciled from Stripe.')}
 ```
 
@@ -212,7 +212,7 @@ No `ConfirmModal`, no diff, no operator-supplied reason (it is hardcoded). It ru
 
 The button's own adjacent banner says *"overwrites every plan from Stripe with no confirmation."* Three separate design statements — including one in the same file at `:855-859` — say a one-click pull must not exist.
 
-**And it writes no audit row.** `staffSyncCatalogue` calls `access.stripeDiff()` purely as a role gate; the only record produced is `plan.stripe_diff`. `syncProductToPlan` writes none either. On the Sync History screen the most destructive action on the platform appears as a benign "stripe_diff" — actively misrepresenting what happened, and violating `audited.ts:12-18` ("no area can perform an action without the machinery that writes it down").
+**And it writes no audit row.** `adminSyncCatalogue` calls `access.stripeDiff()` purely as a role gate; the only record produced is `plan.stripe_diff`. `syncProductToPlan` writes none either. On the Sync History screen the most destructive action on the platform appears as a benign "stripe_diff" — actively misrepresenting what happened, and violating `audited.ts:12-18` ("no area can perform an action without the machinery that writes it down").
 
 **Action:** Put it behind a `ConfirmModal` with `requireReason`, `confirmText` = environment name, and a count of plans that would change; gate at `super_admin`; add `recordFleet({ action: 'plan.sync_catalogue', reason, metadata })`. Or move it out of the UI into a `wrangler` one-liner.
 
@@ -246,7 +246,7 @@ The first prod release is therefore a 191-commit, ~15-migration, whole-applicati
 
 ### B-12 · The design specification package was deleted · **P0 (documentation integrity)**
 
-Commit `bc1b283` ("Staff sign in with Firebase; the database says who is an admin") deleted **23 files / 4,493 lines** from `docs/design/` plus `docs/IMPLEMENTATION_PLAN.md`. The commit message does not mention it — collateral from a `git add -A`. `coordination/DEFERRED.md` X-05 records the *same directory* being swept away once before, and names the staging rule that was then broken again.
+Commit `bc1b283` ("Admin sign in with Firebase; the database says who is an admin") deleted **23 files / 4,493 lines** from `docs/design/` plus `docs/IMPLEMENTATION_PLAN.md`. The commit message does not mention it — collateral from a `git add -A`. `coordination/DEFERRED.md` X-05 records the *same directory* being swept away once before, and names the staging rule that was then broken again.
 
 CLAUDE.md calls `docs/design/` *"The product's design authority"* and presents a 20-row catalog of links to it. **Every link is dead.**
 
@@ -279,9 +279,9 @@ git checkout bc1b283^ -- docs/design/ docs/IMPLEMENTATION_PLAN.md
 | Workspace claiming (API) | `routes/claim.ts` | **WORKING** | preview/claim/merge/key-repoint all real | — | none |
 | Workspace claiming (UI reachability) | `Sandbox.jsx` | **BROKEN** | claim URL discarded | P0 | B-04 |
 | Checkout | `routes/billing.ts:139-242` | **BUILD_REQUIRED** | server done + 12 tests; **zero frontend callers** | P1 | render `purchasable` |
-| Staff role gates (server) | `staff/audited.ts:136-144` | **WORKING** | 18 gates verified; `staff.denied` written before throw | — | none |
-| Staff role gates (UI) | `Users.jsx:281` | **BROKEN** | revoke-all-keys enabled for `support`, needs `admin` | P1 | gate on `holds(role,'admin')` |
-| Staff audit on reads | `staff/access.ts:129,625` | **BROKEN** | `listFleet`/`needsAttention` unaudited vs class's "no read-only exception" | P2 | add records |
+| Admin role gates (server) | `admin/audited.ts:136-144` | **WORKING** | 18 gates verified; `admin.denied` written before throw | — | none |
+| Admin role gates (UI) | `Users.jsx:281` | **BROKEN** | revoke-all-keys enabled for `support`, needs `admin` | P1 | gate on `holds(role,'admin')` |
+| Admin audit on reads | `admin/access.ts:129,625` | **BROKEN** | `listFleet`/`needsAttention` unaudited vs class's "no read-only exception" | P2 | add records |
 | Error boundary | — | **BUILD_REQUIRED** | none exists | P1 | wrap `<App/>` |
 | Security headers (web) | `apps/web/scripts/security-headers.js` | **WORKING** | generated + 16 tests + smoke assertion | — | none |
 | Security headers (admin) | — | **BUILD_REQUIRED** | none | P0 | B-07 |
@@ -315,7 +315,7 @@ Broken/static: Caption+Tags fake save (**P0**); Rename button has no handler; So
 
 ---
 
-## Page-by-Page Results — Staff Console
+## Page-by-Page Results — Admin Console
 
 **Plans** · One-click catalogue overwrite (**P0 ×2**, B-08/B-09); no input for `description`, `is_public`, `is_default`, `sort_order` — so **the default plan cannot be changed**, while `retire()` refuses to retire the default and tells the operator to change it (dead end); "Use Reconcile all" names a button that does not exist. Strong: `QuotaField` is a correct three-way `null`/`-1`/value control; reprice warning; diff dialog ticks nothing by default.
 
@@ -328,9 +328,9 @@ Broken/static: Caption+Tags fake save (**P0**); Rename button has no handler; So
 
 **Audit** · `nextBefore` is returned by the server and appears **nowhere** in `apps/admin/src` — the log is truncated at 100 rows with no "load older" (**P1**). Strong: CSV formula-injection neutralised server-side and tested; export fetched with the bearer token; export records itself after reading.
 
-**Verified clean:** Overview, EmailSettings (no defects found), Login/session (no bypass; `requireStaff` checks verified token + `email_verified` + row exists + not disabled on **every** request), StaffAccounts (self-disable and last-super_admin demotion refused on both sides).
+**Verified clean:** Overview, EmailSettings (no defects found), Login/session (no bypass; `requireAdmin` checks verified token + `email_verified` + row exists + not disabled on **every** request), AdminAccounts (self-disable and last-super_admin demotion refused on both sides).
 
-**Copy defects:** session dialog says "Staff sessions last four hours and are not renewed" (Firebase tokens last ~1h and **are** auto-renewed); re-enable dialog says "same password and TOTP" (neither exists); sidebar and role-picker promise agent and key controls that exist nowhere in the UI.
+**Copy defects:** session dialog says "Admin sessions last four hours and are not renewed" (Firebase tokens last ~1h and **are** auto-renewed); re-enable dialog says "same password and TOTP" (neither exists); sidebar and role-picker promise agent and key controls that exist nowhere in the UI.
 
 ---
 
@@ -401,9 +401,9 @@ Broken/static: Caption+Tags fake save (**P0**); Rename button has no handler; So
 | # | Finding | Location | Pri |
 |---|---|---|---|
 | S-1 | Cross-scope listing/search leak (fixed but uncommitted) | `db/workspace-scoped.ts` | **P0** |
-| S-2 | Staff console: no CSP/XFO/HSTS/Referrer-Policy — framable, clickjackable | `apps/admin/vite.config.js` | **P0** |
+| S-2 | Admin console: no CSP/XFO/HSTS/Referrer-Policy — framable, clickjackable | `apps/admin/vite.config.js` | **P0** |
 | S-3 | Ungated prod deploy on `main` naming a nonexistent environment | `main:deploy-prod.yml:22` | **P0** |
-| S-4 | Destructive catalogue overwrite, unconfirmed and unaudited | `Plans.jsx:183`, `staff-console.ts:510` | **P0** |
+| S-4 | Destructive catalogue overwrite, unconfirmed and unaudited | `Plans.jsx:183`, `admin-console.ts:510` | **P0** |
 | S-5 | **No rate limiting on any authenticated route or MCP** | `lib/rate-limit.ts` (1 call site) | **P1** |
 | S-6 | Agent API keys can read `GET /v1/billing`, which returns `ownerEmail` | `index.ts:550` (`op: null`), `billing.ts:81` | **P1** |
 | S-7 | Unbounded un-billed storage via abandoned presigned uploads | `files.ts:252-266`, `presign.ts:127-134`, `purge.ts:61` | **P1** |
@@ -411,10 +411,10 @@ Broken/static: Caption+Tags fake save (**P0**); Rename button has no handler; So
 | S-9 | Migration 0014 seeds a **personal Gmail** as prod `super_admin`, in a **public repo** | `0014:86-95` | **P1** |
 | S-10 | Two orphaned live credentials in a public repo's secret store: `GH_BOOTSTRAP_PAT`, `MAILERSEND_API_TOKEN` — no consumer; `secrets: inherit` exposes them to any future workflow | repo Actions secrets | **P1** |
 | S-11 | No audit on recursive folder delete, move, copy, restore, patch | `routes/folders.ts` (zero `audit` hits), `routes/files.ts` | **P1** |
-| S-12 | Five cross-tenant staff reads unaudited, contradicting the class contract | `staff/access.ts:129,359,519,625` | **P2** |
+| S-12 | Five cross-tenant admin reads unaudited, contradicting the class contract | `admin/access.ts:129,359,519,625` | **P2** |
 | S-13 | Admin bypass of every prod control (`enforce_admins:false`, `can_admins_bypass:true`, `prevent_self_review:false`, single self-reviewer) | live branch/env protection | **P2** |
-| S-14 | `POST /v1/staff/users` uses the one role gate that writes **no** `staff.denied` row | `routes/staff.ts:324-356` | **P2** |
-| S-15 | Source maps published for both SPAs (2.26 MB web, 1.46 MB admin) — hands an attacker the full staff-API map | both `vite.config.js` | **P3** |
+| S-14 | `POST /v1/admin/users` uses the one role gate that writes **no** `admin.denied` row | `routes/admin.ts:324-356` | **P2** |
+| S-15 | Source maps published for both SPAs (2.26 MB web, 1.46 MB admin) — hands an attacker the full admin-API map | both `vite.config.js` | **P3** |
 | S-16 | `SESSION_SIGNING_KEY` required at deploy, read by nothing | `backend.yml:240` | **P3** |
 
 **Verified sound, worth recording:** no committed secrets anywhere in history; nothing secret reaches either bundle; SQL injection not found (every dynamic fragment uses fixed column literals with bound values); CSV formula injection neutralised; credentials refused in query strings (checked twice); sub-key scope subset enforced; `workers_dev`/`preview_urls` disabled and independently verified against the Cloudflare API; no impersonation feature exists; suspend-before-delete enforced server-side and tested.
@@ -433,7 +433,7 @@ Broken/static: Caption+Tags fake save (**P0**); Rename button has no handler; So
    - *Variables:* prod has 8, dev 10. Prod **lacks** `FIREBASE_PROJECT_ID`, `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_APP_ID`.
    - *Secrets:* prod has only `DATABASE_ENCRYPTION_KEY`, `SESSION_SIGNING_KEY`. It **lacks** `R2_FILES_ACCESS_KEY_ID`, `R2_FILES_SECRET_ACCESS_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` → `backend.yml:338,360` `exit 1`.
    - `WEB_DOMAIN`/`WEB_WORKER_NAME` exist in **neither** environment nor at repo level, so `frontend-web-*.yml` fails closed for **dev as well as prod** — the live dashboard is not currently redeployable through CI. (`frontend.yml:165-169` documents this for prod; that it also blocks dev appears unintended.)
-4. **A prod Firebase project must exist**, with `app.agentdisk.io` and `admin.agentdisk.io` on its authorized-domain list.
+4. **A prod Firebase project must exist**, with `app.agentdisk.io` and `securepanel.agentdisk.io` on its authorized-domain list.
 5. **No paid plan is purchasable** — `0012` seeds four plans with `stripe_price_id = NULL`; live-mode products must be created and synced by hand.
 6. **S-9** — prod migrations grant `super_admin` to a personal Gmail the moment they run.
 7. **No log retention declared** (`[observability]` absent everywhere), **no alerting, no error reporting, no uptime monitor**. `/v1/healthz` is shallow and its `commit` field is always `"dev"`.
@@ -452,15 +452,15 @@ Broken/static: Caption+Tags fake save (**P0**); Rename button has no handler; So
 
 1. **`docs/design/` — the whole design authority — is deleted** (B-12). 20 dead links in CLAUDE.md.
 2. **CLAUDE.md and `docs/STATUS.md` say the plan editor is not built. It is fully built** — create, update, retire, stripe-diff, sync-from-stripe, with 41 tests. `backlog/001` is right; CLAUDE.md is wrong, and simultaneously documents the feature's design invariants elsewhere in the same file.
-3. **`docs/USER_TESTING_GUIDE.md` Part 8 is unfollowable** — it instructs the reader to run `provision-staff.mjs` (deleted) to mint a password + TOTP credential type that migration 0014 removed. A reader is blocked at step 25.
-4. **CLAUDE.md's "first staff account cannot come from the API" rule is false three ways.** `provision-staff.mjs`, `src/staff/crypto.ts` and `test/staff-crypto.test.ts` **all do not exist** (verified). Staff accounts are created by `POST /v1/staff/accounts`, which works.
+3. **`docs/USER_TESTING_GUIDE.md` Part 8 is unfollowable** — it instructs the reader to run `provision-admin.mjs` (deleted) to mint a password + TOTP credential type that migration 0014 removed. A reader is blocked at step 25.
+4. **CLAUDE.md's "first admin account cannot come from the API" rule is false three ways.** `provision-admin.mjs`, `src/admin/crypto.ts` and `test/admin-crypto.test.ts` **all do not exist** (verified). Admin accounts are created by `POST /v1/admin/accounts`, which works.
 5. **The design-system section describes a 96-file byte-verified mirror that no longer exists** — `design-system/` holds 7 entries. `_ds_manifest.json` is absent, making the "regenerate the barrel from it" rule unfollowable.
 6. **The product cannot be bought through its own UI** — not listed as a gap.
 7. **Status numbers:** api 673→**674**, web 172→**195**, admin 27→**33**, admin bundle 70 KiB→**~105.7 KiB**. The 226 KiB Worker figure is unverified and identical to the figure recorded when the API had 519 tests — likely copied, not measured. Also: "sweeps 41 authenticated routes" — the array holds **42**.
-8. **~58 dangling `backlog/NNN` citations across 41 files** (28 in `apps/` source alone). Only `001`–`004` exist. Worse, the numbering was **reused**: `CLAUDE.md:40`'s "See `backlog/002`" means the old design-system item and now resolves *successfully* to the staff-admin-panel document — the one citation in the repo that lands on the wrong page with no signal.
+8. **~58 dangling `backlog/NNN` citations across 41 files** (28 in `apps/` source alone). Only `001`–`004` exist. Worse, the numbering was **reused**: `CLAUDE.md:40`'s "See `backlog/002`" means the old design-system item and now resolves *successfully* to the admin-admin-panel document — the one citation in the repo that lands on the wrong page with no signal.
 9. **Six security findings from the 8 Sept audit remain open** exactly as CLAUDE.md says: abandoned uploads, rate limiting, audit-trail gaps, webhook secret encryption, agent-key billing read, and the billing write block.
 
-**Implemented but undocumented:** staff email settings (Mailjet + test-send), `regression-tests/` (6 specs, ~38 live tests, run by **no** CI workflow and absent from the "only index"), `Claude outputs/`, `infra/firebase/`, `POST /v1/staff/accounts`, the staff purge cron, the webhook delivery consumer, `check-jsx-identifiers.mjs`, `verify:layout`.
+**Implemented but undocumented:** admin email settings (Mailjet + test-send), `regression-tests/` (6 specs, ~38 live tests, run by **no** CI workflow and absent from the "only index"), `Claude outputs/`, `infra/firebase/`, `POST /v1/admin/accounts`, the admin purge cron, the webhook delivery consumer, `check-jsx-identifiers.mjs`, `verify:layout`.
 
 **summary.md (8 Sept):** 6 fixed · 6 still open · 1 moot · 1 unknown. The 8 Tier-1 false-success controls it found are **all genuinely fixed** — that work was real. One Tier-3 item survives verbatim: the FileBrowser "extracted text" search claim.
 
@@ -470,7 +470,7 @@ Broken/static: Caption+Tags fake save (**P0**); Rename button has no handler; So
 
 ## Dead Code / Technical Debt
 
-- **Dead endpoints:** `POST /v1/staff/users` (501, obsolete body, unaudited gate).
+- **Dead endpoints:** `POST /v1/admin/users` (501, obsolete body, unaudited gate).
 - **Unused backend capability:** checkout-session, search, move, copy, folder list/delete, restore, blast-radius, transfer-owner, agent-disable, single-key-revoke, audit cursor.
 - **Unused frontend code:** `AccentPicker`, Agents row-action column + its two modals, `api.listFolders`, `api.getFile`, `isAuthError`, `Dashboard.jsx:82-83` locals, four admin exports (incl. `auditExportUrl`, which builds a URL that *cannot* carry the Authorization header — a trap for the next author), `react-router-dom`.
 - **Vestigial schema:** `users.oauth_github_id` (always NULL), `workspaces.requests_period` (never written, but published by `whoami` as if live).
@@ -536,10 +536,10 @@ Broken/static: Caption+Tags fake save (**P0**); Rename button has no handler; So
 41. Move `/account/profile` inside `RequireAuth`
 
 **6 — Static / remove candidates**
-42. Decide on `/sandbox` (link or delete); the three fake error-page timers; the Docs TOC; `AccentPicker`; the Agents row-action column; `POST /v1/staff/users`; `react-router-dom`
+42. Decide on `/sandbox` (link or delete); the three fake error-page timers; the Docs TOC; `AccentPicker`; the Agents row-action column; `POST /v1/admin/users`; `react-router-dom`
 
 **7 — Cleanup**
-43. Rewrite CLAUDE.md's stale sections (staff bootstrap, design system, status numbers, plan editor); update `STATUS.md`, `Skill/1 Build.md`, `DEFERRED.md`, `USER_TESTING_GUIDE.md` Part 8; resolve the 58 dangling citations and the `backlog/002` collision
+43. Rewrite CLAUDE.md's stale sections (admin bootstrap, design system, status numbers, plan editor); update `STATUS.md`, `Skill/1 Build.md`, `DEFERRED.md`, `USER_TESTING_GUIDE.md` Part 8; resolve the 58 dangling citations and the `backlog/002` collision
 
 **8 — Final regression**
 44. Full suite + `regression-tests/` against dev; then the hand-sequenced prod release (B-11)

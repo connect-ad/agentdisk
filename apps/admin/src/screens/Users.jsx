@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { staffApi } from '../api.js';
+import { adminApi } from '../api.js';
 import { ConfirmModal, Modal } from '../components/Overlay.jsx';
 import { EmptyState, ErrorState, NotTracked } from '../components/States.jsx';
 import { holds } from '../components/Shell.jsx';
@@ -24,7 +24,7 @@ import {
  * ── Exact-match lookup, deliberately ───────────────────────────────────────
  * No prefix or partial search. The design file's own note says so and it is a
  * better privacy posture than the spec had, so it is the actual behaviour: a
- * staff tool that can search `%@gmail.com` is a staff tool that can enumerate
+ * admin tool that can search `%@gmail.com` is a admin tool that can enumerate
  * the customer base, and every real support request starts from an address
  * somebody already has.
  *
@@ -81,7 +81,7 @@ export function Users({ role, onNavigate, onToast }) {
     setError(null);
     setCheck(null);
     try {
-      setResult(await staffApi.findUser(email.trim()));
+      setResult(await adminApi.findUser(email.trim()));
       setSearched(true);
     } catch (err) {
       setError(err);
@@ -93,7 +93,7 @@ export function Users({ role, onNavigate, onToast }) {
 
   async function reload() {
     if (!user) return;
-    setResult(await staffApi.getUser(user.id));
+    setResult(await adminApi.getUser(user.id));
   }
 
   async function act(fn, message) {
@@ -115,7 +115,7 @@ export function Users({ role, onNavigate, onToast }) {
     setBusy(true);
     setError(null);
     try {
-      setCheck(await staffApi.deletionCheck(user.id));
+      setCheck(await adminApi.deletionCheck(user.id));
       setDialog('delete');
     } catch (err) {
       setError(err);
@@ -145,7 +145,7 @@ export function Users({ role, onNavigate, onToast }) {
           </button>
         </div>
         <p style={{ margin: '10px 0 0', fontSize: '11.5px', color: 'var(--tx3)' }}>
-          Exact match only. Partial email search is deliberately unavailable to staff.
+          Exact match only. Partial email search is deliberately unavailable to admin.
         </p>
       </form>
 
@@ -261,7 +261,7 @@ export function Users({ role, onNavigate, onToast }) {
                 marginBottom: '12px'
               }}
             >
-              STAFF ACTIONS
+              ADMIN ACTIONS
             </div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               <button
@@ -325,7 +325,7 @@ export function Users({ role, onNavigate, onToast }) {
             onCancel={() => setDialog(null)}
             onConfirm={reason =>
               act(
-                () => staffApi.setUserDisabled(user.id, dialog === 'disable', reason),
+                () => adminApi.setUserDisabled(user.id, dialog === 'disable', reason),
                 dialog === 'disable' ? 'Account disabled.' : 'Account re-enabled.'
               )
             }
@@ -340,7 +340,7 @@ export function Users({ role, onNavigate, onToast }) {
             busy={busy}
             onCancel={() => setDialog(null)}
             onConfirm={() =>
-              act(() => staffApi.forceLogout(user.id, result.memberships?.[0]?.workspaceId), 'Signed out everywhere.')
+              act(() => adminApi.forceLogout(user.id, result.memberships?.[0]?.workspaceId), 'Signed out everywhere.')
             }
           />
 
@@ -354,7 +354,7 @@ export function Users({ role, onNavigate, onToast }) {
             busy={busy}
             onCancel={() => setDialog(null)}
             onConfirm={reason =>
-              act(() => staffApi.forcePasswordReset(user.id, reason), 'Reset link sent to the account holder.')
+              act(() => adminApi.forcePasswordReset(user.id, reason), 'Reset link sent to the account holder.')
             }
           />
 
@@ -379,7 +379,7 @@ export function Users({ role, onNavigate, onToast }) {
             confirmLabel="Revoke keys"
             busy={busy}
             onCancel={() => setDialog(null)}
-            onConfirm={() => act(() => staffApi.revokeUserKeys(user.id), 'Keys revoked.')}
+            onConfirm={() => act(() => adminApi.revokeUserKeys(user.id), 'Keys revoked.')}
           />
 
           <ConfirmModal
@@ -391,7 +391,7 @@ export function Users({ role, onNavigate, onToast }) {
             confirmLabel="Restore"
             busy={busy}
             onCancel={() => setDialog(null)}
-            onConfirm={reason => act(() => staffApi.restoreUser(user.id, reason), 'Account restored.')}
+            onConfirm={reason => act(() => adminApi.restoreUser(user.id, reason), 'Account restored.')}
           />
 
           <DeleteUserDialog
@@ -404,7 +404,7 @@ export function Users({ role, onNavigate, onToast }) {
             onNavigate={onNavigate}
             onSubmit={(reason, revokeKeys) =>
               act(
-                () => staffApi.deleteUser(user.id, user.email, reason, revokeKeys),
+                () => adminApi.deleteUser(user.id, user.email, reason, revokeKeys),
                 'Account deleted. Restorable for 30 days.'
               )
             }

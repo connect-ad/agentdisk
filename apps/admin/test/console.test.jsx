@@ -56,12 +56,12 @@ describe('the role matrix', () => {
     expect(visible).toContain('users');
   });
 
-  it('hides staff accounts below super_admin', () => {
+  it('hides admin accounts below super_admin', () => {
     const forAdmin = NAV.filter(item => holds('admin', item.role)).map(item => item.key);
-    expect(forAdmin).not.toContain('staff');
+    expect(forAdmin).not.toContain('admin');
 
     const forSuper = NAV.filter(item => holds('super_admin', item.role)).map(item => item.key);
-    expect(forSuper).toContain('staff');
+    expect(forSuper).toContain('admin');
   });
 });
 

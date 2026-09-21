@@ -53,7 +53,7 @@ export interface SweepOptions {
   /** Take rows that are not yet due. super_admin only at the route. */
   force?: boolean;
   limit?: number;
-  trigger?: "cron" | "staff";
+  trigger?: "cron" | "admin";
   actorId?: string | null;
   actorEmail?: string | null;
 }
@@ -69,7 +69,7 @@ interface PendingRow {
  * Whether real deletion is switched on for this deployment.
  *
  * The exact string, so an unset, empty or misspelled value is safe. Same shape
- * as SANDBOX_EXPIRY_ENABLED and STAFF_PURGE_ENABLED before it.
+ * as SANDBOX_EXPIRY_ENABLED and ADMIN_PURGE_ENABLED before it.
  */
 export function pendingDeletionEnabled(env: { PENDING_DELETION_ENABLED?: string }): boolean {
   return env.PENDING_DELETION_ENABLED === "true";

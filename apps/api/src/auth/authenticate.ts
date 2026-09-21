@@ -188,10 +188,10 @@ export async function resolveVerifiedUser(
     throw unauthorized(`token predates session_revoked_after for user ${user.id}`);
   }
 
-  // Staff-initiated removal and for-cause disablement, checked as OUR OWN fact
+  // Admin-initiated removal and for-cause disablement, checked as OUR OWN fact
   // rather than Firebase's (32 PART 7a.2).
   //
-  // The staff endpoints also disable the Firebase identity, but that call can
+  // The admin endpoints also disable the Firebase identity, but that call can
   // fail, and an ID token already in the caller's hands stays valid for up to
   // its remaining hour regardless. If this check were not here, deletion would
   // silently depend on a third party's side effect having succeeded - and a

@@ -10,7 +10,7 @@ which has never been deployed.
 | Website | **https://app-dev.agentdisk.io** |
 | API | `https://api-dev.agentdisk.io` — JSON only; every path returns `{"error":…}` in a browser, which is correct |
 | MCP | `https://api-dev.agentdisk.io/mcp` |
-| Staff console | `https://admin-dev.agentdisk.io` — internal, Part 8 |
+| Admin console | `https://securepanel-dev.agentdisk.io` — internal, Part 8 |
 
 ---
 
@@ -204,15 +204,15 @@ account" happens on Stripe's page.
 
 ---
 
-## Part 8 — The staff console (you, as the operator)
+## Part 8 — The admin console (you, as the operator)
 
-This one is not customer-facing. It lives on its own hostname so a staff session
+This one is not customer-facing. It lives on its own hostname so a admin session
 cookie and a customer session cookie cannot reach each other in a browser.
 
-**24. Open https://admin-dev.agentdisk.io** — it loads, and you cannot log in,
-because no staff account exists yet. That is not a bug to work around: `POST
-/v1/staff/users` deliberately returns 501, since an endpoint that mints a working
-staff credential is an endpoint that can be tricked into minting one.
+**24. Open https://securepanel-dev.agentdisk.io** — it loads, and you cannot log in,
+because no admin account exists yet. That is not a bug to work around: `POST
+/v1/admin/users` deliberately returns 501, since an endpoint that mints a working
+admin credential is an endpoint that can be tricked into minting one.
 
 **25. Create the first one from your machine.** You need
 `DATABASE_ENCRYPTION_KEY` — the same value the Worker runs with, from the `dev`
@@ -222,7 +222,7 @@ it would land in history and in the process list:
 ```bash
 cd apps/api
 export DATABASE_ENCRYPTION_KEY='...'        # from the dev environment secret
-node scripts/provision-staff.mjs --email you@example.com --role super_admin --env dev
+node scripts/provision-admin.mjs --email you@example.com --role super_admin --env dev
 ```
 
 It prints a generated password, an `otpauth://` URI, and **the code your
@@ -237,7 +237,7 @@ secret, neither usable alone, but there is no reason to keep it.
 **26. Log in** with the address, the generated password, and a live TOTP code.
 All three are required; there is no password-only path.
 
-**27. Look up a workspace** by ID or email. Every read is audited — staff access
+**27. Look up a workspace** by ID or email. Every read is audited — admin access
 is the one deliberate exception to tenant isolation in this system, so unlike
 customer reads, *looking* is recorded too, not just changing.
 
@@ -247,7 +247,7 @@ customer reads, *looking* is recorded too, not just changing.
 
 Told plainly so you don't spend time hunting for it:
 
-- **Editable plans and pricing.** The staff console lists plans; it cannot yet
+- **Editable plans and pricing.** The admin console lists plans; it cannot yet
   change them or push a price to Stripe.
 - **Multipart upload** — a single file above about 5 GB.
 - **Signed permanent links.**
@@ -278,14 +278,14 @@ round-tripped and checked byte-for-byte, the `403` on an ungranted permission,
 the members flow including the unverified-address refusal, the Stripe portal
 session returning a real URL, and the MCP endpoint answering `initialize`.
 
-**Verified against the deployed console:** Part 8's hostname serves the staff
+**Verified against the deployed console:** Part 8's hostname serves the admin
 console, stays `noindex`, is built against this stack's own API, and publishes no
 `workers.dev` bypass — asserted by `apps/admin/scripts/smoke-test.mjs` on every
 deploy, and run by hand against the live origin.
 
 **Verified by test, not by hand:** MCP tool filtering by scope, the webhook
 signature rejections and delivery retries, the billing write-block, and that the
-values `provision-staff.mjs` writes under Node are the values the Worker's own
+values `provision-admin.mjs` writes under Node are the values the Worker's own
 verifiers accept. That last one is pinned to literal output rather than
 recomputed, because a test that generates its inputs with the code it is checking
 asserts nothing.

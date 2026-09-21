@@ -84,7 +84,7 @@ Named plainly rather than left to be discovered.
 | Missing | Consequence |
 |---|---|
 | Editable plans and pricing | The console lists plans; it cannot change one or push a price to Stripe (14 PART 29.6) |
-| Staff account provisioning in-product | `POST /v1/staff/users` is 501 by design; accounts come from `apps/api/scripts/provision-staff.mjs` |
+| Admin account provisioning in-product | `POST /v1/admin/users` is 501 by design; accounts come from `apps/api/scripts/provision-admin.mjs` |
 | Multipart upload | Files above ~5 GB cannot be uploaded in one part |
 | Signed permanent links | `POST /v1/files/:id/sign` needs a `signed_links` table |
 | Full-text search inside files | Needs an index. The API names the fields it did search |

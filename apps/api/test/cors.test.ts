@@ -27,15 +27,15 @@ function preflight(path: string, origin: string, method = "POST"): Promise<Respo
 }
 
 describe("preflight", () => {
-  it("permits the staff console's own origin", async () => {
+  it("permits the admin console's own origin", async () => {
     // The console is a SECOND origin calling the same API, and it was left out
-    // of CORS_ALLOWED_ORIGINS when it started calling /v1/staff/* with a
+    // of CORS_ALLOWED_ORIGINS when it started calling /v1/admin/* with a
     // Firebase token. Every request from it was blocked by the browser, and the
-    // console reported that as "you have no staff access" - a correct-looking
+    // console reported that as "you have no admin access" - a correct-looking
     // answer to a question that was never asked.
     //
     // curl never sees this, which is why it survived a full endpoint smoke test.
-    const res = await preflight("/v1/staff/whoami", CONSOLE, "GET");
+    const res = await preflight("/v1/admin/whoami", CONSOLE, "GET");
     expect(res.headers.get("access-control-allow-origin")).toBe(CONSOLE);
     expect(res.headers.get("access-control-allow-headers")).toContain("authorization");
   });

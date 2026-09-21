@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 /**
- * The staff console's own dialog primitives.
+ * The admin console's own dialog primitives.
  *
  * Written here rather than imported from `apps/web`, per docs/ui-layering.md §3
  * and coordination/DEFERRED.md X-02: the console does not take the customer
@@ -466,7 +466,7 @@ export function Modal({
  * typed value matches exactly — no trimming, no case folding. A gate that
  * accepts an approximation is a gate that only slows down the careful.
  *
- * `requireReason` is the other half. Staff actions that reach into a customer's
+ * `requireReason` is the other half. Admin actions that reach into a customer's
  * account take a mandatory reason, because the audit row is worth little without
  * one.
  */

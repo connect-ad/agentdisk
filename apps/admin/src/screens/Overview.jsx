@@ -1,5 +1,5 @@
 import React from 'react';
-import { staffApi } from '../api.js';
+import { adminApi } from '../api.js';
 import { useResource } from '../lib/useResource.js';
 import { EmptyState, ErrorState, Skeleton } from '../components/States.jsx';
 import { bytes, count, since } from '../lib/format.js';
@@ -77,10 +77,10 @@ const ATTENTION_COLS = '150px minmax(0,1fr) 120px 80px';
 export function Overview({ onNavigate, onData }) {
   const summary = useResource(async () => {
     const [overview, attention] = await Promise.all([
-      staffApi.overview(),
-      staffApi.needsAttention()
+      adminApi.overview(),
+      adminApi.needsAttention()
     ]);
-    // GET /v1/staff/overview answers { summary: { ... } }.
+    // GET /v1/admin/overview answers { summary: { ... } }.
     onData?.({ attention: attention.workspaces.length, workspaces: overview.summary?.workspaces });
     return { summary: overview.summary ?? {}, attention: attention.workspaces };
   }, []);

@@ -9,7 +9,7 @@
 -- purpose, and only the *quota* was on the wrong side of the line.
 --
 -- `plan_override` keeps its meaning and is untouched. It answers "which
--- limits", which is still a per-workspace question a staff operator may need
+-- limits", which is still a per-workspace question a admin operator may need
 -- to answer; these columns answer "how much is used", which is not.
 --
 -- Denormalized, for the same reason the workspace counters are: summing the

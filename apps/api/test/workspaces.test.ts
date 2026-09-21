@@ -407,29 +407,29 @@ describe('DELETE /v1/workspaces/:id', () => {
     expect((queued?.due_at ?? 0) - (queued?.marked_at ?? 0)).toBe(7 * 24 * 60 * 60 * 1000);
   });
 
-  it('clears the staff_actions pointer, which used to block the delete outright', async () => {
+  it('clears the admin_actions pointer, which used to block the delete outright', async () => {
     const token = await mint(OWNER_UID, 'wsowner@example.com');
     const { doomed } = await twoOwned(token);
     await fill(doomed);
 
-    // staff_actions.workspace_id references workspaces(id) with no ON DELETE
-    // clause, and nothing ever cleared it - so any workspace staff had touched
-    // could not be deleted at all. Guaranteed on the staff path, because a
-    // workspace must be suspended before staff may delete it.
+    // admin_actions.workspace_id references workspaces(id) with no ON DELETE
+    // clause, and nothing ever cleared it - so any workspace admin had touched
+    // could not be deleted at all. Guaranteed on the admin path, because a
+    // workspace must be suspended before admin may delete it.
     await env.DB.prepare(
-      `INSERT INTO staff_actions
+      `INSERT INTO admin_actions
          (id, actor_id, actor_email, actor_role, action, workspace_id, result, created_at)
-       VALUES ('sac_BLOCK', 'stf_X', 'staff@example.com', 'admin',
+       VALUES ('sac_BLOCK', 'stf_X', 'admin@example.com', 'admin',
                'workspace.suspend', ?, 'success', ?)`
     ).bind(doomed, NOW).run();
 
     const res = await SELF.fetch(`${URL_BASE}/v1/workspaces/${doomed}`, asDelete(token, { name: 'Doomed' }));
     expect(res.status).toBe(200);
 
-    // The fleet log keeps the record that staff acted; it loses only the
+    // The fleet log keeps the record that admin acted; it loses only the
     // pointer to a workspace that no longer exists.
     const action = await env.DB.prepare(
-      `SELECT workspace_id FROM staff_actions WHERE id = 'sac_BLOCK'`
+      `SELECT workspace_id FROM admin_actions WHERE id = 'sac_BLOCK'`
     ).first<{ workspace_id: string | null }>();
     expect(action).not.toBeNull();
     expect(action?.workspace_id).toBeNull();

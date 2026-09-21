@@ -16,25 +16,25 @@
 
 import { ApiError } from "../lib/errors";
 import { SENDER_EMAIL, sendTestEmail } from "../lib/email";
-import { json, requireStaff, type StaffDeps } from "./staff";
-import { area } from "./staff-console";
-import { StaffSettingsAccess } from "../staff/settings-access";
+import { json, requireAdmin, type AdminDeps } from "./admin";
+import { area } from "./admin-console";
+import { AdminSettingsAccess } from "../admin/settings-access";
 
 /** Named on screen so an operator reading a bounce knows whose dashboard to open. */
 const PROVIDER = "Mailjet";
 
 /**
- * GET /v1/staff/settings/email — any staff role.
+ * GET /v1/admin/settings/email — any admin role.
  *
  * Readable below super_admin on purpose: support is exactly who is asked "is
  * email down?", and the answer is a boolean that grants nothing. The body
  * carries whether a credential is present, never any part of one.
  */
-export async function staffGetEmailSettings(
+export async function adminGetEmailSettings(
   request: Request,
-  deps: StaffDeps
+  deps: AdminDeps
 ): Promise<Response> {
-  await requireStaff(request, deps);
+  await requireAdmin(request, deps);
 
   return json({
     configured: deps.email !== null,
@@ -44,7 +44,7 @@ export async function staffGetEmailSettings(
 }
 
 /**
- * POST /v1/staff/settings/email/test — super_admin.
+ * POST /v1/admin/settings/email/test — super_admin.
  *
  * Sends one message to the caller's own address. The role gate is checked
  * inside `sendTest`, before the configuration is looked at, so a caller who may
@@ -54,10 +54,10 @@ export async function staffGetEmailSettings(
  * `settings-access.ts` for why the recipient is not a parameter anywhere on
  * this path.
  */
-export async function staffTestEmail(request: Request, deps: StaffDeps): Promise<Response> {
-  const staff = await requireStaff(request, deps);
+export async function adminTestEmail(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
 
-  const sentTo = await area(StaffSettingsAccess, staff, deps).sendTest(async (to) => {
+  const sentTo = await area(AdminSettingsAccess, admin, deps).sendTest(async (to) => {
     // Inside the callback, so the role refusal above happens first and an
     // unconfigured deployment still leaves a recorded `denied` row rather than
     // failing silently ahead of the audit write.

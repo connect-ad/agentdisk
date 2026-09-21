@@ -11,7 +11,7 @@
  * The residual risk runs the other way: Stripe succeeds, the D1 write fails,
  * and the two disagree until something heals them. That case is already
  * covered, twice. The `product.updated` webhook our own push triggers calls
- * `syncProductToPlan`, and the staff sync replays the same upsert on demand.
+ * `syncProductToPlan`, and the admin sync replays the same upsert on demand.
  * So the failure mode we can recover from automatically is the one we chose to
  * be exposed to.
  *
@@ -35,7 +35,7 @@
  * keep in step and no second declaration to drift from.
  */
 
-import { AuditedStaffAccess } from "./audited";
+import { AuditedAdminAccess } from "./audited";
 import { ApiError, validationError } from "../lib/errors";
 import { invalidateCatalogue, type PlanRow } from "../billing/catalogue";
 import {
@@ -54,7 +54,7 @@ import type { Stripe } from "../billing/stripe";
  * request path by every authenticated call through the catalogue cache, and it
  * has no use for them. This is the console's view, not the hot path's.
  */
-export interface StaffPlanRow extends PlanRow {
+export interface AdminPlanRow extends PlanRow {
   last_synced_at: number | null;
   last_synced_direction: string | null;
 }
@@ -111,9 +111,9 @@ const SYNCABLE = new Set<string>([
   "sort_order",
 ]);
 
-export class StaffPlanAccess extends AuditedStaffAccess {
+export class AdminPlanAccess extends AuditedAdminAccess {
   /** Support+ read. Reading the catalogue is not recorded per row; the list is one action. */
-  async list(): Promise<StaffPlanRow[]> {
+  async list(): Promise<AdminPlanRow[]> {
     const rows = await this.db
       .prepare(
         `SELECT id, package_id, name, description, amount_cents, currency, interval,
@@ -124,15 +124,15 @@ export class StaffPlanAccess extends AuditedStaffAccess {
                 last_synced_at, last_synced_direction
            FROM plans ORDER BY sort_order ASC, amount_cents ASC`
       )
-      .all<StaffPlanRow>();
+      .all<AdminPlanRow>();
     return rows.results ?? [];
   }
 
-  private async requirePlan(planId: string): Promise<StaffPlanRow> {
+  private async requirePlan(planId: string): Promise<AdminPlanRow> {
     const row = await this.db
       .prepare(`SELECT * FROM plans WHERE id = ?`)
       .bind(planId)
-      .first<StaffPlanRow>();
+      .first<AdminPlanRow>();
     if (row === null) throw new ApiError("NOT_FOUND", "No such plan.");
     return row;
   }
@@ -162,7 +162,7 @@ export class StaffPlanAccess extends AuditedStaffAccess {
     planId: string,
     patch: PlanPatch,
     reason: string
-  ): Promise<{ plan: StaffPlanRow; repriced: boolean; newPriceId: string | null }> {
+  ): Promise<{ plan: AdminPlanRow; repriced: boolean; newPriceId: string | null }> {
     await this.requireRole("admin", "edit plans");
 
     const current = await this.requirePlan(planId);
@@ -176,7 +176,7 @@ export class StaffPlanAccess extends AuditedStaffAccess {
       });
     }
 
-    const merged: StaffPlanRow = { ...current, ...patch } as StaffPlanRow;
+    const merged: AdminPlanRow = { ...current, ...patch } as AdminPlanRow;
     if (merged.amount_cents < 0 || !Number.isInteger(merged.amount_cents)) {
       throw validationError("A price must be a whole number of cents, and not negative.");
     }
@@ -280,8 +280,8 @@ export class StaffPlanAccess extends AuditedStaffAccess {
     stripe: Stripe,
     input: PlanPatch & { id: string; currency?: string; interval?: string },
     reason: string
-  ): Promise<StaffPlanRow> {
-    await this.requireRole("super_admin", "create plans");
+  ): Promise<AdminPlanRow> {
+    await this.requireRole("admin", "create plans");
 
     if (!/^[a-z][a-z0-9_-]{1,30}$/.test(input.id)) {
       throw validationError("A plan id is lowercase letters, digits, dashes or underscores.");
@@ -400,8 +400,8 @@ export class StaffPlanAccess extends AuditedStaffAccess {
    * entitlements, so deleting it would silently drop everybody still on that
    * plan to the default — the opposite of what retiring is supposed to mean.
    */
-  async retire(stripe: Stripe, planId: string, reason: string): Promise<StaffPlanRow> {
-    await this.requireRole("super_admin", "retire plans");
+  async retire(stripe: Stripe, planId: string, reason: string): Promise<AdminPlanRow> {
+    await this.requireRole("admin", "retire plans");
 
     const current = await this.requirePlan(planId);
     if (current.is_default === 1) {

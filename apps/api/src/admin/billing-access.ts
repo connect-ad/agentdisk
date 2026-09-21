@@ -26,7 +26,7 @@
  * about a customer's account that we would be making up.
  */
 
-import { AuditedStaffAccess } from "./audited";
+import { AuditedAdminAccess } from "./audited";
 import type { Stripe } from "../billing/stripe";
 
 export interface BillingOrgRow {
@@ -56,7 +56,7 @@ export interface BillingSummary {
   partial: boolean;
 }
 
-export class StaffBillingAccess extends AuditedStaffAccess {
+export class AdminBillingAccess extends AuditedAdminAccess {
   /**
    * Every organization with a Stripe customer.
    *
@@ -69,7 +69,7 @@ export class StaffBillingAccess extends AuditedStaffAccess {
     stripe: Stripe | null,
     filter: "all" | "past_due" | "canceled" = "all"
   ): Promise<{ rows: BillingOrgRow[]; summary: BillingSummary }> {
-    await this.requireRole("support", "read billing");
+    await this.requireRole("admin", "read billing");
 
     const where =
       filter === "past_due"

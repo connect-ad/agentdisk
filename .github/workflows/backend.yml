@@ -378,7 +378,7 @@ jobs:
           fi
 
           # Each credential is pushed on its own merit. These two were paired
-          # once - both or neither, the way Stripe's are - back when staff
+          # once - both or neither, the way Stripe's are - back when admin
           # password reset was the only thing that sent mail and genuinely
           # needed both halves. That coupling is wrong now and it cost a
           # deployment to learn: the console's test-send button needs the
@@ -396,7 +396,7 @@ jobs:
           fi
 
           # The warning still earns its place, because the DEPENDENCY is real
-          # even though the coupling was not: staff password reset needs a
+          # even though the coupling was not: admin password reset needs a
           # channel to send through and a credential to mint the link with.
           # With only the channel it fails after a support engineer has told a
           # customer the mail is coming; with only the Firebase key a live reset
@@ -404,11 +404,11 @@ jobs:
           if [ "$HAVE_EMAIL" = "1" ] && [ -n "${FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]; then
             :
           elif [ "$HAVE_EMAIL" = "1" ] || [ -n "${FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]; then
-            echo "::warning::Only one of the Mailjet keys / FIREBASE_SERVICE_ACCOUNT_JSON is available for $ENVIRONMENT_NAME. Staff password reset refuses; whatever was present was still pushed, and everything else deploys."
+            echo "::warning::Only one of the Mailjet keys / FIREBASE_SERVICE_ACCOUNT_JSON is available for $ENVIRONMENT_NAME. Admin password reset refuses; whatever was present was still pushed, and everything else deploys."
           elif [ "$WORKSPACE" = "dev" ]; then
-            echo "::warning::No email credentials for dev. Staff password reset refuses; everything else deploys."
+            echo "::warning::No email credentials for dev. Admin password reset refuses; everything else deploys."
           else
-            echo "::error::No email credentials available for prod. Staff password reset would refuse on a live deployment."
+            echo "::error::No email credentials available for prod. Admin password reset would refuse on a live deployment."
             exit 1
           fi
 

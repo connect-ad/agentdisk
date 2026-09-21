@@ -401,11 +401,11 @@ describe("an absent credential is 401 on every authenticated route", () => {
     ["POST", "/v1/webhooks"],
     ["PATCH", "/v1/webhooks/wh_x"],
     ["DELETE", "/v1/webhooks/wh_x"],
-    ["GET", "/v1/staff/whoami"],
-    ["GET", "/v1/staff/overview"],
-    ["GET", "/v1/staff/workspaces"],
-    ["GET", `/v1/staff/workspaces/${WORKSPACE_A}`],
-    ["POST", `/v1/staff/users/usr_x/force-logout`],
+    ["GET", "/v1/admin/whoami"],
+    ["GET", "/v1/admin/overview"],
+    ["GET", "/v1/admin/workspaces"],
+    ["GET", `/v1/admin/workspaces/${WORKSPACE_A}`],
+    ["POST", `/v1/admin/users/usr_x/force-logout`],
   ];
 
   it.each(AUTHENTICATED)("%s %s", async (method, path) => {

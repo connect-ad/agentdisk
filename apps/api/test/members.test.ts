@@ -141,7 +141,7 @@ beforeEach(async () => {
 
   for (const u of [OWNER, ADMIN, READER, OUTSIDER]) await seedUser(u);
   await seedMembership("mem_OWNER", OWNER.id, "owner", null);
-  await seedMembership("mem_ADMIN", ADMIN.id, "admin", WORKSPACE_A);
+  await seedMembership("mem_ADMIN", ADMIN.id, "reader", WORKSPACE_A);
   await seedMembership("mem_READER", READER.id, "reader", WORKSPACE_A);
 });
 
@@ -203,7 +203,7 @@ describe("inviting", () => {
 
     const res = await call(await mint(OWNER.uid, OWNER.email), inviteMember, {
       method: "POST",
-      body: { email: squatter.email, role: "admin" },
+      body: { email: squatter.email, role: "reader" },
     });
     expect(res.status).toBe(409);
     expect(await res.text()).toContain("not verified");
@@ -267,20 +267,46 @@ describe("protecting the account owner", () => {
 });
 
 describe("changing a role", () => {
-  it("promotes and demotes an invited member", async () => {
+  // There is nothing to promote TO any more. "admin" was the middle role and
+  // is gone - the word now means an operator of the internal console - so the
+  // grantable set is `reader` alone and a role change can only ever be a
+  // no-op. What these pin is that the endpoint still refuses the two things
+  // that would matter if the set ever grew again.
+  it("accepts the one role that can be granted", async () => {
+    const owner = await mint(OWNER.uid, OWNER.email);
+    const res = await call(owner, (ctx, req) => changeMemberRole(ctx, req, "mem_READER"), {
+      method: "PATCH",
+      body: { role: "reader" },
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { member: { role: string } }).member.role).toBe("reader");
+  });
+
+  it("refuses a role that no longer exists", async () => {
+    // Specifically "admin". Somebody will try it - it was valid for months and
+    // it is still a word this product uses - and it must not quietly land as a
+    // role nothing in the authorization chain recognises.
     const owner = await mint(OWNER.uid, OWNER.email);
     const res = await call(owner, (ctx, req) => changeMemberRole(ctx, req, "mem_READER"), {
       method: "PATCH",
       body: { role: "admin" },
     });
-    expect(res.status).toBe(200);
-    expect(((await res.json()) as { member: { role: string } }).member.role).toBe("admin");
+    expect(res.status).toBe(400);
   });
 
-  it("refuses an admin trying to promote themselves", async () => {
+  it("refuses ownership being handed over from a workspace", async () => {
+    const owner = await mint(OWNER.uid, OWNER.email);
+    const res = await call(owner, (ctx, req) => changeMemberRole(ctx, req, "mem_READER"), {
+      method: "PATCH",
+      body: { role: "owner" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("refuses a member trying to change their own role", async () => {
     const res = await call(await mint(ADMIN.uid, ADMIN.email), (ctx, req) =>
       changeMemberRole(ctx, req, "mem_ADMIN")
-    , { method: "PATCH", body: { role: "admin" } });
+    , { method: "PATCH", body: { role: "reader" } });
     expect(res.status).toBe(403);
   });
 });

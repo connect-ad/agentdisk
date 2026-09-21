@@ -1,6 +1,6 @@
 name: Frontend admin prod
 
-# The internal staff console, on its own origin.
+# The internal admin console, on its own origin.
 #
 # Its own caller rather than one frontend workflow filtering on which
 # app changed: this way GitHub does the path filtering natively, and an

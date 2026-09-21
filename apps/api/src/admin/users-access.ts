@@ -1,5 +1,5 @@
 /**
- * Staff actions on a customer's account — 32 PART 6 and 7a.
+ * Admin actions on a customer's account — 32 PART 6 and 7a.
  *
  * ── The one thing this file does not have ───────────────────────────────────
  * There is no impersonation here, and there is not going to be. Every method
@@ -10,7 +10,7 @@
  * claiming the customer deleted their own account.
  *
  * ── Deletion is soft, and nothing irreversible happens inline ───────────────
- * `DELETE /v1/staff/users/:id` sets three things and stops: `deleted_at`,
+ * `DELETE /v1/admin/users/:id` sets three things and stops: `deleted_at`,
  * `session_revoked_after`, and the Firebase identity to *disabled* — disabled,
  * never deleted, so it stays recoverable. The org/workspace cascade and the PII
  * scrub happen only from the purge job, 30 days later, and `restore` fully
@@ -22,10 +22,10 @@
  * succeeded — see the comment there.
  */
 
-import { AuditedStaffAccess } from "./audited";
+import { AuditedAdminAccess } from "./audited";
 import { ApiError, forbidden, validationError } from "../lib/errors";
 
-export interface StaffUserRecord {
+export interface AdminUserRecord {
   id: string;
   email: string;
   firebaseUid: string | null;
@@ -39,7 +39,7 @@ export interface StaffUserRecord {
   lastActiveAt: number | null;
 }
 
-export interface StaffUserMembership {
+export interface AdminUserMembership {
   workspaceId: string | null;
   workspaceName: string | null;
   workspaceSlug: string | null;
@@ -72,17 +72,17 @@ export interface DeletionCheck {
   cascadingOrgs: { orgId: string; orgName: string; workspaces: number }[];
 }
 
-export class StaffUserAccess extends AuditedStaffAccess {
+export class AdminUserAccess extends AuditedAdminAccess {
   /**
    * Exact match only, and deliberately so.
    *
-   * No prefix, no partial, no `LIKE`. A staff tool that can search
-   * `%@gmail.com` is a staff tool that can enumerate the customer base, and the
+   * No prefix, no partial, no `LIKE`. A admin tool that can search
+   * `%@gmail.com` is a admin tool that can enumerate the customer base, and the
    * support workflow this exists for always starts from an address somebody
    * already has. The design file's own note says as much; this is that note
    * made into the behaviour.
    */
-  async findByEmail(email: string): Promise<StaffUserRecord | null> {
+  async findByEmail(email: string): Promise<AdminUserRecord | null> {
     const normalised = email.trim().toLowerCase();
     if (normalised === "" || !normalised.includes("@")) {
       throw validationError("A full email address is required. Partial search is unavailable.");
@@ -99,10 +99,10 @@ export class StaffUserAccess extends AuditedStaffAccess {
            FROM users u WHERE u.email = ?`
       )
       .bind(normalised)
-      .first<StaffUserRecord>();
+      .first<AdminUserRecord>();
 
     // Recorded whether or not it found anybody. A lookup that missed is still a
-    // staff member asking after a named individual, which is the fact the log
+    // admin member asking after a named individual, which is the fact the log
     // exists to hold.
     await this.recordFleet({
       action: "user.lookup",
@@ -114,7 +114,7 @@ export class StaffUserAccess extends AuditedStaffAccess {
     return row;
   }
 
-  async getById(userId: string): Promise<StaffUserRecord | null> {
+  async getById(userId: string): Promise<AdminUserRecord | null> {
     const row = await this.db
       .prepare(
         `SELECT u.id, u.email, u.firebase_uid AS firebaseUid,
@@ -126,7 +126,7 @@ export class StaffUserAccess extends AuditedStaffAccess {
            FROM users u WHERE u.id = ?`
       )
       .bind(userId)
-      .first<StaffUserRecord>();
+      .first<AdminUserRecord>();
 
     await this.recordFleet({
       action: "user.lookup",
@@ -146,7 +146,7 @@ export class StaffUserAccess extends AuditedStaffAccess {
    * customer-facing model actually works and therefore what a support engineer
    * needs to see.
    */
-  async membershipsOf(userId: string): Promise<StaffUserMembership[]> {
+  async membershipsOf(userId: string): Promise<AdminUserMembership[]> {
     const rows = await this.db
       .prepare(
         `SELECT m.workspace_id AS workspaceId, w.name AS workspaceName, w.slug AS workspaceSlug,
@@ -158,7 +158,7 @@ export class StaffUserAccess extends AuditedStaffAccess {
           ORDER BY m.created_at ASC`
       )
       .bind(userId)
-      .all<StaffUserMembership>();
+      .all<AdminUserMembership>();
     return rows.results ?? [];
   }
 
@@ -191,7 +191,7 @@ export class StaffUserAccess extends AuditedStaffAccess {
    * effect immediately and does not depend on that call succeeding.
    */
   async setDisabled(userId: string, disabled: boolean, reason: string): Promise<boolean> {
-    await this.requireRole("support", "disable customer accounts");
+    await this.requireRole("admin", "disable customer accounts");
 
     const result = await this.db
       .prepare(
@@ -240,7 +240,7 @@ export class StaffUserAccess extends AuditedStaffAccess {
    *     nulled as part of the flow rather than left aimed at a tombstone.
    */
   async deletionCheck(userId: string): Promise<DeletionCheck> {
-    await this.requireRole("super_admin", "delete customer accounts");
+    await this.requireRole("admin", "delete customer accounts");
 
     const owned = await this.db
       .prepare(
@@ -345,7 +345,7 @@ export class StaffUserAccess extends AuditedStaffAccess {
     reason: string,
     options: { revokeKeys: boolean }
   ): Promise<{ deleted: boolean; keysRevoked: number }> {
-    await this.requireRole("super_admin", "delete customer accounts");
+    await this.requireRole("admin", "delete customer accounts");
 
     const check = await this.deletionCheck(userId);
     if (check.blocked) {
@@ -394,7 +394,7 @@ export class StaffUserAccess extends AuditedStaffAccess {
       // should see that their keys were revoked and by whom, rather than have it
       // recorded only somewhere they cannot see.
       for (const row of affected.results ?? []) {
-        await this.record(row.workspaceId, "staff.keys.revoked", { userId, cause: "user.delete" });
+        await this.record(row.workspaceId, "admin.keys.revoked", { userId, cause: "user.delete" });
       }
     }
 
@@ -440,7 +440,7 @@ export class StaffUserAccess extends AuditedStaffAccess {
    * is the customer's call, not a side effect of restoring their login.
    */
   async restore(userId: string, reason: string): Promise<boolean> {
-    await this.requireRole("super_admin", "restore customer accounts");
+    await this.requireRole("admin", "restore customer accounts");
 
     const result = await this.db
       .prepare(
@@ -475,7 +475,7 @@ export class StaffUserAccess extends AuditedStaffAccess {
    * they were never invited to.
    */
   async transferOwner(orgId: string, newOwnerUserId: string, reason: string): Promise<void> {
-    await this.requireRole("super_admin", "transfer organization ownership");
+    await this.requireRole("admin", "transfer organization ownership");
 
     const org = await this.db
       .prepare(`SELECT id, name, owner_user_id AS ownerUserId FROM organizations WHERE id = ?`)

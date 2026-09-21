@@ -21,7 +21,17 @@
 import { forbidden } from "../lib/errors";
 import type { KeyScope, ScopeOp } from "./scopes";
 
-export const MEMBER_ROLES = ["owner", "admin", "reader"] as const;
+/**
+ * Two roles, not three. "admin" was the middle one and is gone, because the
+ * word now means an operator of the internal console and nothing else - a
+ * customer's workspace admin and a console admin sharing a name is exactly the
+ * confusion this rename existed to remove.
+ *
+ * The consequence, stated plainly: **no invitable role can write.** Somebody
+ * invited into a workspace reads it. Writing belongs to the owner and to the
+ * API keys they mint, which is where agent writes came from anyway.
+ */
+export const MEMBER_ROLES = ["owner", "reader"] as const;
 export type MemberRole = (typeof MEMBER_ROLES)[number];
 
 export function isMemberRole(value: string): value is MemberRole {

@@ -305,7 +305,7 @@ export async function generatePasswordResetLink(
  * Disable or re-enable a Firebase identity — `accounts:update`.
  *
  * **Disable, never delete.** A deleted Firebase account cannot be restored, and
- * the staff deletion flow it serves is soft for thirty days precisely so that
+ * the admin deletion flow it serves is soft for thirty days precisely so that
  * it can be. Deleting here would make the restore path a lie.
  *
  * Returns false when there is no such identity, which is an answer rather than

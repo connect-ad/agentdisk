@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth, firebaseConfigured } from './lib/firebase.js';
-import { onSessionLost, staffApi } from './api.js';
+import { onSessionLost, adminApi } from './api.js';
 import { Shell, holds } from './components/Shell.jsx';
 import { SessionExpired } from './components/States.jsx';
 import { ToastDock } from './components/Overlay.jsx';
@@ -12,7 +12,7 @@ import { Users } from './screens/Users.jsx';
 import { Billing } from './screens/Billing.jsx';
 import { Plans, SyncHistory } from './screens/Plans.jsx';
 import { Audit } from './screens/Audit.jsx';
-import { StaffAccounts } from './screens/StaffAccounts.jsx';
+import { AdminAccounts } from './screens/AdminAccounts.jsx';
 import { EmailSettings } from './screens/EmailSettings.jsx';
 import { freshnessLabel } from './lib/useResource.js';
 
@@ -27,13 +27,13 @@ import { freshnessLabel } from './lib/useResource.js';
  * page — which is the whole of what the design asks for.
  *
  * ── Two different "signed out" states, and they are not the same ───────────
- * **Not signed in** shows the Google button. **Signed in but not staff** shows
+ * **Not signed in** shows the Google button. **Signed in but not admin** shows
  * the same screen with the address named and an explanation, because that is
- * what happens when somebody's staff row is removed, or when they use their
+ * what happens when somebody's admin row is removed, or when they use their
  * personal Google account by mistake. Collapsing the two would present a
  * sign-in button to somebody already signed in, which reads as broken.
  *
- * A 401 mid-task now means either an expired token or a staff row that was just
+ * A 401 mid-task now means either an expired token or a admin row that was just
  * disabled — disable takes effect on the very next request. Either way the
  * prompt keeps the current route, so signing back in returns to the same
  * screen rather than losing the operator's place.
@@ -82,7 +82,7 @@ function describe(path) {
     };
   }
   if (path === '/workspaces/suspended') {
-    return { key: 'workspaces', title: 'Suspended', subtitle: 'Suspended by staff action.' };
+    return { key: 'workspaces', title: 'Suspended', subtitle: 'Suspended by admin action.' };
   }
   if (path.startsWith('/workspaces/')) {
     return { key: 'workspaces', title: 'Workspace', subtitle: null };
@@ -118,14 +118,14 @@ function describe(path) {
     return {
       key: 'plans',
       title: 'Sync history',
-      subtitle: 'Every plan change, from the staff audit log.'
+      subtitle: 'Every plan change, from the admin audit log.'
     };
   }
   if (path === '/audit') {
-    return { key: 'audit', title: 'Audit log', subtitle: 'Every staff action across the fleet.' };
+    return { key: 'audit', title: 'Audit log', subtitle: 'Every admin action across the fleet.' };
   }
-  if (path === '/staff') {
-    return { key: 'staff', title: 'Staff accounts', subtitle: 'Internal accounts and their roles.' };
+  if (path === '/admin') {
+    return { key: 'admin', title: 'Admin accounts', subtitle: 'Internal accounts and their roles.' };
   }
   if (path === '/settings/email') {
     return {
@@ -138,10 +138,10 @@ function describe(path) {
 }
 
 /** The minimum role a route needs, mirrored from the server's own gates. */
-const ROUTE_ROLE = { staff: 'super_admin' };
+const ROUTE_ROLE = { admin: 'super_admin' };
 
 export default function App() {
-  const [staff, setStaff] = useState(null);
+  const [admin, setAdmin] = useState(null);
   const [identity, setIdentity] = useState(null);
   const [authError, setAuthError] = useState(null);
   const [checking, setChecking] = useState(firebaseConfigured);
@@ -158,7 +158,7 @@ export default function App() {
   }, []);
 
   /**
-   * Follow Firebase, then ask the API whether this identity is staff.
+   * Follow Firebase, then ask the API whether this identity is admin.
    *
    * Two questions, deliberately in that order and deliberately not merged. The
    * SDK answers the first locally and instantly; only the API can answer the
@@ -169,7 +169,7 @@ export default function App() {
     return onAuthStateChanged(auth, async user => {
       if (!user) {
         setIdentity(null);
-        setStaff(null);
+        setAdmin(null);
         setChecking(false);
         return;
       }
@@ -178,18 +178,18 @@ export default function App() {
       setChecking(true);
       setAuthError(null);
       try {
-        const result = await staffApi.whoami();
-        setStaff(result.staff);
+        const result = await adminApi.whoami();
+        setAdmin(result.admin);
         setExpired(false);
       } catch (err) {
-        setStaff(null);
-        // **Only a 401 means "not staff".** Anything else — a blocked CORS
+        setAdmin(null);
+        // **Only a 401 means "not admin".** Anything else — a blocked CORS
         // preflight, a 500, the API being unreachable — is a failure to ASK the
         // question, and reporting it as the answer sends somebody hunting for a
         // missing database row that is sitting right there. That is exactly
         // what happened the first time this shipped: the console's origin was
         // absent from CORS_ALLOWED_ORIGINS, every call was blocked by the
-        // browser, and the screen said "no staff access" with great confidence.
+        // browser, and the screen said "no admin access" with great confidence.
         if (err?.status !== 401) setAuthError(err);
       } finally {
         setChecking(false);
@@ -201,9 +201,9 @@ export default function App() {
   useEffect(
     () =>
       onSessionLost(() => {
-        if (staff) setExpired(true);
+        if (admin) setExpired(true);
       }),
-    [staff]
+    [admin]
   );
 
   if (checking) {
@@ -221,20 +221,20 @@ export default function App() {
           fontSize: '13px'
         }}
       >
-        Checking your staff access…
+        Checking your admin access…
       </div>
     );
   }
 
-  if (!staff) {
-    // `identity` present means signed in but not staff, which the screen says
+  if (!admin) {
+    // `identity` present means signed in but not admin, which the screen says
     // in those words rather than looping them back to a button.
-    return <Login notStaff={authError ? null : identity} error={authError} />;
+    return <Login notAdmin={authError ? null : identity} error={authError} />;
   }
 
   const route = describe(path);
   const needed = ROUTE_ROLE[route.key];
-  const permitted = !needed || holds(staff.role, needed);
+  const permitted = !needed || holds(admin.role, needed);
 
   async function endSession() {
     // Signing out IS discarding the Firebase token; there is no server call.
@@ -243,7 +243,7 @@ export default function App() {
     } catch {
       /* The local state is cleared regardless. */
     }
-    setStaff(null);
+    setAdmin(null);
     setIdentity(null);
     navigate('/');
   }
@@ -263,7 +263,7 @@ export default function App() {
             Your role cannot open this screen
           </div>
           <div style={{ fontSize: '12.5px', lineHeight: 1.6, color: 'var(--warnTx)' }}>
-            This needs {needed}. You are signed in as {staff.role}. The endpoints behind it refuse
+            This needs {needed}. You are signed in as {admin.role}. The endpoints behind it refuse
             independently, so this is not the only thing stopping you.
           </div>
         </div>
@@ -292,21 +292,21 @@ export default function App() {
       return (
         <WorkspaceDetail
           workspaceId={path.slice('/workspaces/'.length)}
-          role={staff.role}
+          role={admin.role}
           onNavigate={navigate}
           onToast={toast}
         />
       );
     }
-    if (path === '/users') return <Users role={staff.role} onNavigate={navigate} onToast={toast} />;
+    if (path === '/users') return <Users role={admin.role} onNavigate={navigate} onToast={toast} />;
     if (path === '/billing') return <Billing filter="all" />;
     if (path === '/billing/past-due') return <Billing filter="past_due" />;
     if (path === '/billing/canceled') return <Billing filter="canceled" />;
-    if (path === '/plans') return <Plans role={staff.role} onToast={toast} />;
+    if (path === '/plans') return <Plans role={admin.role} onToast={toast} />;
     if (path === '/plans/sync-history') return <SyncHistory />;
     if (path === '/audit') return <Audit onToast={toast} />;
-    if (path === '/staff') return <StaffAccounts currentStaffId={staff.id} onToast={toast} />;
-    if (path === '/settings/email') return <EmailSettings role={staff.role} onToast={toast} />;
+    if (path === '/admin') return <AdminAccounts currentAdminId={admin.id} onToast={toast} />;
+    if (path === '/settings/email') return <EmailSettings role={admin.role} onToast={toast} />;
 
     return (
       <div style={{ color: 'var(--tx2)', fontSize: '13px' }}>
@@ -318,7 +318,7 @@ export default function App() {
   return (
     <>
       <Shell
-        staff={staff}
+        admin={admin}
         path={path}
         counts={counts}
         attention={attention}
@@ -334,7 +334,7 @@ export default function App() {
         <SessionExpired
           onReauthenticate={() => {
             // The path is untouched, so signing in returns to this same screen.
-            setStaff(null);
+            setAdmin(null);
             setExpired(false);
           }}
         />

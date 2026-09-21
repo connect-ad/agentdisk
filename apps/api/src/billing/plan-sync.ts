@@ -3,7 +3,7 @@
  *
  * ── Why one function and not two ────────────────────────────────────────────
  * Three things can change the catalogue: a `product.created`/`product.updated`
- * webhook, an operator running the staff sync, and an edit made directly in the
+ * webhook, an operator running the admin sync, and an edit made directly in the
  * Stripe dashboard (which arrives as the same webhook). amardrive's reference
  * architecture makes the point explicitly — its `/admin/packages/sync` replays
  * *the same* `onStripeProductChanged` upsert the webhook uses, so a missed
@@ -29,7 +29,7 @@
  * A consequence worth stating: `product.created` usually arrives BEFORE its
  * price exists, because Terraform creates the product first. That delivery
  * writes the row with a NULL price, and the price lands on the next
- * `product.updated` or - reliably - when the staff sync runs. This is why the
+ * `product.updated` or - reliably - when the admin sync runs. This is why the
  * catalogue pipeline's summary tells you to run the sync after an apply, and
  * why checkout refuses a plan with no price instead of assuming one.
  */
@@ -187,7 +187,7 @@ export async function syncProductToPlan(
          updated_at = excluded.updated_at,
          -- Stamped here, not only by the console's own edit paths.
          --
-         -- This is the function BOTH the product.* webhook and the staff
+         -- This is the function BOTH the product.* webhook and the admin
          -- "Reconcile all" run through, and neither wrote these columns - so
          -- last_synced_at stayed NULL forever and the Plans screen showed
          -- "not synced" on every row no matter how many times somebody synced.

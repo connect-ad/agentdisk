@@ -1,11 +1,11 @@
 /**
- * The audit discipline every staff area inherits — 32 PART 9.
+ * The audit discipline every admin area inherits — 32 PART 9.
  *
  * ── Why this was extracted ──────────────────────────────────────────────────
- * `StaffScopedAccess` began as one class holding both the cross-tenant queries
+ * `AdminScopedAccess` began as one class holding both the cross-tenant queries
  * and the audit plumbing underneath them. That was right while the console
  * reached workspaces and nothing else. It stopped being right once the console
- * grew users, plans, billing, staff accounts and an audit screen of its own:
+ * grew users, plans, billing, admin accounts and an audit screen of its own:
  * one class would have run to well past a thousand lines, which is the point at
  * which nobody reads the audit methods again to check they are still
  * unconditional.
@@ -13,31 +13,35 @@
  * So the *discipline* lives here and the *queries* live in area classes that
  * extend it. What did not change is the property that made the exception safe
  * to have in the first place: `record`, `recordFleet` and `requireRole` are
- * protected, every area class is constructed only inside a `/v1/staff/*`
+ * protected, every area class is constructed only inside a `/v1/admin/*`
  * handler, and no area class can perform an action without inheriting the
  * machinery that writes it down.
  *
  * ── The two logs, and why there are two ─────────────────────────────────────
  * `record` writes the workspace-scoped `audit_events` row the CUSTOMER can see
- * in their own activity log — so somebody whose data staff touched can find
- * that out without being told. `recordFleet` writes the `staff_actions` row
+ * in their own activity log — so somebody whose data admin touched can find
+ * that out without being told. `recordFleet` writes the `admin_actions` row
  * that exists whether or not a workspace was involved at all. An action
  * touching a live workspace writes both. One that does not — a user lookup, a
- * plan edit, creating a staff account — writes only the second. Migration 0011
+ * plan edit, creating a admin account — writes only the second. Migration 0011
  * carries the full reasoning for why these cannot be one table.
  *
  * Both are awaited rather than fired into `waitUntil`, unlike the
  * customer-facing audit helper. The asymmetry is deliberate: a customer's
- * upload should not wait on a log write, but a staff action that could not be
+ * upload should not wait on a log write, but a admin action that could not be
  * recorded should not be reported as having happened.
  */
 
 import { newId } from "../lib/ids";
 import { forbidden } from "../lib/errors";
-import type { StaffRole, StaffUser } from "./access";
+import type { AdminRole, AdminUser } from "./access";
 
-/** support < admin < super_admin. The only ordering there is. */
-const RANK: Record<StaffRole, number> = { support: 0, admin: 1, super_admin: 2 };
+/**
+ * One role, so nothing outranks anything. Kept as a map rather than deleted
+ * with the comparison it feeds, because restoring a tier should be adding a
+ * line here - not rediscovering which of forty methods were privileged.
+ */
+const RANK: Record<AdminRole, number> = { admin: 0 };
 
 export interface FleetRecord {
   action: string;
@@ -49,10 +53,10 @@ export interface FleetRecord {
   metadata?: Record<string, string | number | boolean | null>;
 }
 
-export abstract class AuditedStaffAccess {
+export abstract class AuditedAdminAccess {
   constructor(
     protected readonly db: D1Database,
-    protected readonly staff: StaffUser,
+    protected readonly admin: AdminUser,
     protected readonly requestId: string,
     protected readonly now: number,
     /**
@@ -79,18 +83,18 @@ export abstract class AuditedStaffAccess {
         `INSERT INTO audit_events
            (id, workspace_id, actor_type, actor_id, action, resource_type, resource_id,
             result, ip, client, request_id, metadata, created_at)
-         VALUES (?, ?, 'staff', ?, ?, 'workspace', ?, ?, ?, NULL, ?, ?, ?)`
+         VALUES (?, ?, 'admin', ?, ?, 'workspace', ?, ?, ?, NULL, ?, ?, ?)`
       )
       .bind(
         newId("auditEvent", this.now),
         workspaceId,
-        this.staff.id,
+        this.admin.id,
         action,
         workspaceId,
         result,
         this.sourceIp,
         this.requestId,
-        JSON.stringify({ ...metadata, staffEmail: this.staff.email, staffRole: this.staff.role }),
+        JSON.stringify({ ...metadata, adminEmail: this.admin.email, adminRole: this.admin.role }),
         this.now
       )
       .run();
@@ -100,17 +104,17 @@ export abstract class AuditedStaffAccess {
   protected async recordFleet(options: FleetRecord): Promise<void> {
     await this.db
       .prepare(
-        `INSERT INTO staff_actions
+        `INSERT INTO admin_actions
            (id, actor_id, actor_email, actor_role, action, workspace_id,
             target_type, target_id, reason, result, source_ip, request_id,
             metadata, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
-        newId("staffAction", this.now),
-        this.staff.id,
-        this.staff.email,
-        this.staff.role,
+        newId("adminAction", this.now),
+        this.admin.id,
+        this.admin.email,
+        this.admin.role,
         options.action,
         options.workspaceId ?? null,
         options.targetType ?? null,
@@ -133,18 +137,18 @@ export abstract class AuditedStaffAccess {
    * only successful actions cannot show it. Recorded before the throw, because
    * after it there is no "after".
    */
-  protected async requireRole(minimum: StaffRole, action: string): Promise<void> {
-    if (RANK[this.staff.role] >= RANK[minimum]) return;
+  protected async requireRole(minimum: AdminRole, action: string): Promise<void> {
+    if (RANK[this.admin.role] >= RANK[minimum]) return;
     await this.recordFleet({
-      action: `staff.denied`,
+      action: `admin.denied`,
       result: "denied",
-      metadata: { attempted: action, required: minimum, held: this.staff.role },
+      metadata: { attempted: action, required: minimum, held: this.admin.role },
     });
-    throw forbidden(`The ${this.staff.role} role cannot ${action}.`);
+    throw forbidden(`The ${this.admin.role} role cannot ${action}.`);
   }
 
   /** Whether this actor holds at least `minimum`. For shaping a response, never for gating one. */
-  protected holds(minimum: StaffRole): boolean {
-    return RANK[this.staff.role] >= RANK[minimum];
+  protected holds(minimum: AdminRole): boolean {
+    return RANK[this.admin.role] >= RANK[minimum];
   }
 }

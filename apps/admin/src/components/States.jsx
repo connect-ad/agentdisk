@@ -5,7 +5,7 @@ import { card, mono, primaryBtn, secondaryBtn } from '../lib/ui.js';
  * The states the design file never drew.
  *
  * The mockup has skeletons and nothing else: no empty state, no failed fetch,
- * no 403, no expired session. Those are not edge cases in a staff console —
+ * no 403, no expired session. Those are not edge cases in a admin console —
  * they are most of what a support engineer actually meets, because the whole
  * job is looking at accounts that are in a bad state, and because a four-hour
  * session with no rotation guarantees expiry mid-task.
@@ -134,7 +134,7 @@ export function ErrorState({ error, onRetry }) {
 /**
  * The session ended mid-task.
  *
- * It keeps the route. A staff session is four hours with no refresh rotation,
+ * It keeps the route. A admin session is four hours with no refresh rotation,
  * so this is going to happen to somebody halfway through reading a workspace,
  * and a silent redirect to the login screen would lose where they were and
  * quietly discard whatever they had typed.
@@ -157,10 +157,10 @@ export function SessionExpired({ onReauthenticate }) {
     >
       <div style={{ ...card, maxWidth: '420px', padding: '24px' }}>
         <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--tx)', marginBottom: '8px' }}>
-          Your staff session expired
+          Your admin session expired
         </div>
         <p style={{ margin: '0 0 18px', fontSize: '13px', lineHeight: 1.6, color: 'var(--tx2)' }}>
-          Staff sessions last four hours and are not renewed automatically. Sign in again and you
+          Admin sessions last four hours and are not renewed automatically. Sign in again and you
           will come back to this same screen.
         </p>
         <button type="button" onClick={onReauthenticate} style={{ ...primaryBtn, width: '100%' }}>

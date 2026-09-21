@@ -60,7 +60,7 @@ export interface PlanLimits {
    *
    * Zero is the free plan's wall, and it is a count rather than a boolean so
    * that it travels through the same D1 column, the same -1-means-unlimited
-   * convention and the same staff-console editor as every other limit. A
+   * convention and the same admin-console editor as every other limit. A
    * boolean would have needed a second shape for one field.
    */
   shareLinks: number;

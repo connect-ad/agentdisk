@@ -20,7 +20,7 @@ import {
 } from "./helpers";
 import { newId } from "../src/lib/ids";
 import { purgeExpiredShares } from "../src/jobs/purge";
-import { asStaff } from "./staff-auth";
+import { asAdmin } from "./admin-auth";
 
 const NOW = 1_780_000_000_000;
 const URL_BASE = "https://api-test.agentdisk.io";
@@ -434,8 +434,8 @@ describe("the public share routes", () => {
 });
 
 describe("links die with the account and the workspace", () => {
-  const STAFF_USER_ID = "usr_TESTUSER";
-  const STAFF_USER_EMAIL = "test@example.com";
+  const ADMIN_USER_ID = "usr_TESTUSER";
+  const ADMIN_USER_EMAIL = "test@example.com";
 
   beforeEach(async () => {
     await seedTwoWorkspaces();
@@ -446,7 +446,7 @@ describe("links die with the account and the workspace", () => {
     // in the block operating on an already-deleted account.
     await env.DB
       .prepare(`UPDATE users SET deleted_at = NULL, disabled_at = NULL, session_revoked_after = 0 WHERE id = ?`)
-      .bind(STAFF_USER_ID)
+      .bind(ADMIN_USER_ID)
       .run();
   });
 
@@ -472,24 +472,24 @@ describe("links die with the account and the workspace", () => {
     return (JSON.parse(row.metadata) as { reason?: string }).reason ?? null;
   }
 
-  /** Calls the real staff route, not raw SQL — the point is the existing operation. */
-  async function deleteUserViaStaff(userId: string): Promise<Response> {
-    const token = await asStaff("super@agentdisk.io", "super_admin");
-    return SELF.fetch(`${URL_BASE}/v1/staff/users/${userId}`, {
+  /** Calls the real admin route, not raw SQL — the point is the existing operation. */
+  async function deleteUserViaAdmin(userId: string): Promise<Response> {
+    const token = await asAdmin("super@agentdisk.io", "admin");
+    return SELF.fetch(`${URL_BASE}/v1/admin/users/${userId}`, {
       method: "DELETE",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({
         reason: "test: account deletion cascades share links",
-        confirmEmail: STAFF_USER_EMAIL,
+        confirmEmail: ADMIN_USER_EMAIL,
         revokeKeys: true,
       }),
     });
   }
 
-  /** Also the real staff route: suspension, not a hand-written UPDATE. */
-  async function suspendWorkspaceViaStaff(workspaceId: string): Promise<Response> {
-    const token = await asStaff("admin@agentdisk.io", "admin");
-    return SELF.fetch(`${URL_BASE}/v1/staff/workspaces/${workspaceId}/status`, {
+  /** Also the real admin route: suspension, not a hand-written UPDATE. */
+  async function suspendWorkspaceViaAdmin(workspaceId: string): Promise<Response> {
+    const token = await asAdmin("admin@agentdisk.io", "admin");
+    return SELF.fetch(`${URL_BASE}/v1/admin/workspaces/${workspaceId}/status`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({ status: "suspended", reason: "test: suspension cascades share links" }),
@@ -500,11 +500,11 @@ describe("links die with the account and the workspace", () => {
     const token = await seedLiveFileShare("/mine.md");
 
     // Prove the link worked before the deletion, so the closing assertions
-    // prove the staff action removed it rather than proving it was never
+    // prove the admin action removed it rather than proving it was never
     // live in the first place.
     expect((await publicGet(`/v1/shares/open/${token}`)).status).toBe(200);
 
-    const res = await deleteUserViaStaff(STAFF_USER_ID);
+    const res = await deleteUserViaAdmin(ADMIN_USER_ID);
     expect(res.status).toBe(200);
 
     expect((await publicGet(`/v1/shares/open/${token}`)).status).toBe(404);
@@ -515,7 +515,7 @@ describe("links die with the account and the workspace", () => {
     await seedLiveFileShare("/audited-delete.md");
     expect(await countShareRows()).toBe(1);
 
-    await deleteUserViaStaff(STAFF_USER_ID);
+    await deleteUserViaAdmin(ADMIN_USER_ID);
 
     expect(await auditReasonFor(WORKSPACE_A, "share.revoked")).toBe("account deleted");
   });
@@ -527,7 +527,7 @@ describe("links die with the account and the workspace", () => {
     // after.
     expect((await publicGet(`/v1/shares/open/${token}`)).status).toBe(200);
 
-    const res = await suspendWorkspaceViaStaff(WORKSPACE_A);
+    const res = await suspendWorkspaceViaAdmin(WORKSPACE_A);
     expect(res.status).toBe(200);
 
     expect((await publicGet(`/v1/shares/open/${token}`)).status).toBe(404);
@@ -538,7 +538,7 @@ describe("links die with the account and the workspace", () => {
     await seedLiveFileShare("/audited-suspend.md");
     expect(await countShareRows()).toBe(1);
 
-    await suspendWorkspaceViaStaff(WORKSPACE_A);
+    await suspendWorkspaceViaAdmin(WORKSPACE_A);
 
     expect(await auditReasonFor(WORKSPACE_A, "share.revoked")).toBe("workspace suspended");
   });
@@ -550,11 +550,11 @@ describe("links die with the account and the workspace", () => {
     await new WorkspaceScopedShares(env.DB, WORKSPACE_B).create({
       id: "shr_OTHERWS", kind: "file", fileId: "fil_OTHERWS", folderPath: null,
       token: "tokotherws", tokenHash: "hashotherws",
-      expiresAt: NOW + 1000, createdBy: STAFF_USER_ID, now: NOW,
+      expiresAt: NOW + 1000, createdBy: ADMIN_USER_ID, now: NOW,
     });
     expect(await countShareRows()).toBe(2);
 
-    await suspendWorkspaceViaStaff(WORKSPACE_A);
+    await suspendWorkspaceViaAdmin(WORKSPACE_A);
 
     expect((await publicGet(`/v1/shares/open/${tokenA}`)).status).toBe(404);
     expect(await findShareByToken(env.DB, "hashotherws", NOW)).not.toBeNull();
@@ -566,7 +566,7 @@ describe("links die with the account and the workspace", () => {
     await new WorkspaceScopedShares(env.DB, WORKSPACE_A).create({
       id: "shr_EXP", kind: "file", fileId: "fil_EXP", folderPath: null,
       token: "expired", tokenHash: "hashexpired",
-      expiresAt: NOW - 1, createdBy: STAFF_USER_ID, now: NOW,
+      expiresAt: NOW - 1, createdBy: ADMIN_USER_ID, now: NOW,
     });
 
     // Prove the row is there before the sweep, so the closing assertion

@@ -28,7 +28,7 @@ import { purgeExpiredShares, reapStrandedFiles, reconcileCounters } from "./jobs
 import { pendingDeletionEnabled, sweepPendingDeletions } from "./jobs/pending-deletions";
 import { handleDelivery, isWebhookEvent } from "./jobs/webhook-delivery";
 import { listActivity } from "./routes/activity";
-import { handleStaffRoute } from "./routes/staff-router";
+import { handleAdminRoute } from "./routes/admin-router";
 import {
   createWebhook,
   deleteWebhook,
@@ -68,7 +68,7 @@ import {
 import { readSigningConfig, type R2SigningConfig } from "./storage/presign";
 import { preflightResponse, withCorsHeaders } from "./lib/cors";
 import { expireUnclaimedWorkspaces } from "./jobs/sandbox-expiry";
-import { purgeStaffDeleted } from "./jobs/staff-purge";
+import { purgeAdminDeleted } from "./jobs/admin-purge";
 
 export interface Env {
   DB: D1Database;
@@ -140,11 +140,11 @@ export interface Env {
    */
   SANDBOX_EXPIRY_ENABLED?: string;
   /**
-   * Real deletion for the staff 30-day sweep. Absent or anything but "true"
+   * Real deletion for the admin 30-day sweep. Absent or anything but "true"
    * means report-only, which is the deployed default until a full window of
-   * candidate logs has been read. See jobs/staff-purge.ts.
+   * candidate logs has been read. See jobs/admin-purge.ts.
    */
-  STAFF_PURGE_ENABLED?: string;
+  ADMIN_PURGE_ENABLED?: string;
   /**
    * Real deletion for the seven-day pending-deletion sweep. Absent or anything
    * but "true" means report-only.
@@ -158,7 +158,7 @@ export interface Env {
   PENDING_DELETION_ENABLED?: string;
 
   /**
-   * Encrypts staff TOTP secrets at rest (06 PART 16.16a). Staff login refuses
+   * Encrypts admin TOTP secrets at rest (06 PART 16.16a). Admin login refuses
    * to run without it, because an unverifiable second factor is not one.
    */
   DATABASE_ENCRYPTION_KEY?: string;
@@ -498,12 +498,12 @@ export default {
 
       const segments = url.pathname.split("/").filter((segment) => segment !== "");
 
-      // Staff. A separate table, a separate token shape and a separate code
+      // Admin. A separate table, a separate token shape and a separate code
       // path from every customer route above - so there is no path along which
-      // a customer credential could be evaluated against staff logic, or the
-      // reverse. This is the one place StaffScopedAccess is reachable.
-      if (segments[0] === "v1" && segments[1] === "staff") {
-        return await handleStaffRoute(request, env, segments, id);
+      // a customer credential could be evaluated against admin logic, or the
+      // reverse. This is the one place AdminScopedAccess is reachable.
+      if (segments[0] === "v1" && segments[1] === "admin") {
+        return await handleAdminRoute(request, env, segments, id);
       }
 
 
@@ -837,27 +837,27 @@ export default {
           );
         }
 
-        // The fourth sweep: staff-initiated deletions past their 30-day window.
+        // The fourth sweep: admin-initiated deletions past their 30-day window.
         //
         // Its own try/catch, like the three above, so one job failing cannot
         // stop the others. **Defaults to reporting**, for the same reason the
-        // sandbox sweep does - see STAFF_PURGE_ENABLED on Env. Dev holds weeks
+        // sandbox sweep does - see ADMIN_PURGE_ENABLED on Env. Dev holds weeks
         // of test data and a first tick with deletion on would take all of it.
         try {
-          const staffPurge = await purgeStaffDeleted(
+          const adminPurge = await purgeAdminDeleted(
             env.DB,
             env.FILES,
             now,
-            env.STAFF_PURGE_ENABLED !== "true"
+            env.ADMIN_PURGE_ENABLED !== "true"
           );
           console.log(
-            JSON.stringify({ level: "info", message: "staff purge run", ...staffPurge })
+            JSON.stringify({ level: "info", message: "admin purge run", ...adminPurge })
           );
         } catch (err) {
           console.log(
             JSON.stringify({
               level: "error",
-              message: "staff purge run failed",
+              message: "admin purge run failed",
               reason: err instanceof Error ? err.message : String(err),
             })
           );

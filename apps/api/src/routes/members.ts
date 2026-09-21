@@ -19,8 +19,12 @@ import type { MemberRecord } from "../db/members";
 import type { AuthContext } from "../middleware/auth";
 import { audit } from "../lib/audit";
 
-/** The owner's own row is not grantable — it comes with paying for the account. */
-const INVITABLE_ROLES = ["admin", "reader"] as const;
+/**
+ * The owner's own row is not grantable — it comes with paying for the account.
+ * Which leaves exactly one invitable role now that the middle one is gone, so
+ * an invite decides who, never what.
+ */
+const INVITABLE_ROLES = ["reader"] as const;
 
 const inviteSchema = z.object({
   email: z.string().trim().toLowerCase().email("That is not a valid email address."),

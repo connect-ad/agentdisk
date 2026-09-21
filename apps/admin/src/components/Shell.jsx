@@ -6,7 +6,7 @@ import { btn, ellipsis, h1, mono, secondaryBtn } from '../lib/ui.js';
  *
  * ── What the design has that this does not ─────────────────────────────────
  * The prototype bar is gone entirely — the ROLE switcher and the "Login screen"
- * toggle were scaffolding for a mockup, and a role switcher in a real staff
+ * toggle were scaffolding for a mockup, and a role switcher in a real admin
  * console is a privilege-escalation control with a friendly label. The real
  * role comes from the authenticated session and nothing on screen can change
  * it. The theme toggle is the one piece kept, moved into the top strip.
@@ -63,7 +63,7 @@ export const NAV = [
   // is down, and the answer is a boolean that grants nothing. Only the test
   // send is gated higher, and the screen and the server both check that.
   { key: 'email', label: 'Email', path: '/settings/email', role: 'support' },
-  { key: 'staff', label: 'Staff Accounts', path: '/staff', role: 'super_admin' }
+  { key: 'admin', label: 'Admin Accounts', path: '/admin', role: 'super_admin' }
 ];
 
 export function holds(role, minimum) {
@@ -73,7 +73,7 @@ export function holds(role, minimum) {
 function restrictionNote(role) {
   if (role === 'super_admin') return null;
   if (role === 'admin') {
-    return 'Admin: you can suspend, adjust overrides and edit plans. Creating or retiring a plan, deleting anything, and managing staff accounts need super_admin.';
+    return 'Admin: you can suspend, adjust overrides and edit plans. Creating or retiring a plan, deleting anything, and managing admin accounts need super_admin.';
   }
   return 'Support: you can read every screen and act on agents and API keys. Suspending a workspace, adjusting an override and editing plans need admin.';
 }
@@ -81,14 +81,14 @@ function restrictionNote(role) {
 /** The tab title, so a browser with six console tabs open is navigable. */
 function useDocumentTitle(title) {
   useEffect(() => {
-    document.title = title ? `${title} · AgentDisk staff` : 'AgentDisk staff';
+    document.title = title ? `${title} · AgentDisk admin` : 'AgentDisk admin';
   }, [title]);
 }
 
 export function ThemeToggle() {
   const [theme, setTheme] = useState(() => {
     try {
-      return window.localStorage.getItem('agentdisk.staff.theme') ?? 'dark';
+      return window.localStorage.getItem('agentdisk.admin.theme') ?? 'dark';
     } catch {
       return 'dark';
     }
@@ -97,7 +97,7 @@ export function ThemeToggle() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     try {
-      window.localStorage.setItem('agentdisk.staff.theme', theme);
+      window.localStorage.setItem('agentdisk.admin.theme', theme);
     } catch {
       /* Per-viewer convenience. Nothing depends on it surviving. */
     }
@@ -309,7 +309,7 @@ function Sidebar({ role, path, counts, onNavigate }) {
 }
 
 export function Shell({
-  staff,
+  admin,
   path,
   counts = {},
   attention = 0,
@@ -374,7 +374,7 @@ export function Shell({
               padding: '2px 6px'
             }}
           >
-            STAFF
+            ADMIN
           </span>
         </div>
 
@@ -411,7 +411,7 @@ export function Shell({
           <ThemeToggle />
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '12.5px', color: 'var(--tx)', ...ellipsis }}>{staff.email}</span>
+            <span style={{ fontSize: '12.5px', color: 'var(--tx)', ...ellipsis }}>{admin.email}</span>
             <span
               style={{
                 ...mono,
@@ -424,7 +424,7 @@ export function Shell({
                 border: '1px solid var(--accBd)'
               }}
             >
-              {staff.role}
+              {admin.role}
             </span>
           </div>
 
@@ -447,7 +447,7 @@ export function Shell({
       </header>
 
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <Sidebar role={staff.role} path={path} counts={counts} onNavigate={onNavigate} />
+        <Sidebar role={admin.role} path={path} counts={counts} onNavigate={onNavigate} />
 
         <main style={{ flex: 1, minWidth: 0, padding: '22px 24px 48px', overflowX: 'hidden' }}>
           <div

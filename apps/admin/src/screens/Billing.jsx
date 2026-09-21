@@ -1,5 +1,5 @@
 import React from 'react';
-import { staffApi } from '../api.js';
+import { adminApi } from '../api.js';
 import { useResource } from '../lib/useResource.js';
 import { EmptyState, ErrorState, Skeleton } from '../components/States.jsx';
 import { count, date, money, planLabel } from '../lib/format.js';
@@ -51,7 +51,7 @@ const TITLES = {
 };
 
 export function Billing({ filter = 'all' }) {
-  const resource = useResource(() => staffApi.billing(filter === 'all' ? undefined : filter), [filter]);
+  const resource = useResource(() => adminApi.billing(filter === 'all' ? undefined : filter), [filter]);
 
   if (resource.loading) return <Skeleton rows={6} />;
   if (resource.error && !resource.data) {

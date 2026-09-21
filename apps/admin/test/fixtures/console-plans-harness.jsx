@@ -8,7 +8,7 @@
  * around the dialog rather than in it - so this fixture keeps everything
  * around it: `React.StrictMode`, the `Shell`, the `Plans` screen and its data
  * loading. Only the network is replaced, by the browser check routing
- * `/v1/staff/plans` to a fixture response.
+ * `/v1/admin/plans` to a fixture response.
  */
 
 import React from 'react';
@@ -17,19 +17,19 @@ import { Shell } from '../../src/components/Shell.jsx';
 import { Plans } from '../../src/screens/Plans.jsx';
 import '../../src/app.css';
 
-const staff = { email: 'harness@agentdisk.io', role: 'super_admin' };
+const admin = { email: 'harness@agentdisk.io', role: 'super_admin' };
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <Shell
-      staff={staff}
+      admin={admin}
       path="/plans"
       onNavigate={() => {}}
       onSignOut={() => {}}
       title="Plans"
       subtitle="Plan definitions and their Stripe mapping."
     >
-      <Plans role={staff.role} onToast={() => {}} />
+      <Plans role={admin.role} onToast={() => {}} />
     </Shell>
   </React.StrictMode>
 );

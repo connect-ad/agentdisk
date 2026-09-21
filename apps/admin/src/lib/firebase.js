@@ -1,8 +1,8 @@
 /**
- * Firebase for the staff console — migration 0014.
+ * Firebase for the admin console — migration 0014.
  *
- * Deliberately the same project as the customer dashboard. Staff sign in with
- * the identity they already have, and `staff_users` in D1 decides what that
+ * Deliberately the same project as the customer dashboard. Admin sign in with
+ * the identity they already have, and `admin_users` in D1 decides what that
  * identity may do here. The console never asks Firebase what role somebody
  * holds and never reads a custom claim: a claim is minted into a token once and
  * would go stale on a demotion, whereas the row is read fresh on every request.
@@ -11,13 +11,13 @@
  * `browserSessionPersistence`, not `browserLocalPersistence`. The dashboard
  * should survive a reload and a new tab, because that is an ordinary product
  * expectation. This console holds cross-tenant reach, so closing the tab should
- * end the session — the same reasoning that put the old staff token in
+ * end the session — the same reasoning that put the old admin token in
  * `sessionStorage` rather than `localStorage`, carried over to the mechanism
  * that replaced it.
  *
  * The config below is public by design: it names the project, it authorises
  * nothing. What stops a stranger using it is the project's authorised-domain
- * list, the API's `aud` check, and the staff row.
+ * list, the API's `aud` check, and the admin row.
  */
 
 import { initializeApp } from 'firebase/app';

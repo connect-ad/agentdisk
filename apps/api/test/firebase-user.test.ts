@@ -207,7 +207,7 @@ beforeEach(async () => {
 
   // Invited to workspace A only, as admin.
   await seedUser(INVITED_ADMIN, "admin@example.com", INVITED_ADMIN_UID);
-  await seedMembership("mem_ADMIN_A", INVITED_ADMIN, "admin", WORKSPACE_A);
+  await seedMembership("mem_ADMIN_A", INVITED_ADMIN, "reader", WORKSPACE_A);
 
   // Invited to workspace A only, read-only.
   await seedUser(READER_USER, "reader@example.com", READER_UID);
@@ -413,7 +413,7 @@ describe("log out everywhere", () => {
 
   it("only revokes the user who asked", async () => {
     await seedUser("usr_OTHERPERSON", "other@example.com", "firebase-uid-other");
-    await seedMembership("mem_OTHER", "usr_OTHERPERSON", "admin", WORKSPACE_A);
+    await seedMembership("mem_OTHER", "usr_OTHERPERSON", "reader", WORKSPACE_A);
 
     await env.DB.prepare(`UPDATE users SET session_revoked_after = ? WHERE id = ?`)
       .bind(NOW + 1000, MEMBER_USER)
@@ -524,7 +524,7 @@ describe("the workspace a signup lands in", () => {
 });
 
 /**
- * Staff-initiated removal, enforced as our own fact.
+ * Admin-initiated removal, enforced as our own fact.
  *
  * The property under test is the one 32 PART 7a.2 calls non-negotiable: a token
  * that is cryptographically perfect, unexpired, and issued BEFORE the deletion
@@ -603,7 +603,7 @@ describe("a deleted or disabled account", () => {
 
   it("does not touch anybody else", async () => {
     await seedUser("usr_BYSTANDER", "bystander@example.com", "firebase-uid-bystander");
-    await seedMembership("mem_BYSTANDER", "usr_BYSTANDER", "admin", WORKSPACE_A);
+    await seedMembership("mem_BYSTANDER", "usr_BYSTANDER", "reader", WORKSPACE_A);
 
     await env.DB.prepare(`UPDATE users SET deleted_at = ? WHERE id = ?`)
       .bind(NOW, MEMBER_USER)

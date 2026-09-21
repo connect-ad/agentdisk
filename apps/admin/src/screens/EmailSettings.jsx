@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { staffApi } from '../api.js';
+import { adminApi } from '../api.js';
 import { useResource } from '../lib/useResource.js';
 import { ErrorState, Skeleton } from '../components/States.jsx';
 import { card, disabledBtn, label, mono, paneIn, pill, primaryBtn } from '../lib/ui.js';
@@ -21,8 +21,8 @@ import { card, disabledBtn, label, mono, paneIn, pill, primaryBtn } from '../lib
  * operator that the console's controls are suggestions.
  *
  * ── It does not choose the recipient, and there is no field for one ─────────
- * The message goes to the signed-in staff member's own address, decided
- * server-side from their `staff_users` row. There is deliberately no input
+ * The message goes to the signed-in admin member's own address, decided
+ * server-side from their `admin_users` row. There is deliberately no input
  * here: a test-send form that takes an address is an open relay wearing a
  * friendly label, sending from a domain whose SPF and DKIM already align.
  *
@@ -55,7 +55,7 @@ function Row({ name, children }) {
 }
 
 export function EmailSettings({ role, onToast, api }) {
-  const io = api ?? { read: staffApi.emailSettings, test: staffApi.testEmail };
+  const io = api ?? { read: adminApi.emailSettings, test: adminApi.testEmail };
 
   const { data, error, loading, refresh } = useResource(() => io.read());
   const [sending, setSending] = useState(false);
@@ -94,7 +94,7 @@ export function EmailSettings({ role, onToast, api }) {
           </div>
           <div style={{ fontSize: '12.5px', lineHeight: 1.6, color: 'var(--tx2)', marginTop: '5px' }}>
             The channel this product sends its own transactional mail through — today, the
-            staff-initiated password reset. Sign-in links, address verification and self-service
+            admin-initiated password reset. Sign-in links, address verification and self-service
             password reset are sent by Firebase and are not covered by this check.
           </div>
         </div>
@@ -139,7 +139,7 @@ export function EmailSettings({ role, onToast, api }) {
         <div style={{ padding: '15px 16px' }}>
           <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--tx)' }}>Send a test</div>
           <div style={{ fontSize: '12.5px', lineHeight: 1.6, color: 'var(--tx2)', marginTop: '5px' }}>
-            Sends one message to your own staff address. There is no field for a recipient on
+            Sends one message to your own admin address. There is no field for a recipient on
             purpose — an endpoint that emails an address on request is a relay, not a test.
           </div>
 

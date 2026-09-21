@@ -1,7 +1,7 @@
 /**
  * Stripe Product -> D1 `plans`.
  *
- * This is the upsert that the `product.*` webhook and the staff sync both call,
+ * This is the upsert that the `product.*` webhook and the admin sync both call,
  * and the reason they share it is that a missed delivery, an edit made straight
  * in the Stripe dashboard and a manual reconcile must all heal identically.
  * Two implementations would drift, and the drift would surface only as
@@ -273,7 +273,7 @@ describe("retirePlanForProduct", () => {
  *
  * `last_synced_at` is what the Plans screen renders as "synced 14:02". It was
  * written only by the console's own edit paths, never by this function - which
- * is the one BOTH the `product.*` webhook and the staff "Reconcile all" run
+ * is the one BOTH the `product.*` webhook and the admin "Reconcile all" run
  * through. So the column stayed NULL however many times somebody synced, and
  * the screen said "not synced" permanently.
  *

@@ -18,16 +18,16 @@
 
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { StaffPlanAccess } from "../src/staff/plans-access";
+import { AdminPlanAccess } from "../src/admin/plans-access";
 import { metadataForPlan, syncProductToPlan } from "../src/billing/plan-sync";
 import { invalidateCatalogue } from "../src/billing/catalogue";
-import type { StaffUser } from "../src/staff/access";
+import type { AdminUser } from "../src/admin/access";
 import type { Stripe } from "../src/billing/stripe";
 
 const NOW = 1_790_000_000_000;
 
-function staff(role: StaffUser["role"], id = `stf_${role}`): StaffUser {
-  return { id, email: `${role}@agentdisk.io`, role, disabledAt: null } as StaffUser;
+function admin(role: AdminUser["role"], id = `stf_${role}`): AdminUser {
+  return { id, email: `${role}@agentdisk.io`, role, disabledAt: null } as AdminUser;
 }
 
 /** Records every call, and can be told to fail on any one of them. */
@@ -68,8 +68,8 @@ function stripeStub(
   return { client, calls, named: (m: string) => calls.filter(c => c.method === m) };
 }
 
-const access = (role: StaffUser["role"]) =>
-  new StaffPlanAccess(env.DB, staff(role), "req_TEST", NOW, "203.0.113.9");
+const access = (role: AdminUser["role"]) =>
+  new AdminPlanAccess(env.DB, admin(role), "req_TEST", NOW, "203.0.113.9");
 
 async function planRow(id: string) {
   return env.DB.prepare(`SELECT * FROM plans WHERE id = ?`)
@@ -79,7 +79,7 @@ async function planRow(id: string) {
 
 async function fleetActions(action: string) {
   const rows = await env.DB.prepare(
-    `SELECT action, actor_role, target_id, result, reason, source_ip FROM staff_actions WHERE action = ?`
+    `SELECT action, actor_role, target_id, result, reason, source_ip FROM admin_actions WHERE action = ?`
   )
     .bind(action)
     .all<Record<string, unknown>>();
@@ -87,7 +87,7 @@ async function fleetActions(action: string) {
 }
 
 beforeEach(async () => {
-  await env.DB.prepare(`DELETE FROM staff_actions`).run();
+  await env.DB.prepare(`DELETE FROM admin_actions`).run();
   // Migration 0012 seeds the four plans with NULL Stripe ids, because the
   // catalogue does not exist in Stripe at migration time. Give Pro a product
   // and a price so the tests that are not about a missing product get past it.
@@ -284,7 +284,7 @@ describe("retiring a plan", () => {
     await env.DB.prepare(`UPDATE plans SET is_default = 0 WHERE id = 'basic'`).run();
     const before = await planRow("basic");
 
-    await access("super_admin").retire(stripeStub().client, "basic", "withdrawn");
+    await access("admin").retire(stripeStub().client, "basic", "withdrawn");
 
     const after = await planRow("basic");
     expect(after).not.toBeNull();
@@ -300,7 +300,7 @@ describe("retiring a plan", () => {
     await env.DB.prepare(`UPDATE plans SET is_default = 1 WHERE id = 'free'`).run();
 
     await expect(
-      access("super_admin").retire(stripeStub().client, "free", "x")
+      access("admin").retire(stripeStub().client, "free", "x")
     ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 });
@@ -308,25 +308,35 @@ describe("retiring a plan", () => {
 /* ------------------------------ role gating ------------------------------ */
 
 describe("who may do what", () => {
-  it("refuses a support engineer, and records the refusal", async () => {
+  // Two tests here used to pin the tiers: support could not edit a plan, and
+  // admin could not create or retire one. The console has one role now, so
+  // nothing refuses anybody and neither can be asserted. What replaces them is
+  // the fact that matters operationally - the whole catalogue is editable by
+  // anyone who can reach the console, and every edit is written down.
+  it("lets the one role edit, create and retire", async () => {
     await expect(
-      access("support").update(stripeStub().client, "pro", { agents: 1 }, "x")
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      access("admin").update(stripeStub().client, "pro", { agents: 1 }, "x")
+    ).resolves.toBeDefined();
 
-    // The denial is a fact worth holding. A log of only successful actions
-    // cannot show somebody repeatedly trying what their role forbids.
-    const denials = await fleetActions("staff.denied");
-    expect(denials).toHaveLength(1);
-    expect(denials[0]?.result).toBe("denied");
-  });
-
-  it("lets admin edit but not create or retire", async () => {
+    // A id of its own: "scale" belongs to the creation test below, and a plan
+    // id is unique, so borrowing it here would make that test fail on a
+    // CONFLICT caused by this one.
     await expect(
-      access("admin").create(stripeStub().client, { id: "scale" }, "x")
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      access("admin").create(stripeStub().client, { id: "scale-probe" }, "x")
+    ).resolves.toBeDefined();
+
     await expect(
       access("admin").retire(stripeStub().client, "basic", "x")
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    ).resolves.toBeDefined();
+  });
+
+  it("records no refusals, because there is no longer a role that can be refused", async () => {
+    // Asserted rather than assumed. `admin.denied` is still written by
+    // requireRole and is still the shape a refusal takes - it simply cannot
+    // fire while ADMIN_ROLES has one member. If a tier comes back, this test
+    // failing is the reminder that the denial path is live again.
+    await access("admin").update(stripeStub().client, "pro", { agents: 1 }, "x");
+    expect(await fleetActions("admin.denied")).toHaveLength(0);
   });
 
   it("records the actor, the reason and the address on a successful edit", async () => {
@@ -349,7 +359,7 @@ describe("who may do what", () => {
 describe("creating a plan", () => {
   it("creates the product and a price, and records it", async () => {
     const stripe = stripeStub();
-    const created = await access("super_admin").create(
+    const created = await access("admin").create(
       stripe.client,
       { id: "scale", name: "AgentDisk Scale", amount_cents: 20000, agents: 200 },
       "new tier"
@@ -365,7 +375,7 @@ describe("creating a plan", () => {
     // Free is the absence of a subscription, not a $0 one. A $0 recurring price
     // would give every account on it a real subscription that can go past_due.
     const stripe = stripeStub();
-    const created = await access("super_admin").create(
+    const created = await access("admin").create(
       stripe.client,
       { id: "starter", amount_cents: 0 },
       "free tier"
@@ -377,10 +387,10 @@ describe("creating a plan", () => {
 
   it("refuses an id that already exists, and one that is not an id", async () => {
     await expect(
-      access("super_admin").create(stripeStub().client, { id: "pro" }, "x")
+      access("admin").create(stripeStub().client, { id: "pro" }, "x")
     ).rejects.toMatchObject({ code: "CONFLICT" });
     await expect(
-      access("super_admin").create(stripeStub().client, { id: "Not An Id" }, "x")
+      access("admin").create(stripeStub().client, { id: "Not An Id" }, "x")
     ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   });
 });

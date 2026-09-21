@@ -31,7 +31,7 @@ CREATE TABLE pending_deletions (
 
   -- Denormalised, plain TEXT, no foreign keys. Every row these name is gone by
   -- the time this row exists, so a join is impossible rather than merely
-  -- undesirable. Same reasoning as staff_actions.actor_email.
+  -- undesirable. Same reasoning as admin_actions.actor_email.
   workspace_id    TEXT NOT NULL,
   workspace_name  TEXT NOT NULL,
   org_id          TEXT NOT NULL,
@@ -61,8 +61,8 @@ CREATE INDEX idx_pending_deletions_workspace ON pending_deletions(workspace_id);
 CREATE TABLE job_runs (
   id              TEXT PRIMARY KEY,
   job             TEXT NOT NULL,
-  trigger         TEXT NOT NULL,   -- 'cron' | 'staff'
-  actor_id        TEXT,            -- staff id when trigger = 'staff', else NULL
+  trigger         TEXT NOT NULL,   -- 'cron' | 'admin'
+  actor_id        TEXT,            -- admin id when trigger = 'admin', else NULL
   actor_email     TEXT,
   dry_run         INTEGER NOT NULL,
   started_at      INTEGER NOT NULL,

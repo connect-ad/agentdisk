@@ -7,12 +7,18 @@ import {
   PageHead, Panel, Tabs, Input, Button, Icon, Badge,
   Modal, ConfirmModal, Alert, EmptyState, Toast
 } from '../components/index.js';
-import { MembersTab, PrivacyTab, BillingTab } from './SettingsTabs.jsx';
+import { MembersTab } from './SettingsTabs.jsx';
 
 /**
- * Settings. MVP-0 tabs are General (8.21) and Security (8.23).
- * Members (8.22), Privacy (8.24) and Billing (8.25) are MVP-1 — declared here so
- * the tablist is stable, and filled in Step 4.
+ * Settings. Three tabs: General (8.21), Security (8.23) and Members (8.22).
+ *
+ * Billing (8.25) and Privacy (8.24) used to sit here too and no longer do.
+ * Billing is account-scoped, not workspace-scoped — one organization owns many
+ * workspaces and is billed once — so it lives at `/w/{ws}/billing`, reached
+ * from the profile menu, and `routes/Billing.jsx` is the only way in. A tab
+ * showing the same organization's plan under each workspace's settings invited
+ * exactly the wrong reading. Privacy restated `routes/Legal.jsx`, which is the
+ * authoritative text, and a second copy is a second thing to keep true.
  *
  * URL: /w/{ws}/settings
  */
@@ -281,9 +287,7 @@ export default function Settings() {
         items={[
           { value: 'general', label: 'General' },
           { value: 'security', label: 'Security' },
-          { value: 'members', label: 'Members' },
-          { value: 'privacy', label: 'Privacy' },
-          { value: 'billing', label: 'Billing' }
+          { value: 'members', label: 'Members' }
         ]}
       />
 
@@ -352,10 +356,8 @@ export default function Settings() {
       {/* --- 8.23 Security --- */}
       {tab === 'security' ? <SecurityTab onToast={setToast} /> : null}
 
-      {/* --- 8.22 / 8.24 / 8.25 --- */}
+      {/* --- 8.22 Members --- */}
       {tab === 'members' ? <MembersTab /> : null}
-      {tab === 'privacy' ? <PrivacyTab /> : null}
-      {tab === 'billing' ? <BillingTab /> : null}
 
       <Modal
         open={dialog === 'delete-ws'}

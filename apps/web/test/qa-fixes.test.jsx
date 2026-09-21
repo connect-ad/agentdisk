@@ -31,6 +31,7 @@ vi.mock('../src/lib/auth.jsx', async () => {
 
 const Dashboard = (await import('../src/routes/Dashboard.jsx')).default;
 const Settings = (await import('../src/routes/Settings.jsx')).default;
+const Billing = (await import('../src/routes/Billing.jsx')).default;
 const McpConnection = (await import('../src/routes/McpConnection.jsx')).default;
 const AccountMenu = (await import('../src/components-local/AccountMenu.jsx')).default;
 const WorkspaceStats = (await import('../src/components-local/WorkspaceStats.jsx')).default;
@@ -353,6 +354,11 @@ describe('MCP connection status', () => {
     mount(<McpConnection />, busy);
     const panel = (await screen.findByText('Recent MCP calls')).closest('section');
     await waitFor(() => expect(within(panel).getByText('create_file')).toBeTruthy());
+    // The row reads "agt_1 called create_file". It used to pass the raw
+    // `mcp.create_file` action, which ActivityRow has no label for, so the
+    // action string was printed and then the tool name printed again after it.
+    expect(within(panel).getByText(/called/)).toBeTruthy();
+    expect(within(panel).queryByText(/mcp\.create_file/)).toBeNull();
     // A denied call is shown as denied rather than quietly dropped.
     expect(within(panel).getByText(/Refused by the key/)).toBeTruthy();
     expect(screen.queryByText('No MCP calls yet')).toBeNull();
@@ -436,7 +442,11 @@ describe('AccountMenu', () => {
 
 /* --------------------- 17 #7 / 18 #8 · billing has no flash -------------- */
 
-describe('Settings → Billing', () => {
+/* The tab this used to click through no longer exists: billing is
+   account-scoped and reached from the profile menu, so `routes/Billing.jsx`
+   is the only way in. The behaviour under test is unchanged — same component,
+   same endpoint — only the way in is. */
+describe('Billing page', () => {
   it('shows only a loading state until the real fetch resolves', async () => {
     let resolve;
     const ctx = contextFor(WITH);
@@ -444,9 +454,7 @@ describe('Settings → Billing', () => {
     globalThis.__ws = ctx;
     globalThis.__auth = { user: { email: 'a@b.co' }, providerIds: [], changePassword: vi.fn() };
 
-    const user = userEvent.setup();
-    render(<MemoryRouter><Settings /></MemoryRouter>);
-    await user.click(screen.getByRole('tab', { name: 'Billing' }));
+    render(<MemoryRouter><Billing /></MemoryRouter>);
 
     // The bug this replaces flashed a hardcoded "Pro — $20/month" here.
     expect(screen.getByText('Loading billing…')).toBeTruthy();

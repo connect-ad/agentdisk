@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
-  PageHead, Panel, Tabs, CodeBlock, Badge, Button, Icon, Alert, Select,
+  PageHead, Panel, CodeBlock, Badge, Button, Icon, Alert, Select,
   McpToolList, ActivityRow, EmptyState
 } from '../components/index.js';
 import { useResource } from '../lib/useResource.js';
@@ -36,18 +36,12 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? 'https://api-dev.agentdisk.io'
 const ENDPOINT = `${API_BASE}/mcp`;
 const PLACEHOLDER = '<YOUR_API_KEY>';
 
-const CLIENTS = [
-  { value: 'claude-desktop', label: 'Claude Desktop', file: 'claude_desktop_config.json' },
-  { value: 'claude-code', label: 'Claude Code', file: '.mcp.json' },
-  { value: 'cursor', label: 'Cursor', file: '.cursor/mcp.json' },
-  { value: 'generic', label: 'Generic MCP client', file: 'mcp.json' }
-];
-
 /**
  * The tool surface, mirroring `apps/api/src/mcp/tools.ts` — same names, same
- * ops, same order. `op` is the field the backend actually gates on, so it is
- * the field this screen ticks against; anything else here would be a second
- * opinion about a decision that has already been made in one place.
+ * ops; the descriptions are shorter paraphrases and the order is the screen's
+ * own. `op` is the field the backend actually gates on, so it is the field
+ * this screen ticks against; anything else here would be a second opinion
+ * about a decision that has already been made in one place.
  */
 const TOOLS = [
   { name: 'list_files', op: 'list', description: 'List files and folders under a path, with pagination.' },
@@ -93,7 +87,6 @@ function relativeTime(iso) {
 
 export default function McpConnection() {
   const { ws } = useParams();
-  const [client, setClient] = useState('claude-desktop');
   const [keyId, setKeyId] = useState(null);
   const { status, data, error, reload } = useResource(loadMcp);
 
@@ -145,8 +138,6 @@ export default function McpConnection() {
     }
   }
 }`;
-
-  const current = CLIENTS.find(c => c.value === client);
 
   return (
     <>
@@ -206,8 +197,17 @@ export default function McpConnection() {
           <span className="ds__stepnum">2</span>
           <span className="panel__title">Add the server to your client</span>
         </div>
-        <Tabs value={client} onChange={setClient} items={CLIENTS.map(c => ({ value: c.value, label: c.label }))} />
-        <CodeBlock filename={current.file} code={config} />
+        {/*
+          One snippet, no client tabs. The tab strip that used to sit here
+          changed only the filename label — all four tabs rendered this same
+          JSON — and two of the clients it named cannot take this shape at all:
+          Claude Desktop's config file is stdio-only, and Claude Code's
+          `.mcp.json` reads a URL entry as stdio unless it carries
+          `"type": "http"`. A tab that hands somebody a config their client
+          rejects is worse than no tab. This is the `url` + `headers` shape
+          Cursor and other URL-based clients accept as-is.
+        */}
+        <CodeBlock filename="mcp.json" code={config} />
         {/*
           The snippet keeps the placeholder and offers no way to swap a real key
           into it. That is not a missing feature: a key is shown once, at
@@ -303,14 +303,21 @@ export default function McpConnection() {
       <Panel flush title="Recent MCP calls">
         {loading ? null : calls.length > 0 ? (
           calls.slice(0, 20).map(event => (
+            // The server audits `mcp.<tool>`, which ActivityRow has no label
+            // for, so passing the raw action made every row read
+            // "agt_1 mcp.list_files list_files". `mcp.call` is the one MCP
+            // action the row does know ("called"), and the tool goes in the
+            // resource slot. The MCP path audits only success or denied —
+            // a generic failure is not audited at all — so there is no third
+            // status to forward.
             <ActivityRow
               key={event.id}
-              action={event.action}
+              action="mcp.call"
               actor={event.actor?.id ?? '—'}
               actorType={event.actor?.type ?? 'agent'}
               resource={event.action.replace(/^mcp\./, '')}
               time={relativeTime(event.at)}
-              status={event.result === 'success' ? 'ok' : event.result}
+              status={event.result === 'denied' ? 'denied' : 'ok'}
               detail={event.result === 'denied' ? 'Refused by the key’s scope' : undefined}
             />
           ))

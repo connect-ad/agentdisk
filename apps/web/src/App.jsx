@@ -19,6 +19,7 @@ import { Sandbox } from './routes/Sandbox.jsx';
 import { Signup, VerifyEmail, ForgotPassword, ResetPassword, Login } from './routes/Auth.jsx';
 import { Landing, Pricing } from './routes/Marketing.jsx';
 import Claim from './routes/Claim.jsx';
+import SharePage from './routes/SharePage.jsx';
 import { Terms, Privacy } from './routes/Legal.jsx';
 import Docs from './routes/Docs.jsx';
 import McpConnection from './routes/McpConnection.jsx';
@@ -363,6 +364,10 @@ export default function App() {
           bounce a first-time visitor to /login before they could see what they
           were being asked to sign up for. */}
       <Route path="/claim/:token" element={<Claim />} />
+      {/* Public for the same reason as /claim above, and more so: whoever opens
+          a share link has no account here and is not being asked to make one.
+          The token is the only thing that can name these files. */}
+      <Route path="/s/:token" element={<SharePage />} />
       <Route element={<RequireAuth />}>
         <Route path="/app" element={<CurrentWorkspaceRedirect />} />
         {/* `/dashboard` is the shareable spelling of the same idea: a bookmark,

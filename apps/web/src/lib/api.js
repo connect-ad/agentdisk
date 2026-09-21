@@ -79,6 +79,37 @@ export async function previewClaim(claimToken, signal) {
   return response.json();
 }
 
+/**
+ * The public half of a share link. No credential, by design — the token in the
+ * URL is the only thing that can name these files.
+ *
+ * Every refusal from this endpoint is one identical 404, so the caller learns
+ * that the link is not available and never which of expiry, revocation or a
+ * bad guess produced that. Do not try to distinguish them here.
+ */
+export async function previewShare(shareToken, signal) {
+  const response = await fetch(
+    new URL(`/v1/shares/open/${encodeURIComponent(shareToken)}`, BASE_URL),
+    { signal }
+  );
+  if (!response.ok) throw await toError(response);
+  return response.json();
+}
+
+/**
+ * The download address for one file inside a share.
+ *
+ * A plain href rather than a fetch: the route 302s to a short-lived presigned
+ * R2 URL, and letting the browser follow that redirect is what makes the
+ * download stream from R2 instead of through this app.
+ */
+export function sharedDownloadUrl(shareToken, fileId) {
+  return new URL(
+    `/v1/shares/open/${encodeURIComponent(shareToken)}/download/${encodeURIComponent(fileId)}`,
+    BASE_URL
+  ).toString();
+}
+
 export function createApiClient(getToken) {
   /**
    * Counted in and out of `pending.js` so the top progress bar can show that

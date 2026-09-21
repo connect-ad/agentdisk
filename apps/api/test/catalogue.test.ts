@@ -51,6 +51,7 @@ function row(overrides: Partial<PlanRow> = {}): PlanRow {
     members: 5,
     workspaces: 10,
     api_keys: 20,
+    share_links: 100,
     priority_support: 1,
     is_public: 1,
     is_default: 0,
@@ -249,5 +250,29 @@ describe("resolveWorkspaceLimits — against the real seeded catalogue", () => {
 
     const later = await loadCatalogue(env.DB, NOW + 61_000);
     expect(later).not.toBe(first);
+  });
+});
+
+describe("share link entitlement", () => {
+  it("gives the free plan none", () => {
+    expect(PLAN_LIMITS.free.shareLinks).toBe(0);
+  });
+
+  it("gives an unclaimed sandbox none, so an anonymous workspace cannot publish", () => {
+    expect(SANDBOX_LIMITS.shareLinks).toBe(0);
+  });
+
+  it("scales with the paid plans", () => {
+    expect(PLAN_LIMITS.basic.shareLinks).toBe(10);
+    expect(PLAN_LIMITS.pro.shareLinks).toBe(100);
+    expect(PLAN_LIMITS.team.shareLinks).toBe(UNLIMITED);
+  });
+
+  it("falls back to the floor when the catalogue row does not specify one", () => {
+    expect(limitsFromRow(row({ share_links: null }), PLAN_LIMITS.basic).shareLinks).toBe(10);
+  });
+
+  it("reads -1 in the catalogue as unlimited", () => {
+    expect(limitsFromRow(row({ share_links: -1 }), PLAN_LIMITS.free).shareLinks).toBe(UNLIMITED);
   });
 });

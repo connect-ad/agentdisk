@@ -167,6 +167,7 @@ describe("metadata round trip", () => {
       members: 5,
       workspaces: 10,
       api_keys: 20,
+      share_links: 100,
       priority_support: 1,
       is_default: 0,
       sort_order: 30,

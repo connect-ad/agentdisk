@@ -55,6 +55,15 @@ export interface PlanLimits {
    * not what the plan is selling.
    */
   workspaces: number;
+  /**
+   * Live public share links a workspace may hold.
+   *
+   * Zero is the free plan's wall, and it is a count rather than a boolean so
+   * that it travels through the same D1 column, the same -1-means-unlimited
+   * convention and the same staff-console editor as every other limit. A
+   * boolean would have needed a second shape for one field.
+   */
+  shareLinks: number;
 }
 
 /**
@@ -83,6 +92,7 @@ export const PLAN_LIMITS: Record<PlanName, PlanLimits> = {
     apiKeys: 2,
     members: 1,
     workspaces: 1,
+    shareLinks: 0,
   },
   basic: {
     storageBytes: 5 * GB,
@@ -94,6 +104,7 @@ export const PLAN_LIMITS: Record<PlanName, PlanLimits> = {
     apiKeys: 6,
     members: 2,
     workspaces: 3,
+    shareLinks: 10,
   },
   pro: {
     storageBytes: 50 * GB,
@@ -105,6 +116,7 @@ export const PLAN_LIMITS: Record<PlanName, PlanLimits> = {
     apiKeys: 20,
     members: 5,
     workspaces: 10,
+    shareLinks: 100,
   },
   team: {
     storageBytes: 500 * GB,
@@ -116,6 +128,7 @@ export const PLAN_LIMITS: Record<PlanName, PlanLimits> = {
     apiKeys: 100,
     members: 25,
     workspaces: 50,
+    shareLinks: UNLIMITED,
   },
 };
 
@@ -180,6 +193,10 @@ export const SANDBOX_LIMITS: PlanLimits = {
   // there is nothing for it to own a second of. Present because PlanLimits
   // requires it, not because it is a quota anything checks.
   workspaces: 1,
+  // Zero, not a smaller number. An unclaimed sandbox is anonymous and
+  // Turnstile-gated; nothing about it should be able to publish bytes to the
+  // open internet.
+  shareLinks: 0,
 };
 
 /** The claim-state fields limits resolution needs. A subset, so tests can pass a literal. */

@@ -157,10 +157,10 @@ export async function syncProductToPlan(
          amount_cents, currency, interval,
          stripe_product_id, stripe_price_id,
          storage_bytes, file_count, egress_bytes_period, requests_period,
-         max_file_bytes, agents, members, workspaces, api_keys,
+         max_file_bytes, agents, members, workspaces, api_keys, share_links,
          priority_support, is_public, is_default, sort_order,
          created_at, updated_at, last_synced_at, last_synced_direction
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'inbound')
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'inbound')
        ON CONFLICT(id) DO UPDATE SET
          package_id = excluded.package_id,
          name = excluded.name,
@@ -179,6 +179,7 @@ export async function syncProductToPlan(
          members = excluded.members,
          workspaces = excluded.workspaces,
          api_keys = excluded.api_keys,
+         share_links = excluded.share_links,
          priority_support = excluded.priority_support,
          is_public = excluded.is_public,
          is_default = excluded.is_default,
@@ -217,6 +218,7 @@ export async function syncProductToPlan(
       entitlement(metadata, "members"),
       entitlement(metadata, "workspaces"),
       entitlement(metadata, "api_keys"),
+      entitlement(metadata, "share_links"),
       flag(metadata, "priority_support"),
       // An archived product stays in the table but stops being offered, so
       // somebody already on it keeps their entitlements. Deleting the row would
@@ -300,6 +302,7 @@ export function metadataForPlan(row: {
   members: number | null;
   workspaces: number | null;
   api_keys: number | null;
+  share_links: number | null;
   priority_support: number;
   is_default: number;
   sort_order: number;
@@ -322,6 +325,7 @@ export function metadataForPlan(row: {
     ["members", row.members],
     ["workspaces", row.workspaces],
     ["api_keys", row.api_keys],
+    ["share_links", row.share_links],
   ];
 
   for (const [key, value] of numeric) {
@@ -340,6 +344,7 @@ export const ENTITLEMENT_COLUMNS = [
   "members",
   "workspaces",
   "api_keys",
+  "share_links",
   "file_count",
   "egress_bytes_period",
   "requests_period",

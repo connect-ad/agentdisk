@@ -73,6 +73,7 @@ export interface PlanRow {
   members: number | null;
   workspaces: number | null;
   api_keys: number | null;
+  share_links: number | null;
   priority_support: number;
   is_public: number;
   is_default: number;
@@ -196,6 +197,7 @@ export function limitsFromRow(row: PlanRow, floor: PlanLimits): PlanLimits {
     apiKeys: field(row.api_keys, floor.apiKeys),
     members: field(row.members, floor.members),
     workspaces: field(row.workspaces, floor.workspaces),
+    shareLinks: field(row.share_links, floor.shareLinks),
   };
 }
 

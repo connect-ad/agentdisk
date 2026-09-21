@@ -70,6 +70,7 @@ export interface PlanPatch {
   members?: number | null;
   workspaces?: number | null;
   api_keys?: number | null;
+  share_links?: number | null;
   file_count?: number | null;
   egress_bytes_period?: number | null;
   requests_period?: number | null;
@@ -118,7 +119,7 @@ export class StaffPlanAccess extends AuditedStaffAccess {
         `SELECT id, package_id, name, description, amount_cents, currency, interval,
                 stripe_product_id, stripe_price_id,
                 storage_bytes, file_count, egress_bytes_period, requests_period,
-                max_file_bytes, agents, members, workspaces, api_keys,
+                max_file_bytes, agents, members, workspaces, api_keys, share_links,
                 priority_support, is_public, is_default, sort_order,
                 last_synced_at, last_synced_direction
            FROM plans ORDER BY sort_order ASC, amount_cents ASC`
@@ -219,6 +220,7 @@ export class StaffPlanAccess extends AuditedStaffAccess {
              name = ?, description = ?, amount_cents = ?,
              storage_bytes = ?, file_count = ?, egress_bytes_period = ?, requests_period = ?,
              max_file_bytes = ?, agents = ?, members = ?, workspaces = ?, api_keys = ?,
+             share_links = ?,
              priority_support = ?, is_public = ?, is_default = ?, sort_order = ?,
              stripe_price_id = COALESCE(?, stripe_price_id),
              last_synced_at = ?, last_synced_direction = 'outbound', updated_at = ?
@@ -237,6 +239,7 @@ export class StaffPlanAccess extends AuditedStaffAccess {
           merged.members,
           merged.workspaces,
           merged.api_keys,
+          merged.share_links,
           merged.priority_support,
           merged.is_public,
           merged.is_default,
@@ -305,6 +308,7 @@ export class StaffPlanAccess extends AuditedStaffAccess {
       members: input.members ?? null,
       workspaces: input.workspaces ?? null,
       api_keys: input.api_keys ?? null,
+      share_links: input.share_links ?? null,
       priority_support: input.priority_support ?? 0,
       is_default: input.is_default ?? 0,
       sort_order: input.sort_order ?? 0,
@@ -341,10 +345,10 @@ export class StaffPlanAccess extends AuditedStaffAccess {
              id, package_id, name, description, amount_cents, currency, interval,
              stripe_product_id, stripe_price_id,
              storage_bytes, file_count, egress_bytes_period, requests_period,
-             max_file_bytes, agents, members, workspaces, api_keys,
+             max_file_bytes, agents, members, workspaces, api_keys, share_links,
              priority_support, is_public, is_default, sort_order,
              last_synced_at, last_synced_direction, created_at, updated_at
-           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'outbound',?,?)`
+           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'outbound',?,?)`
         )
         .bind(
           input.id,
@@ -365,6 +369,7 @@ export class StaffPlanAccess extends AuditedStaffAccess {
           draft.members,
           draft.workspaces,
           draft.api_keys,
+          draft.share_links,
           draft.priority_support,
           input.is_public ?? 1,
           draft.is_default,

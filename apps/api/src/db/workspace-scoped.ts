@@ -24,6 +24,7 @@ import type {
   WebhookRow,
 } from "./types";
 import { escapeLikePattern } from "../lib/paths";
+import { WorkspaceScopedShares } from "./shares";
 
 /**
  * The two binds for "inside this path prefix", anchored to a segment boundary.
@@ -823,6 +824,11 @@ export function createWorkspaceContext(db: D1Database, workspaceId: string) {
     auditEvents: new WorkspaceScopedAuditEvents(db, workspaceId),
     counters: new WorkspaceScopedCounters(db, workspaceId),
     settings: new WorkspaceScopedSettings(db, workspaceId),
+    // Bound here like every other repository, rather than handed a raw D1
+    // binding at the call site. The public share route needs a lookup that
+    // crosses the workspace boundary; that one lives in db/shares.ts as a
+    // named module function, deliberately outside this context.
+    shares: new WorkspaceScopedShares(db, workspaceId),
   };
 }
 

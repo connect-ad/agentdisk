@@ -1,4 +1,4 @@
-import { env } from "cloudflare:test";
+import { SELF, env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   DEFAULT_SHARE_TTL_MS,
@@ -9,9 +9,38 @@ import {
   shareUrl,
 } from "../src/lib/shares";
 import { WorkspaceScopedShares, findShareByToken } from "../src/db/shares";
-import { WORKSPACE_A, WORKSPACE_B, resetTenantData, seedTwoWorkspaces } from "./helpers";
+import {
+  WORKSPACE_A,
+  WORKSPACE_B,
+  bearer,
+  resetTenantData,
+  seedApiKey,
+  seedTwoWorkspaces,
+  setWorkspaceStatus,
+} from "./helpers";
 
 const NOW = 1_780_000_000_000;
+const URL_BASE = "https://api-test.agentdisk.io";
+
+interface ErrorBody {
+  error: { code: string; message: string; requestId: string; details?: Record<string, unknown> };
+}
+
+async function call(
+  method: string,
+  path: string,
+  token: string,
+  body?: unknown
+): Promise<Response> {
+  return SELF.fetch(`${URL_BASE}${path}`, {
+    method,
+    headers: {
+      ...bearer(token),
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+}
 
 describe("resolveExpiry", () => {
   it("defaults to seven days", () => {
@@ -75,28 +104,27 @@ describe("shareUrl", () => {
   });
 });
 
+/**
+ * `r2_object_key` and `mime_type` are NOT NULL with no default, so a seed that
+ * omits them fails on the constraint rather than on the thing under test.
+ * Nothing here reads either column; they are present to satisfy the schema.
+ */
+async function seedFile(id: string, path: string, workspaceId = WORKSPACE_A): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO files
+       (id, workspace_id, path, name, r2_object_key, mime_type, status,
+        size_bytes, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'text/markdown', 'active', 7, 'usr_TESTUSER', ?, ?)`
+  )
+    .bind(id, workspaceId, path, path.split("/").pop(), `${workspaceId}/${id}`, NOW, NOW)
+    .run();
+}
+
 describe("WorkspaceScopedShares", () => {
   beforeEach(async () => {
     await seedTwoWorkspaces();
     await resetTenantData();
   });
-
-  /**
-   * `r2_object_key` and `mime_type` are NOT NULL with no default, so a seed
-   * that omits them fails on the constraint rather than on the thing under
-   * test. Nothing here reads either column; they are present to satisfy the
-   * schema.
-   */
-  async function seedFile(id: string, path: string, workspaceId = WORKSPACE_A): Promise<void> {
-    await env.DB.prepare(
-      `INSERT INTO files
-         (id, workspace_id, path, name, r2_object_key, mime_type, status,
-          size_bytes, created_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'text/markdown', 'active', 7, 'usr_TESTUSER', ?, ?)`
-    )
-      .bind(id, workspaceId, path, path.split("/").pop(), `${workspaceId}/${id}`, NOW, NOW)
-      .run();
-  }
 
   it("counts only links that have not expired", async () => {
     const shares = new WorkspaceScopedShares(env.DB, WORKSPACE_A);
@@ -164,5 +192,86 @@ describe("WorkspaceScopedShares", () => {
     await env.DB.prepare(`DELETE FROM files WHERE id = ?`).bind("fil_C").run();
 
     expect(await findShareByToken(env.DB, "hashc", NOW)).toBeNull();
+  });
+});
+
+describe("POST /v1/shares", () => {
+  beforeEach(async () => {
+    await seedTwoWorkspaces();
+    await resetTenantData();
+    await setWorkspaceStatus(WORKSPACE_A, "active");
+  });
+
+  async function setPlan(plan: string): Promise<void> {
+    await env.DB.prepare(`UPDATE organizations SET plan = ? WHERE id = 'org_TESTORG'`)
+      .bind(plan)
+      .run();
+  }
+
+  it("refuses a key that does not carry the share op", async () => {
+    const { token } = await seedApiKey({ ops: ["read", "write", "list"] });
+    const res = await call("POST", "/v1/shares", token, { fileId: "fil_X" });
+    expect(res.status).toBe(403);
+  });
+
+  it("refuses the free plan with a message naming the limit", async () => {
+    await setPlan("free");
+    const { token } = await seedApiKey({ ops: ["read", "share"] });
+    await seedFile("fil_FREE", "/free.md");
+
+    const res = await call("POST", "/v1/shares", token, { fileId: "fil_FREE" });
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as ErrorBody).error.message).toMatch(/upgrade/i);
+  });
+
+  it("creates a link on a paid plan and returns the url exactly once", async () => {
+    await setPlan("pro");
+    const { token } = await seedApiKey({ ops: ["read", "share"] });
+    await seedFile("fil_OK", "/ok.md");
+
+    const res = await call("POST", "/v1/shares", token, { fileId: "fil_OK" });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { share: { id: string }; url: string };
+    expect(body.url).toMatch(/\/s\//);
+    expect(body.share.id).toMatch(/^shr_/);
+  });
+
+  it("refuses to share a file in another workspace", async () => {
+    await setPlan("pro");
+    const { token } = await seedApiKey({ ops: ["read", "share"] });
+    await seedFile("fil_B", "/b.md", WORKSPACE_B);
+
+    const res = await call("POST", "/v1/shares", token, { fileId: "fil_B" });
+    expect(res.status).toBe(404);
+  });
+
+  it("stops at the plan's ceiling and frees a slot when one is revoked", async () => {
+    await setPlan("basic");
+    const { token } = await seedApiKey({ ops: ["read", "share", "list"] });
+
+    const ids: string[] = [];
+    for (let i = 0; i < 10; i += 1) {
+      await seedFile(`fil_N${i}`, `/n${i}.md`);
+      const res = await call("POST", "/v1/shares", token, { fileId: `fil_N${i}` });
+      expect(res.status).toBe(201);
+      ids.push(((await res.json()) as { share: { id: string } }).share.id);
+    }
+
+    await seedFile("fil_OVER", "/over.md");
+    expect((await call("POST", "/v1/shares", token, { fileId: "fil_OVER" })).status).toBe(403);
+
+    expect((await call("DELETE", `/v1/shares/${ids[0]}`, token)).status).toBe(200);
+    expect((await call("POST", "/v1/shares", token, { fileId: "fil_OVER" })).status).toBe(201);
+  });
+
+  it("lists the workspace's live links", async () => {
+    await setPlan("pro");
+    const { token } = await seedApiKey({ ops: ["read", "share", "list"] });
+    await seedFile("fil_L", "/l.md");
+    await call("POST", "/v1/shares", token, { fileId: "fil_L" });
+
+    const res = await call("GET", "/v1/shares", token);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { shares: unknown[] }).shares).toHaveLength(1);
   });
 });

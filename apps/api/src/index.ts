@@ -34,6 +34,7 @@ import {
   listWebhooks,
   patchWebhook,
 } from "./routes/webhooks";
+import { createShare, deleteShare, listShares } from "./routes/shares";
 import { createCheckoutSession, createPortalSession, getBilling } from "./routes/billing";
 import { handleStripeWebhook } from "./routes/stripe-webhook";
 import {
@@ -477,6 +478,27 @@ export default {
       // The customer's own webhook endpoints. `/v1/webhooks/stripe` is checked
       // first, below, because it is the one path under this prefix that is
       // Stripe calling us rather than us listing their endpoints.
+      if (
+        segments[0] === "v1" &&
+        segments[1] === "shares"
+      ) {
+        const shareId = segments[2];
+
+        if (shareId === undefined) {
+          if (request.method === "POST") return await authed({ op: "share" }, createShare);
+          if (request.method === "GET") return await authed({ op: "list" }, listShares);
+          throw new ApiError("NOT_FOUND", "No such route.");
+        }
+        if (segments[3] !== undefined) throw new ApiError("NOT_FOUND", "No such route.");
+
+        if (request.method === "DELETE") {
+          return await authed({ op: "share" }, (authCtx, req) =>
+            deleteShare(authCtx, req, shareId)
+          );
+        }
+        throw new ApiError("NOT_FOUND", "No such route.");
+      }
+
       if (
         segments[0] === "v1" &&
         segments[1] === "webhooks" &&

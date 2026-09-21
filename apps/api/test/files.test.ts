@@ -720,3 +720,99 @@ describe("file_tags is scoped through its file", () => {
     expect(await attacker.getTags(file.id)).toEqual([]);
   });
 });
+
+describe("a scope prefix is a whole segment - in listings, not only per row", () => {
+  /**
+   * `scopeAllowsPath` has always required `path === prefix` or
+   * `path.startsWith(prefix + "/")`, and every single-resource handler asks it.
+   * The collection queries did not: they built `LIKE 'prefix%'`, which is the
+   * plain `startsWith` the scope module exists to avoid, and returned the rows
+   * with no post-filter.
+   *
+   * These drive the three endpoints that enumerate. `test/scopes.test.ts` pins
+   * the same rule at the function level and passed throughout the bug, which is
+   * why the boundary has to be asserted here, through the repository, as well.
+   */
+  async function seedSiblings(): Promise<string> {
+    const wide = await seedApiKey({ workspaceId: WORKSPACE_A });
+    for (const path of ["/agents/bot/mine.txt", "/agents/bot-evil/secrets.txt"]) {
+      const res = await call("POST", "/v1/files", wide.token, { path, content: toBase64("x") });
+      expect(res.status).toBe(201);
+    }
+    await call("POST", "/v1/folders", wide.token, { path: "/agents/bot/notes" });
+    await call("POST", "/v1/folders", wide.token, { path: "/agents/bot-evil/hidden" });
+
+    const scoped = await seedApiKey({ workspaceId: WORKSPACE_A, pathPrefix: "/agents/bot/*" });
+    return scoped.token;
+  }
+
+  it("refuses the sibling when it is named explicitly", async () => {
+    // The asymmetry is the point: this 403 is what makes the leak below a
+    // boundary violation rather than a scope that was only ever advisory.
+    const token = await seedSiblings();
+    expect((await call("GET", "/v1/files?path=/agents/bot-evil", token)).status).toBe(403);
+  });
+
+  it("does not list a sibling that shares the prefix as a string", async () => {
+    const token = await seedSiblings();
+    const res = await call("GET", "/v1/files", token);
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as { files: { path: string }[] };
+    expect(body.files.map((file) => file.path)).toEqual(["/agents/bot/mine.txt"]);
+  });
+
+  it("does not surface a sibling through search", async () => {
+    const token = await seedSiblings();
+    const res = await SELF.fetch(`${URL_BASE}/v1/search?q=agents`, { headers: bearer(token) });
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as { files: { path: string }[] };
+    expect(body.files.map((file) => file.path)).toEqual(["/agents/bot/mine.txt"]);
+  });
+
+  it("does not list a sibling's folders", async () => {
+    const token = await seedSiblings();
+    const body = (await (await call("GET", "/v1/folders", token)).json()) as {
+      folders: { path: string }[];
+    };
+
+    // The prefix itself is in scope and stays listed; its string-siblings do not.
+    expect(body.folders.map((folder) => folder.path)).toEqual([
+      "/agents/bot",
+      "/agents/bot/notes",
+    ]);
+  });
+
+  it("applies the same boundary to a narrowed request inside the scope", async () => {
+    // The defect over-matched within scope too: asking for "/agents/bot/logs"
+    // also returned "/agents/bot/logs-archive".
+    const wide = await seedApiKey({ workspaceId: WORKSPACE_A });
+    for (const path of ["/agents/bot/logs/a.txt", "/agents/bot/logs-archive/b.txt"]) {
+      await call("POST", "/v1/files", wide.token, { path, content: toBase64("x") });
+    }
+
+    const scoped = await seedApiKey({ workspaceId: WORKSPACE_A, pathPrefix: "/agents/bot/*" });
+    const body = (await (
+      await call("GET", "/v1/files?path=/agents/bot/logs", scoped.token)
+    ).json()) as { files: { path: string }[] };
+
+    expect(body.files.map((file) => file.path)).toEqual(["/agents/bot/logs/a.txt"]);
+  });
+
+  it("still lists the whole workspace for an unscoped key", async () => {
+    // The root prefix owns everything, and the boundary must not narrow it.
+    const wide = await seedApiKey({ workspaceId: WORKSPACE_A });
+    for (const path of ["/top.txt", "/nested/deep/file.txt"]) {
+      await call("POST", "/v1/files", wide.token, { path, content: toBase64("x") });
+    }
+
+    const body = (await (await call("GET", "/v1/files", wide.token)).json()) as {
+      files: { path: string }[];
+    };
+    expect(body.files.map((file) => file.path).sort()).toEqual([
+      "/nested/deep/file.txt",
+      "/top.txt",
+    ]);
+  });
+});

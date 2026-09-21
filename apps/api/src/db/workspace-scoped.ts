@@ -25,6 +25,30 @@ import type {
 } from "./types";
 import { escapeLikePattern } from "../lib/paths";
 
+/**
+ * The two binds for "inside this path prefix", anchored to a segment boundary.
+ *
+ * `LIKE 'prefix%'` asks the wrong question. For a key scoped to `/agents/bot`
+ * it also matches `/agents/bot-evil/secrets.txt`, which is precisely what
+ * `scopeAllowsPath` refuses one row at a time - so the collection queries were
+ * contradicting, in bulk, the boundary every single-resource handler enforces.
+ * A prefix owns itself and everything beneath its separator, and nothing else.
+ *
+ * Returned as binds rather than as a SQL fragment on purpose: this file's rule
+ * is that nothing is ever interpolated into a statement, and a helper that
+ * returned text - even text built from an internal constant - would be the
+ * first exception to it. The clause is written out literally at each call site
+ * and is identical at all four.
+ *
+ * A root prefix owns the whole workspace, so it yields a pattern that matches
+ * every path rather than a special-cased second statement. One SQL shape per
+ * site, no branch to get wrong.
+ */
+function prefixBinds(pathPrefix: string): [exact: string, under: string] {
+  if (pathPrefix === "" || pathPrefix === "/") return ["/", "%"];
+  return [pathPrefix, `${escapeLikePattern(pathPrefix)}/%`];
+}
+
 abstract class WorkspaceScoped {
   constructor(
     protected readonly db: D1Database,
@@ -55,13 +79,15 @@ export class WorkspaceScopedFiles extends WorkspaceScoped {
   }
 
   async listByPrefix(pathPrefix: string, limit = 100, offset = 0): Promise<FileRow[]> {
+    const [exact, under] = prefixBinds(pathPrefix);
     const result = await this.db
       .prepare(
         `SELECT * FROM files
-         WHERE workspace_id = ? AND path LIKE ? ESCAPE '\\' AND deleted_at IS NULL
+         WHERE workspace_id = ? AND (path = ? OR path LIKE ? ESCAPE '\\')
+           AND deleted_at IS NULL
          ORDER BY created_at DESC LIMIT ? OFFSET ?`
       )
-      .bind(this.workspaceId, `${escapeLikePattern(pathPrefix)}%`, limit, offset)
+      .bind(this.workspaceId, exact, under, limit, offset)
       .all<FileRow>();
     return result.results ?? [];
   }
@@ -95,13 +121,13 @@ export class WorkspaceScopedFiles extends WorkspaceScoped {
     limit: number,
     cursor: string | null
   ): Promise<FileRow[]> {
-    const prefixPattern = `${escapeLikePattern(pathPrefix)}%`;
+    const [exact, under] = prefixBinds(pathPrefix);
     const termPattern = `%${escapeLikePattern(term)}%`;
 
     const sql = `SELECT DISTINCT f.* FROM files f
                    LEFT JOIN file_tags t ON t.file_id = f.id
                   WHERE f.workspace_id = ?
-                    AND f.path LIKE ? ESCAPE '\\'
+                    AND (f.path = ? OR f.path LIKE ? ESCAPE '\\')
                     AND f.deleted_at IS NULL
                     AND (f.name LIKE ? ESCAPE '\\'
                       OR f.path LIKE ? ESCAPE '\\'
@@ -113,7 +139,8 @@ export class WorkspaceScopedFiles extends WorkspaceScoped {
 
     const binds: (string | number)[] = [
       this.workspaceId,
-      prefixPattern,
+      exact,
+      under,
       termPattern,
       termPattern,
       termPattern,
@@ -127,24 +154,26 @@ export class WorkspaceScopedFiles extends WorkspaceScoped {
   }
 
   async listPage(pathPrefix: string, limit: number, cursor: string | null): Promise<FileRow[]> {
-    const like = `${escapeLikePattern(pathPrefix === "/" ? "" : pathPrefix)}%`;
+    const [exact, under] = prefixBinds(pathPrefix);
     const statement =
       cursor === null
         ? this.db
             .prepare(
               `SELECT * FROM files
-                WHERE workspace_id = ? AND path LIKE ? ESCAPE '\\' AND deleted_at IS NULL
+                WHERE workspace_id = ? AND (path = ? OR path LIKE ? ESCAPE '\\')
+                  AND deleted_at IS NULL
                 ORDER BY id DESC LIMIT ?`
             )
-            .bind(this.workspaceId, like, limit + 1)
+            .bind(this.workspaceId, exact, under, limit + 1)
         : this.db
             .prepare(
               `SELECT * FROM files
-                WHERE workspace_id = ? AND path LIKE ? ESCAPE '\\' AND deleted_at IS NULL
+                WHERE workspace_id = ? AND (path = ? OR path LIKE ? ESCAPE '\\')
+                  AND deleted_at IS NULL
                   AND id < ?
                 ORDER BY id DESC LIMIT ?`
             )
-            .bind(this.workspaceId, like, cursor, limit + 1);
+            .bind(this.workspaceId, exact, under, cursor, limit + 1);
     const result = await statement.all<FileRow>();
     return result.results ?? [];
   }
@@ -369,14 +398,14 @@ export class WorkspaceScopedFolders extends WorkspaceScoped {
   }
 
   async listByPrefix(pathPrefix: string): Promise<FolderRow[]> {
-    const like = `${escapeLikePattern(pathPrefix === "/" ? "" : pathPrefix)}%`;
+    const [exact, under] = prefixBinds(pathPrefix);
     const result = await this.db
       .prepare(
         `SELECT * FROM folders
-          WHERE workspace_id = ? AND path LIKE ? ESCAPE '\\'
+          WHERE workspace_id = ? AND (path = ? OR path LIKE ? ESCAPE '\\')
           ORDER BY path`
       )
-      .bind(this.workspaceId, like)
+      .bind(this.workspaceId, exact, under)
       .all<FolderRow>();
     return result.results ?? [];
   }

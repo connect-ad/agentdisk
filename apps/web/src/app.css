@@ -231,7 +231,7 @@
 .auth__sso:hover:not(:disabled){border-color:var(--line-3);background:var(--surf3)}
 .auth__sso:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 .auth__sso:disabled{opacity:.55;cursor:not-allowed}
-.auth__sso svg{flex:0 0 auto}
+.auth__sso svg{flex:0 0 auto;width:0.85em;height:0.85em} /* 21 */
 .auth__divider{display:flex;align-items:center;gap:0.55em;margin-bottom:1em}
 .auth__divider::before,.auth__divider::after{content:"";flex:1;height:1px;
   background:var(--bd)}
@@ -275,14 +275,16 @@
 .auth__input--pw{font-size:0.7em;letter-spacing:0.2em}
 .auth__input--pw::placeholder{letter-spacing:var(--tr-none)}
 .auth__fieldok{margin-left:auto;flex:0 0 auto;color:var(--okTx);display:flex}
+.auth__fieldok svg{width:0.75em;height:0.75em} /* 19 */
 .auth__reveal{flex:0 0 auto;display:flex;align-items:center;border:none;
   background:transparent;padding:0;cursor:pointer;color:var(--tx3)}
+.auth__reveal svg{width:0.8em;height:0.8em} /* 20 */
 .auth__reveal:hover{color:var(--tx2)}
 .auth__reveal:focus-visible{outline:2px solid var(--acc);outline-offset:2px;
   border-radius:2px}
 .auth__err{display:flex;align-items:center;gap:0.45em;margin-top:0.55em;
   font-size:0.6em;color:var(--dngrTx)}
-.auth__err svg{flex:0 0 auto}
+.auth__err svg{flex:0 0 auto;width:1.1em;height:1.1em}
 
 /* --- password strength ---
    One bar per rule met, the verdict in a word, and the rules as one row of
@@ -314,6 +316,7 @@
   background:var(--okSoft)}
 .auth__reqmark{display:inline-flex;align-items:center;justify-content:center;
   width:0.9em;height:0.9em;flex:0 0 auto}
+.auth__reqmark svg{width:100%;height:100%}
 .auth__reqdot{width:0.35em;height:0.35em;border-radius:var(--r-full);
   background:currentColor;opacity:.6;display:block}
 
@@ -328,6 +331,7 @@
   display:flex;align-items:center;justify-content:center;margin-top:0.08em;
   color:transparent;
   transition:background var(--d-1) var(--ease),border-color var(--d-1) var(--ease)}
+.auth__check svg{width:0.6em;height:0.6em}
 .auth__consent input:checked + .auth__check{background:var(--acc);
   border-color:var(--acc);color:var(--accInk)}
 .auth__consent input:focus-visible + .auth__check{outline:2px solid var(--acc);

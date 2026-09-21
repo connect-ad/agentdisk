@@ -122,7 +122,7 @@ function AuthSheet({ tab, children }) {
       <Platter />
       <div className="auth__sheet">
         <Link to="/" className="auth__brand">
-          <Logo size={24} />
+          <Logo size={30} />
           <span className="auth__wordmark">AgentDisk</span>
         </Link>
 

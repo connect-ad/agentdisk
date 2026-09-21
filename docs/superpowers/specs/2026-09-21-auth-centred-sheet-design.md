@@ -77,8 +77,12 @@ themes; the accent appears once, in one sector.
 ## How it fits every screen
 
 `.auth` takes its font-size from the viewport's height —
-`clamp(0.85rem, 2.5dvh, 1rem)` — and every length in the block is an em of
-that. Full scale from 800px of viewport height; the 85% floor from 680 down.
+`clamp(0.85rem, 2.65dvh, 1.25rem)` — and every length in the block is an em
+of that. Full size, a quarter over the root, from about 945px of viewport
+height; the 0.85rem floor from 640 down. (Raised from a 1rem ceiling at 2.5dvh
+on the owner's call the same day: the sheet read too small. The px in the
+table above are the 1em = 20px figures it was drawn at; at full size every
+one is 1.25× that.)
 The block is therefore written in em, not in the rem tokens the rest of
 `app.css` uses: a token is a fixed length, and a fixed length is exactly what
 cannot fit a 1366×768 laptop and a 1440p monitor with the same rule. Each em
@@ -88,13 +92,15 @@ are still tokens.
 Box sizes are set on boxes and text sizes on text, never both on one element,
 so a 42px control stays `2.1em` of the sheet whatever its label's size is.
 
-| State | Full scale | At the floor |
+| State | Full size (1.25rem) | At the floor (0.85rem) |
 |---|---|---|
-| Sign up, nothing typed | ~650px of page | ~555 |
-| Sign up, strength chips open | ~710 | ~605 |
-| Log in | ~600 | ~510 |
+| Sign up, nothing typed | ~810px of page | ~555 |
+| Sign up, strength chips open | ~890 | ~605 |
+| Log in | ~750 | ~510 |
 
-So the pages fit from about 600px of viewport height up. Below that they
+Between the two the unit is 2.65dvh, so the sheet is ~94% of the viewport
+at every height and never more. The pages fit from about 600px of viewport
+height up. Below that they
 scroll — a 768p screen under several toolbars, or a browser zoomed in — and
 no readable sign-up form fits in less. The figures are computed from the CSS
 by the same model that was checked against the live Log in page to within 2%

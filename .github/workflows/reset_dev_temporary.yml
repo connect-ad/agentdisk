@@ -89,9 +89,20 @@ jobs:
         working-directory: infra/terraform
         run: |
           set -euo pipefail
-          terraform init -input=false \
-            -backend-config="bucket=$TFSTATE_BUCKET" \
-            -backend-config="use_lockfile=true"
+          # The endpoint is not optional. R2 is S3-compatible but is not AWS,
+          # and without it Terraform talks to real S3, which rejects an R2 key
+          # with "InvalidAccessKeyId: The AWS Access Key Id you provided does
+          # not exist in our records" - an error that reads like a wrong secret
+          # and is actually a wrong host. Written exactly the way infra.yml
+          # writes it: two spellings of one backend config is how they drift.
+          cat > backend.hcl <<EOF
+          bucket = "${TFSTATE_BUCKET}"
+          endpoints = {
+            s3 = "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          }
+          EOF
+
+          terraform init -backend-config=backend.hcl -input=false
           terraform workspace select "$WORKSPACE"
 
           actual="$(terraform workspace show)"

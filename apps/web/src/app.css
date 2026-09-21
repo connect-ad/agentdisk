@@ -190,7 +190,24 @@
    are real px: a media query resolves rem against the initial 16, not this
    document's 125% root, so writing them in rem here would be a lie. */
 @media (max-height:1000px){
-  .auth{--auth-inset:1rem;--auth-pad:1.5rem}
+  .auth{--auth-inset:1rem;--auth-pad:1.25rem}
+  /* Sign up draws a name field, a consent row and -- from the first keystroke
+     -- a five-rule checklist that Log in does not, about 220px more. Padding
+     alone cannot absorb that, so the rhythm between the controls closes up as
+     well. Margins and gaps only: the 42px control and the 46px submit are the
+     reference's contract and a field that shrinks with the window is a
+     different control, not a tighter one. */
+  .auth__seg{margin-bottom:1rem}
+  .auth__sub{margin-bottom:0.875rem}
+  .auth__ssos{margin-bottom:0.6875rem}
+  .auth__divider{margin-bottom:0.75rem}
+  .auth__group{margin-bottom:0.5625rem}
+  .auth__group--pw{margin-bottom:0.4375rem}
+  .auth__label,.auth__labelrow{margin-bottom:0.3125rem}
+  .auth__strength{margin-bottom:0.6875rem}
+  .auth__consent{margin-bottom:0.75rem}
+  .auth__foot{margin-top:0.625rem}
+  .auth__alt{margin-top:0.875rem;padding-top:0.75rem}
 }
 @media (max-height:820px){
   .auth{--auth-inset:0rem;--auth-pad:1.25rem}

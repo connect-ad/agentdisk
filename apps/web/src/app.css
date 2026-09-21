@@ -161,8 +161,12 @@
    margin, because a 660 sheet pinned to the top of a 900 viewport reads
    bottom-heavy on a real screen where it does not on the canvas.
    ========================================================================== */
-.auth{min-height:100vh;display:grid;place-items:center;
-  padding:var(--sheet-gap) 1.5rem;background:var(--paper)}
+/* --auth-inset is the gutter above and below the sheet, --auth-pad the panels'
+   own vertical padding. They are variables so the short-viewport step below
+   can tighten both from one place; every other value here is the reference's. */
+.auth{--auth-inset:var(--sheet-gap);--auth-pad:2.5rem;
+  min-height:100dvh;display:grid;place-items:center;
+  padding:var(--auth-inset) 1.5rem;background:var(--paper)}
 .auth__sheet{width:100%;max-width:68.75rem;background:var(--paper);
   border:1px solid var(--line);border-radius:var(--r-4);overflow:hidden;
   box-shadow:var(--sh-4)}
@@ -174,11 +178,27 @@
    what the viewport actually has; dvh rather than vh because a mobile URL bar
    otherwise counts height the page never gets. */
 .auth__split{display:grid;grid-template-columns:minmax(0,1fr) 30rem;
-  min-height:min(41.25rem,calc(100dvh - 2 * var(--sheet-gap) - 2px))}
+  min-height:min(41.25rem,calc(100dvh - 2 * var(--auth-inset) - 2px))}
+
+/* The reference's canvas is taller than a real laptop's content area. Log in
+   draws about 793px of controls, so at the reference's 2.5rem panel padding
+   and 2.25rem gutter the sheet asks for ~985px -- and a 1920x1080 Chrome with
+   a bookmarks bar offers about 915. The floor above cannot help, because the
+   content exceeds it; the only honest lever is the whitespace around it. Two
+   steps rather than a fluid clamp, so the roomy spacing survives intact on a
+   screen that can afford it instead of being eroded on every screen. The px
+   are real px: a media query resolves rem against the initial 16, not this
+   document's 125% root, so writing them in rem here would be a lie. */
+@media (max-height:1000px){
+  .auth{--auth-inset:1rem;--auth-pad:1.5rem}
+}
+@media (max-height:820px){
+  .auth{--auth-inset:0rem;--auth-pad:1.25rem}
+}
 
 /* --- the brand panel --- */
 .auth__brandpanel{background:var(--surf2);border-right:1px solid var(--bd);
-  padding:2.5rem 2.375rem;display:flex;flex-direction:column;
+  padding:var(--auth-pad) 2.375rem;display:flex;flex-direction:column;
   justify-content:space-between;gap:var(--sheet-gap)}
 .auth__brand{display:flex;align-items:center;gap:0.625rem;
   text-decoration:none;flex:none}
@@ -213,7 +233,7 @@
 
 /* --- the form panel --- */
 .auth__formpanel{display:flex;align-items:center;justify-content:center;
-  padding:2.5rem 2.75rem}
+  padding:var(--auth-pad) 2.75rem}
 .auth__form{width:100%;max-width:23.25rem;
   animation:ad-valuein var(--d-3) var(--ease) both}
 /* Only the Mobile frame shows a wordmark over the form; the desktop split

@@ -203,6 +203,22 @@ jobs:
             exit 1
           fi
 
+          # Two phases, and the first one is not optional.
+          #
+          # Cloudflare refuses to delete a queue while a Worker binds it:
+          #   "Cannot delete queue 'agentdisk-dev-jobs' that is still
+          #    referenced by a binding in a Worker."
+          # Terraform cannot order around that by itself, because the Worker's
+          # `bindings` are in `ignore_changes` - Wrangler owns the content, so
+          # the live bindings are not in the config Terraform is planning from.
+          # That is the documented Terraform-owns-EXISTENCE split working
+          # exactly as designed, and this is the one place it costs something.
+          #
+          # So the scripts (and the custom domains that depend on them) go
+          # first, in their own destroy. Once no Worker exists, nothing binds
+          # the queues and the full destroy has no ordering left to get wrong.
+          terraform destroy -auto-approve -input=false -lock-timeout=5m             -target=module.stack.cloudflare_workers_script.api             -target=module.stack.cloudflare_workers_script.web             -target=module.stack.cloudflare_workers_script.admin
+
           terraform destroy -auto-approve -input=false -lock-timeout=5m
 
   # From here it is the ordinary build, in the order deploy-all-dev.yml uses.

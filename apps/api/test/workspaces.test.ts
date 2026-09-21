@@ -98,6 +98,14 @@ beforeEach(async () => {
   await env.DB.prepare(
     `DELETE FROM audit_events WHERE workspace_id NOT LIKE 'ws_AAA%' AND workspace_id NOT LIKE 'ws_BBB%'`
   ).run();
+  // A deleted workspace's files now land in pending_deletions keyed by file_id,
+  // and `fill()` reuses the literal id 'file_DOOMED' for every test. Without
+  // this, the second test to delete a filled workspace hits the primary key,
+  // the whole cascade batch rolls back, and the workspace survives with its
+  // files still pointing at it - which is what then fails the DELETE below on
+  // a foreign key rather than on the thing under test.
+  await env.DB.prepare(`DELETE FROM pending_deletions`).run();
+  await env.DB.prepare(`DELETE FROM job_runs`).run();
   await env.DB.prepare(`DELETE FROM workspaces WHERE id NOT LIKE 'ws_AAA%' AND id NOT LIKE 'ws_BBB%'`).run();
   await env.DB.prepare(`DELETE FROM organizations WHERE id != ?`).bind(ORG_ID).run();
   await env.DB.prepare(`DELETE FROM users WHERE id != 'usr_TESTUSER'`).run();
@@ -357,7 +365,7 @@ describe('DELETE /v1/workspaces/:id', () => {
     expect(row).toBeNull();
   });
 
-  it('takes every row that pointed at it, and the R2 objects too', async () => {
+  it('takes every row that pointed at it, and queues the objects rather than deleting them', async () => {
     const token = await mint(OWNER_UID, 'wsowner@example.com');
     const { doomed } = await twoOwned(token);
     await fill(doomed);
@@ -371,7 +379,60 @@ describe('DELETE /v1/workspaces/:id', () => {
     }
     const tag = await env.DB.prepare(`SELECT tag FROM file_tags WHERE file_id = 'file_DOOMED'`).first();
     expect(tag).toBeNull();
-    expect(await env.FILES.get(`ws/${doomed}/file_DOOMED`)).toBeNull();
+
+    // The bytes deliberately survive the request. Every credential and every
+    // piece of metadata is gone above; what waits is the part nobody can
+    // observe, which is what makes this request bounded and atomic.
+    expect(await env.FILES.get(`ws/${doomed}/file_DOOMED`)).not.toBeNull();
+
+    const queued = await env.DB.prepare(
+      `SELECT r2_object_key, workspace_name, deleted_by, source, marked_at, due_at
+         FROM pending_deletions WHERE file_id = 'file_DOOMED'`
+    ).first<{
+      r2_object_key: string;
+      workspace_name: string;
+      deleted_by: string;
+      source: string;
+      marked_at: number;
+      due_at: number;
+    }>();
+
+    expect(queued).not.toBeNull();
+    expect(queued?.r2_object_key).toBe(`ws/${doomed}/file_DOOMED`);
+    // Denormalised on purpose - every row it names is gone, so a join is
+    // impossible rather than merely undesirable.
+    expect(queued?.workspace_name).toBe('Doomed');
+    expect(queued?.deleted_by).toBe(OWNER);
+    expect(queued?.source).toBe('workspace_delete');
+    expect((queued?.due_at ?? 0) - (queued?.marked_at ?? 0)).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+
+  it('clears the staff_actions pointer, which used to block the delete outright', async () => {
+    const token = await mint(OWNER_UID, 'wsowner@example.com');
+    const { doomed } = await twoOwned(token);
+    await fill(doomed);
+
+    // staff_actions.workspace_id references workspaces(id) with no ON DELETE
+    // clause, and nothing ever cleared it - so any workspace staff had touched
+    // could not be deleted at all. Guaranteed on the staff path, because a
+    // workspace must be suspended before staff may delete it.
+    await env.DB.prepare(
+      `INSERT INTO staff_actions
+         (id, actor_id, actor_email, actor_role, action, workspace_id, result, created_at)
+       VALUES ('sac_BLOCK', 'stf_X', 'staff@example.com', 'admin',
+               'workspace.suspend', ?, 'success', ?)`
+    ).bind(doomed, NOW).run();
+
+    const res = await SELF.fetch(`${URL_BASE}/v1/workspaces/${doomed}`, asDelete(token, { name: 'Doomed' }));
+    expect(res.status).toBe(200);
+
+    // The fleet log keeps the record that staff acted; it loses only the
+    // pointer to a workspace that no longer exists.
+    const action = await env.DB.prepare(
+      `SELECT workspace_id FROM staff_actions WHERE id = 'sac_BLOCK'`
+    ).first<{ workspace_id: string | null }>();
+    expect(action).not.toBeNull();
+    expect(action?.workspace_id).toBeNull();
   });
 
   it('leaves the sibling workspace and the org-wide membership alone', async () => {

@@ -39,6 +39,25 @@ const R2_DELETE_CHUNK = 1000;
 export interface CascadeResult {
   /** R2 objects removed. Zero for a sandbox whose files were merged away first. */
   objectsDeleted: number;
+  /** File rows queued for a later sweep instead of deleted here. */
+  objectsDeferred: number;
+}
+
+/** 12.4's window, and the one the privacy policy now quotes. */
+export const PENDING_DELETION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Deferring needs three things the workspace row is about to stop being able to
+ * supply, which is why they are required rather than looked up: the name and
+ * the org are read off a row this batch deletes, and the actor is never on it
+ * at all. Both call sites that defer already hold all three.
+ */
+export interface DeferOptions {
+  workspaceName: string;
+  orgId: string;
+  deletedBy: string;
+  now: number;
+  source?: string;
 }
 
 /**
@@ -52,22 +71,63 @@ export interface CascadeResult {
 export async function deleteWorkspaceCascade(
   db: D1Database,
   files: R2Bucket,
-  workspaceId: string
+  workspaceId: string,
+  defer?: DeferOptions
 ): Promise<CascadeResult> {
-  const objects = await db
-    .prepare(`SELECT r2_object_key FROM files WHERE workspace_id = ?`)
-    .bind(workspaceId)
-    .all<{ r2_object_key: string | null }>();
+  let keys: string[] = [];
+  let deferred = 0;
 
-  const keys = (objects.results ?? [])
-    .map(row => row.r2_object_key)
-    .filter((key): key is string => key !== null);
+  if (defer === undefined) {
+    const objects = await db
+      .prepare(`SELECT r2_object_key FROM files WHERE workspace_id = ?`)
+      .bind(workspaceId)
+      .all<{ r2_object_key: string | null }>();
 
-  for (let i = 0; i < keys.length; i += R2_DELETE_CHUNK) {
-    await files.delete(keys.slice(i, i + R2_DELETE_CHUNK));
+    keys = (objects.results ?? [])
+      .map(row => row.r2_object_key)
+      .filter((key): key is string => key !== null);
+
+    for (let i = 0; i < keys.length; i += R2_DELETE_CHUNK) {
+      await files.delete(keys.slice(i, i + R2_DELETE_CHUNK));
+    }
+  } else {
+    const counted = await db
+      .prepare(`SELECT COUNT(*) AS n FROM files WHERE workspace_id = ?`)
+      .bind(workspaceId)
+      .first<{ n: number }>();
+    deferred = counted?.n ?? 0;
   }
 
   await db.batch([
+    // The move, when deferring: one INSERT ... SELECT rather than a read into
+    // the Worker and a row-by-row insert, so it lands in this same batch and
+    // is atomic with the deletes below. A loop would not be, and a workspace
+    // whose rows were half moved when the request died is the one state
+    // nothing can clean up afterwards.
+    ...(defer === undefined
+      ? []
+      : [
+          db
+            .prepare(
+              `INSERT INTO pending_deletions
+                 (file_id, r2_object_key, size_bytes, path, name,
+                  workspace_id, workspace_name, org_id, deleted_by, source,
+                  marked_at, due_at, attempts, last_error)
+               SELECT f.id, f.r2_object_key, f.size_bytes, f.path, f.name,
+                      f.workspace_id, ?, ?, ?, ?,
+                      ?, ?, 0, NULL
+                 FROM files f WHERE f.workspace_id = ?`
+            )
+            .bind(
+              defer.workspaceName,
+              defer.orgId,
+              defer.deletedBy,
+              defer.source ?? "workspace_delete",
+              defer.now,
+              defer.now + PENDING_DELETION_TTL_MS,
+              workspaceId
+            ),
+        ]),
     db.prepare(`UPDATE files SET folder_id = NULL WHERE workspace_id = ?`).bind(workspaceId),
     db
       .prepare(`UPDATE folders SET parent_folder_id = NULL WHERE workspace_id = ?`)
@@ -88,10 +148,25 @@ export async function deleteWorkspaceCascade(
     // Only the rows naming this workspace. An org-wide membership has a NULL
     // workspace_id and grants the other workspaces on the same bill.
     db.prepare(`DELETE FROM memberships WHERE workspace_id = ?`).bind(workspaceId),
+    // staff_actions.workspace_id is TEXT REFERENCES workspaces(id) with no ON
+    // DELETE clause (migration 0011), and nothing ever cleared it - so any
+    // workspace a staff member had ever acted on could not be deleted at all:
+    // the DELETE below raised a foreign-key violation and the batch rolled
+    // back over objects this function had already removed from R2.
+    //
+    // Guaranteed to fire on the staff path, because a workspace must be
+    // suspended before staff may delete it and the suspension writes exactly
+    // such a row. NULL rather than DELETE is the point: the fleet log keeps
+    // the record that staff acted and loses only the pointer to a workspace
+    // that no longer exists, which is the case 0011's nullable column was
+    // written for.
+    db.prepare(`UPDATE staff_actions SET workspace_id = NULL WHERE workspace_id = ?`).bind(
+      workspaceId
+    ),
     db.prepare(`DELETE FROM workspaces WHERE id = ?`).bind(workspaceId),
   ]);
 
-  return { objectsDeleted: keys.length };
+  return { objectsDeleted: keys.length, objectsDeferred: deferred };
 }
 
 /**

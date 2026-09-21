@@ -208,13 +208,13 @@ export async function deleteWorkspaceForUser(
   // second query that could be got wrong.
   const workspace = await db
     .prepare(
-      `SELECT w.id, w.name
+      `SELECT w.id, w.name, w.org_id
          FROM workspaces w
          JOIN organizations o ON o.id = w.org_id
         WHERE w.id = ? AND o.owner_user_id = ?`
     )
     .bind(workspaceId, user.id)
-    .first<{ id: string; name: string }>();
+    .first<{ id: string; name: string; org_id: string }>();
 
   if (workspace === null) {
     // Deliberately not distinguishable from "that workspace does not exist".
@@ -240,7 +240,18 @@ export async function deleteWorkspaceForUser(
   // deleteWorkspaceCascade now, shared with the claim merge's cleanup and the
   // unclaimed sweep. The gates above are what make *this* caller a person's
   // deliberate act; the cascade itself is the same operation in all three.
-  const { objectsDeleted } = await deleteWorkspaceCascade(db, files, workspaceId);
+  // Deferred: the workspace, its keys, its agents, its webhooks and its share
+  // links are destroyed here and now, and only the bytes wait. That is not a
+  // softening of the promise - every surface a person or an agent could reach
+  // is gone when this returns. What defers is the part nobody can observe, and
+  // deferring it is what makes this request bounded, atomic and reversible-by-
+  // hand for seven days instead of unbounded, half-atomic and final.
+  const { objectsDeferred } = await deleteWorkspaceCascade(db, files, workspaceId, {
+    workspaceName: workspace.name,
+    orgId: workspace.org_id,
+    deletedBy: user.id,
+    now,
+  });
 
   // Logged, not audited, and that is forced rather than chosen: `audit_events`
   // is workspace-scoped by foreign key, so the one row describing a workspace's
@@ -252,12 +263,15 @@ export async function deleteWorkspaceForUser(
       message: "workspace deleted",
       workspaceId,
       userId: user.id,
-      files: objectsDeleted,
+      // What was queued, not what was destroyed - the objects are still there
+      // for seven days and saying "deleted" here would be the log lying about
+      // the one fact this change exists to create.
+      filesQueued: objectsDeferred,
       at: new Date(now).toISOString(),
     })
   );
 
-  return json({ id: workspaceId, deleted: true, files: objectsDeleted });
+  return json({ id: workspaceId, deleted: true, files: objectsDeferred });
 }
 
 const renameSchema = z.object({

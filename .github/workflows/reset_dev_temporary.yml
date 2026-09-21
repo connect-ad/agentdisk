@@ -204,6 +204,39 @@ jobs:
           fi
           echo "Bucket $R2_BUCKET is empty."
 
+      # Breaks a cycle Terraform cannot: Cloudflare refuses to delete a queue
+      # that a Worker binds, AND refuses to delete a Worker that consumes a
+      # queue. Neither side of that is in Terraform's plan - the binding and
+      # the consumer are both written by `wrangler deploy` - so the destroy
+      # deadlocks with each resource waiting on the other.
+      #
+      # Done with the API rather than `wrangler queues consumer remove` to keep
+      # this job free of an npm install it needs for nothing else.
+      - name: Unbind queue consumers
+        env:
+          CF_TOKEN: ${{ secrets.TERRAFORM_CF_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          prefix="${EXPECTED_D1_DATABASE%-db}"
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/queues"
+
+          queues="$(curl -sf -H "Authorization: Bearer $CF_TOKEN" "$api" || echo '{}')"
+
+          for name in "$prefix-jobs" "$prefix-jobs-dlq"; do
+            qid="$(echo "$queues" | jq -r --arg n "$name" '.result[]? | select(.queue_name==$n) | .queue_id')"
+            if [ -z "$qid" ] || [ "$qid" = "null" ]; then
+              echo "No queue $name; nothing to unbind."
+              continue
+            fi
+            consumers="$(curl -sf -H "Authorization: Bearer $CF_TOKEN" "$api/$qid/consumers" || echo '{}')"
+            echo "$consumers" | jq -r '.result[]?.consumer_id' | while read -r cid; do
+              [ -n "$cid" ] || continue
+              echo "Removing consumer $cid from $name"
+              # Tolerated: a consumer that has already gone is the state we want.
+              curl -sf -X DELETE -H "Authorization: Bearer $CF_TOKEN"                 "$api/$qid/consumers/$cid" > /dev/null || true
+            done
+          done
+
       - name: Destroy the dev stack
         working-directory: infra/terraform
         run: |

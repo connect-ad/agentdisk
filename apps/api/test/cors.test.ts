@@ -13,7 +13,7 @@ import { parseAllowedOrigins, resolveAllowedOrigin } from "../src/lib/cors";
 
 const URL_BASE = "https://api-dev.agentdisk.io";
 const DASHBOARD = "https://app-dev.agentdisk.io";
-const CONSOLE = "https://admin-dev.agentdisk.io";
+const CONSOLE = "https://securepanel-dev.agentdisk.io";
 
 function preflight(path: string, origin: string, method = "POST"): Promise<Response> {
   return SELF.fetch(`${URL_BASE}${path}`, {

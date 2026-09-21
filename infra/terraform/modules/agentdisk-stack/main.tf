@@ -21,7 +21,12 @@ locals {
   # a staff session cookie and a customer session cookie can then never share a
   # cookie scope, which makes "these cannot be confused" true at the browser
   # level rather than by naming convention.
-  admin_hostname = "admin${var.subdomain_suffix}.${var.root_domain}"
+  # "securepanel" rather than "admin": the hostname is the one part of this
+  # console that is guessable from the outside, and admin.<domain> is the first
+  # thing an untargeted scan tries. It buys no real protection on its own - the
+  # admin_users lookup on every request is the boundary - but there is no
+  # reason to advertise.
+  admin_hostname = "securepanel${var.subdomain_suffix}.${var.root_domain}"
 
   worker_name = "${local.prefix}-api"
 

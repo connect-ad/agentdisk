@@ -86,7 +86,7 @@ export default function FileBrowser() {
   const [sort, setSort] = useState('modified');
   const [selected, setSelected] = useState([]);
   const [detail, setDetail] = useState(null);
-  const [dialog, setDialog] = useState(null); // 'new-folder' | 'rename' | 'delete' | 'bulk-delete'
+  const [dialog, setDialog] = useState(null); // 'new-folder' | 'delete' | 'bulk-delete'
   const [confirmText, setConfirmText] = useState('');
   const [dragging, setDragging] = useState(false);
   const [toast, setToast] = useState(null);
@@ -485,7 +485,6 @@ export default function FileBrowser() {
             >
               Download
             </Button>
-            <Button size="sm" variant="ghost">Rename</Button>
             <Button size="sm" variant="danger-outline" onClick={() => setDialog('delete')}>Delete</Button>
           </>
         }
@@ -521,8 +520,6 @@ export default function FileBrowser() {
               </dd>
               <dt>Last modified</dt><dd>{detail.modified}</dd>
             </dl>
-            <Input label="Caption" placeholder="Add a caption…" />
-            <Input label="Tags" placeholder="Add tags…" hint="Comma-separated. Saved when you click away." />
           </>
         ) : null}
       </Drawer>

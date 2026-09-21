@@ -191,7 +191,11 @@ export default function ShareModal({ open, target, limits, onClose, onCreated, a
     }
   };
 
-  const upgradeHref = ws ? `/w/${ws}/settings` : '/pricing';
+  // One billing destination: the account menu's Billing page. /settings has
+  // held no plan control since the Billing tab moved out of it. With no
+  // workspace in hand there is nothing to bill, so this falls back to the
+  // public pricing page.
+  const upgradeHref = ws ? `/w/${ws}/billing` : '/pricing';
 
   return (
     <>

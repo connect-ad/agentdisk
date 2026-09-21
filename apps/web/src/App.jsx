@@ -158,7 +158,11 @@ function InfoStrip({ open, user, wsRoot }) {
           <span className="shell__stripitem">
             <span className="shell__striplabel">PLAN</span>
             <span className="shell__stripplan">{plan}</span>
-            <Link to={`${wsRoot}/settings`} className="shell__striplink">Change</Link>
+            {/* Billing is account-scoped, not workspace-scoped, and the
+                account menu's Billing entry is the single place it lives.
+                This used to point at /settings, which stopped holding a
+                Billing tab when that tab moved out — see routes/Settings.jsx. */}
+            <Link to={`${wsRoot}/billing`} className="shell__striplink">Change</Link>
           </span>
         </>
       ) : null}

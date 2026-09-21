@@ -260,6 +260,18 @@ export function createApiClient(getToken) {
     createFolder: (workspaceId, path) =>
       request('/v1/folders', { method: 'POST', body: { path }, workspaceId }),
 
+    /** Live share links only — a revoked or expired one is simply gone. */
+    listShares: workspaceId => request('/v1/shares', { workspaceId }),
+    /**
+     * `body` is `{fileId, expiresAt?}` or `{path, expiresAt?}` — exactly one of
+     * `fileId`/`path`, matching the API's own refusal of anything else.
+     * Resolves to `{ share, url }`.
+     */
+    createShare: (workspaceId, body) =>
+      request('/v1/shares', { method: 'POST', body, workspaceId }),
+    revokeShare: (workspaceId, shareId) =>
+      request(`/v1/shares/${shareId}`, { method: 'DELETE', workspaceId }),
+
     logoutEverywhere: workspaceId =>
       request('/v1/me/logout-all', { method: 'POST', workspaceId })
   };

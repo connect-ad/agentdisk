@@ -24,7 +24,7 @@ import {
 import { createAgent, deleteAgent, getAgent, listAgents, patchAgent } from "./routes/agents";
 import { createKey, listKeys, revokeKey } from "./routes/keys";
 import { handleMcp } from "./mcp/server";
-import { reapStrandedFiles, reconcileCounters } from "./jobs/purge";
+import { purgeExpiredShares, reapStrandedFiles, reconcileCounters } from "./jobs/purge";
 import { handleDelivery, isWebhookEvent } from "./jobs/webhook-delivery";
 import { listActivity } from "./routes/activity";
 import { handleStaffRoute } from "./routes/staff-router";
@@ -846,6 +846,26 @@ export default {
             JSON.stringify({
               level: "error",
               message: "staff purge run failed",
+              reason: err instanceof Error ? err.message : String(err),
+            })
+          );
+        }
+
+        // The fifth sweep. Housekeeping, not enforcement — an expired share
+        // link already serves nothing, because expiry is in
+        // `findShareByToken`'s WHERE clause. This only keeps the table from
+        // growing, so unlike the sweeps above it needs no enable flag: there
+        // is no destructive default to guard against.
+        try {
+          const sharesExpired = await purgeExpiredShares(env.DB, now);
+          console.log(
+            JSON.stringify({ level: "info", message: "share purge run", sharesExpired })
+          );
+        } catch (err) {
+          console.log(
+            JSON.stringify({
+              level: "error",
+              message: "share purge run failed",
               reason: err instanceof Error ? err.message : String(err),
             })
           );

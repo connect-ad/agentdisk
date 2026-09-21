@@ -202,6 +202,22 @@ export class StaffScopedAccess extends AuditedStaffAccess {
       // The reason is recorded because a suspension somebody has to explain
       // later is worth more than one they merely have to remember.
       await this.record(workspaceId, `staff.workspace.${status}`, { reason });
+
+      if (status !== "active") {
+        // Deleted by WORKSPACE, not by user - a suspended or deleted
+        // workspace must not keep serving public downloads no matter who
+        // created the link. Share links are deleted rather than marked,
+        // because there is no revoked state to mark - see migration 0016.
+        const sharesResult = await this.db
+          .prepare(`DELETE FROM share_links WHERE workspace_id = ?`)
+          .bind(workspaceId)
+          .run();
+        if ((sharesResult.meta.changes ?? 0) > 0) {
+          await this.record(workspaceId, "share.revoked", {
+            reason: status === "deleted" ? "workspace deleted" : "workspace suspended",
+          });
+        }
+      }
     }
     return changed;
   }
@@ -334,6 +350,22 @@ export class StaffScopedAccess extends AuditedStaffAccess {
     // by whom - not have it recorded only somewhere they cannot see.
     for (const row of affected.results ?? []) {
       await this.record(row.workspaceId, "staff.keys.revoked", { userId });
+    }
+
+    // Share links are deleted rather than marked, because there is no revoked
+    // state to mark — see migration 0016. A share link is anonymous and never
+    // reaches resolveVerifiedUser, so without this a link this person made
+    // stays publicly downloadable even after the credential that made it is
+    // gone.
+    const affectedShares = await this.db
+      .prepare(`SELECT DISTINCT workspace_id AS workspaceId FROM share_links WHERE created_by = ?`)
+      .bind(userId)
+      .all<{ workspaceId: string }>();
+
+    await this.db.prepare(`DELETE FROM share_links WHERE created_by = ?`).bind(userId).run();
+
+    for (const row of affectedShares.results ?? []) {
+      await this.record(row.workspaceId, "share.revoked", { reason: "keys revoked" });
     }
 
     return result.meta.changes ?? 0;

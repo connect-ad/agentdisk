@@ -120,6 +120,19 @@ export async function reapStrandedFiles(
   return result;
 }
 
+/**
+ * Housekeeping, not enforcement. An expired row already serves nothing —
+ * `findShareByToken` has the expiry in its WHERE clause, and the plan limit
+ * counts unexpired rows — so this only keeps the table from growing.
+ */
+export async function purgeExpiredShares(db: D1Database, now: number): Promise<number> {
+  const result = await db
+    .prepare(`DELETE FROM share_links WHERE expires_at <= ?`)
+    .bind(now)
+    .run();
+  return result.meta.changes ?? 0;
+}
+
 export interface ReconcileResult {
   workspacesChecked: number;
   workspacesCorrected: number;

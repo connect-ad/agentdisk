@@ -18,6 +18,9 @@ import {
   seedTwoWorkspaces,
   setWorkspaceStatus,
 } from "./helpers";
+import { newId } from "../src/lib/ids";
+import { purgeExpiredShares } from "../src/jobs/purge";
+import { asStaff } from "./staff-auth";
 
 const NOW = 1_780_000_000_000;
 const URL_BASE = "https://api-test.agentdisk.io";
@@ -276,6 +279,48 @@ describe("POST /v1/shares", () => {
   });
 });
 
+async function publicGet(path: string): Promise<Response> {
+  return SELF.fetch(`${URL_BASE}${path}`); // no Authorization header at all
+}
+
+/** Read the body once — a Response body cannot be consumed twice. */
+async function refusal(path: string): Promise<{ status: number; code: string; message: string }> {
+  const res = await publicGet(path);
+  const body = (await res.json()) as ErrorBody;
+  return { status: res.status, code: body.error.code, message: body.error.message };
+}
+
+/**
+ * Mint a share through the real authenticated route, then read the raw token
+ * straight out of D1.
+ *
+ * Parsing it out of the returned `url` would make every test here depend on
+ * DASHBOARD_URL being set in the test environment, which is configuration
+ * rather than anything under test.
+ */
+async function tokenOf(shareId: string): Promise<string> {
+  const row = await env.DB.prepare(`SELECT token FROM share_links WHERE id = ?`)
+    .bind(shareId)
+    .first<{ token: string }>();
+  return row?.token as string;
+}
+
+async function mint(body: Record<string, unknown>): Promise<string> {
+  const { token } = await seedApiKey({ ops: ["read", "share"] });
+  const res = await call("POST", "/v1/shares", token, body);
+  expect(res.status).toBe(201);
+  return tokenOf(((await res.json()) as { share: { id: string } }).share.id);
+}
+
+async function seedLiveFileShare(path: string, fileId = `fil_${path.length}X`): Promise<string> {
+  await seedFile(fileId, path);
+  return mint({ fileId });
+}
+
+async function seedLiveFolderShare(path: string): Promise<string> {
+  return mint({ path });
+}
+
 describe("the public share routes", () => {
   const NOTHING = 404;
 
@@ -285,48 +330,6 @@ describe("the public share routes", () => {
     await setWorkspaceStatus(WORKSPACE_A, "active");
     await env.DB.prepare(`UPDATE organizations SET plan = 'pro' WHERE id = 'org_TESTORG'`).run();
   });
-
-  async function publicGet(path: string): Promise<Response> {
-    return SELF.fetch(`${URL_BASE}${path}`); // no Authorization header at all
-  }
-
-  /** Read the body once — a Response body cannot be consumed twice. */
-  async function refusal(path: string): Promise<{ status: number; code: string; message: string }> {
-    const res = await publicGet(path);
-    const body = (await res.json()) as ErrorBody;
-    return { status: res.status, code: body.error.code, message: body.error.message };
-  }
-
-  /**
-   * Mint a share through the real authenticated route, then read the raw token
-   * straight out of D1.
-   *
-   * Parsing it out of the returned `url` would make every test here depend on
-   * DASHBOARD_URL being set in the test environment, which is configuration
-   * rather than anything under test.
-   */
-  async function tokenOf(shareId: string): Promise<string> {
-    const row = await env.DB.prepare(`SELECT token FROM share_links WHERE id = ?`)
-      .bind(shareId)
-      .first<{ token: string }>();
-    return row?.token as string;
-  }
-
-  async function mint(body: Record<string, unknown>): Promise<string> {
-    const { token } = await seedApiKey({ ops: ["read", "share"] });
-    const res = await call("POST", "/v1/shares", token, body);
-    expect(res.status).toBe(201);
-    return tokenOf(((await res.json()) as { share: { id: string } }).share.id);
-  }
-
-  async function seedLiveFileShare(path: string, fileId = `fil_${path.length}X`): Promise<string> {
-    await seedFile(fileId, path);
-    return mint({ fileId });
-  }
-
-  async function seedLiveFolderShare(path: string): Promise<string> {
-    return mint({ path });
-  }
 
   it("answers identically for expired, revoked and never-existed tokens", async () => {
     // Three different causes, one of them a token that was real until a moment
@@ -413,5 +416,159 @@ describe("the public share routes", () => {
     const token = await seedLiveFileShare("/susp.md", "fil_SUSP");
     await setWorkspaceStatus(WORKSPACE_A, "suspended");
     expect((await publicGet(`/v1/shares/open/${token}`)).status).toBe(NOTHING);
+  });
+});
+
+describe("links die with the account and the workspace", () => {
+  const STAFF_USER_ID = "usr_TESTUSER";
+  const STAFF_USER_EMAIL = "test@example.com";
+
+  beforeEach(async () => {
+    await seedTwoWorkspaces();
+    await resetTenantData();
+    await setWorkspaceStatus(WORKSPACE_A, "active");
+    // resetTenantData() does not touch `users` - a prior test in this block
+    // that soft-deletes usr_TESTUSER would otherwise leave every later test
+    // in the block operating on an already-deleted account.
+    await env.DB
+      .prepare(`UPDATE users SET deleted_at = NULL, disabled_at = NULL, session_revoked_after = 0 WHERE id = ?`)
+      .bind(STAFF_USER_ID)
+      .run();
+  });
+
+  async function publicGet(path: string): Promise<Response> {
+    return SELF.fetch(`${URL_BASE}${path}`); // no Authorization header at all
+  }
+
+  async function countShareRows(): Promise<number> {
+    const row = await env.DB.prepare(`SELECT COUNT(*) AS n FROM share_links`).first<{ n: number }>();
+    return row?.n ?? 0;
+  }
+
+  async function auditReasonFor(workspaceId: string, action: string): Promise<string | null> {
+    const row = await env.DB
+      .prepare(
+        `SELECT metadata FROM audit_events
+          WHERE workspace_id = ? AND action = ?
+          ORDER BY created_at DESC LIMIT 1`
+      )
+      .bind(workspaceId, action)
+      .first<{ metadata: string }>();
+    if (row === null) return null;
+    return (JSON.parse(row.metadata) as { reason?: string }).reason ?? null;
+  }
+
+  /** Calls the real staff route, not raw SQL — the point is the existing operation. */
+  async function deleteUserViaStaff(userId: string): Promise<Response> {
+    const token = await asStaff("super@agentdisk.io", "super_admin");
+    return SELF.fetch(`${URL_BASE}/v1/staff/users/${userId}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        reason: "test: account deletion cascades share links",
+        confirmEmail: STAFF_USER_EMAIL,
+        revokeKeys: true,
+      }),
+    });
+  }
+
+  /** Also the real staff route: suspension, not a hand-written UPDATE. */
+  async function suspendWorkspaceViaStaff(workspaceId: string): Promise<Response> {
+    const token = await asStaff("admin@agentdisk.io", "admin");
+    return SELF.fetch(`${URL_BASE}/v1/staff/workspaces/${workspaceId}/status`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ status: "suspended", reason: "test: suspension cascades share links" }),
+    });
+  }
+
+  it("deleting a user deletes the links they created", async () => {
+    const token = await seedLiveFileShare("/mine.md");
+
+    // Prove the link worked before the deletion, so the closing assertions
+    // prove the staff action removed it rather than proving it was never
+    // live in the first place.
+    expect((await publicGet(`/v1/shares/open/${token}`)).status).toBe(200);
+
+    const res = await deleteUserViaStaff(STAFF_USER_ID);
+    expect(res.status).toBe(200);
+
+    expect((await publicGet(`/v1/shares/open/${token}`)).status).toBe(404);
+    expect(await countShareRows()).toBe(0);
+  });
+
+  it("audits the bulk deletion caused by account deletion", async () => {
+    await seedLiveFileShare("/audited-delete.md");
+    expect(await countShareRows()).toBe(1);
+
+    await deleteUserViaStaff(STAFF_USER_ID);
+
+    expect(await auditReasonFor(WORKSPACE_A, "share.revoked")).toBe("account deleted");
+  });
+
+  it("suspending a workspace deletes every link in it, whoever made them", async () => {
+    const token = await seedLiveFileShare("/theirs.md");
+
+    // Same discipline: prove it is live before suspending, not merely gone
+    // after.
+    expect((await publicGet(`/v1/shares/open/${token}`)).status).toBe(200);
+
+    const res = await suspendWorkspaceViaStaff(WORKSPACE_A);
+    expect(res.status).toBe(200);
+
+    expect((await publicGet(`/v1/shares/open/${token}`)).status).toBe(404);
+    expect(await countShareRows()).toBe(0);
+  });
+
+  it("audits the bulk deletion caused by workspace suspension", async () => {
+    await seedLiveFileShare("/audited-suspend.md");
+    expect(await countShareRows()).toBe(1);
+
+    await suspendWorkspaceViaStaff(WORKSPACE_A);
+
+    expect(await auditReasonFor(WORKSPACE_A, "share.revoked")).toBe("workspace suspended");
+  });
+
+  it("does not touch another workspace's links when only one is suspended", async () => {
+    const tokenA = await seedLiveFileShare("/keepme.md", "fil_KEEPME");
+    await env.DB.prepare(`UPDATE organizations SET plan = 'pro' WHERE id = 'org_TESTORG'`).run();
+    await seedFile("fil_OTHERWS", "/other.md", WORKSPACE_B);
+    await new WorkspaceScopedShares(env.DB, WORKSPACE_B).create({
+      id: "shr_OTHERWS", kind: "file", fileId: "fil_OTHERWS", folderPath: null,
+      token: "tokotherws", tokenHash: "hashotherws",
+      expiresAt: NOW + 1000, createdBy: STAFF_USER_ID, now: NOW,
+    });
+    expect(await countShareRows()).toBe(2);
+
+    await suspendWorkspaceViaStaff(WORKSPACE_A);
+
+    expect((await publicGet(`/v1/shares/open/${tokenA}`)).status).toBe(404);
+    expect(await findShareByToken(env.DB, "hashotherws", NOW)).not.toBeNull();
+    expect(await countShareRows()).toBe(1);
+  });
+
+  it("the hourly purge removes expired rows", async () => {
+    await seedFile("fil_EXP", "/exp.md");
+    await new WorkspaceScopedShares(env.DB, WORKSPACE_A).create({
+      id: "shr_EXP", kind: "file", fileId: "fil_EXP", folderPath: null,
+      token: "expired", tokenHash: "hashexpired",
+      expiresAt: NOW - 1, createdBy: STAFF_USER_ID, now: NOW,
+    });
+
+    // Prove the row is there before the sweep, so the closing assertion
+    // proves the sweep removed it rather than proving it was never inserted.
+    expect(await countShareRows()).toBe(1);
+
+    const purged = await purgeExpiredShares(env.DB, NOW);
+    expect(purged).toBe(1);
+    expect(await countShareRows()).toBe(0);
+  });
+
+  it("the purge leaves a live, unexpired row alone", async () => {
+    const token = await seedLiveFileShare("/still-live.md", "fil_STILLLIVE");
+
+    const purged = await purgeExpiredShares(env.DB, NOW);
+    expect(purged).toBe(0);
+    expect((await publicGet(`/v1/shares/open/${token}`)).status).toBe(200);
   });
 });

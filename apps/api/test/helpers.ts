@@ -35,7 +35,7 @@ export async function seedTwoWorkspaces(): Promise<void> {
 
 /** Remove all workspace-owned rows between tests. */
 export async function resetTenantData(): Promise<void> {
-  for (const table of ["share_links", "file_tags", "files", "folders", "api_keys", "agents", "audit_events"]) {
+  for (const table of ["pending_deletions", "job_runs", "share_links", "file_tags", "files", "folders", "api_keys", "agents", "audit_events"]) {
     await env.DB.prepare(`DELETE FROM ${table}`).run();
   }
 }

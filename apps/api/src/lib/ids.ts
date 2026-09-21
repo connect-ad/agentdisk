@@ -74,6 +74,8 @@ export const ID_PREFIX = {
   webhook: "whk",
   /** A public share link. See migration 0016. */
   shareLink: "shr",
+  /** One recorded execution of a background job. See migration 0017. */
+  jobRun: "job",
   // Staff are not customers and never appear in a workspace's entity graph, but
   // they get the same sortable IDs: an investigation reads both trails.
   staffUser: "stf",

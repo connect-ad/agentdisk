@@ -18,7 +18,7 @@
 import { ApiError, forbidden } from "../lib/errors";
 import { normalizePath } from "../lib/paths";
 
-export const SCOPE_OPS = ["read", "write", "delete", "list", "keys:create"] as const;
+export const SCOPE_OPS = ["read", "write", "delete", "list", "keys:create", "share"] as const;
 export type ScopeOp = (typeof SCOPE_OPS)[number];
 
 export interface KeyScope {

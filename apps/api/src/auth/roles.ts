@@ -28,8 +28,16 @@ export function isMemberRole(value: string): value is MemberRole {
   return (MEMBER_ROLES as readonly string[]).includes(value);
 }
 
-const FULL_OPS: ScopeOp[] = ["read", "write", "delete", "list", "keys:create"];
-const READ_ONLY_OPS: ScopeOp[] = ["read", "list"];
+/**
+ * `share` is here because a dashboard owner acts through a role, not a key.
+ *
+ * This array is hardcoded rather than derived from SCOPE_OPS, which means
+ * adding an op to SCOPE_OPS silently leaves roles without it. That fails in
+ * the safe direction - nobody gains a capability by accident - but it is why
+ * this line has to be edited by hand every time, and why the test asserts it.
+ */
+export const FULL_OPS: ScopeOp[] = ["read", "write", "delete", "list", "keys:create", "share"];
+export const READ_ONLY_OPS: ScopeOp[] = ["read", "list"];
 
 /**
  * Path-prefix narrowing stays empty for every role. It exists for *agent* keys,

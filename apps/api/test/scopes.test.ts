@@ -5,9 +5,11 @@ import {
   isSubsetScope,
   normalizePrefix,
   parseScopes,
+  scopeAllowsOp,
   scopeAllowsPath,
   type KeyScope,
 } from "../src/auth/scopes";
+import { FULL_OPS, READ_ONLY_OPS } from "../src/auth/roles";
 import { ApiError } from "../src/lib/errors";
 
 const scope = (ops: KeyScope["ops"], pathPrefix = ""): KeyScope => ({ ops, pathPrefix });
@@ -133,5 +135,25 @@ describe("isSubsetScope", () => {
     const root = scope(["read", "write", "delete", "list"], "");
     expect(isSubsetScope(scope(["read"], "/anywhere"), root)).toBe(true);
     expect(isSubsetScope(scope(["read"], ""), root)).toBe(true);
+  });
+});
+
+describe("the share op", () => {
+  it("is accepted in a stored scopes blob", () => {
+    const parsed = parseScopes(JSON.stringify({ ops: ["read", "share"], pathPrefix: "/*" }));
+    expect(parsed.ops).toContain("share");
+  });
+
+  it("is not granted by a blob that does not ask for it", () => {
+    const parsed = parseScopes(JSON.stringify({ ops: ["read", "write"], pathPrefix: "/*" }));
+    expect(scopeAllowsOp(parsed, "share")).toBe(false);
+  });
+
+  it("is included in a full-access role, so a dashboard owner can share", () => {
+    expect(FULL_OPS).toContain("share");
+  });
+
+  it("is not included in a read-only role", () => {
+    expect(READ_ONLY_OPS).not.toContain("share");
   });
 });

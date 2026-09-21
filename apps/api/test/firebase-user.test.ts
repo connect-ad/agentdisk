@@ -225,7 +225,7 @@ describe("a signed-in human through the chain", () => {
     expect(body.workspaceId).toBe(WORKSPACE_A);
     expect(body.selfUserId).toBe(MEMBER_USER);
     // Every role manages files across the whole workspace (roles.ts).
-    expect(body.ops).toEqual(["read", "write", "delete", "list", "keys:create"]);
+    expect(body.ops).toEqual(["read", "write", "delete", "list", "keys:create", "share"]);
   });
 
   it("reaches a sibling workspace in the same org", async () => {

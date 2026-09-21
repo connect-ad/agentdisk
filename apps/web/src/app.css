@@ -153,20 +153,24 @@
    than in the rem tokens the rest of the file uses. A token is a fixed
    length, and a fixed length is exactly what cannot fit a 1366x768 laptop
    and a 1440p monitor with the same rule. Each em names the px it is at full
-   scale, where 1em is the 20px root; colour, weight, tracking, motion and
+   scale, where 1em is 25px; colour, weight, tracking, motion and
    the focus ring are still tokens, only lengths scale. Box sizes are set on
    boxes and text sizes on text, never both on one element, so a 42px control
    stays 2.1em of the sheet whatever its label's size is.
 
-   Full scale from 800px of viewport height, where 2.5dvh is the 20px root;
-   the 85% floor from 680px down. Sign up asks for ~650px of page at full
-   scale with nothing typed and ~710 with the strength chips open, so it
-   fits from about 600px of viewport height up. Below that the page scrolls
-   -- a 768p screen under several toolbars, or a browser zoomed in -- and no
-   readable sign-up form fits in less. dvh rather than vh because a mobile
-   URL bar otherwise counts height the page never gets.
+   The unit is 2.65dvh, clamped between 0.85rem and 1.25rem: full size, a
+   quarter over the 20px root, from about 945px of viewport height; the
+   floor from 640 down. Sign up with the strength chips open is ~35.5 units
+   of page, so at every height between the two the sheet takes ~94% of the
+   viewport and never more, and it fits from about 600px up. Below that the
+   page scrolls -- a 768p screen under several toolbars, or a browser zoomed
+   in -- and no readable sign-up form fits in less. The size and the fit are
+   one number: to make the sheet larger, raise the ceiling, and it will be
+   larger on every screen with the height to spare and unchanged on the ones
+   without. dvh rather than vh because a mobile URL bar otherwise counts
+   height the page never gets.
    ========================================================================== */
-.auth{font-size:clamp(0.85rem,2.5dvh,1rem);min-height:100dvh;display:grid;
+.auth{font-size:clamp(0.85rem,2.65dvh,1.25rem);min-height:100dvh;display:grid;
   place-items:center;padding:1em 1.2em;background:var(--paper);
   position:relative}
 

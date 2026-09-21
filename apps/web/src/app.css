@@ -166,8 +166,15 @@
 .auth__sheet{width:100%;max-width:68.75rem;background:var(--paper);
   border:1px solid var(--line);border-radius:var(--r-4);overflow:hidden;
   box-shadow:var(--sh-4)}
+/* 41.25rem is the reference's 660px sheet, but this app's root is 125% so the
+   rem is 20px and the floor is 825 real px — plus two --sheet-gap insets and
+   the sheet's own border, 917px before a single control is drawn. That is
+   taller than a 1536x864 laptop's viewport, so the screen scrolled on empty
+   brand-panel whitespace. The floor is kept as an aspiration and capped at
+   what the viewport actually has; dvh rather than vh because a mobile URL bar
+   otherwise counts height the page never gets. */
 .auth__split{display:grid;grid-template-columns:minmax(0,1fr) 30rem;
-  min-height:41.25rem}
+  min-height:min(41.25rem,calc(100dvh - 2 * var(--sheet-gap) - 2px))}
 
 /* --- the brand panel --- */
 .auth__brandpanel{background:var(--surf2);border-right:1px solid var(--bd);

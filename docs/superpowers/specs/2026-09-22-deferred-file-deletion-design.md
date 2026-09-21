@@ -35,22 +35,105 @@ Deferring the byte deletion fixes all three. It does not soften the customer
 promise, because the workspace, its keys and its entire surface really are gone
 immediately — what defers is only the part nobody can observe.
 
-## Scope: one caller, not four
+## Scope: which callers defer
 
-`deleteWorkspaceCascade` has four callers. Only the customer-initiated route
-defers:
+`deleteWorkspaceCascade` gains a `defer` flag, default `false`. Two callers
+pass `true`; two keep deleting bytes in the request, and one is deleted
+outright.
 
 | Caller | Defers? | Why |
 |---|---|---|
-| `routes/workspaces.ts` — a person deleting their workspace | **Yes** | The case this spec is about |
+| `routes/workspaces.ts` — a person deleting their workspace | **Yes** | The case this spec started from |
+| `routes/staff-console.ts` — staff deleting a workspace or an account | **Yes** | Now hard-deletes; see "Staff deletion becomes one path" |
 | `routes/claim.ts` — sandbox cleanup after a merge | No | Its files were already moved away; there is nothing to defer |
 | `jobs/sandbox-expiry.ts` — the unclaimed sweep | No | Already waited 7 days |
-| `jobs/staff-purge.ts` — the staff 30-day sweep | No | Already waited 30 days |
+| ~~`jobs/staff-purge.ts` — the staff 30-day sweep~~ | — | **Deleted.** Replaced by the 7-day byte window |
 
-Deferring in the last two would double an existing grace period, which is not a
-safety improvement — it is a second window nobody asked for and nobody is
-watching. `deleteWorkspaceCascade` therefore takes a `defer` flag, default
-`false`, and only the route passes `true`.
+Deferring in the sandbox sweep would double an existing grace period, which is
+not a safety improvement — it is a second window nobody asked for and nobody is
+watching.
+
+## Staff deletion becomes one path
+
+Staff deletion is currently soft: `staffDeleteUser` and `staffDeleteWorkspace`
+set a timestamp, and `jobs/staff-purge.ts` performs the real destruction 30
+days later behind `STAFF_PURGE_ENABLED`. That whole mechanism goes.
+
+**Staff deletion is now a hard delete**, and it reaches the bytes through the
+same chain as everything else:
+
+```
+staff deletes an account
+  → each workspace the account owns is hard-deleted
+    → deleteWorkspaceCascade(defer: true) per workspace
+      → credentials and metadata destroyed in the request
+      → file rows moved to pending_deletions
+        → swept after 7 days
+```
+
+One destruction mechanism in the product instead of two, one retention window
+instead of two, and one place where the bytes actually go. `staff-purge.ts`,
+`STAFF_PURGE_ENABLED`, `staffRestoreUser`, `staffRestoreWorkspace` and the
+`restorableUntil` field in the delete response are all deleted with it.
+
+### The user row survives as a tombstone
+
+This is the one thing the hard delete does **not** remove. `audit_events.actor_id`
+and `staff_actions.actor_id` both resolve to a `users` row, and
+`resolveVerifiedUser` reads `users.deleted_at` to refuse a Firebase ID token
+that was minted before the account went — those stay valid for up to an hour
+after Firebase disables the identity, so our own row is the only thing that can
+refuse them in that window.
+
+So the org, the workspaces, the keys, the files, the memberships and the share
+links are all destroyed; the `users` row stays with its email scrubbed,
+`deleted_at` set and `session_revoked_after` stamped. That is a tombstone, not
+a soft delete — nothing about the account is recoverable. The row is a name for
+the audit log to point at.
+
+### The pre-delete blockers stay, and matter more
+
+`deletionCheck` already refuses three cases: sole owner of an organization with
+other members, a live Stripe subscription, and an `organizations.owner_user_id`
+still aimed at the account. Under the old model those were checked 30 days
+before anything happened. Now they are the last gate before destruction, so all
+three are kept unchanged and none may become a warning.
+
+Colleagues are already protected by the first of them: every `memberships` row
+carries `org_id NOT NULL` even when it names a single workspace, so the
+`otherMembers` count includes per-workspace members and not just org-wide ones.
+A workspace cannot be destroyed out from under someone who was invited to it.
+
+The live-billing check also stops being a skip in a cron job and becomes purely
+a refusal in the request, which is where it belonged.
+
+### Suspension stays, and becomes the only reversible step
+
+A workspace must still be suspended before staff can delete it. Suspension is
+instant and reversible and it is what gives a customer the chance to notice.
+With restore gone it is the only reversible step left in the sequence, so it is
+load-bearing rather than a formality.
+
+### Bounded cascades
+
+Deleting an account runs one cascade per workspace it owns, in a single
+request. Deferring the R2 work makes each one D1-only and far cheaper than
+today, but the count is still unbounded. The delete refuses above
+`MAX_CASCADE_WORKSPACES` (20) with a message naming the count, rather than
+timing out halfway through and leaving an account partly destroyed.
+
+### What this costs
+
+**Restore genuinely dies.** A staff member who deletes the wrong account has
+seven days on the *bytes* and no window at all on the workspace, its keys, its
+members or its folder structure. Accepted deliberately.
+
+### The privacy copy understates it
+
+`routes/Legal.jsx:218` promises a purge "within roughly 30 days". Seven days
+satisfies that, so nothing is breached — but the authoritative copy now
+understates what the product does, and Settings → Privacy summarises that page.
+Both are updated in the same pass. Legal.jsx wins where they disagree.
 
 ## What happens at the click
 
@@ -350,12 +433,12 @@ work follows. `test/workspaces.test.ts` asserts the shape and must be updated.
 
 ## Not built
 
-- Customer-facing restore. Impossible after a hard delete, as above.
-- Retrofitting `job_runs` onto the reaper, reconciler, sandbox sweep and staff
+- Restore, customer-facing or staff-facing. Impossible after a hard delete.
+- Retrofitting `job_runs` onto the reaper, reconciler, sandbox sweep and share
   purge. The table is shaped to accept them; wiring them is separate work.
 - A weekly cron trigger. The hourly tick with `due_at` eligibility strictly
   dominates it.
-- Any change to the three non-deferring callers.
+- Any change to the two non-deferring callers.
 
 ## Testing
 
@@ -371,6 +454,11 @@ work follows. `test/workspaces.test.ts` asserts the shape and must be updated.
   row written on a refusal as well as a success.
 - A regression test for the `staff_actions` FK: a workspace with a staff action
   against it deletes cleanly.
+- `test/staff-users.test.ts` — the account delete destroys every owned
+  workspace in the request and queues their files; the `users` row survives
+  scrubbed with `deleted_at` set; all three blockers still refuse; the restore
+  routes are gone, pinned at 404 the way the dead `POST /v1/staff/users` is;
+  the cascade cap refuses above 20 workspaces without destroying any.
 - Quota: after a workspace delete, `reconcileCounters` no longer counts those
   bytes against the org. This falls out of the workspace row being gone — org
   usage joins through `workspaces` — but it is the billing behaviour and it
@@ -384,3 +472,9 @@ work follows. `test/workspaces.test.ts` asserts the shape and must be updated.
 3. Set the flag in the dev Worker environment. Watch one real run in the Runs
    section.
 4. Prod never applies until dev has completed step 3 cleanly.
+
+`STAFF_PURGE_ENABLED` is removed from `Env` in the same change. It was never
+set in any environment, so nothing is being turned off — the variable and the
+job it gated are deleted together. `SANDBOX_EXPIRY_ENABLED` is untouched and
+stays `"false"` in both environments; that sweep is unrelated and still awaits
+its own window of candidate logs (`backlog/030`).

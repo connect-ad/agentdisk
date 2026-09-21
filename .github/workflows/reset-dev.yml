@@ -1,0 +1,227 @@
+name: Reset dev data
+
+# Empties the dev environment — every R2 object, every tenant row — and leaves
+# the schema, the staff accounts and the plan catalogue standing.
+#
+# TEMPORARY. Added for testing; delete this file and
+# `apps/api/scripts/reset-dev-data.sql` when that is done. Both are inert once
+# removed, which is exactly why this is a workflow and not a console button: a
+# button is a route, a role check, an audit action and a screen, all of it
+# shipped inside the prod Worker bundle and all of it needing to be unpicked
+# later. This is two files and a `git rm`.
+#
+# ── The guards, and why there are four ────────────────────────────────────
+#
+#   1. Dispatch only. No push, no schedule, no reusable-workflow call — so
+#      nothing can invoke it as a side effect of landing code.
+#   2. The `dev` GitHub Environment, whose protection rules apply here exactly
+#      as they do to a deploy.
+#   3. A typed confirmation: the D1 database name, checked against what
+#      Terraform actually built. Borrowed from `DELETE /v1/workspaces/:id`,
+#      where the confirmation belongs to the operation rather than to one
+#      client.
+#   4. A hard refusal of any workspace but `dev`, asserted after Terraform has
+#      reported the real names. `deploy-all-dev.yml` puts it best: a one-click
+#      "deploy everything to prod" is exactly the button that should not
+#      exist. Guard 3 alone would not stop a typo in the wrong environment;
+#      this one is structural.
+#
+# R2 goes before D1, matching `jobs/purge.ts` and `db/workspace-cascade.ts`:
+# the rows are the only record of which objects exist, so losing them first
+# orphans bytes nothing can ever find again.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type the dev D1 database name to confirm (e.g. agentdisk-dev)"
+        required: true
+        type: string
+
+# Never concurrent with itself, and never cancelled part-way: a half-finished
+# wipe leaves R2 objects whose rows are gone.
+concurrency:
+  group: reset-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  reset:
+    name: Reset dev
+    runs-on: ubuntu-latest
+    environment: dev
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      WORKSPACE: dev
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_STATE_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.TERRAFORM_CF_ACCESS_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CF_ACCOUNT_ID }}
+      TF_VAR_account_id: ${{ vars.CF_ACCOUNT_ID }}
+      TF_VAR_zone_id: ${{ vars.CF_ZONE_ID }}
+      TF_VAR_root_domain: ${{ vars.DOMAIN_NAME }}
+      TFSTATE_BUCKET: ${{ vars.TFSTATE_BUCKET }}
+      EXPECTED_D1_DATABASE: ${{ vars.D1_DATABASE }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ">= 1.11"
+          terraform_wrapper: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Read-only. `init` and `output` take no state lock and change nothing,
+      # which is the rule infra.yml sets: only infra.yml ever applies.
+      - name: Read Terraform outputs
+        working-directory: infra/terraform
+        run: |
+          set -euo pipefail
+          terraform init -input=false \
+            -backend-config="bucket=$TFSTATE_BUCKET" \
+            -backend-config="use_lockfile=true"
+          terraform workspace select "$WORKSPACE"
+
+          # Workspace selection is mutable CLI state, so re-assert it after
+          # selecting — the one way this layout can point dev intent at prod.
+          actual="$(terraform workspace show)"
+          if [ "$actual" != "$WORKSPACE" ]; then
+            echo "::error::Terraform is in workspace '$actual', expected '$WORKSPACE'."
+            exit 1
+          fi
+
+          d1_name="$(terraform output -raw d1_database_name)"
+          bucket="$(terraform output -raw r2_bucket_name)"
+          account="$(terraform output -raw account_id)"
+
+          echo "D1_NAME=$d1_name"    >> "$GITHUB_ENV"
+          echo "R2_BUCKET=$bucket"   >> "$GITHUB_ENV"
+          echo "R2_ACCOUNT=$account" >> "$GITHUB_ENV"
+
+          # The bucket credential, from the same place backend.yml takes it:
+          # Terraform owns the signing token when `manage_r2_signing_token` is
+          # on, and the R2_FILES_* environment secrets are the fallback when it
+          # is not. Preferring the output means this keeps working after a
+          # token rotation that nobody mirrored into GitHub.
+          #
+          # Masked before it can reach a log. `-raw` on an unset output exits
+          # non-zero, so both reads tolerate failure and leave the value empty
+          # for the purge step to fall back on.
+          r2_key="$(terraform output -raw r2_access_key_id 2>/dev/null || true)"
+          r2_secret="$(terraform output -raw r2_secret_access_key 2>/dev/null || true)"
+          if [ -n "$r2_key" ] && [ -n "$r2_secret" ]; then
+            echo "::add-mask::$r2_key"
+            echo "::add-mask::$r2_secret"
+            echo "TF_R2_KEY=$r2_key"       >> "$GITHUB_ENV"
+            echo "TF_R2_SECRET=$r2_secret" >> "$GITHUB_ENV"
+          fi
+
+      - name: Refuse anything that is not dev
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+
+          # Guard 4, structural. Terraform derives names from the workspace, so
+          # this is the infrastructure itself confirming what is about to be
+          # emptied — not a variable somebody set.
+          if [ "$D1_NAME" != "$EXPECTED_D1_DATABASE" ]; then
+            echo "::error::Terraform built D1 '$D1_NAME' but the dev environment expects '$EXPECTED_D1_DATABASE'."
+            exit 1
+          fi
+          case "$D1_NAME" in
+            *-dev) ;;
+            *) echo "::error::Refusing to reset '$D1_NAME': this workflow only ever touches a -dev database."; exit 1 ;;
+          esac
+          case "$R2_BUCKET" in
+            *-dev-files) ;;
+            *) echo "::error::Refusing to purge '$R2_BUCKET': this workflow only ever touches a -dev-files bucket."; exit 1 ;;
+          esac
+
+          # Guard 3, typed. Compared against what Terraform reported rather
+          # than against the input's own echo, so agreeing with yourself is not
+          # enough. Read from the environment, never interpolated into the
+          # script body, so the input cannot become shell.
+          if [ "$CONFIRM" != "$D1_NAME" ]; then
+            echo "::error::Confirmation did not match. Type '$D1_NAME' exactly."
+            exit 1
+          fi
+
+          echo "Confirmed: emptying $D1_NAME and $R2_BUCKET."
+
+      # R2 first. The rows are the only record of which objects exist.
+      - name: Purge the files bucket
+        env:
+          # Deliberately NOT the ambient AWS_* from the job env — those are
+          # R2_STATE_*, which unlock the Terraform state bucket. Confusing the
+          # two is the most dangerous mix-up in this repo, so the files
+          # credential is bound here, in the one step that needs it, and the
+          # state credential is shadowed out rather than left reachable.
+          SECRET_R2_KEY: ${{ secrets.R2_FILES_ACCESS_KEY_ID }}
+          SECRET_R2_SECRET: ${{ secrets.R2_FILES_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          set -euo pipefail
+
+          export AWS_ACCESS_KEY_ID="${TF_R2_KEY:-$SECRET_R2_KEY}"
+          export AWS_SECRET_ACCESS_KEY="${TF_R2_SECRET:-$SECRET_R2_SECRET}"
+
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+            echo "::error::No R2 credential for the files bucket - neither the Terraform output nor R2_FILES_ACCESS_KEY_ID/R2_FILES_SECRET_ACCESS_KEY is set. Refusing to wipe D1, because that would orphan every object in the bucket."
+            exit 1
+          fi
+
+          # Fails the run rather than warning. The rows are the only record of
+          # which objects exist, so emptying D1 after a failed purge leaves
+          # bytes nothing can ever find - and on a bucket nobody is watching,
+          # nothing would surface it.
+          aws s3 rm "s3://$R2_BUCKET" --recursive \
+            --endpoint-url "https://$R2_ACCOUNT.r2.cloudflarestorage.com"
+
+          remaining="$(aws s3 ls "s3://$R2_BUCKET" --recursive \
+            --endpoint-url "https://$R2_ACCOUNT.r2.cloudflarestorage.com" | wc -l)"
+          if [ "$remaining" != "0" ]; then
+            echo "::error::$remaining object(s) still in $R2_BUCKET after the purge. Not touching D1."
+            exit 1
+          fi
+          echo "Bucket $R2_BUCKET is empty."
+
+      - name: Install app dependencies
+        working-directory: apps/api
+        run: npm ci
+
+      - name: Wipe tenant rows
+        working-directory: apps/api
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute "$D1_NAME" --remote --env "$WORKSPACE" \
+            --file=scripts/reset-dev-data.sql
+
+      # Proves the thing actually happened rather than reporting that it did.
+      # Also proves what SURVIVED: a reset that silently emptied staff_users
+      # would lock everybody out of the console, and the first sign of it would
+      # be a failed login some time later.
+      - name: Verify
+        working-directory: apps/api
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute "$D1_NAME" --remote --env "$WORKSPACE" --json \
+            --command "SELECT
+                         (SELECT COUNT(*) FROM users)         AS users,
+                         (SELECT COUNT(*) FROM organizations) AS orgs,
+                         (SELECT COUNT(*) FROM workspaces)    AS workspaces,
+                         (SELECT COUNT(*) FROM files)         AS files,
+                         (SELECT COUNT(*) FROM staff_users)   AS staff_kept,
+                         (SELECT COUNT(*) FROM plans)         AS plans_kept" \
+            | tee "$RUNNER_TEMP/verify.json"
+
+          node scripts/check-reset.mjs "$RUNNER_TEMP/verify.json"

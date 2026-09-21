@@ -111,9 +111,21 @@ jobs:
             exit 1
           fi
 
-          d1_name="$(terraform output -raw d1_database_name)"
-          bucket="$(terraform output -raw r2_bucket_name)"
-          account="$(terraform output -raw account_id)"
+          # Tolerate a stack that is already part-way gone. A destroy that
+          # failed half-finished leaves outputs empty rather than absent, and
+          # re-running the reset is exactly what somebody does next - so the
+          # guards below have to be able to say "nothing to check" instead of
+          # refusing on a blank name.
+          d1_name="$(terraform output -raw d1_database_name 2>/dev/null || true)"
+          bucket="$(terraform output -raw r2_bucket_name 2>/dev/null || true)"
+          account="$(terraform output -raw account_id 2>/dev/null || true)"
+
+          if [ -n "$d1_name" ] && [ -n "$bucket" ]; then
+            echo "STACK_PRESENT=true" >> "$GITHUB_ENV"
+          else
+            echo "STACK_PRESENT=false" >> "$GITHUB_ENV"
+            echo "::warning::No D1/R2 outputs - the stack is already gone or part-destroyed. Skipping the name guards and the purge; the destroy below still runs to clear whatever is left."
+          fi
 
           echo "D1_NAME=$d1_name"    >> "$GITHUB_ENV"
           echo "R2_BUCKET=$bucket"   >> "$GITHUB_ENV"
@@ -132,6 +144,7 @@ jobs:
           fi
 
       - name: Refuse anything that is not dev
+        if: env.STACK_PRESENT == 'true'
         run: |
           set -euo pipefail
 
@@ -163,7 +176,9 @@ jobs:
 
           echo "Confirmed: destroying $D1_NAME and $R2_BUCKET in workspace $WORKSPACE."
 
+      # Skipped when there is no bucket left to empty. The destroy still runs.
       - name: Empty the files bucket
+        if: env.STACK_PRESENT == 'true'
         env:
           SECRET_R2_KEY: ${{ secrets.R2_FILES_ACCESS_KEY_ID }}
           SECRET_R2_SECRET: ${{ secrets.R2_FILES_SECRET_ACCESS_KEY }}

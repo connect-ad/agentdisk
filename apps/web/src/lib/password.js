@@ -46,16 +46,18 @@
  * The five requirements, in the order they are shown.
  *
  * `label` completes "Your password still needs …", so each one is a noun
- * phrase; that is also how it reads as a checklist item on its own.
+ * phrase; that is also how it reads in the Settings hint and the Firebase
+ * rejection. `short` is the same rule as a chip under the sign-up field, where
+ * five of them share one row and an article would be padding.
  */
 export const PASSWORD_RULES = {
   minLength: 8,
   requirements: [
-    { id: 'length', label: '8 characters or more', test: pw => pw.length >= 8 },
-    { id: 'upper', label: 'an uppercase letter', test: pw => /[A-Z]/.test(pw) },
-    { id: 'lower', label: 'a lowercase letter', test: pw => /[a-z]/.test(pw) },
-    { id: 'digit', label: 'a number', test: pw => /[0-9]/.test(pw) },
-    { id: 'symbol', label: 'a special character', test: pw => /[^A-Za-z0-9]/.test(pw) }
+    { id: 'length', label: '8 characters or more', short: '8+ characters', test: pw => pw.length >= 8 },
+    { id: 'upper', label: 'an uppercase letter', short: 'uppercase', test: pw => /[A-Z]/.test(pw) },
+    { id: 'lower', label: 'a lowercase letter', short: 'lowercase', test: pw => /[a-z]/.test(pw) },
+    { id: 'digit', label: 'a number', short: 'number', test: pw => /[0-9]/.test(pw) },
+    { id: 'symbol', label: 'a special character', short: 'special character', test: pw => /[^A-Za-z0-9]/.test(pw) }
   ]
 };
 

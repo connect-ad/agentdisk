@@ -3,135 +3,49 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Icon, Alert } from '../components/index.js';
 import { useAuth, describeAuthError } from '../lib/auth.jsx';
 import { PASSWORD_RULES, checkPassword, strengthOf } from '../lib/password.js';
-import { BASE_URL } from '../lib/api.js';
-import { FREE_SUMMARY } from '../lib/pricing.js';
 import Logo from '../components-local/Logo.jsx';
 
 /**
  * 8.3 Signup · 8.4 Email Verification · 8.5 Forgot Password ·
  * 8.6 Reset Password · 8.7 Login.
  *
- * Built to `AgentDisk Auth.dc.html`. The layout is the reference's: one sheet
- * split `minmax(0,1fr) 480px`, a brand panel on the fluid side and the form in
- * the fixed column, with a Sign up / Log in segment above the heading. The
- * controls are drawn in `app.css` under `.auth__*` rather than taken from the
- * vendored `Input` and `Button`, because the reference's 42px field with a
- * 9.5px mono micro-label is not a variant either component has — the same
- * reason `.mk__*` and `.err__*` exist beside the barrel.
+ * One card, centred, scaled to the viewport's height. This replaced the split
+ * sheet built to `AgentDisk Auth.dc.html` on 21 Sept 2026: the brand panel
+ * beside the form made the page taller than a laptop's content area, and its
+ * copy was a second, invented account of the product. The layout, its numbers
+ * and what was dropped are in
+ * `docs/superpowers/specs/2026-09-21-auth-centred-sheet-design.md`. The
+ * controls are drawn in `app.css` under `.auth__*`, in em of the sheet's own
+ * scale, rather than taken from the vendored `Input` and `Button`, which are
+ * fixed-size and could not follow it.
  *
- * ---------------------------------------------------------------------------
- * Content, where the reference and this product disagree
+ * Two idioms carry the design. Every label sits in the edge of the thing it
+ * names — the field's name in the field's top border, "Forgot password?" in
+ * the same border at the other end — so no label costs a row. And the page's
+ * only decoration is a disk, the platter rings behind the card, because that
+ * is what the product is.
  *
- * The standing rule for this migration is layout from the design, content from
- * the codebase. The Auth file is a mockup and its copy invents freely, so most
- * of what follows is a correction rather than a preference:
- *
- *  - "5 GB and 50,000 requests a month" is not the free tier. The number is
- *    read from `lib/pricing.js` rather than restated here: this panel carried
- *    its own copy, and when the catalogue was finalised the pricing page moved
- *    and the signup page went on advertising the old allowance.
- *  - The login brand panel lists "3 workspaces · Kessler Labs, Nightshift
- *    Research, Personal sandbox", "4 agent identities", and a LAST SESSION card
- *    reading "15 Sep 2026, 18:22 UTC · Berlin, DE · Chrome 141". That is
- *    account data for somebody who is by definition not signed in yet. It is
- *    replaced with statements about how the product behaves, which are true
- *    before anyone authenticates.
- *  - "$ adk auth login" describes a CLI that does not exist.
- *  - "Sessions expire in 12 hours", "device-bound sessions", and "Keep me
- *    signed in for 30 days" describe a session model this app does not have.
- *    Firebase's default persistence keeps a browser signed in until it signs
- *    out, and the ID token refreshes hourly on its own. The checkbox is gone
- *    rather than stubbed — a control that reports a choice nobody honours is
- *    the `backlog/023` defect this migration keeps finding.
- *  - "After five failed attempts we pause sign-in for 15 minutes" is a number
- *    this client would be inventing. The lockout is Firebase's
- *    `auth/too-many-requests`, which does not publish a threshold.
- *  - "Continue with SAML SSO" is not built. Omitted for the same reason.
- *  - "Email me product updates, at most monthly" has nothing behind it.
- *
- * Two of the reference's states cannot be built as drawn at all:
- *
- *  - Its `login_error` frame puts "No account found for this address" under the
- *    email field. That is precisely the oracle doc 06 PART 16 forbids and
- *    `describeAuthError` exists to prevent: it answers "does this address have
- *    an account here" to anyone who asks. A failed sign-in marks both fields
- *    and shows one generic message, which is the same visual weight without
- *    the disclosure.
- *  - Its password error carries "Two attempts left", a counter this client does
- *    not have and could not honour.
- *
- * What the reference does not draw, and this keeps, because it is built and
- * doc 16 PART 30 names it: email-link sign-in, offered under the submit button.
- * ---------------------------------------------------------------------------
- *
- * Security behaviour the copy exists to enforce (doc 06 PART 16), unchanged:
+ * Security behaviour the copy exists to enforce (doc 06 PART 16), unchanged
+ * from the sheet before it:
  *  - Login failure is generic. Firebase distinguishes `user-not-found` from
- *    `wrong-password`; `describeAuthError` collapses them into one message.
+ *    `wrong-password`; `describeAuthError` collapses them into one message,
+ *    and a failed sign-in marks both fields rather than naming the address.
  *  - Forgot-password shows an identical success whether or not the account
- *    exists — so the screen never awaits a per-address answer.
+ *    exists, so the screen never awaits a per-address answer.
  *  - Repeated failure locks out with Firebase's own limit, not a number this
  *    client invented and could be talked out of.
- */
-
-/* ------------------------------ brand panels ------------------------------ */
-
-/**
- * The left half of the sheet. `points` is optional so the three screens the
- * reference has no artboard for — verify, forgot, reset — can fill the panel
- * with what is true of that moment instead of padding it out to three bullets.
+ *  - No "remember me", no session length, no attempts counter: each would be
+ *    a control reporting a choice nothing honours (`backlog/023`).
  *
- * The login footer prints the endpoints from `BASE_URL`, the value the API
- * client itself calls, so the two cannot disagree about which environment this
- * build talks to.
+ * Email-link sign-in is offered under the Log in button. It is built, and doc
+ * 16 PART 30 names it.
  */
-const BRAND = {
-  signup: {
-    head: 'A disk for every agent you run.',
-    body: 'Create a workspace, scope a key, and your agent has persistent storage in about four minutes.',
-    points: [
-      { title: 'Free tier, no card', note: FREE_SUMMARY },
-      { title: 'Scoped by default', note: 'Every key carries explicit operations and an optional path prefix' },
-      { title: 'MCP and REST', note: 'Ten MCP tools, or the same operations over HTTP' }
-    ],
-    footLabel: 'AFTER SIGN-UP',
-    footCode: '1  verify your email\n2  a workspace is made for you\n3  mint a key, connect your agent'
-  },
-  login: {
-    head: 'Welcome back.',
-    body: 'Your workspaces, keys and audit history are exactly where you left them.',
-    points: [
-      { title: 'Membership is per workspace', note: 'Being on one workspace of a bill does not put you in the one beside it' },
-      { title: 'Your agents stay connected', note: 'API keys are untouched by a browser sign-in, so nothing needs re-authenticating' },
-      { title: 'Every action names its actor', note: 'Activity separates what you did from what an agent did' }
-    ],
-    footLabel: 'ENDPOINTS',
-    footCode: `REST  ${BASE_URL}/v1\nMCP   ${BASE_URL}/mcp`
-  },
-  verify: {
-    head: 'One link to go.',
-    body: 'Verifying your address is what lets you accept a workspace invitation, so the link goes out the moment you sign up.',
-    footLabel: 'IF IT DOES NOT ARRIVE',
-    footCode: '1  check your spam folder\n2  wait out the 60s cooldown\n3  resend'
-  },
-  forgot: {
-    head: 'Reset it and carry on.',
-    body: 'Enter the address on your account. This page answers the same way whether or not an account exists, so it never confirms who has one.',
-    footLabel: 'WHY THE REPLY IS VAGUE',
-    footCode: 'a page that says\n"no such account" answers\nthat question for anyone'
-  },
-  reset: {
-    head: 'Set a new password.',
-    body: 'The link carries a one-time code. It is checked before this form appears, so an expired link says so now rather than after you have typed a password twice.',
-    footLabel: 'AFTER YOU SAVE',
-    footCode: 'you are sent to Log in\nand the old link stops\nworking'
-  }
-};
 
 /* --------------------------------- icons --------------------------------- */
 
-/* The reference's own marks. Drawn here rather than through `Icon` where its
-   stroke weight is the point: the 18px brand chip carries a 3px tick and the
-   field validity mark a 2.8px one, against the component's 1.6px default. */
+/* Drawn here rather than through `Icon` where the stroke weight is the point:
+   the consent box carries a 3.4px tick and the field validity mark a 2.8px
+   one, against the component's 1.6px default. */
 
 function Tick({ size = 11, width = 3 }) {
   return (
@@ -174,78 +88,65 @@ function GithubMark() {
 /* --------------------------------- shell --------------------------------- */
 
 /**
- * The sheet. `tab` names which half of the segment is current, or is left off
- * on the three screens the segment does not apply to — verify, forgot and
- * reset are not a choice between signing up and signing in.
- *
- * The segment's halves are links, not buttons: /signup and /login are separate
- * routes, so a click that only changed local state would leave the address bar
- * describing the wrong screen and break the back button.
+ * The platter. Five rings of a disk in the page's hairline colour and one
+ * sector of one ring in the accent, fixed behind the card and clipped to the
+ * viewport in `app.css`. Decoration, so hidden from assistive technology; no
+ * motion, so nothing for reduced-motion to switch off. `non-scaling-stroke`
+ * keeps the rings one pixel wide however large the viewport draws the box.
  */
-function AuthSheet({ brand, tab, children }) {
+function Platter() {
+  return (
+    <div className="auth__bg" aria-hidden="true">
+      <svg viewBox="0 0 1000 1000" focusable="false">
+        {[150, 230, 310, 390, 470].map(r => (
+          <circle key={r} className="auth__ring" cx="500" cy="500" r={r} vectorEffect="non-scaling-stroke" />
+        ))}
+        <path className="auth__arc" d="M780.9 368.9A310 310 0 0 1 768.5 655" vectorEffect="non-scaling-stroke" />
+      </svg>
+    </div>
+  );
+}
+
+/**
+ * The sheet. `tab` names which of Sign up / Log in is current, or is left off
+ * on the three screens the choice does not apply to — verify, forgot and reset
+ * are not a choice between signing up and signing in.
+ *
+ * The tabs are links, not buttons: /signup and /login are separate routes, so
+ * a click that only changed local state would leave the address bar describing
+ * the wrong screen and break the back button.
+ */
+function AuthSheet({ tab, children }) {
   return (
     <div className="auth">
+      <Platter />
       <div className="auth__sheet">
-        <div className="auth__split">
-          <div className="auth__brandpanel">
-            <Link to="/" className="auth__brand">
-              <Logo size={30} />
-              <span className="auth__wordmark">AgentDisk</span>
-            </Link>
+        <Link to="/" className="auth__brand">
+          <Logo size={24} />
+          <span className="auth__wordmark">AgentDisk</span>
+        </Link>
 
-            <div>
-              <h2 className="auth__brandhead">{brand.head}</h2>
-              <p className="auth__brandbody">{brand.body}</p>
-              {brand.points ? (
-                <div className="auth__points">
-                  {brand.points.map(p => (
-                    <div className="auth__point" key={p.title}>
-                      <span className="auth__pointmark"><Tick /></span>
-                      <span style={{ flex: 1, minWidth: 0 }}>
-                        <span className="auth__pointtitle">{p.title}</span>
-                        <span className="auth__pointnote">{p.note}</span>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="auth__brandfoot">
-              <div className="auth__brandfootlabel">{brand.footLabel}</div>
-              <div className="auth__brandfootcode">{brand.footCode}</div>
-            </div>
-          </div>
-
-          <div className="auth__formpanel">
-            <div className="auth__form">
-              <Link to="/" className="auth__brand auth__mobilebrand">
-                <Logo size={28} />
-                <span className="auth__wordmark">AgentDisk</span>
+        <div className="auth__card">
+          {tab ? (
+            <nav className="auth__tabs" aria-label="Sign up or log in">
+              <Link
+                to="/signup"
+                className={`auth__tab${tab === 'signup' ? ' is-on' : ''}`}
+                aria-current={tab === 'signup' ? 'page' : undefined}
+              >
+                Sign up
               </Link>
+              <Link
+                to="/login"
+                className={`auth__tab${tab === 'login' ? ' is-on' : ''}`}
+                aria-current={tab === 'login' ? 'page' : undefined}
+              >
+                Log in
+              </Link>
+            </nav>
+          ) : null}
 
-              {tab ? (
-                <div className="auth__seg">
-                  <Link
-                    to="/signup"
-                    className={`auth__segbtn${tab === 'signup' ? ' is-on' : ''}`}
-                    aria-current={tab === 'signup' ? 'page' : undefined}
-                  >
-                    Sign up
-                  </Link>
-                  <Link
-                    to="/login"
-                    className={`auth__segbtn${tab === 'login' ? ' is-on' : ''}`}
-                    aria-current={tab === 'login' ? 'page' : undefined}
-                  >
-                    Log in
-                  </Link>
-                </div>
-              ) : null}
-
-              {children}
-            </div>
-          </div>
+          {children}
         </div>
       </div>
     </div>
@@ -254,15 +155,19 @@ function AuthSheet({ brand, tab, children }) {
 
 function Head({ title, sub }) {
   return (
-    <>
+    <div className="auth__head">
       <h1 className="auth__h1">{title}</h1>
       {sub ? <p className="auth__sub">{sub}</p> : null}
-    </>
+    </div>
   );
 }
 
 /**
- * The reference's field: a mono micro-label over a 42px row.
+ * A 42px control with its name in its top edge. The label is absolutely
+ * positioned over the border on a slip of the card's background, so it costs
+ * no row; `labelExtra` — Log in's "Forgot password?" — sits in the same edge at
+ * the other end. Both stay real `<label for>` / link elements, so a click on the
+ * name still focuses the field and a screen reader still reads it as the name.
  *
  * `error` draws the red edge and the message under it; `invalid` draws the
  * edge alone. The login form needs the second one — a failed sign-in marks the
@@ -272,14 +177,8 @@ function Field({ id, label, error, invalid, valid, trailing, children, labelExtr
   const bad = Boolean(error) || Boolean(invalid);
   return (
     <div className={`auth__group${compact ? ' auth__group--pw' : ''}`}>
-      {labelExtra ? (
-        <div className="auth__labelrow">
-          <label className="auth__label" htmlFor={id}>{label}</label>
-          {labelExtra}
-        </div>
-      ) : (
-        <label className="auth__label" htmlFor={id}>{label}</label>
-      )}
+      <label className="auth__label" htmlFor={id}>{label}</label>
+      {labelExtra ? <span className="auth__labelextra">{labelExtra}</span> : null}
       <div className={`auth__field${bad ? ' is-bad' : ''}`}>
         {children}
         {valid ? <span className="auth__fieldok"><Tick size={15} width={2.8} /></span> : null}
@@ -318,20 +217,25 @@ function Submit({ busy, busyText, children, disabled, gap }) {
       aria-busy={busy || undefined}
       disabled={busy || disabled}
     >
-      {busy ? <><span className="auth__spin" /> {busyText}</> : children}
+      {busy
+        ? <><span className="auth__spin" /><span className="auth__submittx">{busyText}</span></>
+        : <span className="auth__submittx">{children}</span>}
     </button>
   );
 }
 
 /**
- * The strength block, shared by signup and reset: one bar per rule met, and
- * under it the rules themselves, ticking as they are satisfied.
+ * The strength block, shared by signup and reset: one bar per rule met, the
+ * verdict in a word beside them, and under that the rules as a row of chips,
+ * each ticking as it is satisfied.
  *
- * The checklist renders from the first keystroke rather than on failure,
- * because the point is to be told the rules while typing instead of after
- * submitting — Firebase refuses a non-compliant password at `accounts:signUp`
- * whatever this form does, so a person who only learns the rules from the
- * rejection retypes the same password.
+ * Chips rather than a list because the list was three rows, and 139px under
+ * the password field is what stopped Sign up fitting a laptop's screen. The
+ * checklist renders from the first keystroke rather than on failure, because
+ * the point is to be told the rules while typing instead of after submitting —
+ * Firebase refuses a non-compliant password at `accounts:signUp` whatever this
+ * form does, so a person who only learns the rules from the rejection retypes
+ * the same password.
  */
 function Strength({ pw }) {
   const st = strengthOf(pw);
@@ -343,9 +247,6 @@ function Strength({ pw }) {
         {PASSWORD_RULES.requirements.map((rule, i) => (
           <span key={rule.id} className={`auth__bar${i < st.score ? ' is-on' : ''}`} />
         ))}
-      </div>
-      <div className="auth__strengthrow">
-        <span className="auth__strengthnote">{st.note}</span>
         {/* Never colour alone: the word carries the same meaning as the bars. */}
         <span
           className={`auth__strengthtag${st.tone === 'ok' ? '' : ` auth__strengthtag--${st.tone}`}`}
@@ -355,9 +256,9 @@ function Strength({ pw }) {
         </span>
       </div>
       {/* The gate, written out. `aria-live` is on the tag above rather than
-          here: announcing five list items on every keystroke would make the
-          field unusable with a screen reader, while the one-word verdict is
-          exactly the running commentary that helps. */}
+          here: announcing five chips on every keystroke would make the field
+          unusable with a screen reader, while the one-word verdict is exactly
+          the running commentary that helps. */}
       <ul className="auth__reqs" data-testid="pw-requirements">
         {PASSWORD_RULES.requirements.map(rule => {
           const ok = met.includes(rule);
@@ -365,9 +266,9 @@ function Strength({ pw }) {
             <li key={rule.id} className={`auth__req${ok ? ' is-met' : ''}`}>
               {/* A word, not only a tick and a colour. */}
               <span className="auth__reqmark" aria-hidden="true">
-                {ok ? <Tick size={11} width={3} /> : <span className="auth__reqdot" />}
+                {ok ? <Tick size={10} width={3.2} /> : <span className="auth__reqdot" />}
               </span>
-              <span>{rule.label}</span>
+              <span>{rule.short}</span>
               <span className="sr-only">{ok ? ' — met' : ' — still needed'}</span>
             </li>
           );
@@ -513,8 +414,8 @@ export function Signup() {
   };
 
   return (
-    <AuthSheet brand={BRAND.signup} tab="signup">
-      <Head title="Create your account" sub="Free forever on the starter tier. No card required." />
+    <AuthSheet tab="signup">
+      <Head title="Create your account" />
 
       {err ? (
         <div role="alert" style={{ marginBottom: 'var(--s-6)' }}>
@@ -580,7 +481,7 @@ export function Signup() {
             <label className="auth__consent">
               <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} />
               <span className="auth__check"><Tick width={3.4} /></span>
-              <span>
+              <span className="auth__consenttx">
                 I agree to the <Link to="/terms">terms of service</Link> and{' '}
                 <Link to="/privacy">privacy policy</Link>
               </span>
@@ -632,7 +533,7 @@ export function VerifyEmail() {
   };
 
   return (
-    <AuthSheet brand={BRAND.verify}>
+    <AuthSheet>
       <Head
         title="Check your inbox"
         sub={user?.email
@@ -659,10 +560,10 @@ export function VerifyEmail() {
       </div>
 
       <button type="button" className="auth__submit" disabled={cooldown > 0} onClick={resend}>
-        {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend email'}
+        <span className="auth__submittx">{cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend email'}</span>
       </button>
 
-      <Link to="/app" className="auth__ghost" style={{ display: 'block', textAlign: 'center' }}>
+      <Link to="/app" className="auth__ghost">
         Continue to the dashboard
       </Link>
 
@@ -704,7 +605,7 @@ export function ForgotPassword() {
 
   if (sent) {
     return (
-      <AuthSheet brand={BRAND.forgot}>
+      <AuthSheet>
         <Head title="Check your inbox" />
         {/* Deliberately non-committal: identical whether or not the account exists. */}
         <div role="status">
@@ -718,7 +619,7 @@ export function ForgotPassword() {
   }
 
   return (
-    <AuthSheet brand={BRAND.forgot}>
+    <AuthSheet>
       <Head
         title="Reset your password"
         sub="Enter the email on your account and we'll send a reset link."
@@ -782,7 +683,7 @@ export function ResetPassword() {
 
   if (checking) {
     return (
-      <AuthSheet brand={BRAND.reset}>
+      <AuthSheet>
         <Head title="Set a new password" />
         <p className="auth__foot" style={{ marginTop: 0 }}>Checking your link…</p>
       </AuthSheet>
@@ -791,13 +692,13 @@ export function ResetPassword() {
 
   if (!code || !valid) {
     return (
-      <AuthSheet brand={BRAND.reset}>
+      <AuthSheet>
         <Head title="Set a new password" />
         <div role="alert" style={{ marginBottom: 'var(--s-6)' }}>
           <Alert tone="danger" title="This reset link is invalid or has expired." />
         </div>
-        <Link to="/forgot-password" className="auth__submit" style={{ textDecoration: 'none' }}>
-          Request a new link
+        <Link to="/forgot-password" className="auth__submit">
+          <span className="auth__submittx">Request a new link</span>
         </Link>
         <Alt prompt="Know your password?" to="/login" label="Back to log in" />
       </AuthSheet>
@@ -826,7 +727,7 @@ export function ResetPassword() {
   };
 
   return (
-    <AuthSheet brand={BRAND.reset}>
+    <AuthSheet>
       <Head
         title="Set a new password"
         sub="This replaces the password on your account everywhere."
@@ -952,7 +853,7 @@ export function Login() {
 
   if (linkSent) {
     return (
-      <AuthSheet brand={BRAND.login} tab="login">
+      <AuthSheet tab="login">
         <Head title="Check your inbox" />
         <div role="status">
           <Alert tone="ok" title="Sign-in link sent">
@@ -970,8 +871,8 @@ export function Login() {
   const bad = Boolean(err);
 
   return (
-    <AuthSheet brand={BRAND.login} tab="login">
-      <Head title="Log in" sub="Logging in never charges your card." />
+    <AuthSheet tab="login">
+      <Head title="Log in" />
 
       {needsAddress ? (
         <div role="status" style={{ marginBottom: 'var(--s-6)' }}>

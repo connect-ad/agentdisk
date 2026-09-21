@@ -42,7 +42,7 @@ CREATE TABLE admin_actions (
   -- *at the time*, which a join to the current row would quietly overwrite.
   actor_id TEXT NOT NULL,
   actor_email TEXT NOT NULL,
-  -- 'support' | 'admin' | 'super_admin' | 'system'. The last one is not a admin
+  -- 'admin' | 'system'. The second is not an
   -- role and cannot log in - it is how scheduled work identifies itself, so
   -- that an expiry sweep is not recorded as a person.
   actor_role TEXT NOT NULL,

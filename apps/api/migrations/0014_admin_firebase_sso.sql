@@ -53,7 +53,7 @@ CREATE TABLE admin_users_new (
   -- to us, which is a silent authorisation gap rather than a cosmetic one.
   email TEXT NOT NULL UNIQUE,
 
-  -- 'support' | 'admin' | 'super_admin'. Read fresh on every request.
+  -- 'admin'. The only role; read fresh on every request.
   role TEXT NOT NULL,
 
   disabled_at INTEGER,
@@ -87,7 +87,11 @@ INSERT OR IGNORE INTO admin_users (id, email, role, disabled_at, last_login_at, 
 VALUES (
   'stf_seed_owner',
   'kernelv5@gmail.com',
-  'super_admin',
+  -- 'admin' is the only role there is. Seeding 'super_admin' here - which this
+  -- did until the roles collapsed - writes a value `isAdminRole` rejects, so
+  -- the one seeded account could not sign in to the console it exists to open.
+  -- A fresh environment would come up locked out of its own admin panel.
+  'admin',
   NULL,
   NULL,
   CAST(strftime('%s', 'now') AS INTEGER) * 1000,

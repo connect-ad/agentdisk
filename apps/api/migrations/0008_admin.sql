@@ -32,7 +32,8 @@ CREATE TABLE admin_users (
   -- memory at verification. A TOTP secret in plaintext makes the second factor
   -- worth exactly as much as the database it sits in.
   totp_secret TEXT NOT NULL,
-  -- 'support' | 'admin' | 'super_admin'
+  -- 'support' | 'admin' | 'super_admin' at the time; collapsed to 'admin'
+  -- alone by a later change. Left as written: this is a historical migration.
   role TEXT NOT NULL,
   disabled_at INTEGER,
   last_login_at INTEGER,

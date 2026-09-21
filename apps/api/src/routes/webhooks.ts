@@ -25,12 +25,18 @@ import { audit } from "../lib/audit";
 import type { AuthContext } from "../middleware/auth";
 import type { WebhookRow } from "../db/types";
 
-/** What a customer may subscribe to. Anything else is a typo, not a feature. */
+/**
+ * What a customer may subscribe to. Anything else is a typo, not a feature.
+ *
+ * No `file.restored`: deleting is permanent (12.5), so nothing can ever emit
+ * it. Removing it is a breaking change for any endpoint already subscribed to
+ * it, and the right one - a subscription that can never deliver is worse than
+ * a 400 telling somebody so while they are writing the integration.
+ */
 export const WEBHOOK_EVENTS = [
   "file.created",
   "file.updated",
   "file.deleted",
-  "file.restored",
   "folder.created",
   "folder.deleted",
 ] as const;

@@ -63,7 +63,7 @@ const TOOLS = [
   { name: 'create_folder', body: 'Create a folder and any missing parents', scope: 'WRITE' },
   { name: 'move_file', body: 'Move or rename — write at both ends', scope: 'WRITE' },
   { name: 'copy_file', body: 'Copy — read at the source, write at the target', scope: 'WRITE' },
-  { name: 'delete_file', body: 'Soft delete, recoverable for 24 hours', scope: 'DELETE' },
+  { name: 'delete_file', body: 'Permanently destroys the file. Not recoverable', scope: 'DELETE' },
 ];
 
 const TOC = [

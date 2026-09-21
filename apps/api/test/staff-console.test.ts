@@ -18,7 +18,7 @@
 import { SELF, env } from "cloudflare:test";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { asStaff, firebaseToken, installStaffJwks } from "./staff-auth";
-import { NOW, WORKSPACE_A, seedTwoWorkspaces } from "./helpers";
+import { NOW, WORKSPACE_A, WORKSPACE_B, seedTwoWorkspaces } from "./helpers";
 
 const URL_BASE = "https://api-dev.agentdisk.io";
 
@@ -344,6 +344,19 @@ describe("staff accounts", () => {
     expect(JSON.stringify(created)).not.toMatch(/password|totp|secret/i);
   });
 
+  it("refuses an admin the creation of one", async () => {
+    // Granting a role is the one thing only super_admin may do, and this is
+    // where that is proved now: it used to be asserted against
+    // `POST /v1/staff/users`, the pre-SSO provisioning endpoint, which has been
+    // removed. The rule outlived the route.
+    const res = await call("POST", "/v1/staff/accounts", admin, {
+      email: "escalation@agentdisk.io",
+      role: "super_admin",
+      reason,
+    });
+    expect(res.status).toBe(403);
+  });
+
   it("lets the newly granted address sign in, and not before", async () => {
     const theirToken = await firebaseToken({ email: "later@agentdisk.io" });
     expect((await call("GET", "/v1/staff/workspaces", theirToken)).status).toBe(401);
@@ -435,5 +448,104 @@ describe("the audit log", () => {
 
     const csv = await (await call("GET", "/v1/staff/audit/export", support)).text();
     expect(csv).toContain(`"'=cmd`);
+  });
+});
+
+/* ------------------------- the fleet list itself ------------------------- */
+
+describe("GET /v1/staff/workspaces", () => {
+  const reason = "a reason long enough to be one";
+
+  // The status test below seeds 60 filler workspaces to push the real ones off
+  // the first page. They must not survive into the tests after it, which assert
+  // against an unpaginated two-workspace fleet.
+  beforeEach(async () => {
+    await env.DB.prepare(`DELETE FROM workspaces WHERE id LIKE 'ws_FILLER%'`).run();
+  });
+
+  it("searches by name rather than failing", async () => {
+    // The search has never once succeeded: the query carried ESCAPE '\',
+    // which SQLite reads as a two-character escape expression and rejects, so
+    // every ?q= answered 500. Nothing in the suite passed a q at all, which is
+    // how a green run covered a feature that could not work.
+    const res = await call("GET", "/v1/staff/workspaces?q=Workspace%20A", support);
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as { workspaces: { name: string }[] };
+    expect(body.workspaces.map((w) => w.name)).toEqual(["Workspace A"]);
+  });
+
+  it("treats a LIKE wildcard in the search term as a literal", async () => {
+    // The escaping is the reason the ESCAPE clause is there at all; with the
+    // clause fixed, this is what it buys.
+    const res = await call("GET", "/v1/staff/workspaces?q=%25", support);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { workspaces: unknown[] }).workspaces).toEqual([]);
+  });
+
+  it("filters by status on the server, beyond the first page", async () => {
+    // The Suspended view used to fetch this list and filter it in the browser.
+    // With 60 newer workspaces ahead of it, the one suspended workspace fell
+    // outside the default 50 and the screen said "No suspended workspaces".
+    for (let i = 0; i < 60; i++) {
+      await env.DB.prepare(
+        `INSERT INTO workspaces (id, org_id, name, period_reset_at, created_at, updated_at)
+         VALUES (?, 'org_TESTORG', ?, ?, ?, ?)`
+      )
+        .bind(`ws_FILLER${String(i).padStart(19, "0")}`, `Filler ${i}`, NOW, NOW + 1000 + i, NOW)
+        .run();
+    }
+    await env.DB.prepare(`UPDATE workspaces SET status = 'suspended' WHERE id = ?`)
+      .bind(WORKSPACE_A)
+      .run();
+
+    const res = await call("GET", "/v1/staff/workspaces?status=suspended", support);
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as { workspaces: { id: string }[] };
+    expect(body.workspaces.map((w) => w.id)).toEqual([WORKSPACE_A]);
+  });
+
+  it("refuses an unrecognised status instead of answering the wider question", async () => {
+    const res = await call("GET", "/v1/staff/workspaces?status=banana", support);
+    expect(res.status).toBe(400);
+  });
+
+  it("reports the plan a workspace is actually on, override included", async () => {
+    // `o.plan` alone showed the organization's plan, so a workspace carrying an
+    // override displayed the plan it is NOT on - while resolveWorkspaceLimits
+    // enforced the one it is. The Usage tab's percentages were computed against
+    // the wrong plan for exactly these workspaces.
+    expect(
+      (
+        await call("PATCH", `/v1/staff/workspaces/${WORKSPACE_A}/plan-override`, admin, {
+          planId: "basic",
+          reason,
+        })
+      ).status
+    ).toBe(200);
+
+    const listed = (await (await call("GET", "/v1/staff/workspaces", support)).json()) as {
+      workspaces: { id: string; plan: string; planOverride: string | null }[];
+    };
+    const row = listed.workspaces.find((w) => w.id === WORKSPACE_A);
+    expect(row?.plan).toBe("basic");
+    expect(row?.planOverride).toBe("basic");
+
+    const detail = (await (
+      await call("GET", `/v1/staff/workspaces/${WORKSPACE_A}`, support)
+    ).json()) as { workspace: { plan: string; planOverride: string | null } };
+    expect(detail.workspace.plan).toBe("basic");
+    expect(detail.workspace.planOverride).toBe("basic");
+  });
+
+  it("leaves planOverride null for a workspace on its organization's plan", async () => {
+    // null and "the same value as the org" have to stay distinguishable, or the
+    // detail screen cannot say which of the two it is looking at.
+    const detail = (await (
+      await call("GET", `/v1/staff/workspaces/${WORKSPACE_B}`, support)
+    ).json()) as { workspace: { plan: string; planOverride: string | null } };
+    expect(detail.workspace.planOverride).toBeNull();
+    expect(detail.workspace.plan).toBe("free");
   });
 });

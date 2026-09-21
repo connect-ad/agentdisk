@@ -223,7 +223,8 @@ export const TOOLS: ToolDefinition[] = [
 
   {
     name: "delete_file",
-    description: "Delete a file. This is a soft delete and stays recoverable for 24 hours.",
+    description:
+      "Permanently delete a file. The contents are destroyed immediately and cannot be recovered.",
     op: "delete",
     inputSchema: {
       type: "object",

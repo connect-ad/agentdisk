@@ -77,12 +77,12 @@ interface CandidateRow {
  *
  * Ordered oldest-first so a backlog drains in the order it accumulated, rather
  * than starving the earliest abandoned workspaces forever - the same reasoning
- * `purgeExpiredFiles` gives for its own ordering.
+ * `reapStrandedFiles` gives for its own ordering.
  *
- * There is no grace period and no soft delete, and unlike a *file* delete there
- * is no restore window to respect: a sandbox never had soft-delete semantics to
- * begin with, and a workspace nobody claimed in a week has no owner to restore
- * it for. The claim link is the grace period.
+ * There is no grace period and nothing to undo, which is now what a file delete
+ * does too - this used to be the exception and is no longer. A workspace nobody
+ * claimed in a week has no owner to restore it for anyway; the claim link is
+ * the grace period.
  */
 export async function expireUnclaimedWorkspaces(
   db: D1Database,
@@ -183,7 +183,7 @@ export async function expireUnclaimedWorkspaces(
     } catch (err) {
       // One bad workspace must not stop the batch. It stays expired-but-present
       // and is picked up next run, which is correct for a transient R2 or D1
-      // failure - the same forgiveness `purgeExpiredFiles` extends per file.
+      // failure - the same forgiveness `reapStrandedFiles` extends per file.
       result.failed += 1;
       console.log(
         JSON.stringify({

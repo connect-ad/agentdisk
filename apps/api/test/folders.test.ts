@@ -162,22 +162,18 @@ describe("DELETE /v1/folders/:id", () => {
     expect(usage?.file_count).toBe(0);
   });
 
-  it("soft-deletes on a recursive delete, so the grace window still applies", async () => {
+  it("destroys the files on a recursive delete, exactly as a single delete does", async () => {
     const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
     const id = await makeFolder(token, "/docs");
     const fileId = await makeFile(token, "/docs/one.txt");
 
     await call("DELETE", `/v1/folders/${id}?recursive=true`, token);
 
-    const row = await env.DB.prepare(`SELECT status, deleted_at FROM files WHERE id = ?`)
-      .bind(fileId)
-      .first<{ status: string; deleted_at: number | null }>();
-    expect(row?.status).toBe("deleted");
-    expect(row?.deleted_at).not.toBe(null);
-
-    // Recoverable, exactly like a single delete - a recursive delete must not
-    // be the one destructive path with no undo.
-    expect((await call("POST", `/v1/files/${fileId}/restore`, token)).status).toBe(200);
+    // Nothing left for the reaper: the folder rows are gone, so a file left
+    // marked here would be unreachable and still billed until the next tick.
+    const row = await env.DB.prepare(`SELECT status FROM files WHERE id = ?`).bind(fileId).first();
+    expect(row).toBeNull();
+    expect(await env.FILES.head(objectKey(WORKSPACE_A, fileId))).toBeNull();
   });
 
   it("cannot delete another workspace's folder", async () => {

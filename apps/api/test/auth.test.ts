@@ -345,7 +345,6 @@ describe("an absent credential is 401 on every authenticated route", () => {
     ["DELETE", "/v1/files/fil_x"],
     ["GET", "/v1/files/fil_x/download"],
     ["POST", "/v1/files/fil_x/complete"],
-    ["POST", "/v1/files/fil_x/restore"],
     ["POST", "/v1/files/fil_x/move"],
     ["POST", "/v1/files/fil_x/copy"],
     ["GET", "/v1/folders"],

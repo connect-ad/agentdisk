@@ -1,20 +1,22 @@
 /**
- * Purge and reconciliation — 05 PART 12.5, 10.8.
+ * Reaping and reconciliation — 05 PART 12.5, 10.8.
  *
- * These close a real gap rather than guard a hypothetical one: nothing removed
- * soft-deleted R2 objects, so every deleted file was still occupying storage
- * this product pays for and no longer charges for. And the usage counters are
- * maintained incrementally, which means they drift, and a customer billed
+ * These close a real gap rather than guard a hypothetical one. A delete is
+ * three steps across two systems with no transaction between them, so a
+ * request can die holding a row marked `deleted` whose bytes are still in R2 —
+ * invisible to every read, paid for, charged to nobody. And the usage counters
+ * are maintained incrementally, which means they drift, and a customer billed
  * against a drifted counter is either overcharged or storing for free.
  *
- * The grace period is the part worth being careful about. Purging one minute
- * early destroys a file somebody could still have restored, and no test after
- * the fact brings it back.
+ * What the reaper must NOT do is take a row whose own request is still running.
+ * That is what REAP_AFTER_MS is for, and it is the one timing here worth being
+ * careful about — nothing is recoverable, so a row taken early is a request
+ * that fails after the file is already gone.
  */
 
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { purgeExpiredFiles, reconcileCounters, PURGE_GRACE_MS } from "../src/jobs/purge";
+import { reapStrandedFiles, reconcileCounters, REAP_AFTER_MS } from "../src/jobs/purge";
 import { NOW, WORKSPACE_A, WORKSPACE_B, seedTwoWorkspaces } from "./helpers";
 
 async function seedFile(options: {
@@ -62,22 +64,22 @@ beforeEach(async () => {
   ).run();
 });
 
-describe("purge", () => {
-  it("removes a file whose grace period has passed", async () => {
-    await seedFile({ id: "fil_OLD", status: "deleted", deletedAt: NOW - PURGE_GRACE_MS - 1000 });
+describe("reaping stranded files", () => {
+  it("removes a row left marked, and its object", async () => {
+    await seedFile({ id: "fil_OLD", status: "deleted", deletedAt: NOW - REAP_AFTER_MS - 1000 });
 
-    const result = await purgeExpiredFiles(env.DB, env.FILES, NOW);
+    const result = await reapStrandedFiles(env.DB, env.FILES, NOW);
     expect(result).toMatchObject({ examined: 1, rowsDeleted: 1, failed: 0 });
     expect(await fileExists("fil_OLD")).toBe(false);
     expect(await env.FILES.head(`tenant/${WORKSPACE_A}/fil_OLD`)).toBeNull();
   });
 
-  it("leaves a file still inside its grace period alone", async () => {
-    // Purging early destroys something somebody could still restore, and no
-    // amount of noticing afterwards brings it back.
-    await seedFile({ id: "fil_RECENT", status: "deleted", deletedAt: NOW - 60_000 });
+  it("leaves a row whose own delete may still be running", async () => {
+    // `deleteFile` marks, then awaits R2. Reaping inside that gap races the
+    // request for no gain, so the margin is respected rather than raced.
+    await seedFile({ id: "fil_RECENT", status: "deleted", deletedAt: NOW - 1_000 });
 
-    const result = await purgeExpiredFiles(env.DB, env.FILES, NOW);
+    const result = await reapStrandedFiles(env.DB, env.FILES, NOW);
     expect(result.examined).toBe(0);
     expect(await fileExists("fil_RECENT")).toBe(true);
     expect(await env.FILES.head(`tenant/${WORKSPACE_A}/fil_RECENT`)).not.toBeNull();
@@ -85,36 +87,36 @@ describe("purge", () => {
 
   it("does not touch active files", async () => {
     await seedFile({ id: "fil_LIVE", status: "active" });
-    await purgeExpiredFiles(env.DB, env.FILES, NOW);
+    await reapStrandedFiles(env.DB, env.FILES, NOW);
     expect(await fileExists("fil_LIVE")).toBe(true);
   });
 
-  it("purges across workspaces in one sweep", async () => {
+  it("reaps across workspaces in one sweep", async () => {
     // It is a platform job, not a tenant-scoped one - which is exactly why it
     // lives outside the workspace-scoped repositories.
-    await seedFile({ id: "fil_A", workspaceId: WORKSPACE_A, status: "deleted", deletedAt: NOW - PURGE_GRACE_MS - 1 });
-    await seedFile({ id: "fil_B", workspaceId: WORKSPACE_B, status: "deleted", deletedAt: NOW - PURGE_GRACE_MS - 1 });
+    await seedFile({ id: "fil_A", workspaceId: WORKSPACE_A, status: "deleted", deletedAt: NOW - REAP_AFTER_MS - 1 });
+    await seedFile({ id: "fil_B", workspaceId: WORKSPACE_B, status: "deleted", deletedAt: NOW - REAP_AFTER_MS - 1 });
 
-    const result = await purgeExpiredFiles(env.DB, env.FILES, NOW);
+    const result = await reapStrandedFiles(env.DB, env.FILES, NOW);
     expect(result.rowsDeleted).toBe(2);
   });
 
   it("treats an already-missing object as success", async () => {
     // A retry after a partial run must converge, not fail forever. The desired
     // state is "no object", and it already holds.
-    await seedFile({ id: "fil_GONE", status: "deleted", deletedAt: NOW - PURGE_GRACE_MS - 1 });
+    await seedFile({ id: "fil_GONE", status: "deleted", deletedAt: NOW - REAP_AFTER_MS - 1 });
     await env.FILES.delete(`tenant/${WORKSPACE_A}/fil_GONE`);
 
-    const result = await purgeExpiredFiles(env.DB, env.FILES, NOW);
+    const result = await reapStrandedFiles(env.DB, env.FILES, NOW);
     expect(result.failed).toBe(0);
     expect(await fileExists("fil_GONE")).toBe(false);
   });
 
   it("is bounded, so one run cannot exceed its budget", async () => {
     for (let i = 0; i < 5; i += 1) {
-      await seedFile({ id: `fil_M${i}`, status: "deleted", deletedAt: NOW - PURGE_GRACE_MS - 1 });
+      await seedFile({ id: `fil_M${i}`, status: "deleted", deletedAt: NOW - REAP_AFTER_MS - 1 });
     }
-    const result = await purgeExpiredFiles(env.DB, env.FILES, NOW, 2);
+    const result = await reapStrandedFiles(env.DB, env.FILES, NOW, 2);
     expect(result.examined).toBe(2);
     expect(result.rowsDeleted).toBe(2);
 
@@ -124,10 +126,10 @@ describe("purge", () => {
   });
 
   it("takes the oldest first, so a backlog drains in order", async () => {
-    await seedFile({ id: "fil_NEWER", status: "deleted", deletedAt: NOW - PURGE_GRACE_MS - 1000 });
-    await seedFile({ id: "fil_OLDER", status: "deleted", deletedAt: NOW - PURGE_GRACE_MS - 99_000 });
+    await seedFile({ id: "fil_NEWER", status: "deleted", deletedAt: NOW - REAP_AFTER_MS - 1000 });
+    await seedFile({ id: "fil_OLDER", status: "deleted", deletedAt: NOW - REAP_AFTER_MS - 99_000 });
 
-    await purgeExpiredFiles(env.DB, env.FILES, NOW, 1);
+    await reapStrandedFiles(env.DB, env.FILES, NOW, 1);
     expect(await fileExists("fil_OLDER")).toBe(false);
     expect(await fileExists("fil_NEWER")).toBe(true);
   });

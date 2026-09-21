@@ -153,11 +153,46 @@ export async function listFolders(ctx: AuthContext, request: Request): Promise<R
 }
 
 /**
+ * Finish off the files a recursive delete marked: objects first, then rows.
+ *
+ * Bounded per file rather than per request, deliberately. A folder holding
+ * thousands of files is one R2 call each, and a request that runs out of time
+ * halfway leaves the rest marked-but-not-destroyed - which is exactly the state
+ * `reapStrandedFiles` exists to finish. So a partial run is slow, never wrong.
+ *
+ * One failure never stops the rest. The file stays marked, invisible to every
+ * read, and the reaper picks it up; stopping here would abandon the remaining
+ * files in the same state for no gain.
+ */
+async function destroyMarked(
+  ctx: AuthContext,
+  marked: { id: string; r2_object_key: string | null }[]
+): Promise<void> {
+  for (const file of marked) {
+    try {
+      await ctx.storage.delete(file.id);
+      await ctx.db.files.hardDelete(file.id);
+    } catch (err) {
+      console.log(
+        JSON.stringify({
+          level: "warn",
+          message: "recursive delete left a file for the reaper",
+          fileId: file.id,
+          workspaceId: ctx.workspaceId,
+          reason: err instanceof Error ? err.message : String(err),
+        })
+      );
+    }
+  }
+}
+
+/**
  * DELETE /v1/folders/:id
  *
  * 13's table: "blocked (409) if non-empty unless ?recursive=true". Refusing by
  * default is the point - a folder delete that silently takes a subtree with it
- * is the destructive operation people report as data loss.
+ * is the destructive operation people report as data loss, and with `recursive`
+ * now destroying its files permanently that default matters more, not less.
  */
 export async function deleteFolder(ctx: AuthContext, request: Request, folderId: string): Promise<Response> {
   const row = await ctx.db.folders.getById(folderId);
@@ -179,13 +214,17 @@ export async function deleteFolder(ctx: AuthContext, request: Request, folderId:
     return json({ id: folderId, deleted: true, files: 0 });
   }
 
-  // Files are soft-deleted, exactly as a single delete would (10.7), so a
-  // recursive delete stays recoverable inside the grace window rather than
-  // being the one destructive path with no undo.
+  // Files are destroyed, exactly as a single delete would (12.5). The
+  // alternative - marking them and leaving the objects to a sweep - would make
+  // this the one delete in the product that is not finished when it returns,
+  // and the folder rows are gone either way, so the files would be unreachable
+  // but still billed to Cloudflare until the reaper ran.
   const removed = await ctx.db.folders.deleteRecursive(row.path, ctx.now);
   if (removed.files > 0 || removed.bytes > 0) {
     await ctx.db.counters.apply({ bytes: -removed.bytes, files: -removed.files }, ctx.now);
   }
+
+  await destroyMarked(ctx, removed.marked);
 
   return json({ id: folderId, deleted: true, files: removed.files, bytes: removed.bytes });
 }

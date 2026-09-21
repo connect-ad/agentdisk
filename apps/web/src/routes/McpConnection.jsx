@@ -59,7 +59,7 @@ const TOOLS = [
   { name: 'create_folder', op: 'write', description: 'Create a folder, including any missing parents along the way.' },
   { name: 'move_file', op: 'write', description: 'Move or rename a file. Write is required at both the source and the destination.' },
   { name: 'copy_file', op: 'write', description: 'Copy a file to a new path. The bytes never travel through the client.' },
-  { name: 'delete_file', op: 'delete', description: 'Soft-delete a file. Recoverable for 24 hours.' }
+  { name: 'delete_file', op: 'delete', description: 'Permanently delete a file. Not recoverable.' }
 ];
 
 /** An MCP tool call is audited as `mcp.<tool name>` (see mcp/server.ts). */

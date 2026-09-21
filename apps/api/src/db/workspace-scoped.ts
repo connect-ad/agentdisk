@@ -231,8 +231,16 @@ export class WorkspaceScopedFiles extends WorkspaceScoped {
     return (result.meta.changes ?? 0) > 0;
   }
 
-  /** Soft delete (10.7). The R2 object is purged later by the queue consumer. */
-  async softDelete(id: string, now: number): Promise<boolean> {
+  /**
+   * Mark a row deleted, as the first of the three steps a delete takes (12.5).
+   *
+   * Deleting is permanent, so this is not a state anybody is meant to sit in -
+   * it is the marker that makes the next two steps recoverable. Between here
+   * and `hardDelete` the row is already invisible to every read in the system,
+   * and if the R2 delete or the row delete fails in between, the marker is what
+   * `reapStrandedFiles` finds to finish the job on the next tick.
+   */
+  async markDeleted(id: string, now: number): Promise<boolean> {
     const result = await this.db
       .prepare(
         `UPDATE files SET status = 'deleted', deleted_at = ?, updated_at = ?
@@ -243,31 +251,28 @@ export class WorkspaceScopedFiles extends WorkspaceScoped {
     return (result.meta.changes ?? 0) > 0;
   }
 
-  /** Restore within the grace window (12.6). */
-  async restore(id: string, now: number): Promise<boolean> {
-    const result = await this.db
-      .prepare(
-        `UPDATE files SET status = 'active', deleted_at = NULL, updated_at = ?
-         WHERE workspace_id = ? AND id = ? AND deleted_at IS NOT NULL`
-      )
-      .bind(now, this.workspaceId, id)
-      .run();
-    return (result.meta.changes ?? 0) > 0;
-  }
-
   /**
-   * A soft-deleted row, for the restore path (12.6).
+   * Remove the row for good, once its object is gone.
    *
-   * Deliberately a separate method rather than a flag on getById. Every other
-   * read in the system must exclude deleted rows, and an `includeDeleted`
-   * parameter would make that a decision each caller can get wrong. This one
-   * returns *only* deleted rows, so reaching for it is always explicit.
+   * `file_tags.file_id` references `files(id)` with no ON DELETE action, so the
+   * tags go first or SQLite refuses the parent. `share_links.file_id` does
+   * carry ON DELETE CASCADE, which is deliberate rather than incidental: a
+   * destroyed file's share links must not outlive it pointing at nothing.
    */
-  async getDeletedById(id: string): Promise<FileRow | null> {
-    return this.db
-      .prepare(`SELECT * FROM files WHERE workspace_id = ? AND id = ? AND deleted_at IS NOT NULL`)
+  async hardDelete(id: string): Promise<boolean> {
+    // Scoped on the way in, so a file ID from another workspace deletes
+    // nothing - the same guarantee every other method here gives.
+    const owned = await this.db
+      .prepare(`SELECT 1 FROM files WHERE workspace_id = ? AND id = ?`)
       .bind(this.workspaceId, id)
-      .first<FileRow>();
+      .first<{ 1: number }>();
+    if (owned === null) return false;
+
+    await this.db.batch([
+      this.db.prepare(`DELETE FROM file_tags WHERE file_id = ?`).bind(id),
+      this.db.prepare(`DELETE FROM files WHERE workspace_id = ? AND id = ?`).bind(this.workspaceId, id),
+    ]);
+    return true;
   }
 
   async updateMetadata(
@@ -443,22 +448,39 @@ export class WorkspaceScopedFolders extends WorkspaceScoped {
     return folder !== null;
   }
 
-  /** Delete a folder and everything beneath it. Files are soft-deleted (10.7). */
-  async deleteRecursive(path: string, now: number): Promise<{ files: number; bytes: number }> {
+  /**
+   * Delete a folder and everything beneath it (12.5).
+   *
+   * This marks the files and destroys the folder rows; the caller finishes the
+   * files off, because destroying them means deleting R2 objects and this
+   * repository has no storage binding by design. The returned `marked` list is
+   * that handoff - ids and object keys, so the caller needs no second query.
+   */
+  async deleteRecursive(
+    path: string,
+    now: number
+  ): Promise<{ files: number; bytes: number; marked: { id: string; r2_object_key: string | null }[] }> {
     const like = `${escapeLikePattern(path)}/%`;
 
-    // Sum first: once the rows are marked deleted the sizes are still there,
-    // but doing it in one read keeps the caller from having to re-query to
-    // learn how much quota to release.
-    const totals = await this.db
+    // Read before marking, for two reasons now: the caller needs the quota to
+    // release, and it needs the object keys. After the UPDATE below these rows
+    // are still findable by `deleted_at`, but a request that dies between the
+    // two would leave them to the reaper rather than to a second query here.
+    const doomed = await this.db
       .prepare(
-        `SELECT COUNT(*) AS files, COALESCE(SUM(size_bytes), 0) AS bytes
+        `SELECT id, r2_object_key, size_bytes
            FROM files
           WHERE workspace_id = ? AND path LIKE ? ESCAPE '\\'
             AND deleted_at IS NULL AND status = 'active'`
       )
       .bind(this.workspaceId, like)
-      .first<{ files: number; bytes: number }>();
+      .all<{ id: string; r2_object_key: string | null; size_bytes: number }>();
+
+    const marked = doomed.results ?? [];
+    const totals = {
+      files: marked.length,
+      bytes: marked.reduce((sum, row) => sum + row.size_bytes, 0),
+    };
 
     // Order does not save us here: within one statement SQLite deletes rows in
     // an arbitrary order and foreign keys are checked immediately, so deleting
@@ -499,7 +521,11 @@ export class WorkspaceScopedFolders extends WorkspaceScoped {
         .bind(this.workspaceId, path, like),
     ]);
 
-    return { files: totals?.files ?? 0, bytes: totals?.bytes ?? 0 };
+    return {
+      files: totals.files,
+      bytes: totals.bytes,
+      marked: marked.map((row) => ({ id: row.id, r2_object_key: row.r2_object_key })),
+    };
   }
 }
 
@@ -567,18 +593,19 @@ export class WorkspaceScopedAgents extends WorkspaceScoped {
   }
 
   /**
-   * Soft delete, and it has to be.
+   * Soft delete, and still soft now that the keys go with it.
    *
-   * `api_keys.agent_id` references this row, so a hard DELETE fails the foreign
-   * key the moment the agent has ever held a key - and the two ways around that
-   * are both worse than keeping the row. Deleting the keys destroys the record
-   * of what the agent did; nulling their `agent_id` silently converts them from
-   * agent credentials into workspace-level ones, which is exactly the wrong
-   * direction for a credential to drift.
+   * The original reason was the foreign key: `api_keys.agent_id` references
+   * this row, so a hard DELETE failed the moment the agent had ever held a key.
+   * `deleteForAgent` clears that, and the route calls it first - but the row
+   * stays anyway, because an agent id is what `audit_events.actor_id` holds for
+   * every call its keys ever made. Remove the row and that history resolves to
+   * nothing; the one thing a deletion must not do is erase what the thing did
+   * before it was deleted.
    *
-   * Marking it deleted keeps every key's provenance intact, keeps the status
-   * check at authentication working (a deleted agent is not active, so its keys
-   * are refused), and takes the agent out of every list.
+   * Marking it deleted also keeps the status check at authentication working (a
+   * deleted agent is not active, so any key that somehow survived is refused)
+   * and takes the agent out of every list.
    */
   async delete(id: string): Promise<boolean> {
     const result = await this.db
@@ -648,20 +675,42 @@ export class WorkspaceScopedApiKeys extends WorkspaceScoped {
   }
 
   /**
-   * Revoke every live key belonging to one agent, in one statement.
+   * Delete every key belonging to one agent, live or not.
    *
-   * Used when an agent is deleted. Disabling an agent does not need this - the
-   * status check at authentication already stops its keys - but deleting one
-   * removes the row that check reads, so the keys must be revoked explicitly or
-   * they would outlive the thing they belonged to.
+   * Used when an agent is deleted. Revoking them was enough to stop them
+   * authenticating, but it left the rows in the key list under an agent that no
+   * longer exists - a row nobody can act on, naming an agent that resolves to
+   * nothing. Deleting the agent deletes its credentials with it.
+   *
+   * What is given up is the join from an old `audit_events` row back to the key
+   * that made it. The events themselves survive: `resource_id` is plain text
+   * with no foreign key, so the history still says which key id did what, it
+   * just cannot be resolved to a name any more.
    */
-  async revokeForAgent(agentId: string, now: number): Promise<number> {
-    const result = await this.db
+  async deleteForAgent(agentId: string): Promise<number> {
+    // The inbound foreign key first. A key minted by one of these keys carries
+    // its id in `parent_key_id`, and SQLite checks that reference immediately,
+    // so the DELETE below fails while any child points at a row it removes.
+    // The child is somebody's live credential and is kept: `parent_key_id` is
+    // provenance, not authority, and NULL is exactly what "minted by a key that
+    // no longer exists" looks like.
+    //
+    // The child is not constrained to this workspace, because a claim merge
+    // repoints a key row into another one and can leave the two ends apart.
+    // This still names no other tenant's row directly - it clears pointers at
+    // rows this workspace is deleting, and touches nothing else about them.
+    await this.db
       .prepare(
-        `UPDATE api_keys SET revoked_at = ?
-          WHERE workspace_id = ? AND agent_id = ? AND revoked_at IS NULL`
+        `UPDATE api_keys SET parent_key_id = NULL
+          WHERE parent_key_id IN
+            (SELECT id FROM api_keys WHERE workspace_id = ? AND agent_id = ?)`
       )
-      .bind(now, this.workspaceId, agentId)
+      .bind(this.workspaceId, agentId)
+      .run();
+
+    const result = await this.db
+      .prepare(`DELETE FROM api_keys WHERE workspace_id = ? AND agent_id = ?`)
+      .bind(this.workspaceId, agentId)
       .run();
     return result.meta.changes ?? 0;
   }

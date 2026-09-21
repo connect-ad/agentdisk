@@ -1,58 +1,72 @@
 /**
- * Purging soft-deleted files, and keeping the counters honest — 05 PART 12.5,
+ * Reaping stranded file rows, and keeping the counters honest — 05 PART 12.5,
  * 10.8.
  *
- * A delete marks the row and releases the quota immediately; the R2 object
- * survives so a restore is possible for 24 hours. Nothing removed those objects
- * afterwards, so every deleted file was still occupying real storage this
- * product was paying Cloudflare for and no longer charging anybody for. This is
- * the other half.
+ * Deleting is permanent and happens in the request: mark the row, delete the
+ * R2 object, delete the row. This job exists because those are three steps
+ * across two systems with no transaction between them, so a request can die
+ * after the first and leave a row marked `deleted` whose bytes are still there
+ * — invisible to every read, billed by Cloudflare, charged to nobody.
+ *
+ * It used to be the 24-hour grace period itself, back when a delete was soft
+ * and `POST /v1/files/:id/restore` could undo one. Both are gone; what survives
+ * is the half that cleans up, because the failure it cleans up after did not go
+ * anywhere.
  *
  * Two jobs, deliberately in one file because they exist for the same reason:
  * D1 and R2 are separate systems with no transaction between them, so they can
  * disagree, and both of these are about making them agree again.
  *
- * **Purge is idempotent and forgiving.** It deletes the object, then the row.
- * If the object is already gone — a retry, a manual cleanup — that is a
- * success, not an error: the desired state is "no object", and it holds.
+ * **The reaper is idempotent and forgiving.** It deletes the object, then the
+ * row. If the object is already gone — a retry, a request that got further than
+ * it looked — that is a success, not an error: the desired state is "no
+ * object", and it holds.
  *
  * **Reconciliation never trusts the counters it is checking.** It recomputes
  * from the rows themselves. A counter that drifted is exactly the value you
  * cannot use to detect that it drifted.
  */
 
-/** 12.5's grace period. A file deleted inside this window can still be restored. */
-export const PURGE_GRACE_MS = 24 * 60 * 60 * 1000;
+/**
+ * How long a marked row is left alone before the reaper takes it.
+ *
+ * Not a grace period — nothing is recoverable in this window and no API can
+ * bring a file back. It is a margin against reaping a row whose own request is
+ * still running: `deleteFile` marks, then awaits R2, and a reaper that deleted
+ * the row underneath it would race for no reason. A minute is far longer than
+ * that gap and far shorter than anything a customer could notice.
+ */
+export const REAP_AFTER_MS = 60 * 1000;
 
 /** Bounded so one run cannot exceed a Worker's CPU or wall-clock budget. */
-const PURGE_BATCH = 100;
+const REAP_BATCH = 100;
 
-export interface PurgeResult {
+export interface ReapResult {
   examined: number;
   objectsDeleted: number;
   rowsDeleted: number;
   failed: number;
 }
 
-interface PurgeCandidate {
+interface ReapCandidate {
   id: string;
   workspace_id: string;
   r2_object_key: string | null;
 }
 
 /**
- * Remove files whose grace period has passed.
+ * Finish off rows whose delete did not complete.
  *
  * Ordered oldest-first so a backlog drains in the order it accumulated rather
  * than starving the earliest deletions forever.
  */
-export async function purgeExpiredFiles(
+export async function reapStrandedFiles(
   db: D1Database,
   files: R2Bucket,
   now: number,
-  limit = PURGE_BATCH
-): Promise<PurgeResult> {
-  const cutoff = now - PURGE_GRACE_MS;
+  limit = REAP_BATCH
+): Promise<ReapResult> {
+  const cutoff = now - REAP_AFTER_MS;
 
   const candidates = await db
     .prepare(
@@ -63,10 +77,10 @@ export async function purgeExpiredFiles(
         LIMIT ?`
     )
     .bind(cutoff, limit)
-    .all<PurgeCandidate>();
+    .all<ReapCandidate>();
 
   const rows = candidates.results ?? [];
-  const result: PurgeResult = { examined: rows.length, objectsDeleted: 0, rowsDeleted: 0, failed: 0 };
+  const result: ReapResult = { examined: rows.length, objectsDeleted: 0, rowsDeleted: 0, failed: 0 };
 
   for (const row of rows) {
     try {
@@ -87,14 +101,14 @@ export async function purgeExpiredFiles(
       await db.prepare(`DELETE FROM files WHERE id = ?`).bind(row.id).run();
       result.rowsDeleted += 1;
     } catch (err) {
-      // One bad row must not stop the batch. It stays deleted-but-unpurged and
-      // is picked up next run, which is the correct behaviour for a transient
-      // R2 or D1 failure.
+      // One bad row must not stop the batch. It stays marked and is picked up
+      // next run, which is the correct behaviour for a transient R2 or D1
+      // failure.
       result.failed += 1;
       console.log(
         JSON.stringify({
           level: "warn",
-          message: "purge failed for one file",
+          message: "reap failed for one file",
           fileId: row.id,
           workspaceId: row.workspace_id,
           reason: err instanceof Error ? err.message : String(err),
@@ -120,9 +134,9 @@ export interface ReconcileResult {
  * overcharged or getting free storage. This is what makes that self-correcting
  * rather than permanent.
  *
- * Only `active` files count. A soft-deleted file already released its quota at
- * delete time (12.5), which is the customer-friendly choice: they stop paying
- * the moment they delete, not 24 hours later.
+ * Only `active` files count. A row still marked `deleted` released its quota
+ * when the delete was accepted (12.5) and is waiting on the reaper, so counting
+ * it would re-bill storage the customer has already destroyed.
  */
 export async function reconcileCounters(
   db: D1Database,

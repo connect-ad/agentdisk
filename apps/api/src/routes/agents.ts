@@ -165,17 +165,22 @@ export async function deleteAgent(
   const existing = await ctx.db.agents.getById(id);
   if (existing === null) throw new ApiError("NOT_FOUND", "No such agent.");
 
-  // Revoke first, then mark deleted. The other order leaves a window - however
-  // short - in which the agent is no longer active but its keys are not yet
-  // revoked. The status check would cover it, but relying on that ordering to
-  // be safe is a worse guarantee than not needing it.
-  const revoked = await ctx.db.apiKeys.revokeForAgent(id, ctx.now);
+  // The keys go with the agent, rather than being left revoked under an agent
+  // that no longer exists - a row the customer can see, cannot use and cannot
+  // clear. `deleteForAgent` takes every key the agent holds, including the ones
+  // already revoked or expired, since they name the same vanished agent.
+  //
+  // Keys first, then mark deleted. The other order leaves a window - however
+  // short - in which the agent is no longer active but its keys still
+  // authenticate. The status check would cover it, but relying on that ordering
+  // to be safe is a worse guarantee than not needing it.
+  const keysDeleted = await ctx.db.apiKeys.deleteForAgent(id);
   await ctx.db.agents.delete(id);
 
   audit(ctx, _request, "agent.deleted", {
     resourceType: "agent",
     resourceId: id,
-    metadata: { name: existing.name, keysRevoked: revoked },
+    metadata: { name: existing.name, keysDeleted },
   });
-  return json({ deleted: true, keysRevoked: revoked });
+  return json({ deleted: true, keysDeleted });
 }

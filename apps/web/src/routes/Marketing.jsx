@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { Button, Icon } from '../components/index.js';
 import { useAuth } from '../lib/auth.jsx';
 import { PLANS, OVERAGES, FREE_SUMMARY, COUNTING_NOTE } from '../lib/pricing.js';
 import Logo from '../components-local/Logo.jsx';
+import { SupportDialog } from '../components-local/SupportDialog.jsx';
 
 /**
  * 8.1 Landing · 8.2 Pricing.
@@ -107,7 +108,9 @@ const navLinkClass = ({ isActive }) =>
 
 export function Nav() {
   const { user } = useAuth();
+  const [supportOpen, setSupportOpen] = useState(false);
   return (
+    <>
     <nav className="mk__nav">
       <Link to="/" className="mk__brand">
         <Logo size={28} />
@@ -129,6 +132,20 @@ export function Nav() {
             </NavLink>
           ))}
         </span>
+        {/* Support sits immediately after Docs and outside the pill group, and
+            the two facts are one decision: it is the next thing in the row, but
+            it is not a page. It opens a dialog, has no route and no
+            aria-current, so giving it a tab pill would promise a navigation
+            that never happens -- and the group's 2px gap exists to make the
+            pills read as one set of pages.
+
+            It is a <button> because it performs an action. An <a> without an
+            href is not focusable and not announced as anything; one with href="#"
+            puts a fragment in the address bar and breaks the back button. */}
+        <button type="button" className="mk__navlink mk__navlink--action"
+          onClick={() => setSupportOpen(true)}>
+          Support
+        </button>
         {user ? (
           <Button size="sm" as={Link} to="/app">Open dashboard</Button>
         ) : (
@@ -139,6 +156,16 @@ export function Nav() {
         )}
       </span>
     </nav>
+    {/* Outside the <nav>, and this is not cosmetic. .mk__nav is sticky with
+        z-index 30, which makes it a stacking context: a scrim rendered inside
+        it is ranked *within* that context and cannot paint above anything the
+        bar itself sits below, whatever number it carries. That is the trap
+        docs/ui-layering.md §1 records against .wsx__menu, and the reason
+        FileBrowser.jsx keeps its dialogs as siblings of the drawer rather than
+        children. .mk is a static flex column, so out here the scrim's 80
+        competes globally as intended. */}
+    {supportOpen ? <SupportDialog onClose={() => setSupportOpen(false)} /> : null}
+    </>
   );
 }
 

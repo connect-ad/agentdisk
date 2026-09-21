@@ -12,7 +12,7 @@ import { previewShare, sharedDownloadUrl } from '../lib/api.js';
  * other public, token-in-URL page.
  *
  * **A refusal explains nothing, and that is the feature.** The API answers
- * expired, revoked, never-existed, suspended and soft-deleted with one
+ * expired, revoked, never-existed, suspended and deleted with one
  * identical 404 so that the route cannot be used as an oracle to discover which
  * tokens are real. A page that said "this link expired" would hand that oracle
  * straight back, so this one renders the same sentence the API gave it and

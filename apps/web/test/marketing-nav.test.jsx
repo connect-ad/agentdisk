@@ -13,16 +13,19 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
 
+// Signed out by default, as every test below the Support block expects. One
+// test flips it, because the Support item must not depend on being signed in.
 vi.mock('../src/lib/auth.jsx', () => ({
-  useAuth: () => ({ user: null, loading: false }),
+  useAuth: () => ({ user: globalThis.__navUser ?? null, loading: false }),
 }));
 
 const { Nav } = await import('../src/routes/Marketing.jsx');
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); globalThis.__navUser = null; });
 
 function renderAt(path) {
   render(
@@ -164,5 +167,87 @@ describe('the current page is drawn as a shape, not only a colour', () => {
     for (const b of blocksMentioning('.mk__navlink')) {
       expect(b.body, `${b.selector} underlines`).not.toContain('text-decoration:underline');
     }
+  });
+});
+
+/**
+ * Support, the fourth item in the row.
+ *
+ * It is the only thing in the nav that is not a navigation, and both halves of
+ * that matter: it must sit where a reader expects the next item, and it must
+ * not claim to be a page. The dialog it opens is shared with the cookie
+ * notice (components-local/SupportDialog.jsx), so the address exists once.
+ */
+describe('the Support item', () => {
+  const support = () => screen.getByRole('button', { name: 'Support' });
+
+  it('comes immediately after Docs', () => {
+    const { docs } = renderAt('/');
+    const following = docs.compareDocumentPosition(support()) & Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(Boolean(following)).toBe(true);
+  });
+
+  it('is a button and not a link, because it goes nowhere', () => {
+    renderAt('/');
+    expect(screen.queryByRole('link', { name: 'Support' })).toBeNull();
+    expect(support().getAttribute('type')).toBe('button');
+  });
+
+  it('is never the current page, on any page', () => {
+    for (const path of ['/', '/pricing', '/docs', '/terms']) {
+      renderAt(path);
+      expect(support().getAttribute('aria-current')).toBeNull();
+      expect(support().classList.contains('mk__navlink--on')).toBe(false);
+      cleanup();
+    }
+  });
+
+  it('is there signed in too, where the right-hand actions change', () => {
+    globalThis.__navUser = { uid: 'u_1' };
+    renderAt('/');
+    // `Button as={Link}` renders an anchor, so this is a link, not a button.
+    expect(screen.getByRole('link', { name: 'Open dashboard' })).not.toBeNull();
+    expect(support()).not.toBeNull();
+  });
+
+  it('opens the dialog, which carries the address and a mailto', async () => {
+    const user = userEvent.setup();
+    renderAt('/');
+    await user.click(support());
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.textContent).toMatch(/connect@agentdisk\.io/);
+    expect(screen.getByRole('link', { name: /Email connect@agentdisk\.io/ }).getAttribute('href'))
+      .toMatch(/^mailto:connect@agentdisk\.io/);
+  });
+
+  it('renders the dialog outside the sticky nav, or it could not paint above it', async () => {
+    const user = userEvent.setup();
+    renderAt('/');
+    await user.click(support());
+
+    const nav = document.querySelector('.mk__nav');
+    const dialog = screen.getByRole('dialog');
+    // .mk__nav is sticky with z-index 30 and is therefore a stacking context.
+    // A scrim inside it is capped by that context whatever its own z-index --
+    // the trap docs/ui-layering.md §1 records against .wsx__menu.
+    expect(nav.contains(dialog)).toBe(false);
+  });
+
+  it('closes again without navigating', async () => {
+    const user = userEvent.setup();
+    renderAt('/');
+    await user.click(support());
+    await user.click(screen.getByRole('button', { name: 'Not now' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('wears the link styling with the button chrome removed', () => {
+    const action = blocksMentioning('.mk__navlink--action');
+    expect(action.length, 'no rule for the Support item').toBeGreaterThan(0);
+    const body = action.map(b => b.body).join(';');
+    // A UA button background under a nav link reads as a broken control.
+    expect(body).toContain('background:none');
+    expect(body).toContain('cursor:pointer');
   });
 });

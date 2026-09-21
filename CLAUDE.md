@@ -18,7 +18,7 @@ task.
 | `apps/api/` | The Cloudflare Worker: REST + MCP, one deployable | Both surfaces are built and share one authorization chain. MCP tools call the REST handlers rather than reimplementing them, so the two cannot drift — live testing once disputed this for `pathPrefix`, and retesting confirmed the code: both surfaces refuse a path outside the key's prefix, see `backlog/029`. |
 | `infra/terraform/` | All infrastructure as code | One root config, one module, **one workspace per environment** (`dev`, `prod`). No `environments/` directories — see the workspace note below. |
 | `.github/workflows/` | CI and deployment pipelines | **Three areas, split by what they own: `infra`, `backend`, `frontend`.** Each is one reusable engine plus thin per-environment callers, so prod can never drift from dev. Path filters mean an `apps/web` push moves nothing else. `frontend.yml` is called once per app (dashboard, console). `ci.yml` gates PRs and covers all three apps. `deploy-all-dev.yml` is the ordered manual full deploy. |
-| `apps/admin/` | The internal staff console, at `admin-dev.agentdisk.io` | Its own origin on purpose: 14 PART 27.2 scopes the staff session cookie to it, so a staff and a customer credential cannot reach each other in a browser. Deliberately does not import `design-system/` — looking different from the customer dashboard is how a support engineer knows which one they are in; it carries its own palette in `src/app.css`, from the AgentDisk Admin design file, and those tokens must not be reconciled with the dashboard's. Nine screens under `src/screens/`, one shell, routing by the History API rather than a router library. |
+| `apps/admin/` | The internal staff console, at `admin-dev.agentdisk.io` | Its own origin, though no longer for the reason 14 PART 27.2 gives: that doc scopes a staff session cookie to this host so a staff and a customer credential cannot reach each other in a browser, and migration `0014_staff_firebase_sso.sql` deleted that cookie. Staff sign in with the same Firebase identity as customers and one token now reaches both surfaces; the separate origin survives as a way to tell the two apps apart, not as an isolation boundary. **The boundary is the `staff_users` lookup on every request** — see the rule below. Deliberately does not import `design-system/` — looking different from the customer dashboard is how a support engineer knows which one they are in; it carries its own palette in `src/app.css`, from the AgentDisk Admin design file, and those tokens must not be reconciled with the dashboard's. Nine screens under `src/screens/`, one shell, routing by the History API rather than a router library. |
 | `apps/web/` | The dashboard SPA, live at `app-dev.agentdisk.io` | `src/components/` is vendored from `design-system/`; `src/components/index.js` is generated. Hand-written code lives in `src/routes/` and `src/components-local/`. Two vendored files deliberately diverge, all awaiting the same upstream trip: `src/components/AppShell.jsx` for three reasons — `backlog/015`, `backlog/016` and `backlog/026` — `src/components/Modal/Modal.jsx` plus `src/components/Button/Button.jsx`, which together gain Enter-to-submit, the one part of the modal contract that cannot be done from `app.css` — `Button` has to default to `type="button"` or an untyped Cancel inside the new `<form>` submits the dialog it exists to dismiss (`backlog/031`); and `src/components/ApiKeyDisplay/ApiKeyDisplay.jsx`, whose `prefix` defaulted to `ad_live` — a prefix this API has never issued. Deployed as a Workers static-assets Worker, not Pages — see `backlog/013`. |
 | `Skill/` | Reusable how-to knowledge, `<N> <Name>.md` | Procedures, commands and their calibration. Not the specification — that is `docs/design/`. |
 | `backlog/` | Outstanding tasks, `NNN-<slug>.md` | **Four items: the billing module, the staff admin panel built on top of it, and two small ones left by the 19 Sept Mailjet swap.** The previous 31 were deleted 18 Sept 2026 and live at the tag `pre-billing-module`. Status lives in each file. |
@@ -152,16 +152,32 @@ were not touched. See `backlog/002`.
   destination, or a scoped key can write anywhere by moving a file it controls;
   copy needs read on the source, or it becomes a way to pull any file into your
   own scope and read it there.
-- **The first staff account cannot come from the API, and that is the design.**
-  `POST /v1/staff/users` returns 501 on purpose: an endpoint that mints a working
-  staff credential is an endpoint that can be tricked into minting one. Accounts
-  come from `apps/api/scripts/provision-staff.mjs`, which runs under Node and
-  therefore re-implements PBKDF2, AES-GCM and base32 TOTP against the same
-  formats as `src/staff/crypto.ts`. **Nothing at build time connects the two.**
-  A parameter change on either side would silently produce a staff account that
-  cannot log in and — because the endpoint is 501 — cannot be repaired through
-  the API either. `test/staff-crypto.test.ts` pins the script's literal output
-  against the Worker's verifiers so that divergence fails a build instead.
+- **A staff account is an email address in a table, not a credential.** Migration
+  `0014_staff_firebase_sso.sql` reversed 0008 on the owner's call: staff sign in
+  through Firebase like everybody else, and `staff_users` decides who is an
+  admin. `password_hash`, `totp_secret` and `staff_sessions` are gone, along with
+  `scripts/provision-staff.mjs`, `src/staff/crypto.ts` and
+  `test/staff-crypto.test.ts` — **an earlier version of this file described all
+  three as the provisioning path; they no longer exist.** The first administrator
+  is seeded by that migration, because under this scheme there is no credential
+  to mint and so nothing for a provisioning step to do. `apps/admin`'s login is
+  one Google button and nothing else. The property traded away is stated in the
+  migration's header and is worth reading before touching staff auth: one
+  Firebase token now reaches both the customer and the staff surface, and the
+  `staff_users` lookup is the only thing separating them. That is why the role
+  lives in the row and never in a Firebase custom claim — a claim is minted once
+  and goes stale in a token already issued, a row is read fresh every request and
+  a disable takes effect immediately. **Creating one is `POST
+  /v1/staff/accounts`** — super_admin only, audited as `staff.create`, and it
+  shows nothing once because nothing secret is made. The pre-SSO
+  `POST /v1/staff/users` is gone: it answered 501 to avoid minting a credential,
+  which stopped being a risk when there was no credential, and its message
+  instructed the caller to write a `password_hash` and a `totp_secret` into
+  dropped columns. `staff.test.ts` pins its absence at 404, and the rule it used
+  to carry — that an admin cannot create staff — moved to `staff-console.test.ts`
+  against the surviving route. **The rest of `/v1/staff/users` is customer-user
+  administration and is untouched**; the two are different things sharing a
+  prefix, which is how the dead route stayed hidden.
 - **One overlay ladder, and a dialog always outranks a drawer.**
   `docs/ui-layering.md` owns the scale; `app.css` defines it as `--z-*` tokens.
   The drawer was `80` and the modal scrim `60`, so a confirmation opened from
@@ -310,6 +326,28 @@ were not touched. See `backlog/002`.
   failed `disableUser` would leave a live identity refreshing tokens while the
   database said the account was gone. **Unlike revocation, a later `iat` is not
   a way back in**, which is why this needed its own column.
+- **The password policy is enforced in the Firebase console, and `lib/password.js`
+  is only its echo.** Nothing in this repository ever receives a password, so
+  nothing in this repository can enforce one: sign-up, reset and change all hand
+  it to Firebase, and a caller holding the public web API key reaches
+  `identitytoolkit`'s `accounts:signUp` without loading our bundle at all. The
+  rules live at Authentication → Settings → Password policy on **Require
+  enforcement** — currently **8 characters, an uppercase, a lowercase, a number
+  and a special character** — and `apps/web/src/lib/password.js` restates them so
+  a person is told the rules while typing instead of after a round-trip. **Change
+  one and you must change the other**, in a console nothing in CI can read. Two
+  things soften that: `auth/password-does-not-meet-requirements` is handled in
+  `describeAuthError`, so a tightened console still produces a message somebody
+  can act on; and the SDK's `validatePassword`, which would fetch the live policy
+  and make drift impossible, was considered and rejected — a network round-trip
+  on a field being typed into, failing awkwardly offline. **`forceUpgradeOnSignin`
+  is off**, so existing accounts are untouched until they next set a password;
+  the policy applies to every *set*, including reset and change, so login must
+  never gate on it or it would lock out the accounts the flag exists to spare.
+  All three forms call `checkPassword`, because the defect being fixed was three
+  screens disagreeing: signup and reset tested length only, Settings tested
+  nothing while promising twelve characters, and a strength meter scored by a
+  private fourth rule and let through whatever it concluded.
 - **Staff deletion sets a timestamp and stops.** Both delete endpoints are soft
   with a 30-day window; the cascade belongs to `purgeStaffDeleted`, which
   **defaults to reporting** and needs `STAFF_PURGE_ENABLED = "true"` to delete
@@ -459,9 +497,9 @@ live deployment rather than inferred from the code — see
 person can follow.
 
 ```
-apps/api    673 tests across 37 files · typecheck clean
-apps/web    172 tests · build clean
-apps/admin   27 tests · build clean · 70 KiB gzipped
+apps/api    675 tests across 37 files · typecheck clean
+apps/web    217 tests across 17 files · build clean
+apps/admin   33 tests · build clean · 70 KiB gzipped
 Worker      226 KiB gzipped, against Cloudflare's 1 MB limit
 ```
 

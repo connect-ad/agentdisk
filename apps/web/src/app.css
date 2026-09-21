@@ -475,6 +475,11 @@
   transition:color var(--d-2) var(--ease),background-color var(--d-2) var(--ease),
     border-color var(--d-2) var(--ease)}
 .mk__navlink:hover{color:var(--ink);text-decoration:none}
+/* The Support item is a <button> wearing the link's clothes. styles.css resets
+   `font` and `color` on every button but not the chrome, so the UA background
+   and the pointer are the two things left to say. No hover pill and no --on
+   state: it is never the current page, because it is not a page. */
+.mk__navlink--action{background:none;cursor:pointer}
 /* The current label is also bold and a step larger. The pill alone was still
    being missed on a dark bar, and weight plus size are the two signals that
    survive at a glance and in peripheral vision, where a 38%-opacity border
@@ -1323,11 +1328,14 @@
 .ckb__foot{margin:var(--s-6) 0 0;font-size:var(--t-12-5);
   line-height:var(--lh-normal);color:var(--ink-2)}
 
-/* --- its support dialog --- */
-.ckb__support{margin:0 0 var(--s-5);font-size:var(--t-13-5);
+/* --- the support dialog (components-local/SupportDialog.jsx) ---
+   Its own block rather than part of the notice above: the same dialog opens
+   from the marketing nav's Support item, so naming its classes after the
+   cookie bar would have been a lie by the second call site. */
+.spd__body{margin:0 0 var(--s-5);font-size:var(--t-13-5);
   line-height:var(--lh-loose);color:var(--ink-2)}
-.ckb__support:last-child{margin-bottom:0}
-.ckb__addr{font-family:var(--font-mono);font-size:var(--t-12-5);
+.spd__body:last-child{margin-bottom:0}
+.spd__addr{font-family:var(--font-mono);font-size:var(--t-12-5);
   color:var(--ink);background:var(--surface-3);border:1px solid var(--line);
   border-radius:var(--r-1);padding:var(--s-1) var(--s-3);
   white-space:nowrap}

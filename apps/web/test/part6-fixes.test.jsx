@@ -134,7 +134,7 @@ function apiFor(fixture, overrides = {}) {
     listFiles: vi.fn().mockResolvedValue({ files: [] }),
     listAgents: vi.fn().mockResolvedValue({ agents: fixture.agent ? [fixture.agent] : [] }),
     getAgent: vi.fn().mockResolvedValue({ agent: fixture.agent }),
-    deleteAgent: vi.fn().mockResolvedValue({ deleted: true, keysRevoked: 2 }),
+    deleteAgent: vi.fn().mockResolvedValue({ deleted: true, keysDeleted: 2 }),
     updateAgent: vi.fn().mockResolvedValue({ agent: fixture.agent }),
     listKeys: vi.fn().mockResolvedValue({ keys: fixture.keys }),
     revokeKey: vi.fn().mockResolvedValue({ revoked: true }),
@@ -219,9 +219,10 @@ describe('Agent details → Danger zone', () => {
     const dialog = await openDialog(user);
 
     // Two live keys: the active one and the blocked one. The revoked third is
-    // deliberately not counted — it is already dead.
-    expect(within(dialog).getByText(/revoke its 2 live keys/)).toBeTruthy();
-    expect(within(dialog).getByText(/cannot be reactivated/)).toBeTruthy();
+    // deliberately not counted — it is already dead, though it is deleted too,
+    // which is what the second half of the sentence has to say.
+    expect(within(dialog).getByText(/and its 2 live keys/)).toBeTruthy();
+    expect(within(dialog).getByText(/deleted rather than revoked/)).toBeTruthy();
   });
 
   it('says so plainly when the agent holds none — the other workspace', async () => {
@@ -229,7 +230,7 @@ describe('Agent details → Danger zone', () => {
     mountAgent(QUIET);
     const dialog = await openDialog(user);
 
-    expect(within(dialog).getByText(/revoke its 0 live keys/)).toBeTruthy();
+    expect(within(dialog).getByText(/and its 0 live keys/)).toBeTruthy();
     expect(within(dialog).getByText('This agent holds no live keys')).toBeTruthy();
   });
 
@@ -259,11 +260,11 @@ describe('Agent details → Danger zone', () => {
 
     await waitFor(() => expect(api.deleteAgent).toHaveBeenCalledWith(BUSY_ID, 'agt_1'));
     // Landed on the list, which now says what happened. "2" is the API's
-    // `keysRevoked`, not the dialog's estimate — a key minted in another tab
+    // `keysDeleted`, not the dialog's estimate — a key minted in another tab
     // between opening the dialog and confirming is in that number and not in
     // the estimate.
     await screen.findByText('test01 deleted.');
-    expect(screen.getByText(/2 keys were revoked/)).toBeTruthy();
+    expect(screen.getByText(/2 keys were deleted with it/)).toBeTruthy();
   });
 
   it('surfaces a refusal instead of pretending it worked', async () => {

@@ -23,6 +23,7 @@
 
 import { newId } from "../lib/ids";
 import { ApiError } from "../lib/errors";
+import { escapeLikePattern } from "../lib/paths";
 import { AuditedStaffAccess } from "./audited";
 
 export type StaffRole = "support" | "admin" | "super_admin";
@@ -91,6 +92,13 @@ export interface FleetWorkspace {
   orgId: string;
   orgName: string;
   plan: string;
+  /**
+   * The workspace's own override, or null when it is simply on the
+   * organization's plan. `plan` above is already the resolved answer; this says
+   * whether that answer came from an override, which is the difference between
+   * "this customer is on Pro" and "somebody granted this one workspace Pro".
+   */
+  planOverride: string | null;
   billingStatus: string;
   storageBytesUsed: number;
   fileCount: number;
@@ -105,19 +113,53 @@ export interface FleetWorkspace {
  * is auditable by reading, a dozen is not.
  */
 export class StaffScopedAccess extends AuditedStaffAccess {
-  /** Every workspace on the platform, newest first. */
-  async listFleet(limit = 50, search: string | null = null): Promise<FleetWorkspace[]> {
-    const like = search === null ? null : `%${search.replace(/[%_\\]/g, c => `\\${c}`)}%`;
+  /**
+   * Every workspace on the platform, newest first.
+   *
+   * `status` is a server-side filter rather than something the console narrows
+   * afterwards. The Suspended view used to fetch this list and filter it in the
+   * browser, which silently meant "suspended workspaces among the newest 50" -
+   * and rendered a confident "No suspended workspaces" for anything older. A
+   * filter applied after a LIMIT is not a filter.
+   *
+   * The plan is resolved here too. `o.plan` alone was the organization's plan,
+   * so a workspace carrying an override displayed the plan it is NOT on, while
+   * `resolveWorkspaceLimits` enforced the one it is.
+   */
+  async listFleet(
+    limit = 50,
+    search: string | null = null,
+    status: string | null = null
+  ): Promise<FleetWorkspace[]> {
+    // Literal clause text, every value bound. Assembled rather than spliced
+    // inline: there are two optional filters now, and a second nested ternary
+    // in a template literal is what produced the ESCAPE quoting bug this
+    // function carried for months.
+    const clauses: string[] = [];
+    const binds: (string | number)[] = [];
+
+    if (search !== null) {
+      const like = `%${escapeLikePattern(search)}%`;
+      clauses.push("(w.name LIKE ? ESCAPE '\\' OR o.name LIKE ? ESCAPE '\\')");
+      binds.push(like, like);
+    }
+    if (status !== null) {
+      clauses.push("w.status = ?");
+      binds.push(status);
+    }
+    binds.push(limit);
+
     const sql = `SELECT w.id, w.name, w.status, w.org_id AS orgId, o.name AS orgName,
-                        o.plan, o.billing_status AS billingStatus,
+                        COALESCE(w.plan_override, o.plan) AS plan,
+                        w.plan_override AS planOverride,
+                        o.billing_status AS billingStatus,
                         w.storage_bytes_used AS storageBytesUsed, w.file_count AS fileCount,
                         w.created_at AS createdAt
                    FROM workspaces w
                    JOIN organizations o ON o.id = w.org_id
-                  ${like === null ? "" : "WHERE w.name LIKE ? ESCAPE '\\\\' OR o.name LIKE ? ESCAPE '\\\\'"}
+                  ${clauses.length === 0 ? "" : `WHERE ${clauses.join(" AND ")}`}
                   ORDER BY w.created_at DESC
                   LIMIT ?`;
-    const binds = like === null ? [limit] : [like, like, limit];
     const rows = await this.db.prepare(sql).bind(...binds).all<FleetWorkspace>();
     return rows.results ?? [];
   }
@@ -127,7 +169,9 @@ export class StaffScopedAccess extends AuditedStaffAccess {
     const row = await this.db
       .prepare(
         `SELECT w.id, w.name, w.status, w.org_id AS orgId, o.name AS orgName,
-                o.plan, o.billing_status AS billingStatus,
+                COALESCE(w.plan_override, o.plan) AS plan,
+                w.plan_override AS planOverride,
+                o.billing_status AS billingStatus,
                 w.storage_bytes_used AS storageBytesUsed, w.file_count AS fileCount,
                 w.created_at AS createdAt
            FROM workspaces w
@@ -583,6 +627,7 @@ export class StaffScopedAccess extends AuditedStaffAccess {
       .prepare(
         `SELECT w.id, w.name, w.status, w.org_id AS orgId, o.name AS orgName,
                 COALESCE(w.plan_override, o.plan) AS plan,
+                w.plan_override AS planOverride,
                 o.billing_status AS billingStatus,
                 w.storage_bytes_used AS storageBytesUsed, w.file_count AS fileCount,
                 w.created_at AS createdAt,

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Button, Icon, Modal, Switch } from '../components/index.js';
+import { Button, Modal, Switch } from '../components/index.js';
+import { SupportDialog } from './SupportDialog.jsx';
 import { readConsent, saveConsent } from '../lib/consent.js';
 
 /**
@@ -42,13 +43,10 @@ import { readConsent, saveConsent } from '../lib/consent.js';
  * ── Why the Support action is here at all ─────────────────────────────────
  * Asked for directly. It is also the one moment a first-time visitor is being
  * asked to make a decision about their data before they have any way to reach
- * anybody, and `routes/Support.jsx` is behind sign-in. `connect@agentdisk.io`
- * is the address a person actually reads — the same one `backlog/003` points
- * the Google consent screen at.
+ * anybody, and `routes/Support.jsx` is behind sign-in. The dialog itself is
+ * `SupportDialog.jsx`, shared with the marketing nav's Support item so the
+ * address and the message cannot come to differ between the two.
  */
-
-/** The address, once. Used by the modal's body and its mailto. */
-const SUPPORT_EMAIL = 'connect@agentdisk.io';
 
 /**
  * What each category covers, in the terms of what this product really does.
@@ -188,42 +186,7 @@ export default function CookieNotice() {
         </Modal>
       ) : null}
 
-      {supportOpen ? (
-        <Modal
-          title="Talk to a person"
-          mark={<Icon name="info" size={16} />}
-          onClose={() => setSupportOpen(false)}
-          footer={
-            <>
-              {/* Not "Close": the header's own dismiss carries that label, and
-                  two buttons reading Close in one dialog is what a screen
-                  reader announces as a choice between identical things. */}
-              <Button variant="secondary" onClick={() => setSupportOpen(false)}>Not now</Button>
-              <Button
-                variant="primary"
-                as="a"
-                href={`mailto:${SUPPORT_EMAIL}?subject=AgentDisk`}
-                onClick={() => setSupportOpen(false)}
-              >
-                Email {SUPPORT_EMAIL}
-              </Button>
-            </>
-          }
-        >
-          <p className="ckb__support">
-            Anything at all — what this notice is asking, a key that stopped
-            working, an agent taking a 403 at three in the morning. There is no
-            ticket queue to disappear into: mail reaches the people who built
-            this.
-          </p>
-          <p className="ckb__support">
-            Write to <span className="ckb__addr">{SUPPORT_EMAIL}</span> and
-            include your workspace ID if you have one, so we can read the same
-            logs you can. We answer in working hours, in the order it arrives,
-            and we will tell you honestly if something is not built yet.
-          </p>
-        </Modal>
-      ) : null}
+      {supportOpen ? <SupportDialog onClose={() => setSupportOpen(false)} /> : null}
     </>
   );
 }

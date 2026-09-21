@@ -111,7 +111,7 @@ describe('File browser → delete', () => {
     expect(screen.getByRole('dialog', { name: 'Delete notes.md?' })).toBeTruthy();
   });
 
-  it('does not promise a trash it does not have', async () => {
+  it('says the delete is permanent, and offers no window it cannot honour', async () => {
     const user = userEvent.setup();
     await mount({ deleteFile: vi.fn() });
 
@@ -120,9 +120,15 @@ describe('File browser → delete', () => {
     await screen.findByRole('dialog', { name: 'Delete notes.md?' });
 
     const body = document.body.textContent;
+    // This copy has been wrong twice - "trash for 30 days", then a 24-hour
+    // window only the API could use. The delete destroys the file in the
+    // request, so any survival time named here would be a third wrong answer.
     expect(body).not.toMatch(/30 days/);
     expect(body).not.toMatch(/trash/i);
-    expect(body).toMatch(/24 hours/);
+    expect(body).not.toMatch(/24 hours/);
+    expect(body).not.toMatch(/restore/i);
+    expect(body).toMatch(/permanently/i);
+    expect(body).toMatch(/cannot be undone/i);
   });
 });
 

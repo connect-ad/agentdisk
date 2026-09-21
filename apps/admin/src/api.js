@@ -107,7 +107,12 @@ export const staffApi = {
   needsAttention: () => request('/v1/staff/workspaces/needs-attention'),
 
   /* ------------------------------ workspaces ----------------------------- */
-  listWorkspaces: q => request(`/v1/staff/workspaces${query({ q })}`),
+  /**
+   * The fleet list. `status` filters server-side and must: filtering a page of
+   * 50 in the browser answers "suspended among the newest 50" while looking
+   * like it answered "suspended".
+   */
+  listWorkspaces: (q, status) => request(`/v1/staff/workspaces${query({ q, status })}`),
   getWorkspace: id => request(`/v1/staff/workspaces/${id}`),
   workspaceActivity: id => request(`/v1/staff/workspaces/${id}/activity`),
   workspaceBlastRadius: id => request(`/v1/staff/workspaces/${id}/blast-radius`),

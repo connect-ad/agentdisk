@@ -77,10 +77,13 @@ describe("tenant isolation", () => {
     expect(listed.map((f) => f.id)).toEqual(["fil_A1"]);
   });
 
-  it("cannot soft-delete another workspace's file", async () => {
+  it("cannot delete another workspace's file, at either step", async () => {
     await filesB.insert(fileRow({ id: "fil_BDEL", workspace_id: WORKSPACE_B }));
 
-    expect(await filesA.softDelete("fil_BDEL", NOW)).toBe(false);
+    // Both halves are scoped, because a delete is permanent now and either one
+    // reaching across the boundary destroys data that cannot be restored.
+    expect(await filesA.markDeleted("fil_BDEL", NOW)).toBe(false);
+    expect(await filesA.hardDelete("fil_BDEL")).toBe(false);
     // B's file must be untouched - a write that reports failure but mutates
     // anyway would be worse than one that throws.
     expect(await filesB.getById("fil_BDEL")).not.toBeNull();

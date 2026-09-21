@@ -525,7 +525,7 @@ describe("GET /v1/files/:id/download", () => {
   });
 });
 
-describe("DELETE and restore", () => {
+describe("DELETE", () => {
   async function activeFile(token: string, content = "bytes"): Promise<string> {
     const res = await call("POST", "/v1/files", token, {
       path: "/gone.txt",
@@ -535,20 +535,20 @@ describe("DELETE and restore", () => {
     return file.id;
   }
 
-  it("soft-deletes and releases the usage", async () => {
+  it("destroys the object and the row, and releases the usage", async () => {
     const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
     const fileId = await activeFile(token);
 
     const res = await call("DELETE", `/v1/files/${fileId}`, token);
     expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ status: "deleted", permanent: true });
 
-    // The row survives (10.7) and the bytes are still there until the purge.
-    const row = await env.DB.prepare(`SELECT status, deleted_at FROM files WHERE id = ?`)
-      .bind(fileId)
-      .first<{ status: string; deleted_at: number | null }>();
-    expect(row?.status).toBe("deleted");
-    expect(row?.deleted_at).not.toBe(null);
-    expect(await env.FILES.head(objectKey(WORKSPACE_A, fileId))).not.toBe(null);
+    // Both halves, in the same request. The row surviving would mean the
+    // reaper still had work to do; the object surviving would mean bytes
+    // nothing points at.
+    const row = await env.DB.prepare(`SELECT status FROM files WHERE id = ?`).bind(fileId).first();
+    expect(row).toBeNull();
+    expect(await env.FILES.head(objectKey(WORKSPACE_A, fileId))).toBeNull();
 
     const usage = await env.DB.prepare(
       `SELECT storage_bytes_used, file_count FROM workspaces WHERE id = ?`
@@ -569,54 +569,43 @@ describe("DELETE and restore", () => {
     expect(listed.files).toEqual([]);
   });
 
-  it("restores within the grace window and re-books the usage", async () => {
+  it("takes the file's tags with it", async () => {
+    // file_tags references files(id) with no ON DELETE action, so tags that
+    // outlived their file would not merely be litter - the parent DELETE would
+    // be refused and the row would survive.
     const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
-    const fileId = await activeFile(token);
-    await call("DELETE", `/v1/files/${fileId}`, token);
+    const res = await call("POST", "/v1/files", token, {
+      path: "/tagged.txt",
+      content: toBase64("bytes"),
+      tags: ["keep", "me"],
+    });
+    const { file } = (await res.json()) as { file: { id: string } };
 
-    const res = await call("POST", `/v1/files/${fileId}/restore`, token);
-    expect(res.status).toBe(200);
-
-    const usage = await env.DB.prepare(
-      `SELECT storage_bytes_used, file_count FROM workspaces WHERE id = ?`
-    )
-      .bind(WORKSPACE_A)
-      .first<{ storage_bytes_used: number; file_count: number }>();
-    expect(usage?.storage_bytes_used).toBe("bytes".length);
-    expect(usage?.file_count).toBe(1);
-
-    expect((await call("GET", `/v1/files/${fileId}`, token)).status).toBe(200);
+    expect((await call("DELETE", `/v1/files/${file.id}`, token)).status).toBe(200);
+    const tags = await env.DB.prepare(`SELECT COUNT(*) AS n FROM file_tags WHERE file_id = ?`)
+      .bind(file.id)
+      .first<{ n: number }>();
+    expect(tags?.n).toBe(0);
   });
 
-  it("will not restore a file deleted longer ago than the grace window", async () => {
+  it("offers no route back", async () => {
+    // The restore endpoint is gone, not disabled. An agent that still calls it
+    // must get the same answer as for any path this API does not serve.
     const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
     const fileId = await activeFile(token);
     await call("DELETE", `/v1/files/${fileId}`, token);
 
-    // Backdate the deletion past the 24h window. Rewriting the row is the only
-    // way to test this from outside: the handler reads the clock, so the test
-    // has to move the file rather than the time.
-    await env.DB.prepare(`UPDATE files SET deleted_at = ? WHERE id = ?`)
-      .bind(Date.now() - (25 * 60 * 60 * 1000), fileId)
-      .run();
-
-    const res = await call("POST", `/v1/files/${fileId}/restore`, token);
-    expect(res.status).toBe(409);
-
-    const row = await env.DB.prepare(`SELECT status FROM files WHERE id = ?`)
-      .bind(fileId)
-      .first<{ status: string }>();
-    expect(row?.status).toBe("deleted");
+    expect((await call("POST", `/v1/files/${fileId}/restore`, token)).status).toBe(404);
   });
 
-  it("will not restore a file whose bytes are already purged", async () => {
+  it("refuses a second delete of the same file", async () => {
     const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
     const fileId = await activeFile(token);
     await call("DELETE", `/v1/files/${fileId}`, token);
-    await env.FILES.delete(objectKey(WORKSPACE_A, fileId));
 
-    const res = await call("POST", `/v1/files/${fileId}/restore`, token);
-    expect(res.status).toBe(409);
+    // 404 rather than 409: the row is genuinely gone, so "no such file" is the
+    // truthful answer and the same one another workspace's ID would get.
+    expect((await call("DELETE", `/v1/files/${fileId}`, token)).status).toBe(404);
   });
 
   it("needs delete scope, not write", async () => {

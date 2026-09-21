@@ -551,17 +551,18 @@ export default function FileBrowser() {
 
       {/* --- delete: single --- */}
       {/*
-        The description says what actually happens. It used to promise "trash for
-        30 days" in the same breath as "can't be undone" — self-contradictory,
-        and wrong in both halves: the grace period is PURGE_GRACE_MS, 24 hours,
-        and no trash screen exists to restore from. The API's POST
-        /v1/files/:id/restore is the only route back, so the copy names the
-        window without implying the dashboard can use it.
+        The description says what actually happens, which is now a much shorter
+        sentence. This copy has been wrong twice: first promising "trash for 30
+        days" in the same breath as "can't be undone", then naming a 24-hour
+        window only POST /v1/files/:id/restore could use — accurate, but it
+        described a way back this screen did not have. The delete is permanent
+        now, so there is no window to explain and no gap between what the
+        dialog says and what the button does.
       */}
       <ConfirmModal
         open={dialog === 'delete'}
         title={`Delete ${detail ? detail.name : `${selected.length} item(s)`}?`}
-        description="Deleted files stop being listed at once and are removed permanently 24 hours later. The dashboard cannot restore one."
+        description="This permanently destroys the file and its contents. It cannot be undone, and no copy is kept."
         confirmLabel="Delete"
         loading={busy}
         onClose={closeDialog}
@@ -592,6 +593,9 @@ export default function FileBrowser() {
           </>
         }
       >
+        <Alert tone="danger" title="This cannot be undone">
+          All {selected.length} files and their contents are destroyed permanently. No copy is kept.
+        </Alert>
         <Input
           label="Type DELETE to confirm"
           value={confirmText}

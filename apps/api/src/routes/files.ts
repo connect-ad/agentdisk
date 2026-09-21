@@ -1,6 +1,6 @@
 /**
  * File endpoints - 05 PART 12.2 (upload), 12.3 (download), 12.5 (deletion),
- * 12.6 (restore), listed in PART 13's table.
+ * listed in PART 13's table.
  *
  * The shape of the upload flow is the whole point and worth stating plainly:
  * the Worker is never in the byte path. It authorizes, it books, and it hands
@@ -18,6 +18,13 @@
  *     decision up front, and `complete` re-derives the real one from R2 and
  *     re-checks quota against that. A client that lies gets its bytes deleted,
  *     not its quota mis-booked.
+ *
+ * **Deletion is permanent.** 12.6's restore is gone, along with the 24-hour
+ * grace window it needed: a delete destroys the R2 object and the row in the
+ * request that asked for it. What the dashboard's confirmation says is now what
+ * happens, which is the whole reason for the change - the old dialog had to
+ * explain that the file was recoverable through an API call the dashboard could
+ * not make, which is a distinction nobody clicking Delete should have to hold.
  */
 
 import { z } from "zod";
@@ -36,8 +43,6 @@ import { auditAndNotify } from "../lib/audit";
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
 
-/** 12.5: the soft-delete grace period a restore must fall inside (12.6). */
-export const RESTORE_GRACE_MS = 24 * 60 * 60 * 1000;
 
 const HEX_SHA256 = /^[0-9a-f]{64}$/;
 
@@ -611,24 +616,39 @@ export async function patchFile(ctx: AuthContext, request: Request, fileId: stri
 /**
  * DELETE /v1/files/:id - 12.5.
  *
- * Soft delete only. The R2 object is purged later by the queue consumer after
- * the grace period, which is what makes 12.6's restore possible and what keeps
- * the response fast and independent of R2's own failure modes.
+ * Permanent, and in three steps, because D1 and R2 are separate systems with
+ * no transaction between them and this has to be safe at every point one of
+ * them can fail:
+ *
+ *   1. mark the row deleted. It leaves every read in the system immediately,
+ *      so the caller's next list is already correct.
+ *   2. delete the R2 object. Before the row, never after - the row is the only
+ *      record of which object to delete, so losing it first strands bytes
+ *      nothing can find. That is `jobs/purge.ts`'s rule and it still holds.
+ *   3. delete the row.
+ *
+ * If 2 or 3 throws, the marker from 1 survives and `reapStrandedFiles` finishes
+ * the job on the next tick. The file is gone as far as anyone can observe
+ * either way; what the reaper cleans up is the bytes, not the visibility.
  */
 export async function deleteFile(ctx: AuthContext, _request: Request, fileId: string): Promise<Response> {
   const row = await requireFile(ctx, fileId, "delete");
 
-  const deleted = await ctx.db.files.softDelete(fileId, ctx.now);
-  if (!deleted) {
+  const marked = await ctx.db.files.markDeleted(fileId, ctx.now);
+  if (!marked) {
     throw new ApiError("CONFLICT", "This file was already deleted.");
   }
 
-  // Usage is released now, not at purge time: the customer should stop paying
-  // for it the moment they delete it. Reconciliation (10.8) is what keeps the
-  // counters honest if this and the purge ever disagree.
+  // Usage is released here rather than after the object is gone: the two are
+  // the same instant in the happy path, and if R2 is having a bad minute the
+  // customer should still stop paying for a file they have destroyed.
   if (row.status === "active") {
     await ctx.db.counters.apply({ bytes: -row.size_bytes, files: -1 }, ctx.now);
   }
+
+  // R2's delete is idempotent, so the reaper repeating this is harmless.
+  await ctx.storage.delete(fileId);
+  await ctx.db.files.hardDelete(fileId);
 
   auditAndNotify(ctx, _request, "file.deleted", {
     resourceType: "file",
@@ -641,52 +661,8 @@ export async function deleteFile(ctx: AuthContext, _request: Request, fileId: st
     id: fileId,
     status: "deleted",
     deletedAt: new Date(ctx.now).toISOString(),
-    restorableUntil: new Date(ctx.now + RESTORE_GRACE_MS).toISOString(),
-  });
-}
-
-/**
- * POST /v1/files/:id/restore - 12.6.
- *
- * Requires `delete` scope rather than `write`: restoring is the inverse of
- * deleting, so it is the same capability, and PART 13's table says so.
- */
-export async function restoreFile(ctx: AuthContext, _request: Request, fileId: string): Promise<Response> {
-  assertScope(ctx.scope, "delete");
-
-  const row = await ctx.db.files.getDeletedById(fileId);
-  if (row === null) {
-    throw new ApiError("NOT_FOUND", "No such deleted file.");
-  }
-  // Path scope is checked against the row, after the scoped lookup has already
-  // proved the file belongs to this workspace.
-  assertScope(ctx.scope, "delete", row.path);
-
-  const deletedAt = row.deleted_at ?? 0;
-  if (ctx.now - deletedAt > RESTORE_GRACE_MS) {
-    throw new ApiError("CONFLICT", "The restore window for this file has passed.", {
-      details: { deletedAt: new Date(deletedAt).toISOString() },
-    });
-  }
-
-  // The bytes may already be gone even inside the window if a purge ran early.
-  // Better to find out here than to restore a row pointing at nothing.
-  const head = await ctx.storage.head(fileId);
-  if (head === null) {
-    throw new ApiError("CONFLICT", "This file's contents have already been purged.");
-  }
-
-  const restored = await ctx.db.files.restore(fileId, ctx.now);
-  if (!restored) {
-    throw new ApiError("CONFLICT", "This file is not in a restorable state.");
-  }
-  await ctx.db.counters.apply({ bytes: head.size, files: 1 }, ctx.now);
-
-  const tags = await ctx.db.files.getTags(fileId);
-  return json({
-    file: toFileResource(
-      { ...row, status: "active", deleted_at: null, size_bytes: head.size, updated_at: ctx.now },
-      tags
-    ),
+    // Said in the response as well as the docs, because an agent reading this
+    // is exactly who used to be able to call restore.
+    permanent: true,
   });
 }

@@ -18,7 +18,6 @@ import { ApiError } from "../lib/errors";
 import { readEmailConfig } from "../lib/email";
 import { readFirebaseAdminConfig } from "../auth/firebase-admin";
 import {
-  staffCreate,
   staffForceLogout,
   staffForcePasswordReset,
   staffGetWorkspace,
@@ -116,10 +115,6 @@ export async function handleStaffRoute(
   if (area === "overview" && request.method === "GET") {
     return await staffOverview(request, staffDeps);
   }
-  if (area === "users" && request.method === "POST" && resourceId === undefined) {
-    return await staffCreate(request, staffDeps);
-  }
-
   if (area === "workspaces") {
     if (resourceId === undefined && request.method === "GET") {
       return await staffListWorkspaces(request, staffDeps);

@@ -79,10 +79,12 @@ describe("agents", () => {
     expect(body.agents).toHaveLength(0);
   });
 
-  it("revokes an agent's keys when the agent is deleted", async () => {
+  it("deletes an agent's keys when the agent is deleted", async () => {
     // Disabling relies on the status check at authentication. Deleting removes
-    // the row that check reads, so the keys have to be revoked explicitly or
-    // they would outlive the thing that was stopping them.
+    // the row that check reads, so the keys have to go explicitly or they would
+    // outlive the thing that was stopping them - and they go rather than being
+    // revoked, so the key list is not left holding credentials belonging to an
+    // agent that no longer exists.
     const { token: adminToken } = await seedApiKey({
       workspaceId: WORKSPACE_A,
       ops: ["read", "write", "delete", "list", "keys:create"],
@@ -91,6 +93,9 @@ describe("agents", () => {
     const minted = (await (
       await post("/v1/keys", adminToken, { name: "its key", agentId, ops: ["read"] })
     ).json()) as { secret: string };
+    // An already-revoked key of the same agent goes too: it names the same
+    // vanished agent, and nobody can act on it.
+    await seedApiKey({ workspaceId: WORKSPACE_A, agentId, revokedAt: NOW - 1000 });
 
     // The key works while the agent exists.
     expect(
@@ -102,11 +107,57 @@ describe("agents", () => {
       headers: bearer(adminToken),
     });
     expect(deleted.status).toBe(200);
-    expect(((await deleted.json()) as { keysRevoked: number }).keysRevoked).toBe(1);
+    expect(((await deleted.json()) as { keysDeleted: number }).keysDeleted).toBe(2);
 
     expect(
       (await SELF.fetch(`${URL_BASE}/v1/whoami`, { headers: bearer(minted.secret) })).status
     ).toBe(401);
+
+    // Gone from the table, not sitting in it revoked.
+    const left = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM api_keys WHERE agent_id = ?`
+    )
+      .bind(agentId)
+      .first<{ n: number }>();
+    expect(left?.n).toBe(0);
+
+    // And the key list the dashboard reads no longer shows them.
+    const listed = (await (
+      await SELF.fetch(`${URL_BASE}/v1/keys`, { headers: bearer(adminToken) })
+    ).json()) as { keys: { agentId: string | null }[] };
+    expect(listed.keys.some(k => k.agentId === agentId)).toBe(false);
+  });
+
+  it("keeps a key the deleted agent's key had minted, with its parent cleared", async () => {
+    // `parent_key_id` is an inbound foreign key, so the delete fails outright
+    // if it is not cleared first. The child is a live credential of its own and
+    // must survive: provenance pointing at a row that no longer exists is NULL,
+    // not a reason to revoke somebody else's key.
+    const { token: adminToken } = await seedApiKey({
+      workspaceId: WORKSPACE_A,
+      ops: ["read", "write", "delete", "list", "keys:create"],
+    });
+    const agentId = await seedAgent({ id: "agt_PARENT", workspaceId: WORKSPACE_A });
+    const parent = (await (
+      await post("/v1/keys", adminToken, { name: "parent", agentId, ops: ["read", "keys:create"] })
+    ).json()) as { secret: string };
+    const child = (await (
+      await post("/v1/keys", parent.secret, { name: "child", ops: ["read"] })
+    ).json()) as { secret: string; key: { id: string } };
+
+    const deleted = await SELF.fetch(`${URL_BASE}/v1/agents/${agentId}`, {
+      method: "DELETE",
+      headers: bearer(adminToken),
+    });
+    expect(deleted.status).toBe(200);
+
+    const row = await env.DB.prepare(`SELECT parent_key_id FROM api_keys WHERE id = ?`)
+      .bind(child.key.id)
+      .first<{ parent_key_id: string | null }>();
+    expect(row?.parent_key_id).toBe(null);
+    expect(
+      (await SELF.fetch(`${URL_BASE}/v1/whoami`, { headers: bearer(child.secret) })).status
+    ).toBe(200);
   });
 });
 

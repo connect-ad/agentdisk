@@ -142,6 +142,8 @@ export async function staffOverview(request: Request, deps: StaffDeps): Promise<
   return json({ summary: await access(staff, deps).fleetSummary() });
 }
 
+const FLEET_STATUSES = ["active", "suspended", "deleted"];
+
 export async function staffListWorkspaces(request: Request, deps: StaffDeps): Promise<Response> {
   const staff = await requireStaff(request, deps);
   const url = new URL(request.url);
@@ -149,7 +151,15 @@ export async function staffListWorkspaces(request: Request, deps: StaffDeps): Pr
   const rawLimit = Number.parseInt(url.searchParams.get("limit") ?? "50", 10);
   const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 50;
 
-  return json({ workspaces: await access(staff, deps).listFleet(limit, search) });
+  // An unrecognised status is refused rather than ignored. Dropping it would
+  // answer a narrower question with the whole fleet, which is the shape of
+  // mistake the Suspended view was already making.
+  const rawStatus = url.searchParams.get("status");
+  if (rawStatus !== null && !FLEET_STATUSES.includes(rawStatus)) {
+    throw validationError(`status must be one of ${FLEET_STATUSES.join(", ")}.`);
+  }
+
+  return json({ workspaces: await access(staff, deps).listFleet(limit, search, rawStatus) });
 }
 
 export async function staffGetWorkspace(
@@ -305,42 +315,21 @@ export async function staffRevokeKeys(
   return json({ userId, keysRevoked: revoked });
 }
 
-/** Creating staff is super_admin only — the one role that can grant roles. */
-const createStaffSchema = z.object({
-  email: z.string().trim().toLowerCase().email(),
-  role: z.enum(["support", "admin", "super_admin"]),
-});
-
-export async function staffCreate(request: Request, deps: StaffDeps): Promise<Response> {
-  const staff = await requireStaff(request, deps);
-  requireStaffRole(staff, "super_admin");
-
-  let body;
-  try {
-    body = createStaffSchema.parse(await request.json());
-  } catch {
-    throw validationError("An email and a role are required.");
-  }
-
-  if (deps.encryptionKey === undefined || deps.encryptionKey === "") {
-    throw new ApiError("INTERNAL_ERROR", "Staff provisioning is not configured.", {
-      internalReason: "DATABASE_ENCRYPTION_KEY is not set",
-    });
-  }
-
-  // Provisioning returns the enrolment URI once and never stores anything the
-  // new account can log in with on its own - a password still has to be set out
-  // of band. That is deliberate: an invite link that is itself a credential is
-  // a credential in somebody's inbox.
-  return json(
-    {
-      pending: true,
-      email: body.email,
-      role: body.role,
-      note:
-        "Staff accounts are provisioned out of band. Create the row with a hashed password " +
-        "and an encrypted TOTP secret; this endpoint deliberately does not mint a credential.",
-    },
-    501
-  );
-}
+/*
+ * `staffCreate` — `POST /v1/staff/users` — was removed here.
+ *
+ * It answered 501 by design, from a time when a staff member had a password and
+ * a TOTP secret of their own: an endpoint that mints a working staff credential
+ * is an endpoint that can be tricked into minting one, so it deliberately did
+ * nothing and told the operator to provision out of band.
+ *
+ * `0014_staff_firebase_sso.sql` removed the premise. Staff authenticate through
+ * Firebase and `staff_users` holds only an address and a role, so creating one
+ * mints nothing and the refusal protects nothing. What survived was a route
+ * whose response instructed the caller to write a `password_hash` and a
+ * `totp_secret` into columns that no longer exist.
+ *
+ * Creating staff is `staffCreateAccount` — `POST /v1/staff/accounts` — which is
+ * super_admin only, audits `staff.create`, and shows nothing once because
+ * nothing secret is made.
+ */

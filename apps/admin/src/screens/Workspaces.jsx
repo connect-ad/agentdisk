@@ -69,11 +69,11 @@ export function WorkspaceList({ view, onNavigate }) {
 
   const resource = useResource(async () => {
     if (view === 'needs-attention') return staffApi.needsAttention();
-    const result = await staffApi.listWorkspaces(applied || undefined);
-    if (view === 'suspended') {
-      return { workspaces: result.workspaces.filter(w => w.status === 'suspended') };
-    }
-    return result;
+    // The status filter goes to the server. Filtering here filtered one page,
+    // so a suspended workspace outside the newest 50 produced "No suspended
+    // workspaces" — a confident negative, the worst answer this screen can give.
+    if (view === 'suspended') return staffApi.listWorkspaces(undefined, 'suspended');
+    return staffApi.listWorkspaces(applied || undefined);
   }, [view, applied]);
 
   const workspaces = resource.data?.workspaces ?? [];
@@ -340,7 +340,21 @@ export function WorkspaceDetail({ workspaceId, role, onNavigate, onToast }) {
             <Fact name="Organization">
               {workspace.orgName} <span style={{ ...mono, color: 'var(--tx3)' }}>{workspace.orgId}</span>
             </Fact>
-            <Fact name="Plan">{planLabel(workspace.plan)}</Fact>
+            {/*
+              The resolved plan, and whether it was resolved from an override.
+              Two facts, not one: "on Pro" and "granted Pro on this workspace
+              alone" are different situations, and the second is the one an
+              operator is checking after using the dialog below.
+            */}
+            <Fact name="Plan">
+              {planLabel(workspace.plan)}
+              {workspace.planOverride != null && (
+                <span style={{ color: 'var(--tx2)' }}>
+                  {' '}
+                  · override on this workspace, not the organization&apos;s plan
+                </span>
+              )}
+            </Fact>
             <Fact name="Lifecycle">
               <span style={statusCell(lifecycleTone(workspace.status))}>
                 <span style={statusDot(lifecycleTone(workspace.status))} />

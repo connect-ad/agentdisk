@@ -358,17 +358,31 @@ describe("the public share routes", () => {
     expect(body.files[0]?.name).toBe("preview.md");
   });
 
-  it("serves nothing once the shared file is soft-deleted, and works again after a restore", async () => {
+  it("serves nothing the moment the shared file is marked deleted", async () => {
+    // The marker is the first of a delete's three steps, and it has to be
+    // enough on its own: between it and the row going, a share link must not
+    // still be handing the file out.
     const token = await seedLiveFileShare("/soft.md", "fil_SOFT");
     await env.DB.prepare(`UPDATE files SET status = 'deleted', deleted_at = ? WHERE id = ?`)
       .bind(NOW, "fil_SOFT")
       .run();
     expect((await publicGet(`/v1/shares/open/${token}`)).status).toBe(NOTHING);
+  });
 
-    await env.DB.prepare(`UPDATE files SET status = 'active', deleted_at = NULL WHERE id = ?`)
-      .bind("fil_SOFT")
-      .run();
+  it("takes its own share links with the file, rather than leaving them dangling", async () => {
+    // share_links.file_id carries ON DELETE CASCADE, which is the whole answer
+    // here: a destroyed file's links must not outlive it pointing at nothing.
+    const token = await seedLiveFileShare("/hard.md", "fil_HARD");
     expect((await publicGet(`/v1/shares/open/${token}`)).status).toBe(200);
+
+    await env.DB.prepare(`DELETE FROM file_tags WHERE file_id = ?`).bind("fil_HARD").run();
+    await env.DB.prepare(`DELETE FROM files WHERE id = ?`).bind("fil_HARD").run();
+
+    const left = await env.DB.prepare(`SELECT COUNT(*) AS n FROM share_links WHERE file_id = ?`)
+      .bind("fil_HARD")
+      .first<{ n: number }>();
+    expect(left?.n).toBe(0);
+    expect((await publicGet(`/v1/shares/open/${token}`)).status).toBe(NOTHING);
   });
 
   it("refuses a sibling folder that merely shares a name prefix", async () => {

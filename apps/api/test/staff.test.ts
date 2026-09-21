@@ -129,10 +129,20 @@ describe("the role matrix", () => {
     expect(res.status).toBe(400);
   });
 
-  it("refuses admin the ability to create staff", async () => {
-    const token = adminToken;
-    const res = await post("/v1/staff/users", { email: "new@agentdisk.io", role: "support" }, token);
-    expect(res.status).toBe(403);
+  it("has no staff-provisioning route left in the customer-user area", async () => {
+    // `POST /v1/staff/users` was how staff were provisioned when staff had
+    // passwords of their own. Migration 0014 moved staff onto Firebase SSO, so
+    // there is no credential to mint and nothing for the endpoint to do; it
+    // survived as a 501 whose message instructed the caller to write a
+    // `password_hash` and a `totp_secret` into columns that migration dropped.
+    // Creating staff is `POST /v1/staff/accounts`, tested in
+    // `staff-console.test.ts` — including that an admin cannot do it, which is
+    // the guarantee this test used to carry.
+    //
+    // The rest of `/v1/staff/users` is untouched: it is how the console
+    // administers *customer* users, which is a different thing sharing a prefix.
+    const res = await post("/v1/staff/users", { email: "new@agentdisk.io", role: "support" }, adminToken);
+    expect(res.status).toBe(404);
   });
 });
 

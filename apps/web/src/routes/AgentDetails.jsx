@@ -194,9 +194,9 @@ export default function AgentDetails() {
    *
    * "Live" means a key that still authenticates, or would the moment the agent
    * were re-enabled — active plus blocked. An already-expired or already-revoked
-   * key is counted out, because telling somebody they are about to revoke a
-   * credential that has been dead for a month is noise dressed as a warning.
-   * The API revokes those too; it just costs nobody anything.
+   * key is counted out, because what this number answers is what loses access,
+   * and a credential that has been dead for a month loses none. The API deletes
+   * those rows too; their removal costs nobody anything.
    *
    * `null` when the key list failed to load, which is not the same as zero and
    * must not be shown as it.
@@ -208,16 +208,17 @@ export default function AgentDetails() {
     setDeleteError(null);
     try {
       // The count comes back from the API rather than from the tally above:
-      // this is what was actually revoked, and a key minted in another tab
-      // between opening this dialog and confirming it is in that number.
+      // this is what was actually deleted, and a key minted in another tab
+      // between opening this dialog and confirming it is in that number. It
+      // counts the dead rows as well, so it can exceed the live count above.
       const result = await api.deleteAgent(workspaceId, agentId);
-      const revoked = result?.keysRevoked ?? 0;
+      const removed = result?.keysDeleted ?? 0;
       setConfirmDelete(false);
       navigate(`/w/${ws}/agents`, {
         replace: true,
         state: {
           deleted: agent?.name ?? 'Agent',
-          keysRevoked: revoked
+          keysDeleted: removed
         }
       });
     } catch (err) {
@@ -420,9 +421,10 @@ export default function AgentDetails() {
                 <section aria-label="Danger zone">
                   <Panel title="Danger zone" className="danger-zone">
                     <Alert tone="danger" title="Delete this agent">
-                      This permanently deletes <strong>{agent.name}</strong> and revokes every
-                      key it holds. Revoking is not reversible — anything still using one of
-                      those keys needs a new key against a different agent.
+                      This permanently deletes <strong>{agent.name}</strong> and every key it
+                      holds. The keys are removed, not revoked — they leave the key list
+                      entirely, and anything still using one needs a new key against a
+                      different agent.
                     </Alert>
                     <div>
                       <Button
@@ -552,15 +554,16 @@ export default function AgentDetails() {
         <Alert tone="danger" title="This cannot be undone">
           {liveKeyCount === null ? (
             <>
-              This will permanently delete <strong>{agent?.name}</strong> and revoke every key
-              it holds. The key list could not be loaded, so the number is not shown here —
-              the confirmation afterwards reports what was actually revoked.
+              This will permanently delete <strong>{agent?.name}</strong> and every key it
+              holds. The key list could not be loaded, so the number is not shown here —
+              the confirmation afterwards reports what was actually deleted.
             </>
           ) : (
             <>
-              This will permanently delete <strong>{agent?.name}</strong> and revoke its{' '}
-              {liveKeyCount} live {liveKeyCount === 1 ? 'key' : 'keys'}. Revoked keys cannot be
-              reactivated.
+              This will permanently delete <strong>{agent?.name}</strong> and its{' '}
+              {liveKeyCount} live {liveKeyCount === 1 ? 'key' : 'keys'}. The keys are deleted
+              rather than revoked, along with any already revoked or expired, so nothing of
+              this agent is left in the key list.
             </>
           )}
         </Alert>

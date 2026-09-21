@@ -64,7 +64,7 @@ export default function Agents() {
    */
   const { state: navState } = useLocation();
   const deleted = navState?.deleted ?? null;
-  const deletedKeys = navState?.keysRevoked ?? 0;
+  const deletedKeys = navState?.keysDeleted ?? 0;
   const [toast, setToast] = useState(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -120,8 +120,8 @@ export default function Agents() {
     try {
       const result = await api.deleteAgent(workspaceId, target.id);
       setToast(
-        result.keysRevoked > 0
-          ? `Agent deleted, ${result.keysRevoked} key(s) revoked`
+        result.keysDeleted > 0
+          ? `Agent deleted, ${result.keysDeleted} key(s) deleted`
           : 'Agent deleted'
       );
       void reload();
@@ -183,8 +183,8 @@ export default function Agents() {
       {deleted ? (
         <Alert tone="ok" title={`${deleted} deleted.`}>
           {deletedKeys === 0
-            ? 'It held no live keys, so nothing lost access.'
-            : `${deletedKeys} ${deletedKeys === 1 ? 'key was' : 'keys were'} revoked. Anything still using ${deletedKeys === 1 ? 'it' : 'them'} lost access immediately, and a revoked key cannot be reactivated.`}
+            ? 'It held no keys, so nothing lost access.'
+            : `${deletedKeys} ${deletedKeys === 1 ? 'key was' : 'keys were'} deleted with it. Anything still using one lost access immediately, and a deleted key cannot be brought back.`}
         </Alert>
       ) : null}
 
@@ -321,14 +321,14 @@ export default function Agents() {
           }
         >
           <Alert tone="warn" title="This agent still has active credentials">
-            This agent has {target.keys} active API key(s). Revoke them first, or delete anyway to revoke and delete together.
+            This agent has {target.keys} active API key(s). Deleting the agent deletes them too — they leave the key list rather than staying on it revoked.
           </Alert>
         </Modal>
       ) : (
         <ConfirmModal
           open={dialog === 'delete'}
           title={`Delete ${target ? target.name : 'this agent'}?`}
-          description="This can't be undone. The agent's audit history is retained."
+          description="This can't be undone. The agent's keys are deleted with it; its audit history is retained."
           confirmLabel="Delete agent"
           onClose={() => setDialog(null)}
           onConfirm={remove}

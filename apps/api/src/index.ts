@@ -24,7 +24,7 @@ import {
 import { createAgent, deleteAgent, getAgent, listAgents, patchAgent } from "./routes/agents";
 import { createKey, listKeys, revokeKey } from "./routes/keys";
 import { handleMcp } from "./mcp/server";
-import { purgeExpiredFiles, reconcileCounters } from "./jobs/purge";
+import { reapStrandedFiles, reconcileCounters } from "./jobs/purge";
 import { handleDelivery, isWebhookEvent } from "./jobs/webhook-delivery";
 import { listActivity } from "./routes/activity";
 import { handleStaffRoute } from "./routes/staff-router";
@@ -55,7 +55,6 @@ import {
   getFile,
   listFiles,
   patchFile,
-  restoreFile,
   searchFiles,
 } from "./routes/files";
 import {
@@ -702,11 +701,11 @@ export default {
         if (segments.length === 4 && request.method === "GET" && action === "download") {
           return await onFile({ op: "read" }, downloadFile);
         }
-        // Restore takes `delete` scope, not `write`: it is the inverse of a
-        // delete, so it is the same capability (13's table).
-        if (segments.length === 4 && request.method === "POST" && action === "restore") {
-          return await onFile({ op: "delete" }, restoreFile);
-        }
+        // No `restore`: a delete destroys the object and the row in the
+        // request that asked for it, so there is nothing for it to act on.
+        // Left as an absence rather than a route answering 410, because an
+        // unknown action already falls through to the same "no such route" as
+        // any other, and a special case would be one more thing to keep.
         // Move needs write on BOTH ends and copy needs read on the source plus
         // write on the destination (13's table); both second checks are inside
         // the handlers, which are the only place the destination is known.
@@ -763,13 +762,13 @@ export default {
     ctx.waitUntil(
       (async () => {
         try {
-          const purged = await purgeExpiredFiles(env.DB, env.FILES, now);
-          console.log(JSON.stringify({ level: "info", message: "purge run", ...purged }));
+          const reaped = await reapStrandedFiles(env.DB, env.FILES, now);
+          console.log(JSON.stringify({ level: "info", message: "reap run", ...reaped }));
         } catch (err) {
           console.log(
             JSON.stringify({
               level: "error",
-              message: "purge run failed",
+              message: "reap run failed",
               reason: err instanceof Error ? err.message : String(err),
             })
           );

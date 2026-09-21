@@ -35,6 +35,7 @@ import {
   patchWebhook,
 } from "./routes/webhooks";
 import { createShare, deleteShare, listShares } from "./routes/shares";
+import { downloadShared, previewShare } from "./routes/shares-public";
 import { createCheckoutSession, createPortalSession, getBilling } from "./routes/billing";
 import { handleStripeWebhook } from "./routes/stripe-webhook";
 import {
@@ -391,6 +392,26 @@ export default {
             user,
             token
           );
+        }
+      }
+
+      // Public share links. Four and five segments, with a literal "open" that
+      // `/v1/shares/:id` must never swallow — the same shape as the claim link
+      // above, and the same reason `workspaces/needs-attention` had to learn
+      // that literal segments are matched before :id patterns.
+      //
+      // Genuinely public: no credential is read, and that is the design. The
+      // token is the only thing that can name this file.
+      {
+        const match = /^\/v1\/shares\/open\/([^/]+)(?:\/download\/([^/]+))?$/.exec(url.pathname);
+        if (match !== null && request.method === "GET") {
+          const shareToken = decodeURIComponent(match[1] as string);
+          const deps = { db: env.DB, signing: () => readSigningConfig(env), requestId: id };
+          const now = Date.now();
+
+          return match[2] === undefined
+            ? await previewShare(deps, shareToken, now)
+            : await downloadShared(deps, shareToken, decodeURIComponent(match[2]), now);
         }
       }
 

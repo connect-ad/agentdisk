@@ -275,3 +275,129 @@ describe("POST /v1/shares", () => {
     expect(((await res.json()) as { shares: unknown[] }).shares).toHaveLength(1);
   });
 });
+
+describe("the public share routes", () => {
+  const NOTHING = 404;
+
+  beforeEach(async () => {
+    await seedTwoWorkspaces();
+    await resetTenantData();
+    await setWorkspaceStatus(WORKSPACE_A, "active");
+    await env.DB.prepare(`UPDATE organizations SET plan = 'pro' WHERE id = 'org_TESTORG'`).run();
+  });
+
+  async function publicGet(path: string): Promise<Response> {
+    return SELF.fetch(`${URL_BASE}${path}`); // no Authorization header at all
+  }
+
+  /** Read the body once — a Response body cannot be consumed twice. */
+  async function refusal(path: string): Promise<{ status: number; code: string; message: string }> {
+    const res = await publicGet(path);
+    const body = (await res.json()) as ErrorBody;
+    return { status: res.status, code: body.error.code, message: body.error.message };
+  }
+
+  /**
+   * Mint a share through the real authenticated route, then read the raw token
+   * straight out of D1.
+   *
+   * Parsing it out of the returned `url` would make every test here depend on
+   * DASHBOARD_URL being set in the test environment, which is configuration
+   * rather than anything under test.
+   */
+  async function tokenOf(shareId: string): Promise<string> {
+    const row = await env.DB.prepare(`SELECT token FROM share_links WHERE id = ?`)
+      .bind(shareId)
+      .first<{ token: string }>();
+    return row?.token as string;
+  }
+
+  async function mint(body: Record<string, unknown>): Promise<string> {
+    const { token } = await seedApiKey({ ops: ["read", "share"] });
+    const res = await call("POST", "/v1/shares", token, body);
+    expect(res.status).toBe(201);
+    return tokenOf(((await res.json()) as { share: { id: string } }).share.id);
+  }
+
+  async function seedLiveFileShare(path: string, fileId = `fil_${path.length}X`): Promise<string> {
+    await seedFile(fileId, path);
+    return mint({ fileId });
+  }
+
+  async function seedLiveFolderShare(path: string): Promise<string> {
+    return mint({ path });
+  }
+
+  it("answers identically for expired, revoked and never-existed tokens", async () => {
+    // Three different causes, one of them a token that was real until a moment
+    // ago. If any of these three differ, the route is an oracle that confirms
+    // which guesses are real tokens.
+    const expiredToken = await seedLiveFileShare("/expired.md", "fil_EXPIRED");
+    await env.DB.prepare(`UPDATE share_links SET expires_at = ? WHERE token = ?`)
+      .bind(NOW - 1, expiredToken)
+      .run();
+
+    const revokedToken = await seedLiveFileShare("/revoked.md", "fil_REVOKED");
+    await env.DB.prepare(`DELETE FROM share_links WHERE token = ?`).bind(revokedToken).run();
+
+    const expired = await refusal(`/v1/shares/open/${expiredToken}`);
+    const revoked = await refusal(`/v1/shares/open/${revokedToken}`);
+    const never = await refusal("/v1/shares/open/neverexistedatall");
+
+    expect(expired).toEqual(never);
+    expect(revoked).toEqual(never);
+    expect(never.status).toBe(NOTHING);
+  });
+
+  it("previews a live file share with no credential", async () => {
+    const token = await seedLiveFileShare("/preview.md", "fil_PREVIEW");
+    const res = await publicGet(`/v1/shares/open/${token}`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { kind: string; files: { id: string; name: string }[] };
+    expect(body.kind).toBe("file");
+    expect(body.files[0]?.name).toBe("preview.md");
+  });
+
+  it("serves nothing once the shared file is soft-deleted, and works again after a restore", async () => {
+    const token = await seedLiveFileShare("/soft.md", "fil_SOFT");
+    await env.DB.prepare(`UPDATE files SET status = 'deleted', deleted_at = ? WHERE id = ?`)
+      .bind(NOW, "fil_SOFT")
+      .run();
+    expect((await publicGet(`/v1/shares/open/${token}`)).status).toBe(NOTHING);
+
+    await env.DB.prepare(`UPDATE files SET status = 'active', deleted_at = NULL WHERE id = ?`)
+      .bind("fil_SOFT")
+      .run();
+    expect((await publicGet(`/v1/shares/open/${token}`)).status).toBe(200);
+  });
+
+  it("refuses a sibling folder that merely shares a name prefix", async () => {
+    const token = await seedLiveFolderShare("/reports");
+    await seedFile("fil_EVIL", "/reports-private/secrets.md");
+
+    const res = await publicGet(`/v1/shares/open/${token}/download/fil_EVIL`);
+    expect(res.status).toBe(NOTHING);
+  });
+
+  it("refuses a file id from another workspace", async () => {
+    const token = await seedLiveFolderShare("/reports");
+    await seedFile("fil_OTHERWS", "/reports/x.md", WORKSPACE_B);
+
+    expect((await publicGet(`/v1/shares/open/${token}/download/fil_OTHERWS`)).status).toBe(NOTHING);
+  });
+
+  it("refuses a file id that is not the one a file share names", async () => {
+    const token = await seedLiveFileShare("/only.md", "fil_ONLY");
+    await seedFile("fil_NOTSHARED", "/notshared.md");
+
+    expect((await publicGet(`/v1/shares/open/${token}/download/fil_NOTSHARED`)).status).toBe(
+      NOTHING
+    );
+  });
+
+  it("serves nothing when the workspace is suspended", async () => {
+    const token = await seedLiveFileShare("/susp.md", "fil_SUSP");
+    await setWorkspaceStatus(WORKSPACE_A, "suspended");
+    expect((await publicGet(`/v1/shares/open/${token}`)).status).toBe(NOTHING);
+  });
+});

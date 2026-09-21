@@ -72,6 +72,8 @@ export const ID_PREFIX = {
   file: "fil",
   auditEvent: "evt",
   webhook: "whk",
+  /** A public share link. See migration 0016. */
+  shareLink: "shr",
   // Staff are not customers and never appear in a workspace's entity graph, but
   // they get the same sortable IDs: an investigation reads both trails.
   staffUser: "stf",

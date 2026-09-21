@@ -34,7 +34,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: "Type the dev D1 database name to confirm (e.g. agentdisk-dev)"
+        description: "Type the dev D1 database name to confirm (agentdisk-dev-db)"
         required: true
         type: string
 
@@ -138,13 +138,23 @@ jobs:
             echo "::error::Terraform built D1 '$D1_NAME' but the dev environment expects '$EXPECTED_D1_DATABASE'."
             exit 1
           fi
+          # The suffixes are the ones wrangler.toml actually declares:
+          # agentdisk-dev-db and agentdisk-dev-files. Written out rather than
+          # loosened to *dev*, because a pattern broad enough to be safe from
+          # typos is broad enough to match something nobody intended.
           case "$D1_NAME" in
-            *-dev) ;;
-            *) echo "::error::Refusing to reset '$D1_NAME': this workflow only ever touches a -dev database."; exit 1 ;;
+            *-dev-db) ;;
+            *) echo "::error::Refusing to reset '$D1_NAME': this workflow only ever touches a -dev-db database."; exit 1 ;;
           esac
           case "$R2_BUCKET" in
             *-dev-files) ;;
             *) echo "::error::Refusing to purge '$R2_BUCKET': this workflow only ever touches a -dev-files bucket."; exit 1 ;;
+          esac
+
+          # Belt and braces. Nothing above can produce a prod name, but this
+          # costs one line and the failure it guards against is unrecoverable.
+          case "$D1_NAME$R2_BUCKET" in
+            *prod*) echo "::error::'prod' appears in '$D1_NAME' / '$R2_BUCKET'. Refusing outright."; exit 1 ;;
           esac
 
           # Guard 3, typed. Compared against what Terraform reported rather

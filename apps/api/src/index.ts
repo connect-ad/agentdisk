@@ -25,6 +25,7 @@ import { createAgent, deleteAgent, getAgent, listAgents, patchAgent } from "./ro
 import { createKey, listKeys, revokeKey } from "./routes/keys";
 import { handleMcp } from "./mcp/server";
 import { purgeExpiredShares, reapStrandedFiles, reconcileCounters } from "./jobs/purge";
+import { pendingDeletionEnabled, sweepPendingDeletions } from "./jobs/pending-deletions";
 import { handleDelivery, isWebhookEvent } from "./jobs/webhook-delivery";
 import { listActivity } from "./routes/activity";
 import { handleStaffRoute } from "./routes/staff-router";
@@ -144,6 +145,17 @@ export interface Env {
    * candidate logs has been read. See jobs/staff-purge.ts.
    */
   STAFF_PURGE_ENABLED?: string;
+  /**
+   * Real deletion for the seven-day pending-deletion sweep. Absent or anything
+   * but "true" means report-only.
+   *
+   * Not ceremony: building this feature queues rows whose due dates fall during
+   * the work, and dev already holds weeks of test data. The first deploy
+   * carrying a working sweep would otherwise destroy all of it on the next
+   * hourly tick, unattended and with no second copy of the bytes. Read a window
+   * of `pending deletion candidates (dry run)` lines, then set this.
+   */
+  PENDING_DELETION_ENABLED?: string;
 
   /**
    * Encrypts staff TOTP secrets at rest (06 PART 16.16a). Staff login refuses
@@ -866,6 +878,41 @@ export default {
             JSON.stringify({
               level: "error",
               message: "share purge run failed",
+              reason: err instanceof Error ? err.message : String(err),
+            })
+          );
+        }
+
+        // The sixth. Its own try/catch like the five above, so it cannot take
+        // them down - and no new cron expression, because the seven-day window
+        // lives in `due_at` rather than in the schedule. A weekly cron plus a
+        // seven-day window would mean a file marked on Monday waits until the
+        // following Sunday's tick, and a missed tick doubles that again. On the
+        // hourly tick it is seven days give or take an hour, and a missed tick
+        // self-heals.
+        try {
+          const sweep = await sweepPendingDeletions(env.DB, env.FILES, now, {
+            dryRun: !pendingDeletionEnabled(env),
+            trigger: "cron",
+          });
+          console.log(
+            JSON.stringify({
+              level: "info",
+              message: "pending deletion sweep run",
+              runId: sweep.runId,
+              dryRun: sweep.dryRun,
+              examined: sweep.examined,
+              objectsDeleted: sweep.objectsDeleted,
+              rowsDeleted: sweep.rowsDeleted,
+              bytesFreed: sweep.bytesFreed,
+              failed: sweep.failed,
+            })
+          );
+        } catch (err) {
+          console.log(
+            JSON.stringify({
+              level: "error",
+              message: "pending deletion sweep failed",
               reason: err instanceof Error ? err.message : String(err),
             })
           );

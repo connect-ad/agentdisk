@@ -272,6 +272,28 @@ were not touched. See `backlog/002`.
   cleartext. The tokenised link exists only in the provisioning response; the
   warning carries the untokenised claim page and the workspace ID. See
   `lib/claim.ts`'s header.
+- **Storage and file quota belong to the billing account, not the workspace.**
+  The subscription is sold to an organization: one card, one plan, many
+  workspaces. Until migration 0017 `assertWithinQuota` compared a single
+  workspace's counters against that account-level plan, so an account on Pro
+  holding five workspaces held five times the Pro allowance — and the way to
+  buy more room was to press "New workspace", which is free. Membership being
+  per workspace is what made it easy to miss: the two are scoped differently on
+  purpose and only the *quota* was on the wrong side of the line.
+  `organizations.storage_bytes_used` / `file_count` are the numbers enforced;
+  the workspace copies survive because a person looking at one workspace wants
+  to know what it holds. **Egress and requests stay per workspace**, because
+  they are period counters resetting on the workspace's own `period_reset_at`
+  and there is no account-level period to reset them on. `plan_override` is
+  untouched — it answers "which limits", still a per-workspace question a staff
+  operator may need; these columns answer "how much is used", which is not.
+  The type is the guard: `assertWithinQuota` takes `WorkspaceRow &
+  AccountUsage`, so a caller holding only a workspace row cannot call it at
+  all. **Every surface that divides usage by a plan limit had to move with it**
+  — `whoami`'s `usage` (the dashboard reads it, so `backlog/017` would
+  otherwise have recurred exactly), and the staff console's
+  `workspaces/needs-attention`, which was flagging at 95% of an allowance the
+  workspace no longer had.
 - **The hard quota block and the soft sandbox warning are one call.** Every write
   path calls `assertQuotaAndWarn`, never `assertWithinQuota` directly, so there
   is no way to perform the block without also computing the warning — from the
@@ -497,8 +519,8 @@ live deployment rather than inferred from the code — see
 person can follow.
 
 ```
-apps/api    675 tests across 37 files · typecheck clean
-apps/web    217 tests across 17 files · build clean
+apps/api    735 tests across 38 files · typecheck clean
+apps/web    267 tests across 21 files · build clean
 apps/admin   33 tests · build clean · 70 KiB gzipped
 Worker      226 KiB gzipped, against Cloudflare's 1 MB limit
 ```

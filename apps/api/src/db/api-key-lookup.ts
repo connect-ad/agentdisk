@@ -12,7 +12,7 @@
  * createWorkspaceContext with the workspace ID this module produced.
  */
 
-import type { ApiKeyRow, WorkspaceRow } from "./types";
+import type { AccountUsage, ApiKeyRow, WorkspaceRow } from "./types";
 
 /**
  * Look up a key by the SHA-256 of the presented token.
@@ -37,11 +37,14 @@ export async function findApiKeyByHash(
  * The workspace a resolved key belongs to, with its org's plan joined on.
  *
  * The join is here rather than in a second query because every authenticated
- * request needs both: the workspace row carries the usage counters and the plan
- * decides what they are measured against. Two queries would double the D1 round
- * trips on the hot path to learn one number.
+ * request needs all of it: the plan decides what the counters are measured
+ * against, and since migration 0017 the storage and file counters that the
+ * quota is actually decided from live on the organization too. Two queries
+ * would double the D1 round trips on the hot path to learn one number - and
+ * the organization row was already being read here, so the account totals cost
+ * nothing beyond two more columns.
  */
-export interface WorkspaceWithPlan extends WorkspaceRow {
+export interface WorkspaceWithPlan extends WorkspaceRow, AccountUsage {
   org_plan: string;
 }
 
@@ -51,7 +54,10 @@ export async function findWorkspaceById(
 ): Promise<WorkspaceWithPlan | null> {
   return db
     .prepare(
-      `SELECT w.*, o.plan AS org_plan
+      `SELECT w.*,
+              o.plan               AS org_plan,
+              o.storage_bytes_used AS org_storage_bytes_used,
+              o.file_count         AS org_file_count
          FROM workspaces w
          JOIN organizations o ON o.id = w.org_id
         WHERE w.id = ?`

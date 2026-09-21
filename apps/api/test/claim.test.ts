@@ -127,6 +127,14 @@ async function seedFile(
   )
     .bind(size, workspaceId)
     .run();
+  // Both levels, because the quota is decided from the account's (0017) and
+  // this helper stands in for WorkspaceScopedCounters, which writes both.
+  await env.DB.prepare(
+    `UPDATE organizations SET file_count = file_count + 1, storage_bytes_used = storage_bytes_used + ?
+      WHERE id = (SELECT org_id FROM workspaces WHERE id = ?)`
+  )
+    .bind(size, workspaceId)
+    .run();
   return fileId;
 }
 
@@ -143,9 +151,22 @@ async function counters(workspaceId: string) {
     }>();
 }
 
+/**
+ * Put a workspace - and the account it is alone in - at a given usage.
+ *
+ * Every workspace these tests touch is the only one in its organization, so
+ * setting the two to the same number is what "this workspace holds N bytes"
+ * has always meant here. The account row is the one the quota check reads.
+ */
 async function setUsage(workspaceId: string, bytes: number, files = 0): Promise<void> {
   await env.DB.prepare(
     `UPDATE workspaces SET storage_bytes_used = ?, file_count = ? WHERE id = ?`
+  )
+    .bind(bytes, files, workspaceId)
+    .run();
+  await env.DB.prepare(
+    `UPDATE organizations SET storage_bytes_used = ?, file_count = ?
+      WHERE id = (SELECT org_id FROM workspaces WHERE id = ?)`
   )
     .bind(bytes, files, workspaceId)
     .run();

@@ -662,6 +662,7 @@ export class StaffScopedAccess extends AuditedStaffAccess {
                 w.plan_override AS planOverride,
                 o.billing_status AS billingStatus,
                 w.storage_bytes_used AS storageBytesUsed, w.file_count AS fileCount,
+                o.storage_bytes_used AS orgStorageBytesUsed,
                 w.created_at AS createdAt,
                 p.storage_bytes AS planStorageBytes
            FROM workspaces w
@@ -671,19 +672,25 @@ export class StaffScopedAccess extends AuditedStaffAccess {
             AND (
               o.billing_status != 'active'
               OR (p.storage_bytes IS NOT NULL AND p.storage_bytes > 0
-                  AND w.storage_bytes_used * 100 >= p.storage_bytes * 95)
+                  AND o.storage_bytes_used * 100 >= p.storage_bytes * 95)
             )
           ORDER BY w.updated_at DESC LIMIT ?`
       )
       .bind(limit)
-      .all<FleetWorkspace & { planStorageBytes: number | null }>();
+      .all<FleetWorkspace & { planStorageBytes: number | null; orgStorageBytesUsed: number }>();
 
     return (rows.results ?? []).map(row => {
       const reasons: string[] = [];
       if (row.billingStatus !== "active") reasons.push(`Billing is ${row.billingStatus}`);
       if (row.planStorageBytes !== null && row.planStorageBytes > 0) {
-        const percent = Math.round((row.storageBytesUsed * 100) / row.planStorageBytes);
-        if (percent >= 95) reasons.push(`Storage at ${percent}% of plan`);
+        // The account's usage against the account's plan (migration 0017).
+        // Dividing one workspace's bytes by the plan understates every
+        // multi-workspace account, so the console would go on reporting room
+        // that the request path had already stopped granting - and the support
+        // engineer looking for why a customer's uploads fail would find the
+        // one screen that agrees with the customer.
+        const percent = Math.round((row.orgStorageBytesUsed * 100) / row.planStorageBytes);
+        if (percent >= 95) reasons.push(`Account storage at ${percent}% of plan`);
       }
       return { ...row, why: reasons.join(" · ") };
     });

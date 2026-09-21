@@ -2,17 +2,27 @@
  * Quota checks - 02 PART 6.5, run in the authorization middleware before any
  * business logic, returning 429 LIMIT_EXCEEDED naming the dimension that was hit.
  *
- * Scope note: this enforces against the denormalized counters on the workspace
- * row. Those counters are maintained by whoever writes - the storage layer
- * increments storage/file counts, the rate limiter increments requests. Until
- * those writers exist the checks pass trivially, which is correct: the check is
- * live now, so the moment a counter starts moving it is already enforced. What
- * this file must not do is pretend to enforce a dimension nobody is measuring.
+ * Scope note, and it is two scopes rather than one. **Storage and file count
+ * are the subscription's allowance and belong to the billing account**: one
+ * card, one plan, many workspaces, so they are checked against the
+ * organization's totals. Counting them per workspace - which is what this did
+ * before migration 0017 - meant an account on Pro with five workspaces held
+ * five times the Pro allowance, and that the way to get more room was to press
+ * "New workspace", which is free. **Egress and requests stay per workspace**,
+ * because they are period counters that reset on the workspace's own
+ * `period_reset_at` and there is no account-level period to reset them on;
+ * both are `UNLIMITED` on every paid plan, so the distinction currently only
+ * bites a sandbox, which is alone in its organization anyway.
+ *
+ * All of it still enforces against denormalized counters, maintained by
+ * whoever writes - the storage layer increments storage/file counts at both
+ * levels in one batch, the rate limiter increments requests. What this file
+ * must not do is pretend to enforce a dimension nobody is measuring.
  */
 
 import { ApiError } from "./errors";
 import type { PlanLimits } from "./plans";
-import type { WorkspaceRow } from "../db/types";
+import type { AccountUsage, WorkspaceRow } from "../db/types";
 
 export type QuotaDimension = "storage" | "files" | "egress" | "requests" | "agents" | "keys";
 
@@ -77,7 +87,7 @@ function assertBillingAllowsWrite(billingStatus: string, demand: QuotaDemand): v
 }
 
 export function assertWithinQuota(
-  workspace: WorkspaceRow,
+  workspace: WorkspaceRow & AccountUsage,
   limits: PlanLimits,
   demand: QuotaDemand,
   now: number,
@@ -97,25 +107,30 @@ export function assertWithinQuota(
     );
   }
 
+  // Account, not workspace. The message says "account" too: a person told
+  // their *workspace* is full, on a screen showing that workspace holding a
+  // fraction of the plan's storage, would reasonably conclude the product is
+  // broken - and the action that fixes it is on the billing page, not this
+  // workspace's.
   if (demand.bytes !== undefined && demand.bytes > 0) {
-    const projected = workspace.storage_bytes_used + demand.bytes;
+    const projected = workspace.org_storage_bytes_used + demand.bytes;
     if (projected > limits.storageBytes) {
       throw exceeded(
         "storage",
-        "This workspace has reached its storage limit. Upgrade to add more.",
-        workspace.storage_bytes_used,
+        "This account has reached its storage limit. Upgrade to add more.",
+        workspace.org_storage_bytes_used,
         limits.storageBytes
       );
     }
   }
 
   if (demand.files !== undefined && demand.files > 0) {
-    const projected = workspace.file_count + demand.files;
+    const projected = workspace.org_file_count + demand.files;
     if (projected > limits.fileCount) {
       throw exceeded(
         "files",
-        "This workspace has reached its file-count limit. Upgrade to add more.",
-        workspace.file_count,
+        "This account has reached its file-count limit. Upgrade to add more.",
+        workspace.org_file_count,
         limits.fileCount
       );
     }

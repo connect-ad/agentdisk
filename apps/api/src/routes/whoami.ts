@@ -63,8 +63,22 @@ export async function whoami(ctx: AuthContext): Promise<Response> {
       plan: resolvePlan(workspace.plan_override, workspace.org_plan),
     },
     usage: {
-      storageBytes: { used: workspace.storage_bytes_used, max: limits.storageBytes },
-      files: { used: workspace.file_count, max: limits.fileCount },
+      /**
+       * The *account's* totals against the account's limits, because that is
+       * what the quota check reads (migration 0017). Reporting the workspace's
+       * own bytes beside an account-scoped maximum is precisely the
+       * backlog/017 failure: a dashboard doing arithmetic the request path
+       * does not, and telling somebody they have room they do not have.
+       *
+       * `workspaceStorageBytes` and `workspaceFiles` carry the per-workspace
+       * numbers alongside, without a `max`, because there is no per-workspace
+       * ceiling to compare them to - a workspace's share of the account is a
+       * fact, not a limit.
+       */
+      storageBytes: { used: workspace.org_storage_bytes_used, max: limits.storageBytes },
+      files: { used: workspace.org_file_count, max: limits.fileCount },
+      workspaceStorageBytes: { used: workspace.storage_bytes_used },
+      workspaceFiles: { used: workspace.file_count },
       egressBytes: { used: workspace.egress_bytes_period, max: limits.egressBytesPerPeriod },
       requests: { used: workspace.requests_period, max: limits.requestsPerPeriod },
       /**

@@ -106,6 +106,31 @@ export interface WorkspaceRow {
   updated_at: number;
 }
 
+/**
+ * The billing account's usage totals, joined onto a workspace row.
+ *
+ * Storage and files are the *subscription's* allowance: one card, one plan,
+ * many workspaces. Counting them per workspace meant an account on Pro with
+ * five workspaces held five times the Pro allowance, and that pressing "New
+ * workspace" — which is free — was the way to get more room. Migration 0017
+ * moved the counters up to `organizations`.
+ *
+ * Separate names rather than shadowing `storage_bytes_used`, because both
+ * numbers are real and both are shown: the account total is what the quota is
+ * decided against, the workspace total is what a person looking at one
+ * workspace wants to see.
+ *
+ * Declared as its own interface so it can be *required* by the quota check.
+ * `assertWithinQuota` takes `WorkspaceRow & AccountUsage`, which means a
+ * caller holding only a workspace row cannot call it at all — the same trick
+ * `transferObject` uses, where the signature is the safety property rather
+ * than a rule somebody has to remember.
+ */
+export interface AccountUsage {
+  org_storage_bytes_used: number;
+  org_file_count: number;
+}
+
 /** A customer's own webhook endpoint (05 PART 11.1). */
 export interface WebhookRow {
   id: string;

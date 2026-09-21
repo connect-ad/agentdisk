@@ -806,10 +806,25 @@ export class WorkspaceScopedAuditEvents extends WorkspaceScoped {
 }
 
 /**
- * The denormalized usage counters on the workspace row (05 PART 11.1).
+ * The denormalized usage counters (05 PART 11.1) - at both levels.
  *
  * Scoped like everything else: the workspace ID is bound in the constructor, so
- * no caller can adjust another workspace's quota.
+ * no caller can adjust another workspace's quota. The organization is reached
+ * through a subquery on that same bound ID rather than taken as an argument,
+ * which keeps the property intact - there is no parameter through which to
+ * name another tenant's account, exactly as there is none for its bytes.
+ *
+ * **Two rows, because two scopes.** Storage and files are the subscription's
+ * allowance and are enforced against the organization (migration 0017), so the
+ * org counter is the one the quota check actually reads; the workspace copy
+ * survives because a person looking at one workspace wants to know what *it*
+ * holds. Egress is a period counter with no account-level period to reset on,
+ * so it stays where it was.
+ *
+ * Sent as a `batch`, which D1 runs as one implicit transaction. Two separate
+ * `run()` calls could leave the account counted and the workspace not, and the
+ * drift would then sit there until the hourly reconciler happened to look -
+ * with every write in between decided on the wrong number.
  *
  * Deltas are applied with `MAX(0, current + delta)` rather than a bare add. The
  * counters are denormalized, the reconciliation job (10.8) is what makes them
@@ -823,17 +838,37 @@ export class WorkspaceScopedCounters extends WorkspaceScoped {
     const egress = delta.egressBytes ?? 0;
     if (bytes === 0 && files === 0 && egress === 0) return;
 
-    await this.db
-      .prepare(
-        `UPDATE workspaces
-            SET storage_bytes_used  = MAX(0, storage_bytes_used + ?),
-                file_count          = MAX(0, file_count + ?),
-                egress_bytes_period = MAX(0, egress_bytes_period + ?),
-                updated_at          = ?
-          WHERE id = ?`
-      )
-      .bind(bytes, files, egress, now, this.workspaceId)
-      .run();
+    const statements = [
+      this.db
+        .prepare(
+          `UPDATE workspaces
+              SET storage_bytes_used  = MAX(0, storage_bytes_used + ?),
+                  file_count          = MAX(0, file_count + ?),
+                  egress_bytes_period = MAX(0, egress_bytes_period + ?),
+                  updated_at          = ?
+            WHERE id = ?`
+        )
+        .bind(bytes, files, egress, now, this.workspaceId),
+    ];
+
+    // Skipped entirely for an egress-only delta, which is the common read path.
+    // Egress does not move the account counters, so touching `organizations`
+    // there would be a write per download for a number that did not change.
+    if (bytes !== 0 || files !== 0) {
+      statements.push(
+        this.db
+          .prepare(
+            `UPDATE organizations
+                SET storage_bytes_used = MAX(0, storage_bytes_used + ?),
+                    file_count         = MAX(0, file_count + ?),
+                    updated_at         = ?
+              WHERE id = (SELECT org_id FROM workspaces WHERE id = ?)`
+          )
+          .bind(bytes, files, now, this.workspaceId)
+      );
+    }
+
+    await this.db.batch(statements);
   }
 }
 

@@ -70,11 +70,22 @@ export default function Usage() {
   const usage = data?.usage ?? {};
   const resetDays = daysUntil(usage.periodResetAt);
 
+  /**
+   * Two scopes on one page, so each says which it is.
+   *
+   * Storage and files are the subscription's allowance and are counted across
+   * every workspace on the bill — that is what the API enforces, so it is what
+   * this has to show. Egress and requests are period counters belonging to
+   * this workspace alone. Four bars in a column with no such note would read
+   * as four facts about the same thing, and the first time somebody's upload
+   * was refused while this page showed room, the page would be the thing they
+   * stopped trusting.
+   */
   const metrics = [
-    { key: 'Storage', used: usage.storageBytes?.used, limit: usage.storageBytes?.max, fmt: formatBytes },
-    { key: 'Files', used: usage.files?.used, limit: usage.files?.max, fmt: formatCount },
-    { key: 'Egress this period', used: usage.egressBytes?.used, limit: usage.egressBytes?.max, fmt: formatBytes },
-    { key: 'Requests this period', used: usage.requests?.used, limit: usage.requests?.max, fmt: formatCount }
+    { key: 'Storage', scope: 'Across every workspace on this account', used: usage.storageBytes?.used, limit: usage.storageBytes?.max, fmt: formatBytes },
+    { key: 'Files', scope: 'Across every workspace on this account', used: usage.files?.used, limit: usage.files?.max, fmt: formatCount },
+    { key: 'Egress this period', scope: 'This workspace', used: usage.egressBytes?.used, limit: usage.egressBytes?.max, fmt: formatBytes },
+    { key: 'Requests this period', scope: 'This workspace', used: usage.requests?.used, limit: usage.requests?.max, fmt: formatCount }
   ].filter(m => Number.isFinite(m.limit) && m.limit > 0);
 
   const atLimit = metrics.filter(m => (m.used ?? 0) >= m.limit);
@@ -116,6 +127,7 @@ export default function Usage() {
                   </span>
                 </div>
                 <Meter value={used} max={m.limit} label={`${m.key}: ${pct}% used`} />
+                <span style={{ fontSize: 'var(--t-12)', color: 'var(--ink-3)' }}>{m.scope}</span>
               </div>
             );
           })}

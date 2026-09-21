@@ -274,6 +274,37 @@ describe("the chain's authorize step", () => {
     expect(seen).toEqual([WORKSPACE_B]);
   });
 
+  it("spends one allowance across every workspace in the account", async () => {
+    // The whole point of migration 0017, through the real chain rather than
+    // the unit check. WORKSPACE_A and WORKSPACE_B share one organization, so
+    // filling the account from B must refuse a write to A. Before this, each
+    // workspace carried the plan's full storage and "New workspace" - which is
+    // free - was the way to buy more.
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
+    const freeStorage = PLAN_LIMITS.free.storageBytes;
+
+    // B holds it all; A holds nothing at all.
+    await env.DB.prepare(`UPDATE workspaces SET storage_bytes_used = ? WHERE id = ?`)
+      .bind(freeStorage - 10, WORKSPACE_B)
+      .run();
+    await env.DB.prepare(`UPDATE workspaces SET storage_bytes_used = 0 WHERE id = ?`)
+      .bind(WORKSPACE_A)
+      .run();
+    await env.DB.prepare(
+      `UPDATE organizations SET storage_bytes_used = ?
+        WHERE id = (SELECT org_id FROM workspaces WHERE id = ?)`
+    )
+      .bind(freeStorage - 10, WORKSPACE_A)
+      .run();
+
+    await expect(
+      run(token, { op: "write", path: "/big.bin", demand: { bytes: 1000 } })
+    ).rejects.toMatchObject({ code: "LIMIT_EXCEEDED" });
+
+    await env.DB.prepare(`UPDATE workspaces SET storage_bytes_used = 0`).run();
+    await env.DB.prepare(`UPDATE organizations SET storage_bytes_used = 0`).run();
+  });
+
   it("refuses a quota-relevant request that would exceed the plan's storage", async () => {
     const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
     // Read from PLAN_LIMITS rather than restated. This test pinned the literal
@@ -282,7 +313,17 @@ describe("the chain's authorize step", () => {
     // is actually about: that the check is against the plan, whatever the plan
     // currently says.
     const freeStorage = PLAN_LIMITS.free.storageBytes;
+    // The account's counter, because that is what the quota is decided from
+    // since migration 0017; the workspace's own is set beside it so the row
+    // still describes a coherent situation - one workspace, alone in its org,
+    // holding all of it.
     await env.DB.prepare(`UPDATE workspaces SET storage_bytes_used = ? WHERE id = ?`)
+      .bind(freeStorage - 10, WORKSPACE_A)
+      .run();
+    await env.DB.prepare(
+      `UPDATE organizations SET storage_bytes_used = ?
+        WHERE id = (SELECT org_id FROM workspaces WHERE id = ?)`
+    )
       .bind(freeStorage - 10, WORKSPACE_A)
       .run();
 
@@ -295,6 +336,12 @@ describe("the chain's authorize step", () => {
     ).resolves.toMatchObject({ status: 200 });
 
     await env.DB.prepare(`UPDATE workspaces SET storage_bytes_used = 0 WHERE id = ?`)
+      .bind(WORKSPACE_A)
+      .run();
+    await env.DB.prepare(
+      `UPDATE organizations SET storage_bytes_used = 0
+        WHERE id = (SELECT org_id FROM workspaces WHERE id = ?)`
+    )
       .bind(WORKSPACE_A)
       .run();
   });

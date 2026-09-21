@@ -645,19 +645,37 @@ async function claimByAttaching(
   }
 
   // Inline, in this operation - not left for the next reconcileCounters sweep.
-  // An hour of a target workspace under-reporting its own usage is an hour in
-  // which it can be pushed past its real limit by writes the quota check waves
-  // through on numbers it believes.
-  await db
-    .prepare(
-      `UPDATE workspaces
-          SET storage_bytes_used = storage_bytes_used + ?,
-              file_count = file_count + ?,
-              updated_at = ?
-        WHERE id = ?`
-    )
-    .bind(totalBytes, moved.length, now, targetWorkspaceId)
-    .run();
+  // An hour of a target under-reporting its own usage is an hour in which it
+  // can be pushed past its real limit by writes the quota check waves through
+  // on numbers it believes.
+  //
+  // Both levels, batched, for the reason WorkspaceScopedCounters gives: the
+  // account row is the one the quota is decided from, so leaving it behind
+  // would mean the merge's bytes were invisible to every subsequent write.
+  // The source workspace's own counters are not decremented here because its
+  // rows were deleted outright above and the whole sandbox - workspace, org
+  // and all - is destroyed by the caller moments later.
+  await db.batch([
+    db
+      .prepare(
+        `UPDATE workspaces
+            SET storage_bytes_used = storage_bytes_used + ?,
+                file_count = file_count + ?,
+                updated_at = ?
+          WHERE id = ?`
+      )
+      .bind(totalBytes, moved.length, now, targetWorkspaceId),
+
+    db
+      .prepare(
+        `UPDATE organizations
+            SET storage_bytes_used = storage_bytes_used + ?,
+                file_count = file_count + ?,
+                updated_at = ?
+          WHERE id = (SELECT org_id FROM workspaces WHERE id = ?)`
+      )
+      .bind(totalBytes, moved.length, now, targetWorkspaceId),
+  ]);
 
   // **The same key row, repointed.** Same id, same key_hash, same raw token the
   // agent already holds - so its very next call lands in the target workspace

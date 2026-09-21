@@ -365,9 +365,15 @@ export function assertQuotaAndWarn(ctx: AuthContext, demand: QuotaDemand): void 
   ctx.sandboxWarning = isSandboxWorkspace(ctx.workspace)
     ? sandboxQuotaWarning({
         workspaceId: ctx.workspaceId,
+        // The account's totals, matching what assertWithinQuota just decided
+        // on rather than recomputing the same warning from a different number.
+        // For a sandbox the two are identical anyway - bootstrap.ts gives each
+        // one a brand-new organization it is alone in - but reading the field
+        // the enforcement path reads is what keeps them identical if that ever
+        // stops being true.
         projected: {
-          bytes: ctx.workspace.storage_bytes_used + (demand.bytes ?? 0),
-          files: ctx.workspace.file_count + (demand.files ?? 0),
+          bytes: ctx.workspace.org_storage_bytes_used + (demand.bytes ?? 0),
+          files: ctx.workspace.org_file_count + (demand.files ?? 0),
         },
         limits: { storageBytes: ctx.limits.storageBytes, fileCount: ctx.limits.fileCount },
         dashboardUrl: ctx.dashboardUrl,

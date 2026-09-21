@@ -7,7 +7,9 @@ export const NOW = 1_780_000_000_000;
 export const WORKSPACE_A = "ws_AAAAAAAAAAAAAAAAAAAAAAAAAA";
 export const WORKSPACE_B = "ws_BBBBBBBBBBBBBBBBBBBBBBBBBB";
 const USER_ID = "usr_TESTUSER";
-const ORG_ID = "org_TESTORG";
+/** Both workspaces above live in this one billing account - which is what
+ * makes them the fixture for an account-scoped quota. */
+export const ORG_ID = "org_TESTORG";
 
 /**
  * Seed two workspaces under one org, so cross-tenant access has something real

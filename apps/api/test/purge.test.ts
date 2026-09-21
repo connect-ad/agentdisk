@@ -17,7 +17,8 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { reapStrandedFiles, reconcileCounters, REAP_AFTER_MS } from "../src/jobs/purge";
-import { NOW, WORKSPACE_A, WORKSPACE_B, seedTwoWorkspaces } from "./helpers";
+import { NOW, ORG_ID, WORKSPACE_A, WORKSPACE_B, seedTwoWorkspaces } from "./helpers";
+import { createWorkspaceContext } from "../src/db/workspace-scoped";
 
 async function seedFile(options: {
   id: string;
@@ -61,6 +62,9 @@ beforeEach(async () => {
   await env.DB.prepare(`DELETE FROM files`).run();
   await env.DB.prepare(
     `UPDATE workspaces SET storage_bytes_used = 0, file_count = 0`
+  ).run();
+  await env.DB.prepare(
+    `UPDATE organizations SET storage_bytes_used = 0, file_count = 0`
   ).run();
 });
 
@@ -202,5 +206,107 @@ describe("reconciliation", () => {
       .bind(WORKSPACE_B).first<{ b: number }>();
     expect(a?.b).toBe(400);
     expect(b?.b).toBe(700);
+  });
+});
+
+async function orgCounters(): Promise<{ storage_bytes_used: number; file_count: number }> {
+  const row = await env.DB.prepare(
+    `SELECT storage_bytes_used, file_count FROM organizations WHERE id = ?`
+  )
+    .bind(ORG_ID)
+    .first<{ storage_bytes_used: number; file_count: number }>();
+  if (row === null) throw new Error("seed missing");
+  return row;
+}
+
+/**
+ * The account-level counters — the numbers the quota is actually decided from
+ * since migration 0017.
+ *
+ * WORKSPACE_A and WORKSPACE_B share one organization, which is the whole
+ * situation this change exists for: an account on a paid plan used to hold its
+ * plan's storage *per workspace*, so owning a second workspace doubled the
+ * allowance and pressing "New workspace" is free.
+ */
+describe("reconciling the billing account", () => {
+  it("sums every workspace in the account, not just one", async () => {
+    await seedFile({ id: "fil_A1", workspaceId: WORKSPACE_A, sizeBytes: 300 });
+    await seedFile({ id: "fil_B1", workspaceId: WORKSPACE_B, sizeBytes: 700 });
+
+    const result = await reconcileCounters(env.DB, NOW);
+    expect(result.organizationsCorrected).toBeGreaterThanOrEqual(1);
+    expect(await orgCounters()).toEqual({ storage_bytes_used: 1000, file_count: 2 });
+  });
+
+  it("counts only active rows, matching the workspace pass exactly", async () => {
+    // A row marked `deleted` released its quota when the delete was accepted
+    // and is waiting on the reaper. Counting it at the account level but not
+    // the workspace level would make the two disagree by construction.
+    await seedFile({ id: "fil_LIVE", workspaceId: WORKSPACE_A, sizeBytes: 100 });
+    await seedFile({
+      id: "fil_GONE",
+      workspaceId: WORKSPACE_B,
+      sizeBytes: 5000,
+      status: "deleted",
+      deletedAt: NOW - 1000,
+    });
+
+    await reconcileCounters(env.DB, NOW);
+    expect(await orgCounters()).toEqual({ storage_bytes_used: 100, file_count: 1 });
+  });
+
+  it("derives the account from the files, never from the workspace counters", async () => {
+    // The workspace pass is paginated, so summing the counters it has just
+    // fixed would fold this run's unvisited workspaces - and any drift still
+    // in them - into the number every write in the account is refused on.
+    // Here WORKSPACE_A's own counter is left lying, and the account total must
+    // still be the truth.
+    await seedFile({ id: "fil_ONLY", workspaceId: WORKSPACE_A, sizeBytes: 250 });
+    await env.DB.prepare(`UPDATE workspaces SET storage_bytes_used = ? WHERE id = ?`)
+      .bind(999_999, WORKSPACE_A)
+      .run();
+
+    await reconcileCounters(env.DB, NOW);
+    expect(await orgCounters()).toEqual({ storage_bytes_used: 250, file_count: 1 });
+  });
+
+  it("reports a clean account as checked but uncorrected", async () => {
+    await seedFile({ id: "fil_C1", workspaceId: WORKSPACE_A, sizeBytes: 42 });
+    await reconcileCounters(env.DB, NOW);
+
+    const second = await reconcileCounters(env.DB, NOW);
+    expect(second.organizationsChecked).toBeGreaterThanOrEqual(1);
+    expect(second.organizationsCorrected).toBe(0);
+  });
+});
+
+describe("the incremental counter writer", () => {
+  it("moves the account and the workspace together", async () => {
+    const db = createWorkspaceContext(env.DB, WORKSPACE_A);
+    await db.counters.apply({ bytes: 500, files: 2 }, NOW);
+
+    expect(await orgCounters()).toEqual({ storage_bytes_used: 500, file_count: 2 });
+
+    // The second workspace's write lands on the same account, which is what
+    // makes the allowance shared rather than multiplied.
+    const other = createWorkspaceContext(env.DB, WORKSPACE_B);
+    await other.counters.apply({ bytes: 250, files: 1 }, NOW);
+    expect(await orgCounters()).toEqual({ storage_bytes_used: 750, file_count: 3 });
+  });
+
+  it("leaves the account alone for an egress-only delta", async () => {
+    // Egress is a period counter on the workspace and does not move the
+    // account's storage. Writing `organizations` on every download would be a
+    // write per read for a number that did not change.
+    const db = createWorkspaceContext(env.DB, WORKSPACE_A);
+    await db.counters.apply({ egressBytes: 4096 }, NOW);
+    expect(await orgCounters()).toEqual({ storage_bytes_used: 0, file_count: 0 });
+  });
+
+  it("never lets a decrement drive either row negative", async () => {
+    const db = createWorkspaceContext(env.DB, WORKSPACE_A);
+    await db.counters.apply({ bytes: 100, files: 1 }, NOW);
+    await db.counters.apply({ bytes: -5000, files: -50 }, NOW);
+    expect(await orgCounters()).toEqual({ storage_bytes_used: 0, file_count: 0 });
   });
 });

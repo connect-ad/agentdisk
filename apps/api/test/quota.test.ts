@@ -9,13 +9,25 @@ import {
   resolvePlan,
 } from "../src/lib/plans";
 import { ApiError } from "../src/lib/errors";
-import type { WorkspaceRow } from "../src/db/types";
+import type { AccountUsage, WorkspaceRow } from "../src/db/types";
 
 const NOW = 1_780_000_000_000;
 const NEXT_PERIOD = NOW + 86_400_000;
 
-function workspace(overrides: Partial<WorkspaceRow> = {}): WorkspaceRow {
-  return {
+/**
+ * A workspace that is alone in its billing account.
+ *
+ * The account counters default to mirroring the workspace's own, so a fixture
+ * written before storage became account-scoped still means what it said - one
+ * workspace, one org, the two numbers identical. A test about an account
+ * holding *several* workspaces sets `org_storage_bytes_used` explicitly and
+ * leaves the workspace's own below it, which is the case this whole change
+ * exists for.
+ */
+function workspace(
+  overrides: Partial<WorkspaceRow & AccountUsage> = {}
+): WorkspaceRow & AccountUsage {
+  const base: WorkspaceRow = {
     id: "ws_TEST",
     org_id: "org_TEST",
     name: "Test",
@@ -32,6 +44,12 @@ function workspace(overrides: Partial<WorkspaceRow> = {}): WorkspaceRow {
     claim_token_expires_at: null,
     created_at: NOW,
     updated_at: NOW,
+    ...overrides,
+  };
+  return {
+    org_storage_bytes_used: base.storage_bytes_used,
+    org_file_count: base.file_count,
+    ...base,
     ...overrides,
   };
 }
@@ -129,6 +147,80 @@ describe("assertWithinQuota", () => {
     expect(() =>
       assertWithinQuota(busy, free, { egressBytes: 50 * 1024 ** 3 }, NOW)
     ).not.toThrow();
+  });
+
+  describe("storage and files are the account's allowance, not the workspace's", () => {
+    // The defect this pins: before migration 0017 an account could hold N
+    // times its plan's storage by owning N workspaces - and pressing "New
+    // workspace" is free. The subscription is sold to the account, so the
+    // allowance has to be counted there.
+
+    it("refuses a nearly-empty workspace whose ACCOUNT is full", () => {
+      const ws = workspace({
+        storage_bytes_used: 10,
+        org_storage_bytes_used: free.storageBytes - 5,
+      });
+      expect(() => assertWithinQuota(ws, free, { bytes: 100 }, NOW)).toThrow(ApiError);
+    });
+
+    it("allows a full workspace whose ACCOUNT still has room", () => {
+      // The mirror image, and the one that proves the check reads the account
+      // rather than merely reading whichever number is larger. A workspace at
+      // what used to be its ceiling is fine, because it no longer has one.
+      const ws = workspace({
+        storage_bytes_used: free.storageBytes,
+        org_storage_bytes_used: 10,
+      });
+      expect(() => assertWithinQuota(ws, free, { bytes: 100 }, NOW)).not.toThrow();
+    });
+
+    it("counts files the same way, in both directions", () => {
+      const full = workspace({ file_count: 0, org_file_count: free.fileCount });
+      expect(() => assertWithinQuota(full, free, { files: 1 }, NOW)).toThrow(ApiError);
+
+      const room = workspace({ file_count: free.fileCount, org_file_count: 0 });
+      expect(() => assertWithinQuota(room, free, { files: 1 }, NOW)).not.toThrow();
+    });
+
+    it("names the account, not the workspace, in what it reports", () => {
+      // Somebody told their *workspace* is full, looking at a workspace
+      // holding a fraction of the plan, concludes the product is broken - and
+      // goes looking for the fix in the wrong place. The number reported is
+      // the account's too, so it agrees with the limit printed beside it.
+      const ws = workspace({ storage_bytes_used: 0, org_storage_bytes_used: free.storageBytes });
+      try {
+        assertWithinQuota(ws, free, { bytes: 1 }, NOW);
+        throw new Error("expected a throw");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).message).toContain("account");
+        expect((err as ApiError).details).toMatchObject({
+          limit: "storage",
+          used: free.storageBytes,
+        });
+      }
+    });
+
+    it("leaves egress and requests on the workspace", () => {
+      // Period counters, reset on the workspace's own period_reset_at. There
+      // is no account-level period to reset an account-level counter on, so
+      // these deliberately did not move - asserted so that "make everything
+      // account-scoped" is a test failure rather than a plausible-looking
+      // tidy-up.
+      const ws = workspace({
+        egress_bytes_period: free.egressBytesPerPeriod,
+        org_storage_bytes_used: 0,
+        org_file_count: 0,
+      });
+      expect(() => assertWithinQuota(ws, free, { egressBytes: 1 }, NOW)).toThrow(ApiError);
+
+      const busy = workspace({
+        requests_period: free.requestsPerPeriod,
+        org_storage_bytes_used: 0,
+        org_file_count: 0,
+      });
+      expect(() => assertWithinQuota(busy, free, {}, NOW)).toThrow(ApiError);
+    });
   });
 
   it("passes an idle workspace", () => {

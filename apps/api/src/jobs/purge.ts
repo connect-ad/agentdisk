@@ -136,6 +136,8 @@ export async function purgeExpiredShares(db: D1Database, now: number): Promise<n
 export interface ReconcileResult {
   workspacesChecked: number;
   workspacesCorrected: number;
+  organizationsChecked: number;
+  organizationsCorrected: number;
 }
 
 /**
@@ -150,6 +152,15 @@ export interface ReconcileResult {
  * Only `active` files count. A row still marked `deleted` released its quota
  * when the delete was accepted (12.5) and is waiting on the reaper, so counting
  * it would re-bill storage the customer has already destroyed.
+ *
+ * **Two levels since migration 0017**, because the quota is decided from the
+ * organization's totals and the workspace's are what a person sees. The
+ * account pass recomputes from `files` directly rather than by summing the
+ * workspace counters it has just fixed: the workspace pass is paginated, so
+ * summing them would fold this run's unvisited workspaces - and any drift left
+ * in them - into the number the enforcement path reads. Deriving both levels
+ * from the same source means they cannot disagree about anything except drift,
+ * and drift at one level cannot propagate to the other.
  */
 export async function reconcileCounters(
   db: D1Database,
@@ -199,5 +210,55 @@ export async function reconcileCounters(
     );
   }
 
-  return { workspacesChecked: rows.length, workspacesCorrected: corrected };
+  const organizations = await db
+    .prepare(`SELECT id, storage_bytes_used, file_count FROM organizations ORDER BY id LIMIT ?`)
+    .bind(limit)
+    .all<{ id: string; storage_bytes_used: number; file_count: number }>();
+
+  const orgRows = organizations.results ?? [];
+  let orgsCorrected = 0;
+
+  for (const org of orgRows) {
+    const truth = await db
+      .prepare(
+        `SELECT COALESCE(SUM(f.size_bytes), 0) AS bytes, COUNT(*) AS files
+           FROM files f
+           JOIN workspaces w ON w.id = f.workspace_id
+          WHERE w.org_id = ? AND f.status = 'active'`
+      )
+      .bind(org.id)
+      .first<{ bytes: number; files: number }>();
+
+    if (truth === null) continue;
+    if (truth.bytes === org.storage_bytes_used && truth.files === org.file_count) {
+      continue;
+    }
+
+    await db
+      .prepare(
+        `UPDATE organizations SET storage_bytes_used = ?, file_count = ?, updated_at = ? WHERE id = ?`
+      )
+      .bind(truth.bytes, truth.files, now, org.id)
+      .run();
+    orgsCorrected += 1;
+
+    // Louder than the workspace case, in the sense that it matters more: this
+    // is the number every write in the account is refused or allowed on.
+    console.log(
+      JSON.stringify({
+        level: "warn",
+        message: "account counter drift corrected",
+        orgId: org.id,
+        was: { bytes: org.storage_bytes_used, files: org.file_count },
+        now: { bytes: truth.bytes, files: truth.files },
+      })
+    );
+  }
+
+  return {
+    workspacesChecked: rows.length,
+    workspacesCorrected: corrected,
+    organizationsChecked: orgRows.length,
+    organizationsCorrected: orgsCorrected,
+  };
 }

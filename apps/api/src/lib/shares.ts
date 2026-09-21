@@ -24,15 +24,34 @@ export const DEFAULT_SHARE_TTL_MS = MAX_SHARE_TTL_MS;
  */
 export const SHARE_DOWNLOAD_TTL_SECONDS = 60 * 60;
 
+/**
+ * Slack on the ceiling, so that asking for "seven days from now" is not a
+ * race against a clock the caller cannot see.
+ *
+ * `now` here is `ctx.now`, captured before any I/O — and a Workers clock only
+ * advances on I/O, so on a warm isolate it reads the *previous* request's
+ * time. A caller who computes `theirNow + 7 days` is therefore compared
+ * against a ceiling built from a timestamp in the past, and is refused for
+ * being honest. The dashboard now omits the field entirely for its seven-day
+ * preset, but every API caller writing the obvious thing hits this, so the
+ * tolerance belongs here rather than only in one client.
+ *
+ * A minute does not weaken a seven-day policy: 12.4's cap exists to bound how
+ * long bytes stay public, and it still does to within 0.01%.
+ */
+const EXPIRY_GRACE_MS = 60 * 1000;
+
 export function resolveExpiry(requested: number | undefined, now: number): number {
   if (requested === undefined) return now + DEFAULT_SHARE_TTL_MS;
   if (requested <= now) {
     throw validationError("expiresAt must be in the future.");
   }
-  if (requested > now + MAX_SHARE_TTL_MS) {
+  if (requested > now + MAX_SHARE_TTL_MS + EXPIRY_GRACE_MS) {
     throw validationError("A share link cannot last longer than 7 days.");
   }
-  return requested;
+  // Never stored past the real ceiling, however it arrived. The grace decides
+  // what is accepted, not what is granted.
+  return Math.min(requested, now + MAX_SHARE_TTL_MS);
 }
 
 /**

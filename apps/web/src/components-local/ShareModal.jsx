@@ -17,15 +17,28 @@ import { Alert, Badge, Button, ConfirmModal, Icon, Input, Modal, Select } from '
  * `FileBrowser`.
  */
 
+/**
+ * `ms: null` means "say nothing and take the server's default".
+ *
+ * That is not a shorthand, it is the fix for a real defect. The 7-day preset
+ * used to send `browserNow + 7 days` as an absolute timestamp, and the server
+ * refuses anything past `ctx.now + 7 days` — the same constant, so the request
+ * carried no tolerance at all and passed only when the server's clock was at
+ * or ahead of the browser's. It usually is not: `ctx.now` is captured before
+ * any I/O, and a Workers clock only advances on I/O, so on a warm isolate it
+ * reads the previous request's time. The ceiling was therefore computed from a
+ * timestamp in the past while the browser asked for the full allowance from
+ * the present, and the default preset was refused more often than not.
+ *
+ * Seven days is already what `resolveExpiry` returns for an absent
+ * `expiresAt`, computed entirely server-side. Sending nothing is exact rather
+ * than approximately right.
+ */
 const PRESETS = [
   { value: '1h', label: '1 hour', ms: 60 * 60 * 1000 },
   { value: '24h', label: '24 hours', ms: 24 * 60 * 60 * 1000 },
-  { value: '7d', label: '7 days', ms: 7 * 24 * 60 * 60 * 1000 },
-  { value: 'custom', label: 'Custom date…', ms: null }
+  { value: '7d', label: '7 days', ms: null }
 ];
-
-/** Matches the server's own ceiling — `MAX_SHARE_TTL_MS` in lib/shares.ts. */
-const MAX_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes)) return '—';
@@ -37,12 +50,6 @@ function formatBytes(bytes) {
   return `${value >= 10 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
 }
 
-/** `datetime-local` wants `YYYY-MM-DDTHH:mm`, in local time, no timezone suffix. */
-function toLocalInputValue(date) {
-  const pad = n => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 /** The folder path a folder target names, whichever field it arrived in. */
 function folderPathOf(target) {
   return target?.path ?? target?.name ?? '';
@@ -50,7 +57,6 @@ function folderPathOf(target) {
 
 export default function ShareModal({ open, target, limits, onClose, onCreated, api, workspaceId, ws }) {
   const [expiry, setExpiry] = useState('7d');
-  const [customDate, setCustomDate] = useState('');
   const [link, setLink] = useState(null);
   const [error, setError] = useState(null);
   const [creating, setCreating] = useState(false);
@@ -69,7 +75,6 @@ export default function ShareModal({ open, target, limits, onClose, onCreated, a
   useEffect(() => {
     if (!open) return;
     setExpiry('7d');
-    setCustomDate('');
     setError(null);
     setLink(null);
     setFolderStats(null);
@@ -90,7 +95,12 @@ export default function ShareModal({ open, target, limits, onClose, onCreated, a
           kind === 'file' ? s.kind === 'file' && s.fileId === target.id
             : s.kind === 'folder' && s.path === folderPath
         );
-        if (!cancelled) setLink(existing ?? null);
+        if (cancelled) return;
+        setLink(existing ?? null);
+        // A create that failed a moment ago has nothing to say about a link
+        // that already exists, and `error && !link` would only hide it until
+        // the next revoke brought it back.
+        if (existing) setError(null);
       } catch {
         // No live-link answer is not fatal — the create form still works, and
         // the create call itself is the authority on whether one is allowed.
@@ -126,10 +136,7 @@ export default function ShareModal({ open, target, limits, onClose, onCreated, a
   const shareLinksLimit = limits?.shareLinks ?? 0;
   const allowed = shareLinksLimit > 0;
 
-  const maxCustom = new Date(Date.now() + MAX_TTL_MS);
-  const customTooFar = expiry === 'custom' && customDate !== '' && new Date(customDate).getTime() > maxCustom.getTime();
-  const customMissing = expiry === 'custom' && customDate === '';
-  const canSubmit = allowed && !creating && !customTooFar && !customMissing;
+  const canSubmit = allowed && !creating;
 
   const runCreate = async () => {
     if (!canSubmit || !api?.createShare) return;
@@ -137,10 +144,13 @@ export default function ShareModal({ open, target, limits, onClose, onCreated, a
     setError(null);
     try {
       const preset = PRESETS.find(p => p.value === expiry);
-      const expiresAt = expiry === 'custom'
-        ? new Date(customDate).toISOString()
-        : new Date(Date.now() + preset.ms).toISOString();
-      const body = kind === 'file' ? { fileId: target.id, expiresAt } : { path: folderPath, expiresAt };
+      // A null `ms` sends no expiry at all and takes the server's seven-day
+      // default. See PRESETS: asking for the ceiling explicitly is what the
+      // server refuses.
+      const target_ = kind === 'file' ? { fileId: target.id } : { path: folderPath };
+      const body = preset?.ms == null
+        ? target_
+        : { ...target_, expiresAt: new Date(Date.now() + preset.ms).toISOString() };
       const { share } = await api.createShare(workspaceId, body);
       setLink(share);
       onCreated?.(share);
@@ -171,6 +181,7 @@ export default function ShareModal({ open, target, limits, onClose, onCreated, a
     try {
       await api.revokeShare(workspaceId, link.id);
       setLink(null);
+      setError(null);
     } catch (err) {
       setError(err?.message ?? 'The link could not be revoked.');
     } finally {
@@ -240,7 +251,12 @@ export default function ShareModal({ open, target, limits, onClose, onCreated, a
           </Alert>
         ) : null}
 
-        {error ? <Alert tone="danger" title="Not created">{error}</Alert> : null}
+        {/* Never beside a live link. A failed attempt used to leave this
+            banner standing while the `listShares` effect populated `link`
+            underneath it, so the dialog said "Not created" directly above a
+            working share URL — two true statements about different links,
+            which reads as the product contradicting itself. */}
+        {error && !link ? <Alert tone="danger" title="Not created">{error}</Alert> : null}
 
         {link ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s-4)' }}>
@@ -262,27 +278,13 @@ export default function ShareModal({ open, target, limits, onClose, onCreated, a
             </div>
           </div>
         ) : (
-          <>
-            <Select
-              label="Expires"
-              value={expiry}
-              disabled={!allowed}
-              onChange={e => setExpiry(e.target.value)}
-              options={PRESETS.map(p => ({ value: p.value, label: p.label }))}
-            />
-            {expiry === 'custom' ? (
-              <Input
-                label="Expires on"
-                type="datetime-local"
-                value={customDate}
-                max={toLocalInputValue(maxCustom)}
-                disabled={!allowed}
-                onChange={e => setCustomDate(e.target.value)}
-                error={customTooFar ? 'A share link cannot outlive 7 days.' : undefined}
-                hint={customTooFar ? undefined : 'Up to 7 days from now.'}
-              />
-            ) : null}
-          </>
+          <Select
+            label="Expires"
+            value={expiry}
+            disabled={!allowed}
+            onChange={e => setExpiry(e.target.value)}
+            options={PRESETS.map(p => ({ value: p.value, label: p.label }))}
+          />
         )}
       </Modal>
 

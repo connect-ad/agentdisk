@@ -33,50 +33,10 @@ const WS = 'ws_01M1WTCVFG3VEX6VRHCZWN1SK2';
 const FILE_TARGET = { kind: 'file', id: 'fil_A', name: 'q3.pdf' };
 const FOLDER_TARGET = { kind: 'folder', name: '/reports', path: '/reports' };
 
-function setNativeValue(field, value) {
-  Object.defineProperty(field, 'value', { writable: true, value });
-  field.dispatchEvent(new Event('input', { bubbles: true }));
-}
-
 describe('ShareModal → expiry', () => {
   it('offers seven days by default', () => {
     render(<ShareModal open target={FILE_TARGET} limits={{ shareLinks: 100 }} />);
     expect(screen.getByLabelText(/expires/i).value).toBe('7d');
-  });
-
-  it('refuses a custom date past 7 days in the UI, not just at the server', async () => {
-    const user = userEvent.setup();
-    render(<ShareModal open target={FILE_TARGET} limits={{ shareLinks: 100 }} />);
-
-    await user.selectOptions(screen.getByLabelText(/expires/i), 'custom');
-    const tooFar = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000);
-    const pad = n => String(n).padStart(2, '0');
-    const value = `${tooFar.getFullYear()}-${pad(tooFar.getMonth() + 1)}-${pad(tooFar.getDate())}T${pad(tooFar.getHours())}:${pad(tooFar.getMinutes())}`;
-
-    const dateField = screen.getByLabelText(/expires on/i);
-    setNativeValue(dateField, value);
-
-    await waitFor(() => {
-      expect(screen.queryByText(/cannot outlive 7 days/i)).not.toBeNull();
-    });
-    expect(screen.getByRole('button', { name: /create link/i }).disabled).toBe(true);
-  });
-
-  it('accepts a custom date within 7 days', async () => {
-    const user = userEvent.setup();
-    render(<ShareModal open target={FILE_TARGET} limits={{ shareLinks: 100 }} />);
-
-    await user.selectOptions(screen.getByLabelText(/expires/i), 'custom');
-    const soon = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
-    const pad = n => String(n).padStart(2, '0');
-    const value = `${soon.getFullYear()}-${pad(soon.getMonth() + 1)}-${pad(soon.getDate())}T${pad(soon.getHours())}:${pad(soon.getMinutes())}`;
-
-    const dateField = screen.getByLabelText(/expires on/i);
-    setNativeValue(dateField, value);
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /create link/i }).disabled).toBe(false);
-    });
   });
 });
 
@@ -220,6 +180,56 @@ describe('ShareModal → creating a file link', () => {
 
     await screen.findByText(/used all of its share links/i);
   });
+
+  it('sends no expiry at all for the seven-day default', async () => {
+    // The defect this pins. Sending `browserNow + 7 days` asks for exactly the
+    // server's ceiling, and the server computes that ceiling from `ctx.now` -
+    // captured before any I/O, on a clock that only advances on I/O. So the
+    // default preset was refused whenever the isolate's clock was stale, which
+    // is most of the time. Seven days is already what an absent expiresAt
+    // means, decided by the only clock that matters.
+    const user = userEvent.setup();
+    const createShare = vi.fn(async () => ({
+      share: { id: 'shr_1', url: 'https://app.example/s/tok', expiresAt: new Date().toISOString() }
+    }));
+    const listShares = vi.fn(async () => ({ shares: [] }));
+    render(
+      <ShareModal open target={FILE_TARGET} limits={{ shareLinks: 100 }}
+        api={{ createShare, listShares }} workspaceId={WS} />
+    );
+
+    await waitFor(() => expect(listShares).toHaveBeenCalled());
+    expect(screen.getByLabelText(/expires/i).value).toBe('7d');
+    await user.click(screen.getByRole('button', { name: /create link/i }));
+
+    await waitFor(() => expect(createShare).toHaveBeenCalled());
+    expect(createShare.mock.calls[0][1]).toEqual({ fileId: 'fil_A' });
+  });
+
+  it('still sends an explicit expiry for a preset with headroom', async () => {
+    const user = userEvent.setup();
+    const createShare = vi.fn(async () => ({
+      share: { id: 'shr_2', url: 'https://app.example/s/tok2', expiresAt: new Date().toISOString() }
+    }));
+    const listShares = vi.fn(async () => ({ shares: [] }));
+    render(
+      <ShareModal open target={FILE_TARGET} limits={{ shareLinks: 100 }}
+        api={{ createShare, listShares }} workspaceId={WS} />
+    );
+
+    await waitFor(() => expect(listShares).toHaveBeenCalled());
+    await user.selectOptions(screen.getByLabelText(/expires/i), '1h');
+    await user.click(screen.getByRole('button', { name: /create link/i }));
+
+    await waitFor(() => expect(createShare).toHaveBeenCalled());
+    expect(createShare.mock.calls[0][1].expiresAt).toEqual(expect.any(String));
+  });
+
+  it('offers no custom date', () => {
+    render(<ShareModal open target={FILE_TARGET} limits={{ shareLinks: 100 }} />);
+    const options = [...screen.getByLabelText(/expires/i).options].map(o => o.value);
+    expect(options).toEqual(['1h', '24h', '7d']);
+  });
 });
 
 describe('ShareModal → an existing link', () => {
@@ -283,18 +293,17 @@ describe('ShareModal → an existing link', () => {
 });
 
 describe('ShareModal → focus', () => {
-  it('keeps focus in the custom-date field across every keystroke', async () => {
+  it('keeps focus on the expiry field while it is being changed', async () => {
     const user = userEvent.setup();
     render(<ShareModal open target={FILE_TARGET} limits={{ shareLinks: 100 }} />);
-    await user.selectOptions(screen.getByLabelText(/expires/i), 'custom');
 
-    const dateField = screen.getByLabelText(/expires on/i);
-    await user.click(dateField);
+    const field = screen.getByLabelText(/expires/i);
+    await user.click(field);
     // A dialog whose focus-restoring effect depends on an inline `onClose`
-    // re-runs per keystroke and throws focus onto the close button — the bug
-    // this project has shipped before. Typing here would fail if this modal
-    // reproduced it.
-    await user.keyboard('2026');
-    expect(document.activeElement).toBe(dateField);
+    // re-runs per interaction and throws focus onto the close button — the bug
+    // this project has shipped before. Changing the value here would fail if
+    // this modal reproduced it.
+    await user.selectOptions(field, '1h');
+    expect(document.activeElement).toBe(field);
   });
 });

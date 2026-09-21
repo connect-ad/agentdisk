@@ -56,7 +56,21 @@ describe("resolveExpiry", () => {
   });
 
   it("refuses a date beyond the cap", () => {
-    expect(() => resolveExpiry(NOW + MAX_SHARE_TTL_MS + 1000, NOW)).toThrow(/7 days/);
+    expect(() => resolveExpiry(NOW + MAX_SHARE_TTL_MS + 120_000, NOW)).toThrow(/7 days/);
+  });
+
+  it("accepts the exact ceiling, because a caller cannot see our clock", () => {
+    // The defect this exists to stop. `ctx.now` is captured before any I/O and
+    // a Workers clock only advances on I/O, so it can read the previous
+    // request's time - which made "seven days from now" refused for being
+    // honest. A caller slightly ahead of us is inside the grace.
+    expect(() => resolveExpiry(NOW + MAX_SHARE_TTL_MS, NOW)).not.toThrow();
+    expect(() => resolveExpiry(NOW + MAX_SHARE_TTL_MS + 30_000, NOW)).not.toThrow();
+  });
+
+  it("never grants more than the cap, whatever the grace let through", () => {
+    // The grace decides what is accepted, not what is granted.
+    expect(resolveExpiry(NOW + MAX_SHARE_TTL_MS + 30_000, NOW)).toBe(NOW + MAX_SHARE_TTL_MS);
   });
 
   it("refuses a date in the past", () => {

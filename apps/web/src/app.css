@@ -1401,7 +1401,10 @@ a.ds__qsbox:hover .ds__qsbtn{background:var(--accent-hover)}
    Name, agent, masked key with its eye, scope on two lines, last used, and
    one State pill that is also the row's menu. The tone is a colour on a
    word and a mark, never a colour alone. ----------------------------- */
+.ds__ktbl th{font-family:var(--font-mono);letter-spacing:0.08em}
+.ds__ktbl .tbl__primary{font-weight:var(--w-semi);color:var(--ink);font-size:var(--t-14)}
 .ds__kkey{display:inline-flex;align-items:center;gap:var(--s-2);white-space:nowrap}
+.ds__kmask{color:var(--ink);letter-spacing:0.04em}
 .ds__kkey .icon-btn{color:var(--ink-4)}
 .ds__kkey .icon-btn:hover:not(:disabled){color:var(--ink)}
 .ds__kscope{display:flex;flex-direction:column;gap:2px;font-size:var(--t-12);
@@ -1418,5 +1421,6 @@ button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
 .kst--warn{background:var(--warn-soft);border-color:var(--warn-line);color:var(--warn-ink)}
 .kst--danger{background:var(--danger-soft);border-color:var(--danger-line);color:var(--danger-ink)}
 .kst__dot{width:0.375rem;height:0.375rem;border-radius:var(--r-full);background:currentColor;flex:none}
+.kst--ok .kst__dot{background:var(--ok)}
 .kst__label{line-height:1}
 .kst__menu{min-width:9.5rem;animation:ad-fade var(--d-1) var(--ease)}

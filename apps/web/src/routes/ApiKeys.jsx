@@ -186,7 +186,8 @@ export default function ApiKeys() {
   };
 
   const columns = [
-    { key: 'name', header: 'Name', primary: true },
+    // Sized, so the slack goes to the key column rather than trailing the name.
+    { key: 'name', header: 'Name', primary: true, width: 200 },
     {
       key: 'agent',
       header: 'Agent',
@@ -194,12 +195,11 @@ export default function ApiKeys() {
       render: r =>
         r.agentId
           ? <Badge tone="accent" mono>{agentName(r.agentId) ?? r.agentId}</Badge>
-          : <span style={{ color: 'var(--ink-3)' }}>Workspace</span>
+          : <span style={{ color: 'var(--ink-2)' }}>Workspace</span>
     },
     {
       key: 'key',
       header: 'Key',
-      width: 230,
       // The eye. Owner only, because a reader who can read a write-scoped key
       // can write; disabled for a key minted before keys were kept, because
       // nothing brings that one back; absent on a revoked key, which the API
@@ -207,7 +207,7 @@ export default function ApiKeys() {
       // secret itself never appears here, only in the dialog the eye opens.
       render: r => (
         <span className="ds__kkey" onClick={e => e.stopPropagation()}>
-          <ApiKeyDisplay prefix={r.prefix} lastFour={r.lastFour} />
+          <span className="ad-mono ds__kmask">{r.prefix}{'•'.repeat(8)}{r.lastFour}</span>
           {role === 'owner' && r.status !== 'revoked' ? (
             <IconButton
               icon={<Icon name="eye" size={14} />}
@@ -236,7 +236,7 @@ export default function ApiKeys() {
       key: 'lastUsed',
       header: 'Last used',
       width: 110,
-      render: r => <span style={{ color: 'var(--ink-3)' }}>{relativeTime(r.lastUsedAt)}</span>
+      render: r => <span style={{ color: 'var(--ink-2)' }}>{relativeTime(r.lastUsedAt)}</span>
     },
     {
       key: 'state',
@@ -291,6 +291,7 @@ export default function ApiKeys() {
 
       <Panel flush title="Keys">
         <DataTable
+          className="ds__ktbl"
           columns={columns}
           rows={loading ? [] : keys}
           loading={loading}

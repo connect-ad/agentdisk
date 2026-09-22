@@ -988,6 +988,156 @@ git commit -m "Record every claim attempt, and show it in the console"
 
 ---
 
+### Task 10: Sweep unclaimed sandboxes weekly, and give claim links a full console
+
+The unclaimed sweep runs hourly and has `SANDBOX_EXPIRY_ENABLED = "false"` in both environments, so unclaimed sandboxes accumulate forever — the same defect as Task 1, in the other sweep. And Task 9's console screen shows attempts; this widens it to the links themselves.
+
+**Files:**
+- Modify: `apps/api/wrangler.toml` — `SANDBOX_EXPIRY_ENABLED` in `[env.dev]`
+- Modify: `apps/api/src/index.ts` — the sandbox-expiry block in the scheduled handler
+- Modify: `apps/api/src/admin/deletions-access.ts` — add `claimLinks()`
+- Modify: `apps/api/src/routes/admin-console.ts` — extend `GET /v1/admin/claim-links`
+- Modify: `apps/admin/src/screens/ClaimLinks.jsx`
+- Test: `apps/api/test/sandbox-expiry.test.ts`, `apps/api/test/admin-claim-links.test.ts`
+
+**Interfaces:**
+- Consumes: `expireUnclaimedWorkspaces(db, files, now, ttlMs, options)` from `src/jobs/sandbox-expiry.ts`; `recordClaimAttempt` and the `claim_attempts` table from Task 9.
+- Produces: `GET /v1/admin/claim-links?state=&q=` where `state` is one of `all | unclaimed | claimed | due` and `q` matches a workspace id, a claim id or a token hash.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// apps/api/test/sandbox-expiry.test.ts
+it("deletes an expired unclaimed sandbox once the flag is on", async () => {
+  const sandbox = await provision({ createdAt: NOW - UNCLAIMED_TTL_MS - 1000 });
+
+  const result = await expireUnclaimedWorkspaces(env.DB, env.FILES, NOW, UNCLAIMED_TTL_MS, {
+    dryRun: false,
+  });
+
+  expect(result.deleted).toBe(1);
+  const row = await env.DB.prepare(`SELECT id FROM workspaces WHERE id = ?`)
+    .bind(sandbox.workspaceId).first();
+  expect(row).toBeNull();
+});
+
+it("leaves a sandbox that has been claimed, however old", async () => {
+  // claimed_at is the gate, not age. A claimed workspace is somebody's
+  // property and the sweep must never reach it.
+  const sandbox = await provision({ createdAt: NOW - UNCLAIMED_TTL_MS - 1000 });
+  await env.DB.prepare(`UPDATE workspaces SET claimed_at = ? WHERE id = ?`)
+    .bind(NOW, sandbox.workspaceId).run();
+
+  const result = await expireUnclaimedWorkspaces(env.DB, env.FILES, NOW, UNCLAIMED_TTL_MS, {
+    dryRun: false,
+  });
+  expect(result.deleted).toBe(0);
+});
+```
+
+```ts
+// apps/api/test/admin-claim-links.test.ts
+it("lists links by state and finds one by id", async () => {
+  const open = await provision();
+  const taken = await provision();
+  await claimAs(OWNER_UID, taken.claimToken, { mode: "new" });
+
+  const unclaimed = await (await call("GET", "/v1/admin/claim-links?state=unclaimed", admin)).json() as
+    { links: { workspaceId: string; state: string }[] };
+  expect(unclaimed.links.map(l => l.workspaceId)).toContain(open.workspaceId);
+  expect(unclaimed.links.map(l => l.workspaceId)).not.toContain(taken.workspaceId);
+
+  const claimed = await (await call("GET", "/v1/admin/claim-links?state=claimed", admin)).json() as
+    { links: { workspaceId: string; claimedByEmail: string | null }[] };
+  const row = claimed.links.find(l => l.workspaceId === taken.workspaceId);
+  expect(row?.claimedByEmail).toBe(OWNER_EMAIL);
+
+  const found = await (await call("GET", `/v1/admin/claim-links?q=${open.workspaceId}`, admin)).json() as
+    { links: unknown[] };
+  expect(found.links).toHaveLength(1);
+});
+```
+
+- [ ] **Step 2: Run them and watch them fail**
+
+Run: `cd apps/api && npx vitest run test/sandbox-expiry.test.ts test/admin-claim-links.test.ts`
+Expected: the expiry tests may pass already (the job is built); the console tests FAIL with 404.
+
+- [ ] **Step 3: Enable the sandbox sweep**
+
+In `apps/api/wrangler.toml`, set `SANDBOX_EXPIRY_ENABLED = "true"` in `[env.dev]` only — prod stays `"false"` for the same reason Task 1 leaves the other sweep off there.
+
+Both sweeps now share the weekly cron set in Task 1; no separate schedule.
+
+- [ ] **Step 4: Add the console query**
+
+```ts
+// apps/api/src/admin/deletions-access.ts
+/**
+ * Every claim link and where it stands.
+ *
+ * Deliberately one query over `workspaces` rather than over `claim_attempts`:
+ * a link exists whether or not anybody has ever touched it, and the links
+ * nobody has touched are the interesting ones when somebody asks why a person
+ * never received theirs. The attempts are joined on for the timeline.
+ *
+ * `claim_token_hash` is returned, never a token - there is no token to return,
+ * only its hash was ever stored.
+ */
+async claimLinks(state: "all" | "unclaimed" | "claimed" | "due", q: string | null, limit = 50) {
+  const where: string[] = ["w.claim_token_hash IS NOT NULL"];
+  if (state === "unclaimed") where.push("w.claimed_at IS NULL");
+  if (state === "claimed") where.push("w.claimed_at IS NOT NULL");
+  // "due" is the set the weekly sweep will take on its next run: unclaimed and
+  // past its TTL. It is what somebody checks before clicking run-now.
+  if (state === "due") where.push("w.claimed_at IS NULL AND w.created_at <= ?");
+
+  const rows = await this.db
+    .prepare(
+      `SELECT w.id AS workspaceId, w.name, w.created_at AS createdAt,
+              w.claimed_at AS claimedAt, w.claim_token_hash AS tokenHash,
+              w.claim_token_expires_at AS expiresAt,
+              w.storage_bytes_used AS storageBytes, w.file_count AS fileCount,
+              u.email AS claimedByEmail,
+              (SELECT COUNT(*) FROM claim_attempts a WHERE a.workspace_id = w.id) AS attempts
+         FROM workspaces w
+         LEFT JOIN memberships m ON m.workspace_id = w.id AND m.role = 'owner'
+         LEFT JOIN users u ON u.id = m.user_id
+        WHERE ${where.join(" AND ")}
+          ${q ? "AND (w.id = ? OR w.claim_token_hash = ?)" : ""}
+        ORDER BY w.created_at DESC LIMIT ?`
+    )
+    .bind(...[
+      ...(state === "due" ? [this.now - UNCLAIMED_TTL_MS] : []),
+      ...(q ? [q, q] : []),
+      limit,
+    ])
+    .all();
+
+  return rows.results ?? [];
+}
+```
+
+- [ ] **Step 5: Extend the screen**
+
+`ClaimLinks.jsx` gains a state filter — **All / Unclaimed / Claimed / Due for deletion** — and a search box matching a workspace id or a claim token hash. Each row shows the workspace, its size, when the link was created, when it expires, its state, who claimed it if anyone, and the attempt count. Selecting a row opens the Task 9 timeline.
+
+The **Due for deletion** tab is the one that earns its keep: it is exactly what the next weekly sweep will destroy, which is what somebody checks before pressing run-now.
+
+- [ ] **Step 6: Run everything**
+
+Run: `cd apps/api && npx vitest run && npx tsc --noEmit`, then `cd ../admin && npx vitest run && npm run build`
+Expected: PASS, clean, builds.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add apps/api/wrangler.toml apps/api/src apps/admin/src apps/api/test
+git commit -m "Sweep unclaimed sandboxes weekly, and list claim links in the console"
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage.** D1 weekly + on-demand → Tasks 1, 6. D2 enable → Task 1. D3 email scrub → Task 2. D4 Firebase delete → Task 3. D5 remove restore → Task 4. D6 self-service cancels / staff refuses → Task 5. D7 detach + retain + disclose → Tasks 5, 7. D8 seven-day account window → Tasks 2, 3. Console section → Task 6. Re-join test → Task 5 Step 1. No gaps.
@@ -998,7 +1148,12 @@ git commit -m "Record every claim attempt, and show it in the console"
 signature, and Tasks 6 and 9 depend on the new one. Execute in order, or their
 calls will not compile.
 
-**Claim coverage (Tasks 8, 9):** TTL alignment and the 404 in Task 8; the
+**Both sweeps, not one.** Task 1 enables the pending-deletion sweep; Task 10
+enables the unclaimed-sandbox sweep and puts both on the same weekly cron. They
+are separate flags and separate jobs, and enabling only one leaves half the
+product still never deleting anything.
+
+**Claim coverage (Tasks 8, 9, 10):** TTL alignment and the 404 in Task 8; the
 attempt log, its retention and the console screen in Task 9. Their order is not
 cosmetic — Task 8 removes the explanation the client used to get, and Task 9 is
 where that explanation goes instead. Shipping 8 alone leaves support unable to

@@ -215,6 +215,38 @@ export async function sweepPendingDeletions(
 }
 
 /**
+ * Free the email address, and mark the purge finished.
+ *
+ * Called only after the Firebase identity is gone, and all three fields move
+ * together: the address is released so the person can sign up again, the uid is
+ * cleared so a retry cannot repeat a delete that already succeeded, and
+ * `purge_after` is cleared so the row reads as finished rather than
+ * perpetually due.
+ *
+ * `.invalid` is reserved by RFC 2606 and can never resolve or receive mail —
+ * the same pattern `db/bootstrap.ts` uses for provisional sandbox owners. The
+ * row itself survives as a tombstone for `audit_events.actor_id`.
+ *
+ * Exported so the round trip can be tested against the real statement: the
+ * whole point is that `users.email NOT NULL UNIQUE` stops blocking that
+ * address, and a test asserting a copy of this SQL would prove nothing.
+ */
+export async function releaseAddress(
+  db: D1Database,
+  userId: string,
+  now: number
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE users
+          SET email = ?, firebase_uid = NULL, purge_after = NULL, updated_at = ?
+        WHERE id = ?`
+    )
+    .bind(`deleted-${userId}@agentdisk.invalid`, now, userId)
+    .run();
+}
+
+/**
  * Release the identity and the email address of accounts past their window.
  *
  * Runs after the bytes, and its failures never stop them: the objects are the
@@ -275,17 +307,7 @@ async function releaseIdentities(
     }
     try {
       await deleteFirebaseUser(identity.config, identity.kv, user.firebase_uid, now);
-      // Only now, and all three together: the address is freed, the uid is
-      // cleared so a retry cannot repeat the call, and purge_after is cleared
-      // so the row reads as finished rather than perpetually due.
-      await db
-        .prepare(
-          `UPDATE users
-              SET email = ?, firebase_uid = NULL, purge_after = NULL, updated_at = ?
-            WHERE id = ?`
-        )
-        .bind(`deleted-${user.id}@agentdisk.invalid`, now, user.id)
-        .run();
+      await releaseAddress(db, user.id, now);
       result.identitiesReleased += 1;
     } catch (err) {
       result.failed += 1;

@@ -16,7 +16,7 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ACCOUNT_PURGE_TTL_MS } from "../src/db/workspace-cascade";
-import { sweepPendingDeletions } from "../src/jobs/pending-deletions";
+import { sweepPendingDeletions, releaseAddress } from "../src/jobs/pending-deletions";
 import { NOW, ORG_ID, seedTwoWorkspaces } from "./helpers";
 import { AdminUserAccess } from "../src/admin/users-access";
 import type { AdminUser } from "../src/admin/access";
@@ -182,5 +182,58 @@ describe("releasing the identity and the address", () => {
 
     expect(result.identitySkipped).toBe(false);
     expect(result.identitiesReleased).toBe(0);
+  });
+});
+
+describe("coming back afterwards", () => {
+  /** What a fresh signup does: a new row, new uid, same address. */
+  async function signUpAgain(id: string, email: string): Promise<void> {
+    await env.DB.prepare(
+      `INSERT INTO users (id, email, firebase_uid, is_provisional, session_revoked_after,
+                          created_at, updated_at)
+       VALUES (?, ?, ?, 0, 0, ?, ?)`
+    )
+      .bind(id, email, `fb-new-${id}`, NOW, NOW)
+      .run();
+  }
+
+  it("blocks a new signup while the window is open, and allows it after", async () => {
+    // The whole re-join story in one test, and the defect it was found in:
+    // `users.email` is NOT NULL UNIQUE, so a tombstone holding the real
+    // address means a person's own account closure locks them out of their own
+    // email permanently. Their next signup dies on the unique index with an
+    // error they cannot act on.
+    await seedDeletableUser("usr_PURGE9", "ivan@example.com");
+    await access().softDelete("usr_PURGE9", "a reason long enough to be one", { revokeKeys: false });
+
+    // During the window the address is still held - deliberately, because the
+    // account is still being emailed. A signup now is refused, and the refusal
+    // is correct: inside a recovery window somebody should be recovering, not
+    // starting over.
+    await expect(signUpAgain("usr_RETURN1", "ivan@example.com")).rejects.toThrow();
+
+    // The sweep releases it at the end, with the identity.
+    await releaseAddress(env.DB, "usr_PURGE9", NOW + ACCOUNT_PURGE_TTL_MS);
+
+    // And now they can come back.
+    await expect(signUpAgain("usr_RETURN2", "ivan@example.com")).resolves.toBeUndefined();
+  });
+
+  it("gives the returning person a genuinely new account", async () => {
+    // Nothing is recovered. The tombstone keeps its own id and its scrubbed
+    // address; the new row is a different account that merely shares an email.
+    await seedDeletableUser("usr_PURGE10", "judy@example.com");
+    await access().softDelete("usr_PURGE10", "a reason long enough to be one", { revokeKeys: false });
+    await releaseAddress(env.DB, "usr_PURGE10", NOW + ACCOUNT_PURGE_TTL_MS);
+    await signUpAgain("usr_RETURN3", "judy@example.com");
+
+    const tomb = await readUser("usr_PURGE10");
+    expect(tomb?.email).toBe("deleted-usr_PURGE10@agentdisk.invalid");
+    expect(tomb?.deleted_at).not.toBeNull();
+    expect(tomb?.firebase_uid).toBeNull();
+
+    const fresh = await readUser("usr_RETURN3");
+    expect(fresh?.email).toBe("judy@example.com");
+    expect(fresh?.deleted_at).toBeNull();
   });
 });

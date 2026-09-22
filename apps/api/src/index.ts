@@ -46,6 +46,7 @@ import {
   removeWorkspaceMember,
 } from "./routes/members";
 import { resolveVerifiedUser } from "./auth/authenticate";
+import { deleteOwnAccount } from "./routes/account";
 import { readFirebaseAdminConfig } from "./auth/firebase-admin";
 import { extractBearerToken, isApiKeyToken } from "./lib/keys";
 import { unauthorized } from "./lib/errors";
@@ -484,6 +485,19 @@ export default {
       // must never acquire authority over the person who issued it.
       if (route === "POST /v1/me/logout-all") {
         return await authed({ op: null }, logoutAll);
+      }
+
+      // A person closing their own account. `op: null` because no scope
+      // describes it - the route refuses an API key outright, so there is no
+      // capability a key could hold that would make this allowed.
+      if (route === "DELETE /v1/me") {
+        return await authed({ op: null }, (ctx, req) =>
+          deleteOwnAccount(ctx, req, {
+            db: env.DB,
+            files: env.FILES,
+            stripeSecretKey: env.STRIPE_SECRET_KEY,
+          })
+        );
       }
 
       // Search. `list` rather than `read`: a key that may not enumerate must

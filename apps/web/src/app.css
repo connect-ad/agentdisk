@@ -1433,35 +1433,52 @@ button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
 .kst__menu{min-width:9.5rem;animation:ad-fade var(--d-1) var(--ease)}
 
 /* ---- The key dialogs (view, created, rotated) --------------------------
-   Sized from the reference, then taken down a quarter on the owner's call
-   (22 Sept 2026): 33.75rem wide against the 45rem it was, and every inside
-   measurement scaled with it, so the proportions the reference set are
-   kept and only the whole is smaller.
+   Every number here is read from the design source rather than measured off a
+   capture: `AgentDisk Dashboard.dc.html`, the `MODAL - reveal key` block. That
+   file sets no root font-size, no zoom and no transform on its sheet, so its
+   px are literal px at zoom 1 and there is nothing to normalise. The block had
+   drifted to a fairly even ~0.95 of them, with six values well outside even
+   that -- the glyph at 1.88x, the note row's gap at 0.67x, the footer caption
+   at 1.10x -- which is what eyeballing a screenshot produces.
 
-   The mark's glyph needs its own correction. Every other icon in the set
-   fills its 24-unit box; `key` draws inside roughly x 9.3-19, y 7.7-15, so
-   it renders at about 40% of its nominal size and sits right of centre and
-   high. Hence an svg larger than the mark would otherwise want, and a
-   translate of the glyph's own offset. The translate is in percent, which
-   resolves against the svg's border box, so it stays correct whatever size
-   the icon is given. The glyph itself is wrong everywhere it is used, not
-   only here; fixing that is a change to the vendored icon set.
+   The width is the one place this reverses the 22 Sept call to take the dialog
+   down a quarter. That quarter was measured off `modal--lg` (45rem), and 35rem
+   is what the design actually asks for: still 22% under where it started, and
+   20px over where the quarter landed.
+
+   The glyph no longer needs correcting -- see components-local/KeyMark.jsx for
+   why the vendored `key` icon did, and why it is left alone.
 
    The `!important` rules override inline styles in the vendored
    ApiKeyDisplay, whose field and copy button carry their dimensions as
    style attributes; overriding here keeps that component's third
    divergence out of its source. ---------------------------------------- */
-.ds__kview{--kv-pad:1.3125rem;max-width:33.75rem}
-.ds__kview .modal__head{padding:var(--kv-pad) var(--kv-pad) var(--s-7);gap:var(--s-6)}
-.ds__kview .modal__body{padding:0 var(--kv-pad) var(--kv-pad);gap:var(--s-5)}
+.ds__kview{--kv-pad:1.375rem;max-width:35rem}
+/* center, not the base flex-start: the design aligns a single-line title to
+   the middle of its 36px mark. */
+.ds__kview .modal__head{padding:var(--kv-pad) var(--kv-pad) var(--s-6);
+  gap:0.8125rem;align-items:center}
 .ds__kview .modal__mark{width:2.25rem;height:2.25rem;border-radius:var(--r-2)}
-.ds__kview .modal__mark svg{width:2rem;height:2rem;transform:translate(-9%,2.7%)}
-.ds__kview .modal__title{font-size:var(--t-18)}
-.ds__kview code.ad-mono{font-size:var(--t-12);line-height:2;padding:var(--s-4) var(--s-5) !important}
-.ds__kview code.ad-mono + button{font-size:var(--t-12) !important;font-weight:var(--w-semi) !important;padding:0 var(--s-6) !important}
-.ds__kview .ad-meta{font-size:var(--t-12);color:var(--ink-2);gap:var(--s-3) !important}
-.ds__kview .ad-meta svg{width:0.75rem;height:0.75rem;margin-top:0.125rem}
-.ds__kview .modal__foot{justify-content:space-between;padding:var(--s-5) var(--kv-pad)}
-.ds__kview .modal__foot .btn{height:2.25rem;padding:0 var(--s-6);font-size:var(--t-12)}
-.ds__kcap{font-family:var(--font-mono);font-size:var(--t-11);letter-spacing:var(--tr-caps);
+.ds__kview .modal__title{font-size:1.1875rem;letter-spacing:-0.02em}
+/* The design's close button is drawn, not implied: a border and the raised
+   surface. Size is left to the base rule so the mobile touch target at the
+   2.125rem breakpoint is not pulled back down to 30px. */
+.ds__kview .modal__x .icon-btn{border-color:var(--line);background:var(--surface-2);
+  border-radius:0.5rem}
+.ds__kview .modal__body{padding:0 var(--kv-pad) 1.125rem;gap:var(--s-5)}
+/* ApiKeyDisplay's own column: the design puts 12px between the key and the
+   sentence under it, against the 10px the component hardcodes. */
+.ds__kfield{gap:0.75rem !important}
+.ds__kview code.ad-mono{font-size:var(--t-13);line-height:1.4;
+  padding:0.8125rem 0.875rem !important}
+.ds__kview code.ad-mono + button{gap:0.4375rem !important;font-size:var(--t-12-5) !important;
+  font-weight:var(--w-semi) !important;padding:0 0.9375rem !important}
+.ds__kview code.ad-mono + button svg{width:0.875rem;height:0.875rem}
+.ds__kview .ad-meta{font-size:var(--t-12-5);line-height:1.55;color:var(--ink-2);
+  gap:0.5625rem !important}
+.ds__kview .ad-meta svg{width:0.9375rem;height:0.9375rem;margin-top:0.0625rem}
+.ds__kview .modal__foot{justify-content:space-between;padding:0.875rem var(--kv-pad)}
+.ds__kview .modal__foot .btn{height:2.375rem;padding:0 var(--s-7);
+  font-size:var(--t-13-5);border-radius:var(--r-2)}
+.ds__kcap{font-family:var(--font-mono);font-size:var(--t-10);letter-spacing:0.07em;
   text-transform:uppercase;color:var(--ink-3);margin-right:auto}

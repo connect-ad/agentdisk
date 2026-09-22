@@ -6,6 +6,7 @@ import {
 import { useResource } from '../lib/useResource.js';
 import { fetchAgents, fetchKeys } from '../lib/resources.js';
 import StatePill from '../components-local/StatePill.jsx';
+import { KeyMark } from '../components-local/KeyMark.jsx';
 import { useWorkspace } from '../lib/workspace.jsx';
 
 /**
@@ -326,7 +327,7 @@ export default function ApiKeys() {
         title="Create API key"
         tone="accent"
         size="md"
-        mark={<Icon name="key" size={16} />}
+        mark={<KeyMark size={15} />}
         onClose={() => setDialog(null)}
         onSubmit={create}
         footer={
@@ -394,7 +395,7 @@ export default function ApiKeys() {
         title="Your API key"
         tone="accent"
         size="lg"
-        mark={<Icon name="key" size={16} />}
+        mark={<KeyMark />}
         footer={
           <Button
             onClick={() => {
@@ -419,7 +420,7 @@ export default function ApiKeys() {
           Copy it into your agent now. As the workspace owner you can view it again any
           time from the eye button in the keys table.
         </p>
-        <ApiKeyDisplay revealed secret={secret} />
+        <ApiKeyDisplay className="ds__kfield" revealed secret={secret} />
       </Modal>
 
       {/* --- the eye: one key, in a dialog, gone when it closes --- */}
@@ -429,7 +430,7 @@ export default function ApiKeys() {
         title={target ? target.name : 'API key'}
         tone="accent"
         size="lg"
-        mark={<Icon name="key" size={18} />}
+        mark={<KeyMark />}
         onClose={() => { setSecret(''); setDialog(null); }}
         footer={
           <>
@@ -441,7 +442,7 @@ export default function ApiKeys() {
           </>
         }
       >
-        <ApiKeyDisplay revealed secret={secret} />
+        <ApiKeyDisplay className="ds__kfield" revealed secret={secret} />
       </Modal>
 
       {/*
@@ -489,7 +490,7 @@ export default function ApiKeys() {
         title="Your new API key"
         tone="accent"
         size="lg"
-        mark={<Icon name="key" size={16} />}
+        mark={<KeyMark />}
         footer={
           <Button onClick={() => { setSecret(''); setDialog(null); setToast('Key enabled'); }}>
             Done
@@ -500,7 +501,7 @@ export default function ApiKeys() {
           Enabling issues a new secret. Update whatever was using this key, or it will keep
           being refused.
         </Alert>
-        <ApiKeyDisplay revealed secret={secret} />
+        <ApiKeyDisplay className="ds__kfield" revealed secret={secret} />
       </Modal>
 
       {toast ? (

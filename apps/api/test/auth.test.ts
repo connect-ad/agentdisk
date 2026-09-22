@@ -384,6 +384,8 @@ describe("an absent credential is 401 on every authenticated route", () => {
     ["DELETE", "/v1/agents/agt_x"],
     ["GET", "/v1/keys"],
     ["POST", "/v1/keys"],
+    ["GET", "/v1/keys/key_x/secret"],
+    ["PATCH", "/v1/keys/key_x"],
     ["DELETE", "/v1/keys/key_x"],
     ["GET", "/v1/files"],
     ["POST", "/v1/files"],

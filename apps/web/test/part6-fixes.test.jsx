@@ -298,47 +298,72 @@ describe('Agent details → Danger zone', () => {
  * Part 6 #2 — Revocation is permanent, and says so first
  * ========================================================================= */
 
-describe('API keys → revocation permanence', () => {
+/**
+ * Keys are switched off and on now, not revoked. Revoke was a one-way kill
+ * switch and these tests pinned how the screen admitted that; what has to be
+ * pinned instead is the fact that replaced it — **enabling rotates**. A
+ * reversible switch that quietly handed back the same secret would defeat the
+ * reason anyone switches a credential off, and the dialog is where somebody
+ * finds that out in time to decide.
+ *
+ * `old one` is the revoked fixture, which only support can produce now; the
+ * screen still has to render it honestly, with no control that pretends the
+ * customer can undo it.
+ */
+describe('API keys → disable, enable, delete', () => {
   const mountKeys = fixture =>
     mount(<ApiKeys />, fixture, {
       path: '/w/:ws/keys',
       entry: `/w/${fixture.slug}/keys`
     });
 
-  it('replaces the Revoke button with the reason on an already-revoked key', async () => {
+  it('offers no switch on a key support revoked, only the reason', async () => {
     mountKeys(BUSY);
     const row = (await screen.findByText('old one')).closest('tr');
-    expect(
-      within(row).getByText(/Revoked keys can't be reactivated/).textContent
-    ).toContain('mint a new key');
-    // No dead control: the Status column already says Revoked, so a disabled
-    // red button beside it says the same thing twice and looks operable.
-    expect(within(row).queryByRole('button', { name: 'Revoke' })).toBeNull();
+    expect(within(row).getByText(/Revoked by support/)).toBeTruthy();
+    // No dead control. The Status column already says Revoked; a button beside
+    // it saying the same thing looks operable and is not.
+    expect(within(row).queryByRole('button', { name: 'Enable' })).toBeNull();
+    expect(within(row).queryByRole('button', { name: 'Disable' })).toBeNull();
   });
 
-  it('says nothing of the kind beside a key that is still usable', async () => {
+  it('offers Disable and Delete on a key that is still usable', async () => {
     mountKeys(BUSY);
     const row = (await screen.findByText('reader')).closest('tr');
-    expect(within(row).queryByText(/can't be reactivated/)).toBeNull();
-    expect(within(row).getByRole('button', { name: 'Revoke' }).disabled).toBe(false);
+    expect(within(row).queryByText(/Revoked by support/)).toBeNull();
+    expect(within(row).getByRole('button', { name: 'Disable' }).disabled).toBe(false);
+    expect(within(row).getByRole('button', { name: 'Delete' }).disabled).toBe(false);
   });
 
-  /** The other workspace: no keys at all, so no note anywhere on the page. */
-  it('shows no reactivation note on a workspace with no keys', async () => {
+  it('shows no revoked note on a workspace with no keys', async () => {
     mountKeys(QUIET);
     await screen.findByText(/No API keys/i);
-    expect(screen.queryByText(/can't be reactivated/)).toBeNull();
+    expect(screen.queryByText(/Revoked by support/)).toBeNull();
   });
 
-  it('states the permanence before the commitment, not after it', async () => {
+  it('warns that enabling issues a new key, before the disable is committed', async () => {
+    // The whole reason this switch is safe to offer where revoke used to be.
+    // Somebody who reads "you can enable it again" and nothing else will
+    // reasonably expect their agent to keep working afterwards.
     const user = userEvent.setup();
     mountKeys(BUSY);
     const row = (await screen.findByText('reader')).closest('tr');
-    await user.click(within(row).getByRole('button', { name: 'Revoke' }));
+    await user.click(within(row).getByRole('button', { name: 'Disable' }));
 
     const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByText(/can never be reactivated/)).toBeTruthy();
-    expect(within(dialog).getByText(/minting a new key/)).toBeTruthy();
+    expect(within(dialog).getByText(/enabling issues a new key/i)).toBeTruthy();
+    expect(within(dialog).getByText(/next request/)).toBeTruthy();
+  });
+
+  it('says deleting cannot be undone, and points at disable instead', async () => {
+    const user = userEvent.setup();
+    mountKeys(BUSY);
+    const row = (await screen.findByText('reader')).closest('tr');
+    await user.click(within(row).getByRole('button', { name: 'Delete' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/cannot be undone/)).toBeTruthy();
+    expect(within(dialog).getByText(/disable it instead/)).toBeTruthy();
   });
 });
 

@@ -221,7 +221,13 @@ export function createApiClient(getToken) {
     /** Resolves to { key, secret } — the secret exists in this response only. */
     createKey: (workspaceId, body) =>
       request('/v1/keys', { method: 'POST', body, workspaceId }),
-    revokeKey: (workspaceId, keyId) =>
+    /**
+     * Switch a key off, or back on. Enabling rotates: the response carries a
+     * new `secret` and the old one stops working, so a caller must show it.
+     */
+    setKeyStatus: (workspaceId, keyId, status) =>
+      request(`/v1/keys/${keyId}`, { method: 'PATCH', body: { status }, workspaceId }),
+    deleteKey: (workspaceId, keyId) =>
       request(`/v1/keys/${keyId}`, { method: 'DELETE', workspaceId }),
     /**
      * The key itself, for the workspace owner. Refused for readers and for

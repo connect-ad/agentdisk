@@ -243,7 +243,7 @@ describe("minting keys", () => {
    * disable took effect. Both halves are asserted here together, in one test,
    * so that fixing the display without the enforcement (or the reverse) fails.
    */
-  it("reports a disabled agent's key as blocked, and refuses it", async () => {
+  it("reports a disabled agent's key as disabled, and refuses it", async () => {
     const agentId = await seedAgent({ id: "agt_TOGGLE", workspaceId: WORKSPACE_A });
     const agentKey = await seedApiKey({ workspaceId: WORKSPACE_A, agentId, ops: ["list", "read"] });
     const lister = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ["list"] });
@@ -260,7 +260,9 @@ describe("minting keys", () => {
 
     await env.DB.prepare(`UPDATE agents SET status = 'disabled' WHERE id = ?`).bind(agentId).run();
 
-    expect(await statusOf()).toBe("blocked");
+    // One word for "it does not work", whichever switch is off. Which switch
+    // it is lives in `disabledBy`, asserted below.
+    expect(await statusOf()).toBe("disabled");
     expect((await SELF.fetch(`${URL_BASE}/v1/agents`, { headers: bearer(agentKey.token) })).status).toBe(401);
 
     // Reversible, and the listing has to say so: re-enabling restores the key
@@ -269,7 +271,7 @@ describe("minting keys", () => {
     expect(await statusOf()).toBe("active");
   });
 
-  it("keeps revoked ahead of blocked, so a dead key never reads as recoverable", async () => {
+  it("keeps revoked ahead of disabled, so a dead key never reads as recoverable", async () => {
     const agentId = await seedAgent({ id: "agt_GONE", workspaceId: WORKSPACE_A });
     const revoked = await seedApiKey({
       workspaceId: WORKSPACE_A,
@@ -284,11 +286,11 @@ describe("minting keys", () => {
       await SELF.fetch(`${URL_BASE}/v1/keys`, { headers: bearer(lister.token) })
     ).json()) as { keys: { id: string; status: string }[] };
 
-    // Blocked lifts when the agent comes back; revoked never does.
+    // Disabled lifts when the agent comes back; revoked never does.
     expect(body.keys.find(k => k.id === revoked.keyId)?.status).toBe("revoked");
   });
 
-  it("leaves a workspace-level key active — it has no agent to be blocked by", async () => {
+  it("leaves a workspace-level key active — it has no agent to be disabled by", async () => {
     await seedAgent({ id: "agt_IRRELEVANT", workspaceId: WORKSPACE_A, status: "disabled" });
     const plain = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ["read"] });
     const lister = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ["list"] });
@@ -320,7 +322,7 @@ describe("minting keys", () => {
   });
 });
 
-describe("revoking keys", () => {
+describe("deleting keys", () => {
   it("stops the key on its very next request", async () => {
     const { token } = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ["keys:create", "read", "list"] });
     const minted = (await (
@@ -329,30 +331,33 @@ describe("revoking keys", () => {
 
     expect((await SELF.fetch(`${URL_BASE}/v1/whoami`, { headers: bearer(minted.secret) })).status).toBe(200);
 
-    const revoked = await SELF.fetch(`${URL_BASE}/v1/keys/${minted.key.id}`, {
+    const deleted = await SELF.fetch(`${URL_BASE}/v1/keys/${minted.key.id}`, {
       method: "DELETE",
       headers: bearer(token),
     });
-    expect(revoked.status).toBe(200);
+    expect(deleted.status).toBe(200);
 
     expect((await SELF.fetch(`${URL_BASE}/v1/whoami`, { headers: bearer(minted.secret) })).status).toBe(401);
+
+    // Gone, not sitting in the list marked dead. Delete means gone here as it
+    // does for an agent and a workspace.
+    const row = await env.DB.prepare(`SELECT id FROM api_keys WHERE id = ?`).bind(minted.key.id).first();
+    expect(row).toBeNull();
   });
 
-  it("is idempotent rather than an error the second time", async () => {
-    // A retry after a dropped response should not look like a problem.
+  it("is a 404 the second time, because there is nothing left to delete", async () => {
     const { token } = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ["keys:create", "read"] });
     const minted = (await (
       await post("/v1/keys", token, { name: "twice", ops: ["read"] })
     ).json()) as { key: { id: string } };
 
-    const first = await SELF.fetch(`${URL_BASE}/v1/keys/${minted.key.id}`, { method: "DELETE", headers: bearer(token) });
-    const second = await SELF.fetch(`${URL_BASE}/v1/keys/${minted.key.id}`, { method: "DELETE", headers: bearer(token) });
-    expect(first.status).toBe(200);
-    expect(second.status).toBe(200);
-    expect((await second.json()) as { alreadyRevoked: boolean }).toMatchObject({ alreadyRevoked: true });
+    const del = () =>
+      SELF.fetch(`${URL_BASE}/v1/keys/${minted.key.id}`, { method: "DELETE", headers: bearer(token) });
+    expect((await del()).status).toBe(200);
+    expect((await del()).status).toBe(404);
   });
 
-  it("cannot revoke a key in another workspace", async () => {
+  it("cannot delete a key in another workspace", async () => {
     const theirs = await seedApiKey({ workspaceId: WORKSPACE_B, ops: ["read"] });
     const mine = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ["keys:create", "read"] });
 

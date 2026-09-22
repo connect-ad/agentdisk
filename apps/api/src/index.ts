@@ -22,7 +22,7 @@ import {
   listWorkspaces,
 } from "./routes/workspaces";
 import { createAgent, deleteAgent, getAgent, listAgents, patchAgent } from "./routes/agents";
-import { createKey, listKeys, revealKey, revokeKey } from "./routes/keys";
+import { createKey, deleteKey, listKeys, patchKey, revealKey } from "./routes/keys";
 import { handleMcp } from "./mcp/server";
 import { purgeExpiredShares, reapStrandedFiles, reconcileCounters } from "./jobs/purge";
 import { pendingDeletionEnabled, sweepPendingDeletions } from "./jobs/pending-deletions";
@@ -702,9 +702,17 @@ export default {
           );
         }
         if (segments[3] !== undefined) throw new ApiError("NOT_FOUND", "No such route.");
+        // Both need keys:create, not `write`. Enabling mints a new secret, and
+        // deleting destroys a credential - neither is an ordinary edit, and a
+        // key holding only `write` must not be able to do either.
+        if (request.method === "PATCH") {
+          return await authed({ op: "keys:create" }, (authCtx, req) =>
+            patchKey(authCtx, req, keyId)
+          );
+        }
         if (request.method === "DELETE") {
           return await authed({ op: "keys:create" }, (authCtx, req) =>
-            revokeKey(authCtx, req, keyId)
+            deleteKey(authCtx, req, keyId)
           );
         }
         throw new ApiError("NOT_FOUND", "No such route.");

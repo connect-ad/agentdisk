@@ -45,7 +45,7 @@ export default function ApiKeys() {
   const { api, workspaceId, canWrite, role } = useWorkspace();
   const { status, data, error, reload } = useResource(loadKeys);
 
-  const [dialog, setDialog] = useState(null); // 'create' | 'reveal' | 'revoke'
+  const [dialog, setDialog] = useState(null); // 'create' | 'reveal' | 'rotated' | 'disable' | 'delete'
   const [target, setTarget] = useState(null);
   const [toast, setToast] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -97,15 +97,42 @@ export default function ApiKeys() {
     }
   };
 
-  const revoke = async () => {
+  /**
+   * Off, or on again with a new secret.
+   *
+   * Enabling rotates, so the new key is shown the same way a freshly minted
+   * one is: whatever was using the old token has to be updated, and a toast
+   * saying "enabled" would hide the one fact that matters.
+   */
+  const setStatus = async (r, status) => {
+    setBusy(true);
+    try {
+      const result = await api.setKeyStatus(workspaceId, r.id, status);
+      if (result.rotated) {
+        setSecret(result.secret);
+        setDialog('rotated');
+      } else {
+        setToast(status === 'disabled' ? 'Key disabled' : 'Key enabled');
+      }
+      // Whatever was shown is the old value now.
+      setShown(s => { const next = { ...s }; delete next[r.id]; return next; });
+      void reload();
+    } catch (err) {
+      setToast(`Could not change the key: ${err.message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const destroy = async () => {
     if (!target) return;
     setBusy(true);
     try {
-      await api.revokeKey(workspaceId, target.id);
-      setToast('Key revoked');
+      await api.deleteKey(workspaceId, target.id);
+      setToast('Key deleted');
       void reload();
     } catch (err) {
-      setToast(`Could not revoke: ${err.message}`);
+      setToast(`Could not delete: ${err.message}`);
     } finally {
       setBusy(false);
       setDialog(null);
@@ -205,51 +232,59 @@ export default function ApiKeys() {
       key: 'status',
       header: 'Status',
       width: 120,
+      // One word for "it does not work", however it came to be off, because
+      // that is the question being asked of this column. Why, and what to do
+      // about it, is the Actions column's job.
       render: r =>
         r.status === 'revoked' ? <Badge tone="danger" dot>Revoked</Badge>
           : r.status === 'expired' ? <Badge tone="warn" dot>Expired</Badge>
-            // Blocked is the agent's doing, not the key's: the row is intact and
-            // re-enabling the agent brings it straight back. Shown as warn
-            // rather than danger so it does not read as revoked, which is final.
-            : r.status === 'blocked' ? <Badge tone="warn" dot>Agent disabled</Badge>
+            : r.status === 'disabled' ? <Badge tone="warn" dot>Disabled</Badge>
               : <Badge tone="ok" dot>Active</Badge>
     },
     {
       key: 'act',
       header: 'Actions',
-      width: 210,
-      // Revoking is irreversible and there is no un-revoke, so the control that
-      // does it must not be discoverable only by hovering an unlabelled icon.
-      // It was one; the word is the whole point.
+      width: 260,
+      // Words, not bare icons: every one of these either stops a live
+      // credential, changes it, or destroys it.
       render: r => (
-        <span onClick={e => e.stopPropagation()}>
+        <span
+          className="row"
+          style={{ gap: 'var(--s-3)', alignItems: 'center', flexWrap: 'wrap' }}
+          onClick={e => e.stopPropagation()}
+        >
           {/*
-            Revocation is a one-way kill switch, matching every other product
-            that issues credentials, and that is a deliberate design rather than
-            a missing feature. A disabled button with no explanation reads as the
-            second one — so on a revoked key the button is gone entirely and only
-            the reason stays, where somebody hunting for a reactivate control
-            will actually find it. The Status column already says Revoked; a
-            dead red button beside it repeats that and reads as a live control.
+            The agent case has no Enable button on purpose. The key's own
+            switch is already on — enabling it here would appear to work and
+            change nothing, because the refusal is the agent's. The sentence
+            points at the control that would actually help.
           */}
-          {r.status === 'revoked' ? (
-            <span className="ad-meta" style={{ display: 'block' }}>
-              Revoked keys can&apos;t be reactivated — mint a new key when you need one.
-            </span>
+          {r.disabledBy === 'agent' ? (
+            <span className="ad-meta">Its agent is disabled.</span>
+          ) : r.status === 'revoked' ? (
+            <span className="ad-meta">Revoked by support.</span>
+          ) : r.status === 'expired' ? (
+            <span className="ad-meta">Expired.</span>
           ) : (
             <Button
               size="sm"
-              variant="danger-outline"
-              // A blocked key is still revocable. It reported as "active" before
-              // `blocked` existed, so testing for `active` here would quietly take
-              // away the ability to permanently kill a key whose agent happens to
-              // be off — the moment you most want it gone.
-              disabled={!canWrite || r.status === 'expired'}
-              onClick={() => { setTarget(r); setDialog('revoke'); }}
+              variant="secondary"
+              disabled={!canWrite || busy}
+              onClick={() => (r.status === 'disabled'
+                ? setStatus(r, 'active')
+                : (setTarget(r), setDialog('disable')))}
             >
-              Revoke
+              {r.status === 'disabled' ? 'Enable' : 'Disable'}
             </Button>
           )}
+          <Button
+            size="sm"
+            variant="danger-outline"
+            disabled={!canWrite || busy}
+            onClick={() => { setTarget(r); setDialog('delete'); }}
+          >
+            Delete
+          </Button>
         </span>
       )
     }
@@ -325,7 +360,7 @@ export default function ApiKeys() {
           optional
           value={agentId}
           onChange={e => setAgentId(e.target.value)}
-          hint="Optional. A workspace-level key works on its own — choose an agent only to attribute its activity and revoke its keys as a group."
+          hint="Optional. A workspace-level key works on its own — choose an agent only to attribute its activity and disable its keys as a group."
           options={[
             { value: '', label: 'No agent (workspace-level)' },
             ...agents.filter(a => a.status === 'active').map(a => ({ value: a.id, label: a.name }))
@@ -395,23 +430,56 @@ export default function ApiKeys() {
         <ApiKeyDisplay revealed secret={secret} />
       </Modal>
 
+      {/*
+        Disabling is reversible and still worth confirming: it stops a live
+        credential at once. What it must not imply is that enabling puts things
+        back as they were — the secret changes, and that is the sentence people
+        need before they press it, not after.
+      */}
       <ConfirmModal
-        open={dialog === 'revoke'}
-        title={`Revoke ${target ? target.name : 'this key'}?`}
-        /* The permanence is stated before the commitment, not implied after it.
-           "This cannot be undone" was already here and was not enough: it reads
-           as "you can't un-press this button", when the thing people need to
-           know is that the credential itself never comes back. */
-        description="Any agent using this key loses access on its very next request. A revoked key can never be reactivated — restoring access means minting a new key and updating whatever was using this one."
-        confirmLabel="Revoke key"
+        open={dialog === 'disable'}
+        title={`Disable ${target ? target.name : 'this key'}?`}
+        description="Any agent using this key loses access on its very next request. You can enable it again, but enabling issues a new key — whatever was using this one will need updating."
+        confirmLabel="Disable key"
         onClose={() => setDialog(null)}
-        onConfirm={revoke}
+        onConfirm={() => { const t = target; setDialog(null); return setStatus(t, 'disabled'); }}
       />
+
+      <ConfirmModal
+        open={dialog === 'delete'}
+        title={`Delete ${target ? target.name : 'this key'}?`}
+        description="The key is removed and any agent using it loses access on its very next request. This cannot be undone — if you only want to stop it for now, disable it instead."
+        confirmLabel="Delete key"
+        onClose={() => setDialog(null)}
+        onConfirm={destroy}
+      />
+
+      {/* The rotation, shown the way a new key is - because it is one. */}
+      <Modal
+        open={dialog === 'rotated'}
+        title="Your new API key"
+        tone="accent"
+        size="md"
+        mark={<Icon name="key" size={16} />}
+        footer={
+          <Button onClick={() => { setSecret(''); setDialog(null); setToast('Key enabled'); }}>
+            Done
+          </Button>
+        }
+      >
+        <Alert tone="warn" title="The old key no longer works">
+          Enabling issues a new secret. Update whatever was using this key, or it will keep
+          being refused.
+        </Alert>
+        <ApiKeyDisplay revealed secret={secret} />
+      </Modal>
 
       {toast ? (
         <div style={{ position: 'fixed', top: 'var(--s-7)', right: 'var(--s-7)', zIndex: 90 }}>
           <Toast tone="ok" title={toast} onDismiss={() => setToast(null)}>
-            {toast === 'Key revoked' ? 'Any client using it lost access immediately.' : null}
+            {toast === 'Key disabled' || toast === 'Key deleted'
+              ? 'Any client using it lost access immediately.'
+              : null}
           </Toast>
         </div>
       ) : null}

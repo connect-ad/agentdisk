@@ -649,8 +649,8 @@ export class WorkspaceScopedApiKeys extends WorkspaceScoped {
         `INSERT INTO api_keys
            (id, workspace_id, agent_id, name, key_prefix, key_last_four, key_hash,
             key_ciphertext, scopes, created_by_user_id, parent_key_id, expires_at,
-            last_used_at, revoked_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)`
+            last_used_at, disabled_at, revoked_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?)`
       )
       .bind(
         row.id, this.workspaceId, row.agent_id, row.name, row.key_prefix,
@@ -671,10 +671,71 @@ export class WorkspaceScopedApiKeys extends WorkspaceScoped {
     return result.results ?? [];
   }
 
-  async revoke(id: string, now: number): Promise<boolean> {
+  /** Turn a key off. Its token stops authenticating on the next request. */
+  async disable(id: string, now: number): Promise<boolean> {
     const result = await this.db
-      .prepare(`UPDATE api_keys SET revoked_at = ? WHERE workspace_id = ? AND id = ? AND revoked_at IS NULL`)
+      .prepare(
+        `UPDATE api_keys SET disabled_at = ?
+          WHERE workspace_id = ? AND id = ? AND disabled_at IS NULL`
+      )
       .bind(now, this.workspaceId, id)
+      .run();
+    return (result.meta.changes ?? 0) > 0;
+  }
+
+  /**
+   * Turn a key back on with a new secret.
+   *
+   * The rotation is the point, not a side effect: a key is usually switched
+   * off because its token should stop being trusted, and handing the same
+   * token back would undo exactly the thing the switch was for. Everything
+   * that identifies the key - id, name, scope, agent, audit history - is the
+   * same row; only the credential changes.
+   *
+   * One statement, so a crash cannot leave the key enabled under its old hash:
+   * the clear of `disabled_at` and the new hash land together or not at all.
+   */
+  async enableWithRotation(
+    id: string,
+    generated: { keyPrefix: string; keyLastFour: string; keyHash: string },
+    ciphertext: string | null
+  ): Promise<boolean> {
+    const result = await this.db
+      .prepare(
+        `UPDATE api_keys
+            SET disabled_at = NULL, key_prefix = ?, key_last_four = ?,
+                key_hash = ?, key_ciphertext = ?
+          WHERE workspace_id = ? AND id = ? AND disabled_at IS NOT NULL`
+      )
+      .bind(
+        generated.keyPrefix,
+        generated.keyLastFour,
+        generated.keyHash,
+        ciphertext,
+        this.workspaceId,
+        id
+      )
+      .run();
+    return (result.meta.changes ?? 0) > 0;
+  }
+
+  /**
+   * Remove one key outright.
+   *
+   * Delete means gone here as it does for agents and workspaces. The children
+   * first, for the reason `deleteForAgent` gives: `parent_key_id` is an
+   * inbound foreign key SQLite checks immediately, and a key minted by this
+   * one is somebody's live credential that must survive its parent going.
+   * NULL is exactly what "minted by a key that no longer exists" means.
+   */
+  async hardDelete(id: string): Promise<boolean> {
+    await this.db
+      .prepare(`UPDATE api_keys SET parent_key_id = NULL WHERE workspace_id = ? AND parent_key_id = ?`)
+      .bind(this.workspaceId, id)
+      .run();
+    const result = await this.db
+      .prepare(`DELETE FROM api_keys WHERE workspace_id = ? AND id = ?`)
+      .bind(this.workspaceId, id)
       .run();
     return (result.meta.changes ?? 0) > 0;
   }

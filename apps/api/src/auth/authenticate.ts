@@ -79,6 +79,14 @@ export async function authenticateApiKey(
   if (row.revoked_at !== null) {
     throw unauthorized(`key ${row.id} is revoked`);
   }
+  // The customer's own switch (migration 0024). Enforced here and not only in
+  // the listing's `status`, because a key that reads "Disabled" on screen and
+  // still authenticates is the exact failure this product already fixed once
+  // for disabled agents: somebody switches a credential off to stop it, is
+  // told it is off, and it keeps working.
+  if (row.disabled_at !== null) {
+    throw unauthorized(`key ${row.id} is disabled`);
+  }
   if (row.expires_at !== null && row.expires_at <= now) {
     throw unauthorized(`key ${row.id} expired`);
   }

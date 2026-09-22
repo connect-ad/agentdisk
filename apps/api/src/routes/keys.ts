@@ -17,15 +17,21 @@
  * agent a read-only key and it mints itself a writer. `isSubsetScope` enforces
  * that, and it is why `keys:create` is a scope op in its own right.
  *
- * **Revocation is immediate and irreversible.** There is no un-revoke. Bringing
- * a revoked credential back to life is never the safe answer to "I revoked the
- * wrong one" — minting a new one is.
+ * **A key is switched off and on, and enabling rotates it.** This rule used to
+ * read "revocation is immediate and irreversible", and the reasoning behind it
+ * survives the change: bringing a credential back *unchanged* is never the
+ * safe answer to having switched it off. So `PATCH` to `disabled` stops the
+ * token at the next request, and `PATCH` back to `active` issues a **new**
+ * secret under the same row — same id, name, scope, agent and history, a
+ * different credential. The token that was live at the moment of disable never
+ * works again. `DELETE` removes the row outright; the admin console keeps a
+ * separate permanent revoke that a customer cannot clear.
  */
 
 import { z } from "zod";
 import { ApiError, forbidden, validationError } from "../lib/errors";
 import { newId } from "../lib/ids";
-import { generateApiKey, type KeyMode } from "../lib/keys";
+import { generateApiKey, TEST_PREFIX, type KeyMode } from "../lib/keys";
 import { isSubsetScope, SCOPE_OPS, type KeyScope, type ScopeOp } from "../auth/scopes";
 import { normalizePrefix } from "../auth/scopes";
 import type { AuthContext } from "../middleware/auth";
@@ -45,6 +51,17 @@ const createSchema = z.object({
   mode: z.enum(["live", "test"]).optional(),
   /** Unix ms. Absent means no expiry. */
   expiresAt: z.number().int().positive().optional(),
+});
+
+/**
+ * The only thing a customer may change about an existing key.
+ *
+ * Not the name, scope or agent: those are what the audit trail means when it
+ * names this key, and letting them move would make an old event describe a
+ * credential that no longer matches it.
+ */
+const patchSchema = z.object({
+  status: z.enum(["active", "disabled"]),
 });
 
 function json(body: unknown, status = 200): Response {
@@ -84,11 +101,37 @@ function keyStatus(
   row: ApiKeyRow,
   now: number,
   agentStatus: string | undefined
-): "revoked" | "expired" | "blocked" | "active" {
+): "revoked" | "expired" | "disabled" | "active" {
   if (row.revoked_at !== null) return "revoked";
   if (row.expires_at !== null && row.expires_at <= now) return "expired";
-  if (row.agent_id !== null && agentStatus !== "active") return "blocked";
+  // Both ways of being off report `disabled`, because to the person holding
+  // the token they are the same fact: it does not work. `disabledBy` below
+  // says which, since only one of them is theirs to undo here.
+  if (row.disabled_at !== null) return "disabled";
+  if (row.agent_id !== null && agentStatus !== "active") return "disabled";
   return "active";
+}
+
+/**
+ * Which switch is off, or null when none is.
+ *
+ * `blocked` used to be its own status for the agent case and the dashboard
+ * showed "Agent disabled". Collapsing the two into one status keeps the answer
+ * to "does this key work" in one field, and this keeps the answer to "what do
+ * I do about it" in another - enabling a key whose *agent* is off would appear
+ * to succeed and change nothing.
+ *
+ * The key's own switch wins when both are set: it is the one the customer
+ * turned, and re-enabling the agent must not quietly switch a key back on that
+ * they deliberately turned off.
+ */
+function disabledBy(
+  row: ApiKeyRow,
+  agentStatus: string | undefined
+): "key" | "agent" | null {
+  if (row.disabled_at !== null) return "key";
+  if (row.agent_id !== null && agentStatus !== "active") return "agent";
+  return null;
 }
 
 function toResource(row: ApiKeyRow, now: number, agentStatus?: string) {
@@ -106,6 +149,8 @@ function toResource(row: ApiKeyRow, now: number, agentStatus?: string) {
     lastFour: row.key_last_four,
     scopes: scope,
     status: keyStatus(row, now, agentStatus),
+    /** "key" or "agent" when off, null when not. See `disabledBy`. */
+    disabledBy: disabledBy(row, agentStatus),
     // Whether GET /v1/keys/:id/secret can answer at all. False for every key
     // minted before keys were kept (migration 0022); the dashboard disables
     // the eye for those rather than letting somebody click into a 409.
@@ -184,6 +229,7 @@ export async function createKey(ctx: AuthContext, request: Request): Promise<Res
     key_prefix: generated.keyPrefix,
     key_last_four: generated.keyLastFour,
     key_hash: generated.keyHash,
+    disabled_at: null,
     // Kept, sealed, bound to this row's id, so the owner can view it again
     // (migration 0022). Null when the deployment has no secret to seal under -
     // then this key is shown once below and never again, as every key was.
@@ -238,34 +284,127 @@ export async function createKey(ctx: AuthContext, request: Request): Promise<Res
   );
 }
 
-export async function revokeKey(
+/**
+ * PATCH /v1/keys/:id — switch a key off, or back on with a new secret.
+ *
+ * Disabling stops the token on the very next request. Enabling **rotates**:
+ * the row keeps its id, name, scope, agent and history, and gets a new
+ * credential. That is the whole reason this is safe to offer where revoke used
+ * to be the only answer — a key switched off because its token leaked does not
+ * come back with the leaked token.
+ *
+ * The rotation means this is a minting act, not an edit, so it needs
+ * `keys:create` like `createKey`, and the new secret is returned exactly the
+ * way a new key's is.
+ */
+export async function patchKey(
   ctx: AuthContext,
-  _request: Request,
+  request: Request,
+  id: string
+): Promise<Response> {
+  let body;
+  try {
+    body = patchSchema.parse(await request.json());
+  } catch (err) {
+    throw validationError(
+      err instanceof z.ZodError
+        ? (err.issues[0]?.message ?? "That request body is not valid.")
+        : "Send a JSON body."
+    );
+  }
+
+  const existing = await ctx.db.apiKeys.getById(id);
+  if (existing === null) throw new ApiError("NOT_FOUND", "No such key.");
+
+  // An operator's revoke is not the customer's to clear, and an expired key
+  // cannot be un-expired. Refusing both here keeps `enableWithRotation` from
+  // minting a credential onto a row that still would not authenticate.
+  if (existing.revoked_at !== null) {
+    throw new ApiError("CONFLICT", "That key was revoked by support and cannot be switched back on.");
+  }
+
+  if (body.status === "disabled") {
+    const changed = await ctx.db.apiKeys.disable(id, ctx.now);
+    if (changed) {
+      audit(ctx, request, "key.disabled", {
+        resourceType: "api_key",
+        resourceId: id,
+        metadata: { name: existing.name, prefix: existing.key_prefix },
+      });
+    }
+    // Idempotent: a retry after a dropped response is the caller's intent
+    // already satisfied, not a problem to report.
+    const row = await ctx.db.apiKeys.getById(id);
+    return json({ key: toResource(row ?? existing, ctx.now, await agentStatusOf(ctx, existing)) });
+  }
+
+  if (existing.expires_at !== null && existing.expires_at <= ctx.now) {
+    throw new ApiError("CONFLICT", "That key has expired. Create a new one rather than enabling this.");
+  }
+  if (existing.disabled_at === null) {
+    // Already on. Nothing to rotate - and rotating anyway would silently break
+    // whatever is using the key right now, on a request that asked for no
+    // change at all.
+    return json({ key: toResource(existing, ctx.now, await agentStatusOf(ctx, existing)) });
+  }
+
+  const mode: KeyMode = existing.key_prefix.startsWith(TEST_PREFIX) ? "test" : "live";
+  const generated = await generateApiKey(mode);
+  const ciphertext =
+    ctx.encryptionKey === null ? null : await sealSecret(ctx.encryptionKey, generated.token, id);
+
+  const enabled = await ctx.db.apiKeys.enableWithRotation(id, generated, ciphertext);
+  if (!enabled) throw new ApiError("CONFLICT", "That key was changed by somebody else. Reload and try again.");
+
+  audit(ctx, request, "key.rotated", {
+    resourceType: "api_key",
+    resourceId: id,
+    metadata: { name: existing.name, prefix: generated.keyPrefix, previousPrefix: existing.key_prefix },
+  });
+
+  const row = await ctx.db.apiKeys.getById(id);
+  return json({
+    key: toResource(row ?? existing, ctx.now, await agentStatusOf(ctx, existing)),
+    secret: generated.token,
+    secretRetrievable: ciphertext !== null,
+    // Said plainly, because the caller's old token is now dead and anything
+    // still holding it will start failing authentication.
+    rotated: true,
+  });
+}
+
+/** The key's agent's status, or undefined for a workspace-level key. */
+async function agentStatusOf(ctx: AuthContext, row: ApiKeyRow): Promise<string | undefined> {
+  if (row.agent_id === null) return undefined;
+  const agent = await ctx.db.agents.getById(row.agent_id);
+  return agent?.status;
+}
+
+/**
+ * DELETE /v1/keys/:id — remove the key.
+ *
+ * This used to revoke, leaving the row in the list forever as a credential
+ * nobody could use or clear. Delete means gone, the same as an agent and a
+ * workspace; switching a key off is what `PATCH` is for now, and it is the
+ * reversible option this one deliberately is not.
+ */
+export async function deleteKey(
+  ctx: AuthContext,
+  request: Request,
   id: string
 ): Promise<Response> {
   const existing = await ctx.db.apiKeys.getById(id);
   if (existing === null) throw new ApiError("NOT_FOUND", "No such key.");
 
-  const revoked = await ctx.db.apiKeys.revoke(id, ctx.now);
-  if (revoked) {
-    audit(ctx, _request, "key.revoked", {
+  const deleted = await ctx.db.apiKeys.hardDelete(id);
+  if (deleted) {
+    audit(ctx, request, "key.deleted", {
       resourceType: "api_key",
       resourceId: id,
       metadata: { name: existing.name, prefix: existing.key_prefix },
     });
   }
-  if (!revoked) {
-    // Already revoked. Idempotent rather than an error: the caller's intent is
-    // satisfied, and failing here would make a retry after a dropped response
-    // look like a problem.
-    return json({ revoked: false, alreadyRevoked: true });
-  }
-
-  // A revoked key must stop working on the very next request, so anything
-  // caching key lookups has to be invalidated here rather than left to expire.
-  // No such cache exists yet by deliberate choice (see IMPLEMENTATION_PLAN);
-  // when one lands, its bust belongs on this line.
-  return json({ revoked: true });
+  return json({ deleted });
 }
 
 /**

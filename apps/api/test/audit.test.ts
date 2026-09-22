@@ -77,7 +77,7 @@ describe("what gets recorded", () => {
     expect(JSON.stringify(rows)).not.toContain(secret);
   });
 
-  it("records a key being revoked", async () => {
+  it("records a key being deleted", async () => {
     const { token } = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ["read", "keys:create"] });
     const minted = (await (await post("/v1/keys", token, { name: "doomed", ops: ["read"] })).json()) as {
       key: { id: string };
@@ -85,7 +85,7 @@ describe("what gets recorded", () => {
     await SELF.fetch(`${URL_BASE}/v1/keys/${minted.key.id}`, { method: "DELETE", headers: bearer(token) });
 
     const actions = (await events()).map(r => r.action);
-    expect(actions).toContain("key.revoked");
+    expect(actions).toContain("key.deleted");
   });
 
   it("records an upload and a delete", async () => {

@@ -60,6 +60,17 @@ export interface ApiKeyRow {
   parent_key_id: string | null;
   expires_at: number | null;
   last_used_at: number | null;
+  /**
+   * The customer's own switch (migration 0024). NULL is enabled. Enabling
+   * again rotates the secret, so the token that was live when this was set
+   * never authenticates again.
+   */
+  disabled_at: number | null;
+  /**
+   * The admin console's permanent kill switch, and nothing the customer can
+   * set or clear. Distinct from `disabled_at` because an operator revoke must
+   * not be something the customer can simply switch back on.
+   */
   revoked_at: number | null;
   created_at: number;
 }

@@ -1,0 +1,18 @@
+-- Keys are kept, sealed, so the workspace owner can view one again.
+--
+-- Until now a key existed nowhere after creation: only its SHA-256 was
+-- stored, and the dashboard said "copy this now, you won't see it again".
+-- The owner's call (22 Sept 2026) is that a key can be viewed again from the
+-- keys table and dropped straight into the MCP config, which means the
+-- Worker has to be able to produce it. So the token is stored here sealed
+-- under DATABASE_ENCRYPTION_KEY (AES-256-GCM, see lib/secretbox.ts), and
+-- opened only by GET /v1/keys/:id/secret - a signed-in workspace owner,
+-- never an API key, never a reader - with every reveal audited.
+--
+-- Nullable, and NULL means "never kept": every key minted before this
+-- migration, and any minted while the secret is unset. The eye button is
+-- disabled for those rather than pretending; nothing can bring them back.
+--
+-- key_hash stays, and stays UNIQUE: authentication still hashes the bearer
+-- token and looks the hash up. The ciphertext is never on the request path.
+ALTER TABLE api_keys ADD COLUMN key_ciphertext TEXT;

@@ -148,7 +148,8 @@ export function Docs() {
             <p className="doc__p">
               Keys are minted in the dashboard against an agent identity. Pick the
               operations the agent needs and, optionally, a path prefix it may not
-              reach outside of. The key is shown once.
+              reach outside of. The workspace owner can view the key again from the
+              keys table.
             </p>
 
             <h2 className="doc__h2">2. Register the server with your client</h2>

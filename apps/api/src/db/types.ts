@@ -48,6 +48,13 @@ export interface ApiKeyRow {
   key_prefix: string;
   key_last_four: string;
   key_hash: string;
+  /**
+   * The token, sealed under DATABASE_ENCRYPTION_KEY (lib/secretbox.ts), so
+   * the owner can view it again. Null means never kept: minted before
+   * migration 0022, or while the secret was unset. Never on the request
+   * path - authentication is by key_hash alone.
+   */
+  key_ciphertext: string | null;
   scopes: string;
   created_by_user_id: string;
   parent_key_id: string | null;

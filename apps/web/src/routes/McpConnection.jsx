@@ -1,10 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   PageHead, Panel, CodeBlock, Badge, Button, Icon, Alert, Select,
   McpToolList, ActivityRow, EmptyState
 } from '../components/index.js';
 import { useResource } from '../lib/useResource.js';
+import { useWorkspace } from '../lib/workspace.jsx';
 
 /**
  * 8.18 MCP Connection — MVP-1
@@ -87,7 +88,10 @@ function relativeTime(iso) {
 
 export default function McpConnection() {
   const { ws } = useParams();
+  const { api, workspaceId, role } = useWorkspace();
   const [keyId, setKeyId] = useState(null);
+  const [secret, setSecret] = useState(null);
+  const [revealError, setRevealError] = useState(null);
   const { status, data, error, reload } = useResource(loadMcp);
 
   const loading = status === 'loading';
@@ -107,6 +111,23 @@ export default function McpConnection() {
 
   const ops = selected?.scopes?.ops ?? [];
   const pathPrefix = selected?.scopes?.pathPrefix ?? '';
+
+  // The real key for the config block, fetched when the selection changes and
+  // only for an owner: the route refuses everybody else, and asking anyway
+  // would put a 403 in the console on every visit by a reader. `retrievable`
+  // is false for a key minted before keys were kept; nothing can fill that in.
+  const selectedId = selected?.id ?? null;
+  const canFill = role === 'owner' && selected?.retrievable === true;
+  useEffect(() => {
+    setSecret(null);
+    setRevealError(null);
+    if (!canFill || selectedId === null) return undefined;
+    let alive = true;
+    api.revealKey(workspaceId, selectedId)
+      .then(r => { if (alive) setSecret(r.secret); })
+      .catch(err => { if (alive) setRevealError(err.message); });
+    return () => { alive = false; };
+  }, [api, workspaceId, selectedId, canFill]);
 
   // The whole of the Priority-0 fix: availability is the key's real ops, not a
   // fixed list. With no key selected nothing is ticked, which is also true.
@@ -133,11 +154,36 @@ export default function McpConnection() {
     "agentdisk": {
       "url": "${ENDPOINT}",
       "headers": {
-        "Authorization": "Bearer ${PLACEHOLDER}"
+        "Authorization": "Bearer ${secret ?? PLACEHOLDER}"
       }
     }
   }
 }`;
+
+  const download = () => {
+    const blob = new Blob([`${config}\n`], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'mcp.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const keyLabel = k => {
+    const agent = k.agentId ? agents.find(a => a.id === k.agentId)?.name ?? k.agentId : null;
+    return `${k.name || k.prefix}${agent ? ` · ${agent}` : ''}`;
+  };
+
+  /** Why the block still says the placeholder, when it does. */
+  const fillNote = (() => {
+    if (secret) return 'This block carries the real key. Treat the file as a secret.';
+    if (!selected) return 'Choose a key in step 1 and it is filled in here.';
+    if (role !== 'owner') return 'Only the workspace owner can fill the key in. Ask them for it.';
+    if (!selected.retrievable) return 'This key was created before keys were kept, so it cannot be filled in. Mint a new one.';
+    if (revealError) return `Could not fetch the key: ${revealError}`;
+    return 'Fetching the key…';
+  })();
 
   return (
     <>
@@ -175,21 +221,47 @@ export default function McpConnection() {
       ) : null}
 
       {/*
-        The design lays this screen out as three numbered steps rather than one
-        panel. Step 1 sends you to the keys screen, step 2 is the config block,
-        step 3 reports the real handshake state — which is the badge this screen
-        already computes from actual call history, not a fixture.
+        Three numbered steps rather than one panel. Step 1 chooses the key,
+        step 2 is the config block with that key already in it, step 3 reports
+        the real handshake state — the badge this screen computes from actual
+        call history, not a fixture.
+
+        Step 1 used to send you to the keys screen and step 2 told you to paste
+        the key in by hand, because a key was shown once and stored only as a
+        hash, so this screen could not fill it in. Keys are kept now (migration
+        0022) and GET /v1/keys/:id/secret hands one to its owner, which is what
+        the dropdown drives. The key chosen here is also the key the tools
+        panel below is computed from; it had its own picker for that, and two
+        pickers for one choice is how a screen contradicts itself.
       */}
       <div className="ds__step">
         <div className="ds__stephead">
           <span className="ds__stepnum">1</span>
-          <span className="panel__title">Create a scoped key</span>
+          <span className="panel__title">Choose the key</span>
         </div>
-        <p className="ad-small ad-measure" style={{ marginBottom: 'var(--s-5)' }}>
-          Give the agent the narrowest scopes it needs. A research agent usually wants
-          read, write and list under one prefix.
-        </p>
-        <Button size="sm" variant="secondary" as={Link} to={`/w/${ws}/keys`}>Go to API keys</Button>
+        {status === 'loaded' && usableKeys.length === 0 ? (
+          <p className="ad-small ad-measure">
+            No usable key yet. <Link to={`/w/${ws}/keys`}>Create one</Link> with the narrowest
+            scopes the agent needs — a research agent usually wants read, write and list
+            under one prefix.
+          </p>
+        ) : (
+          <>
+            <p className="ad-small ad-measure" style={{ marginBottom: 'var(--s-5)' }}>
+              The agent connects with this key. The config below and the tools further down
+              both follow it.
+            </p>
+            <div style={{ maxWidth: '28rem' }}>
+              <Select
+                aria-label="API key"
+                value={selected?.id ?? ''}
+                options={usableKeys.map(k => ({ value: k.id, label: keyLabel(k) }))}
+                onChange={e => setKeyId(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       <div className="ds__step">
@@ -207,18 +279,22 @@ export default function McpConnection() {
           rejects is worse than no tab. This is the `url` + `headers` shape
           Cursor and other URL-based clients accept as-is.
         */}
-        <CodeBlock filename="mcp.json" code={config} />
-        {/*
-          The snippet keeps the placeholder and offers no way to swap a real key
-          into it. That is not a missing feature: a key is shown once, at
-          creation, and is stored only as a hash afterwards — so this screen
-          could not fill it in even if it wanted to. The checkbox that used to
-          sit here promised exactly that and substituted an empty string.
-        */}
-        <p className="ad-meta ad-measure">
-          Replace <code className="inline">{PLACEHOLDER}</code> with the key you copied when you
-          created it. Keys are only ever shown once, so if you no longer have it,{' '}
-          <Link to={`/w/${ws}/keys`}>mint a new one</Link>.
+        <CodeBlock
+          filename="mcp.json"
+          code={config}
+          actions={
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<Icon name="download" size={13} />}
+              onClick={download}
+            >
+              Download mcp.json
+            </Button>
+          }
+        />
+        <p className="ad-meta ad-measure" role={revealError ? 'alert' : undefined}>
+          {fillNote}
         </p>
       </div>
 
@@ -259,17 +335,7 @@ export default function McpConnection() {
         subtitle={
           selected
             ? 'What this key can call. The server refuses everything else, whether or not a client offers it.'
-            : 'Select a key to see what it can call.'
-        }
-        actions={
-          usableKeys.length > 1 ? (
-            <Select
-              aria-label="API key"
-              value={selected?.id ?? ''}
-              options={usableKeys.map(k => ({ value: k.id, label: k.name || k.prefix }))}
-              onChange={e => setKeyId(e.target.value)}
-            />
-          ) : null
+            : 'Choose a key in step 1 to see what it can call.'
         }
       >
         {selected ? (

@@ -223,6 +223,13 @@ export function createApiClient(getToken) {
       request('/v1/keys', { method: 'POST', body, workspaceId }),
     revokeKey: (workspaceId, keyId) =>
       request(`/v1/keys/${keyId}`, { method: 'DELETE', workspaceId }),
+    /**
+     * The key itself, for the workspace owner. Refused for readers and for
+     * API keys, audited every time, and 404 for a key minted before keys were
+     * kept - see the route's header for why each of those is so.
+     */
+    revealKey: (workspaceId, keyId) =>
+      request(`/v1/keys/${keyId}/secret`, { workspaceId }),
 
     listWebhooks: workspaceId => request('/v1/webhooks', { workspaceId }),
     /** Resolves to { webhook, secret } — the secret exists in this response only. */

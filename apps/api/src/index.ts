@@ -22,7 +22,7 @@ import {
   listWorkspaces,
 } from "./routes/workspaces";
 import { createAgent, deleteAgent, getAgent, listAgents, patchAgent } from "./routes/agents";
-import { createKey, listKeys, revokeKey } from "./routes/keys";
+import { createKey, listKeys, revealKey, revokeKey } from "./routes/keys";
 import { handleMcp } from "./mcp/server";
 import { purgeExpiredShares, reapStrandedFiles, reconcileCounters } from "./jobs/purge";
 import { pendingDeletionEnabled, sweepPendingDeletions } from "./jobs/pending-deletions";
@@ -293,6 +293,7 @@ export default {
             queue: env.JOBS,
             firebase: firebaseConfig(env),
             dashboardUrl: env.DASHBOARD_URL,
+            encryptionKey: env.DATABASE_ENCRYPTION_KEY,
           },
           requirement,
           handler
@@ -323,6 +324,7 @@ export default {
               turnstileSecret: env.TURNSTILE_SECRET_KEY,
               allowedHostnames: env.TURNSTILE_ALLOWED_HOSTNAMES,
               dashboardUrl: env.DASHBOARD_URL,
+              encryptionKey: env.DATABASE_ENCRYPTION_KEY,
             });
           }
           // An API key is deliberately not accepted here: an agent key is
@@ -689,6 +691,15 @@ export default {
           if (request.method === "GET") return await authed({ op: "list" }, listKeys);
           if (request.method === "POST") return await authed({ op: "keys:create" }, createKey);
           throw new ApiError("NOT_FOUND", "No such route.");
+        }
+        // The key itself, for its owner. Gated on keys:create at the
+        // middleware - a reader's scope lacks it, so a reader is refused before
+        // the handler runs - and on being a signed-in owner inside it.
+        if (segments[3] === "secret" && segments[4] === undefined) {
+          if (request.method !== "GET") throw new ApiError("NOT_FOUND", "No such route.");
+          return await authed({ op: "keys:create" }, (authCtx, req) =>
+            revealKey(authCtx, req, keyId)
+          );
         }
         if (segments[3] !== undefined) throw new ApiError("NOT_FOUND", "No such route.");
         if (request.method === "DELETE") {

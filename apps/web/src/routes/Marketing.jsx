@@ -68,7 +68,7 @@ const STEPS = [
   {
     n: '1',
     title: 'Create a key',
-    body: 'Pick scopes and a prefix. The key is shown once.',
+    body: 'Pick scopes and a prefix. View it again whenever you need it.',
     code: "adk keys create \\\n  --scopes read,write,list \\\n  --prefix /projects/*",
   },
   {

@@ -197,8 +197,8 @@ export function Sandbox() {
           <div>
             <h1 className="auth__h1">Start a sandbox</h1>
             <p className="auth__sub" style={{ marginTop: 'var(--s-2)' }}>
-              No account needed. You get a workspace, an agent, and one API key —
-              shown once.
+              No account needed. You get a workspace, an agent, and one API key. Copy
+              it now; once you claim the workspace you can view it again.
             </p>
           </div>
 

@@ -42,7 +42,7 @@ function relativeTime(iso) {
 const EXPIRY_DAYS = { never: null, 30: 30, 90: 90 };
 
 export default function ApiKeys() {
-  const { api, workspaceId, canWrite } = useWorkspace();
+  const { api, workspaceId, canWrite, role } = useWorkspace();
   const { status, data, error, reload } = useResource(loadKeys);
 
   const [dialog, setDialog] = useState(null); // 'create' | 'reveal' | 'revoke'
@@ -57,6 +57,10 @@ export default function ApiKeys() {
   const [expiry, setExpiry] = useState('never');
   const [ops, setOps] = useState({ read: true, write: false, delete: false, list: true });
   const [secret, setSecret] = useState('');
+  // Keys the owner has chosen to show, by id. Fetched on demand, held only
+  // while shown: Hide drops it, and a reload starts empty.
+  const [shown, setShown] = useState({});
+  const [revealError, setRevealError] = useState(null);
 
   const keys = data?.keys ?? [];
   const agents = data?.agents ?? [];
@@ -110,6 +114,25 @@ export default function ApiKeys() {
 
   const agentName = id => agents.find(a => a.id === id)?.name ?? null;
 
+  const toggleShown = async r => {
+    if (shown[r.id]) {
+      setShown(s => { const next = { ...s }; delete next[r.id]; return next; });
+      return;
+    }
+    setRevealError(null);
+    try {
+      const { secret: value } = await api.revealKey(workspaceId, r.id);
+      setShown(s => ({ ...s, [r.id]: value }));
+    } catch (err) {
+      setRevealError({ id: r.id, message: err.message });
+    }
+  };
+
+  const copyShown = r => {
+    try { navigator.clipboard.writeText(shown[r.id]); } catch (e) { /* clipboard unavailable */ }
+    setToast('Key copied');
+  };
+
   const columns = [
     { key: 'name', header: 'Name', primary: true },
     {
@@ -121,7 +144,47 @@ export default function ApiKeys() {
           ? <Badge tone="accent" mono>{agentName(r.agentId) ?? r.agentId}</Badge>
           : <span style={{ color: 'var(--ink-3)' }}>Workspace</span>
     },
-    { key: 'key', header: 'Key', width: 200, render: r => <ApiKeyDisplay prefix={r.prefix} lastFour={r.lastFour} /> },
+    {
+      key: 'key',
+      header: 'Key',
+      width: 320,
+      // The eye. Owner only, because a reader who can read a write-scoped key
+      // can write; disabled for a key minted before keys were kept, because
+      // nothing brings that one back; absent on a revoked key, which the API
+      // refuses anyway. Show/Hide is a word beside the icon, not an icon
+      // alone - the same rule Revoke follows.
+      render: r => (
+        <span
+          className="row"
+          style={{ gap: 'var(--s-3)', alignItems: 'center', flexWrap: 'wrap' }}
+          onClick={e => e.stopPropagation()}
+        >
+          {shown[r.id]
+            ? <code className="ad-mono" style={{ userSelect: 'all' }}>{shown[r.id]}</code>
+            : <ApiKeyDisplay prefix={r.prefix} lastFour={r.lastFour} />}
+          {role === 'owner' && r.status !== 'revoked' ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<Icon name={shown[r.id] ? 'eyeOff' : 'eye'} size={13} />}
+              disabled={!r.retrievable}
+              title={r.retrievable ? undefined : 'Created before keys were kept. Mint a new one to have one you can view.'}
+              onClick={() => toggleShown(r)}
+            >
+              {shown[r.id] ? 'Hide' : 'Show'}
+            </Button>
+          ) : null}
+          {shown[r.id] ? (
+            <Button size="sm" variant="secondary" icon={<Icon name="copy" size={13} />} onClick={() => copyShown(r)}>
+              Copy
+            </Button>
+          ) : null}
+          {revealError?.id === r.id ? (
+            <span className="ad-meta" role="alert">{revealError.message}</span>
+          ) : null}
+        </span>
+      )
+    },
     {
       key: 'scope',
       header: 'Scope',
@@ -298,7 +361,7 @@ export default function ApiKeys() {
         />
       </Modal>
 
-      {/* --- reveal-once: no onClose, so it cannot be dismissed by accident --- */}
+      {/* --- the new key: no onClose, so it cannot be dismissed by accident --- */}
       <Modal
         open={dialog === 'reveal'}
         title="Your API key"
@@ -308,20 +371,27 @@ export default function ApiKeys() {
         footer={
           <Button
             onClick={() => {
-              // Dropping it from state here is the point: after this click the
-              // value genuinely does not exist anywhere in the app.
+              // Out of this screen's state; the table's eye button fetches it
+              // afresh, so nothing here holds a secret longer than it is shown.
               setSecret('');
               setDialog(null);
               setToast('Key created');
             }}
           >
-            I&rsquo;ve copied my key
+            Done
           </Button>
         }
       >
-        <Alert tone="warn" title="Copy this now — you won't be able to see it again">
-          We store only a hash of this key. If you lose it, revoke it and create a new one.
-        </Alert>
+        {/*
+          This used to warn "you won't be able to see it again — we store only
+          a hash". Keys are kept now (sealed; migration 0022), and the owner
+          can view one from the table at any time, so the warning would be
+          false and the urgency it created has nothing behind it.
+        */}
+        <p className="ad-small ad-measure">
+          Copy it into your agent now. As the workspace owner you can view it again any
+          time from the eye button in the keys table.
+        </p>
         <ApiKeyDisplay revealed secret={secret} />
       </Modal>
 

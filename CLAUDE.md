@@ -284,6 +284,21 @@ were not touched. See `backlog/002`.
   cleartext. The tokenised link exists only in the provisioning response; the
   warning carries the untokenised claim page and the workspace ID. See
   `lib/claim.ts`'s header.
+- **API keys are kept, sealed, and only a signed-in owner can open one.**
+  Until migration 0022 a key existed nowhere after creation — only its hash —
+  and "you won't see it again" was the whole of the protection. On the owner's
+  call (22 Sept 2026) the token is now stored in `api_keys.key_ciphertext`,
+  AES-256-GCM under `DATABASE_ENCRYPTION_KEY` and bound to the row id
+  (`lib/secretbox.ts`), so a copy of the database is not a copy of the keys
+  and a ciphertext moved between rows opens as nothing. `GET
+  /v1/keys/:id/secret` is the only reader: it refuses an API key (a credential
+  that can read other credentials can escalate), refuses a reader (who could
+  otherwise copy a writer), refuses a revoked key, answers 409 for a key minted
+  before it was kept, and audits every success as `key.revealed`.
+  **Authentication is still by `key_hash`** — the ciphertext is never on the
+  request path. The dashboard's eye button and the MCP page's key dropdown
+  both go through this route; the sandbox key an agent provisions is sealed
+  the same way, so it becomes viewable to whoever claims the workspace.
 - **Storage and file quota belong to the billing account, not the workspace.**
   The subscription is sold to an organization: one card, one plan, many
   workspaces. Until migration 0017 `assertWithinQuota` compared a single
@@ -487,7 +502,7 @@ Claude Design project `agent-storage-mcp` · `d311bfd0-9751-4a9b-84f4-b33e7a0937
 | Lint contract | **Gone with the mirror.** The rules survive as the convention above and the greps in `Skill/1 Build.md`; no tool checks them. |
 
 The AgentDisk-specific components carry the product thesis: `FileCell` (agent
-provenance), `ApiKeyDisplay` (show-once), `PermissionSelector` (least privilege),
+provenance), `ApiKeyDisplay` (masked by default), `PermissionSelector` (least privilege),
 `McpToolList` (per-tool scopes), `ActivityRow` (agent vs human actors).
 
 ### Skills — [Skill/](Skill/)

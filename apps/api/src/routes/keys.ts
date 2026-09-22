@@ -4,10 +4,13 @@
  * The credential an agent actually holds. Three rules shape this file, and each
  * one is a decision rather than a detail:
  *
- * **The secret is returned exactly once.** Only its SHA-256 is stored, so there
- * is no "show key again" to build later — the response to `POST` is the single
- * moment the raw value exists outside the caller's memory. A database
- * disclosure yields hashes, not working credentials.
+ * **The secret is kept, sealed, and opened only for its owner.** This rule
+ * used to read "returned exactly once" — only the SHA-256 was stored, so a
+ * database disclosure yielded hashes. Since migration 0022 the token is also
+ * stored under DATABASE_ENCRYPTION_KEY (lib/secretbox.ts), so the owner can
+ * view it again from the keys table; `revealKey` at the bottom of this file
+ * is the one reader and its header lists what it refuses. Authentication is
+ * still by hash alone — the ciphertext is never on the request path.
  *
  * **A key can never be minted with more than the minter holds.** A scoped key
  * that could create an unscoped one would make scoping decorative: hand an
@@ -28,6 +31,7 @@ import { normalizePrefix } from "../auth/scopes";
 import type { AuthContext } from "../middleware/auth";
 import type { ApiKeyRow } from "../db/types";
 import { audit } from "../lib/audit";
+import { openSecret, sealSecret } from "../lib/secretbox";
 
 const createSchema = z.object({
   name: z.string().trim().min(1, "A key needs a name.").max(64),
@@ -102,6 +106,10 @@ function toResource(row: ApiKeyRow, now: number, agentStatus?: string) {
     lastFour: row.key_last_four,
     scopes: scope,
     status: keyStatus(row, now, agentStatus),
+    // Whether GET /v1/keys/:id/secret can answer at all. False for every key
+    // minted before keys were kept (migration 0022); the dashboard disables
+    // the eye for those rather than letting somebody click into a 409.
+    retrievable: row.key_ciphertext !== null,
     createdBy: row.created_by_user_id,
     lastUsedAt: row.last_used_at === null ? null : new Date(row.last_used_at).toISOString(),
     expiresAt: row.expires_at === null ? null : new Date(row.expires_at).toISOString(),
@@ -166,15 +174,21 @@ export async function createKey(ctx: AuthContext, request: Request): Promise<Res
 
   const mode: KeyMode = body.mode === "test" ? "test" : "live";
   const generated = await generateApiKey(mode);
+  const id = newId("apiKey", ctx.now);
 
   const row: ApiKeyRow = {
-    id: newId("apiKey", ctx.now),
+    id,
     workspace_id: ctx.workspaceId,
     agent_id: body.agentId ?? null,
     name: body.name,
     key_prefix: generated.keyPrefix,
     key_last_four: generated.keyLastFour,
     key_hash: generated.keyHash,
+    // Kept, sealed, bound to this row's id, so the owner can view it again
+    // (migration 0022). Null when the deployment has no secret to seal under -
+    // then this key is shown once below and never again, as every key was.
+    key_ciphertext:
+      ctx.encryptionKey === null ? null : await sealSecret(ctx.encryptionKey, generated.token, id),
     scopes: JSON.stringify(requested),
     created_by_user_id:
       ctx.identity.kind === "firebase_user"
@@ -213,11 +227,12 @@ export async function createKey(ctx: AuthContext, request: Request): Promise<Res
       // would make every agent-bound key report `blocked` in the one response
       // that also carries its secret.
       key: toResource(row, ctx.now, row.agent_id === null ? undefined : "active"),
-      // The one and only time this value exists in a response. Said out loud in
-      // the payload so a client that stores the object wholesale still has a
-      // chance of noticing what it just wrote to disk.
       secret: generated.token,
-      secretShownOnce: true,
+      // Whether the owner can ask for it again (GET /v1/keys/:id/secret).
+      // This used to be `secretShownOnce: true`; a client that stored the
+      // object wholesale was meant to notice what it wrote to disk. Now it
+      // says the opposite thing about the same value.
+      secretRetrievable: row.key_ciphertext !== null,
     },
     201
   );
@@ -251,4 +266,74 @@ export async function revokeKey(
   // No such cache exists yet by deliberate choice (see IMPLEMENTATION_PLAN);
   // when one lands, its bust belongs on this line.
   return json({ revoked: true });
+}
+
+/**
+ * GET /v1/keys/:id/secret — the key itself, for its owner.
+ *
+ * Until migration 0022 this route could not exist: a key was stored only as
+ * a hash, and "you won't see it again" was the whole of the protection. Keys
+ * are kept now, sealed under DATABASE_ENCRYPTION_KEY, so the owner can view
+ * one from the keys table and drop it into the MCP config. What replaces the
+ * old protection is the set of refusals below, and each is there for a
+ * reason:
+ *
+ *  - **Not an API key.** A key that can read other keys is a key that can
+ *    escalate: a read-only credential would mint nothing, but it could copy
+ *    the writer sitting beside it.
+ *  - **Owner only.** A reader sees the workspace's files already; a reader
+ *    who can read a write-scoped key can write. The middleware refuses first
+ *    (a reader's scope lacks keys:create); this check is the one that holds if
+ *    that requirement is ever loosened.
+ *  - **Not revoked.** A revoked key does not work, and a route that hands out
+ *    dead credentials teaches people to try them.
+ *  - **Never kept, never shown.** Keys minted before 0022 have no ciphertext.
+ *    409 rather than 404: the key exists, it is the secret that does not.
+ *  - **Audited, every time.** `key.revealed` with who and which. Viewing a
+ *    credential is an act, and the log is where an owner finds out that
+ *    somebody else on the account has been doing it.
+ *
+ * A ciphertext that will not open is a 500, not a 4xx: it means the secret the
+ * Worker runs with is not the one the row was sealed under, and nothing the
+ * caller does can change that.
+ */
+export async function revealKey(
+  ctx: AuthContext,
+  request: Request,
+  keyId: string
+): Promise<Response> {
+  if (ctx.identity.kind !== "firebase_user") {
+    throw forbidden("Only a signed-in workspace owner can view a key.");
+  }
+  if (ctx.identity.role !== "owner") {
+    throw forbidden("Only the workspace owner can view a key.");
+  }
+
+  const row = await ctx.db.apiKeys.getById(keyId);
+  if (row === null) throw new ApiError("NOT_FOUND", "No such key.");
+  if (row.revoked_at !== null) {
+    throw new ApiError(
+      "CONFLICT",
+      "That key is revoked. A revoked key cannot be shown or reactivated; mint a new one."
+    );
+  }
+  if (row.key_ciphertext === null || ctx.encryptionKey === null) {
+    throw new ApiError(
+      "CONFLICT",
+      "This key was minted before keys were kept, so it cannot be shown. Mint a new one."
+    );
+  }
+
+  const secret = await openSecret(ctx.encryptionKey, row.key_ciphertext, row.id);
+  if (secret === null) {
+    throw new Error(`api key ${row.id} is sealed under a different secret, or its ciphertext changed`);
+  }
+
+  audit(ctx, request, "key.revealed", {
+    resourceType: "api_key",
+    resourceId: row.id,
+    metadata: { name: row.name, prefix: row.key_prefix },
+  });
+
+  return json({ secret });
 }

@@ -54,6 +54,8 @@ export interface CreateWorkspaceDeps {
    * sandbox to a real account, so it must not go missing on a deploy.
    */
   dashboardUrl?: string | undefined;
+  /** DATABASE_ENCRYPTION_KEY, passed through to provisioning so the sandbox key is kept. */
+  encryptionKey?: string | undefined;
   now?: number;
 }
 
@@ -105,6 +107,7 @@ export async function createWorkspace(
     workspaceName: parsed.data.name ?? "Sandbox",
     agentName: parsed.data.agentName ?? "sandbox-agent",
     now,
+    encryptionKey: deps.encryptionKey ?? null,
   });
 
   const body = {

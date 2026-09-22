@@ -643,14 +643,14 @@ export class WorkspaceScopedApiKeys extends WorkspaceScoped {
       .prepare(
         `INSERT INTO api_keys
            (id, workspace_id, agent_id, name, key_prefix, key_last_four, key_hash,
-            scopes, created_by_user_id, parent_key_id, expires_at, last_used_at,
-            revoked_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)`
+            key_ciphertext, scopes, created_by_user_id, parent_key_id, expires_at,
+            last_used_at, revoked_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)`
       )
       .bind(
         row.id, this.workspaceId, row.agent_id, row.name, row.key_prefix,
-        row.key_last_four, row.key_hash, row.scopes, row.created_by_user_id,
-        row.parent_key_id, row.expires_at, row.created_at
+        row.key_last_four, row.key_hash, row.key_ciphertext, row.scopes,
+        row.created_by_user_id, row.parent_key_id, row.expires_at, row.created_at
       )
       .run();
   }

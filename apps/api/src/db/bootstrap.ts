@@ -12,6 +12,7 @@
  */
 
 import { generateApiKey, randomSecret, sha256Hex } from "../lib/keys";
+import { sealSecret } from "../lib/secretbox";
 import { newId } from "../lib/ids";
 import { FALLBACK_SLUG, slugify } from "../lib/slug";
 import { serializeScopes, type KeyScope } from "../auth/scopes";
@@ -77,6 +78,13 @@ export interface ProvisionRequest {
   workspaceName: string;
   agentName: string;
   now: number;
+  /**
+   * DATABASE_ENCRYPTION_KEY, so the sandbox key is kept the way a dashboard
+   * key is (migration 0022) and the person who claims the workspace can view
+   * it. Null or absent keeps nothing - the key is then shown once, in the
+   * provisioning response, and never again.
+   */
+  encryptionKey?: string | null;
 }
 
 export interface ProvisionResult {
@@ -110,6 +118,9 @@ export async function provisionSandboxWorkspace(
   const keyId = newId("apiKey", now);
 
   const key = await generateApiKey("live");
+  // Bound to the row id, so the ciphertext opens for this key and no other.
+  const keyCiphertext =
+    request.encryptionKey == null ? null : await sealSecret(request.encryptionKey, key.token, keyId);
 
   // The claim link's secret. Generated here rather than on first use so it is
   // written inside the same batch as the workspace it unlocks - a workspace
@@ -172,8 +183,9 @@ export async function provisionSandboxWorkspace(
       .prepare(
         `INSERT INTO api_keys
            (id, workspace_id, agent_id, name, key_prefix, key_last_four, key_hash,
-            scopes, created_by_user_id, expires_at, revoked_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)`
+            key_ciphertext, scopes, created_by_user_id, expires_at, revoked_at,
+            created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)`
       )
       .bind(
         keyId,
@@ -183,6 +195,7 @@ export async function provisionSandboxWorkspace(
         key.keyPrefix,
         key.keyLastFour,
         key.keyHash,
+        keyCiphertext,
         serializeScopes(SANDBOX_KEY_SCOPE),
         userId,
         now

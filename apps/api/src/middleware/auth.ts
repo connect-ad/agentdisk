@@ -90,6 +90,12 @@ export interface AuthContext {
    */
   dashboardUrl?: string;
   /**
+   * DATABASE_ENCRYPTION_KEY, or null when the deployment has none. Sealing a
+   * new key and opening one for its owner both go through this; a handler
+   * never reads the env for it.
+   */
+  encryptionKey: string | null;
+  /**
    * A soft warning for a write that was allowed but is close to an unclaimed
    * workspace's cap, or null.
    *
@@ -191,6 +197,13 @@ export interface WithAuthDeps {
    * claim page. Optional: absent simply omits the link from the warning.
    */
   dashboardUrl?: string;
+  /**
+   * DATABASE_ENCRYPTION_KEY, for sealing a freshly minted key and opening one
+   * for its owner (lib/secretbox.ts). Optional: absent, keys are minted with
+   * no ciphertext and can never be viewed again, which is what this product
+   * did for every key before migration 0022.
+   */
+  encryptionKey?: string;
 }
 
 /**
@@ -326,6 +339,7 @@ export async function withAuth(
     queue: deps.queue,
     sandboxWarning: null,
     dashboardUrl: deps.dashboardUrl,
+    encryptionKey: deps.encryptionKey ?? null,
     self:
       identity.kind === "firebase_user"
         ? {

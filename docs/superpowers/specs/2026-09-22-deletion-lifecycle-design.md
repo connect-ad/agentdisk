@@ -7,6 +7,13 @@ deferral and is partly implemented. This completes it and fixes what it left.
 
 ---
 
+**Revised 22 Sept 2026, after a cross-check against the entitlements spec.**
+D3's *timing* is superseded: the email scrub and the Firebase identity deletion
+now happen together at the END of the window, not at its start, because the
+dunning and confirmation emails need an address that D3 destroyed on day zero.
+See "Revisions" in `2026-09-22-entitlements-design.md` (R1). D3's substance —
+that the address is released to `.invalid` so a person can return — is unchanged.
+
 ## What is already built
 
 The deferred-deletion work landed the mechanism: deleting a workspace destroys

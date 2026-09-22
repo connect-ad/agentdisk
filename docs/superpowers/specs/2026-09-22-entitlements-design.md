@@ -289,6 +289,115 @@ know.
 
 `invoice.upcoming` is not currently handled by the webhook and must be added.
 
+## Revisions, 22 September 2026
+
+Seven problems were found reviewing these two specs against each other. Six are
+resolved here; the seventh needed no change.
+
+### R1 — The identity and the address die together, at the end
+
+**Superseded: D3's timing.** D3 scrubbed `users.email` at the moment of
+deletion and D4 queued the Firebase identity for the end of the window. That
+made the emails unsendable: the day-3, day-7 and deletion-confirmed messages
+all need an address the first step had already destroyed. Two features broke
+each other and neither spec noticed, because each was written on its own.
+
+Both now happen at the **same moment, at the end of the window**: the sweep
+deletes the Firebase identity and scrubs `users.email` in one step. The address
+stays live and mailable for the whole window, and is freed only once everything
+is genuinely gone.
+
+The consequence is accepted rather than worked around: **during the window the
+person cannot sign up again with that address**, because `users.email` is
+`UNIQUE` and still holds it. That is the right behaviour — inside the recovery
+window they should be recovering, not starting over — but the refusal must say
+so. "That email is already in use" reads as a bug and would send somebody to
+support; it says the account is pending deletion, and when the address frees.
+
+### R2 — A failed payment and a cancellation end the same way
+
+**Superseded: D12.** D12 deleted an account fourteen days after a failed
+payment while D13 kept a voluntary canceller's files indefinitely. The customer
+whose bank declined a card lost everything; the one who deliberately left kept
+it. Nobody would defend that written down, and customers would find it.
+
+Both now do the same thing: **drop to Free and become read-only if over the
+limit.** Neither is deleted for the payment event itself.
+
+### R3 — Deletion is driven by dormancy, not by payment
+
+**Supersedes D14's trigger, and replaces D12's timeline.**
+
+An account is deleted when it is **both over its limit and untouched** — no
+sign-in and no API call — for **90 days**, after two warnings, through the
+existing seven-day path.
+
+Payment status is not part of the test. An account that cancels and stays
+*under* the Free limits is never deleted at all: it costs essentially nothing
+and is a future customer.
+
+Ninety days rather than fourteen, and the arithmetic is why. At $0.015/GB-month
+a worst-case abandoned 500 GB Team account costs **$7.50 a month**, so the
+whole ninety-day exposure is about **$22.50** — for the one abandonment large
+enough to matter. Fourteen days after a bank declines a card deletes the data of
+people who were travelling, or between cards, and would have paid. The saving is
+not worth the story.
+
+### R4 — Countable overages are permanent, and that is fine
+
+**Resolves the open question on `agents`, `apiKeys`, `members`, `workspaces`.**
+
+Nothing converges them and nothing needs to. These cost nothing to hold: the
+limits shape what a plan is worth, they do not control a cost. Storage is the
+opposite, which is why storage is the dimension with a real consequence.
+
+So an account downgraded from twenty keys to two keeps its twenty working keys
+and cannot create a twenty-first. Forcing it under would break eighteen running
+agents, which is exactly what "never break existing" exists to prevent.
+
+### R5 — A warning before the wall
+
+The six emails covered every way an account could end and none of the ways it
+could be rescued. **80% and 95% of storage or file count now send one**, to the
+owner, at most once per threshold per period.
+
+This is the highest-value message in the set and the only one that prevents
+rather than explains. The machinery exists — `sandboxQuotaWarning` computes
+exactly this and is wired only for unclaimed sandboxes.
+
+### R6 — A paid file-size limit must not collapse silently
+
+`maxFileBytes` above 100 MB is reachable only through the presigned path. With
+the R2 credential pair unset, presigning is off and every plan caps at 100 MB —
+so a Team customer paying for 4.9 GB gets Free's ceiling with nothing saying
+why.
+
+**This fails loudly instead.** The smoke test asserts that the configured upload
+paths can carry the largest `maxFileBytes` any purchasable plan declares. A
+deployment that cannot honour what it sells stops the pipeline rather than
+waiting to become a support thread.
+
+### R7 — The recovery promise must be true at day 7
+
+The timeline said an account was "queued for deletion" at day 7 and erased at
+day 14, while `deleteWorkspaceCascade` destroys keys and agents the moment it
+runs. If it ran at day 7, "pay before day 14 and recover everything" was false
+for the entire second week.
+
+Under R2 and R3 this dissolves: nothing is queued on a payment event at all, and
+when dormancy deletion does run, the cascade and the seven-day byte window begin
+together. There is no interval in which an account is half-destroyed and
+described as recoverable.
+
+### R8 — Claiming while over a limit
+
+A claim that would exceed a limit is refused, and the person frees space first.
+
+**The refusal must carry the deadline.** The sandbox is swept seven days from
+creation, so a bare "limit exceeded" leaves somebody to discover the files were
+destroyed while they were deciding. It names both facts: what to free, and the
+date after which there is nothing left to claim.
+
 ## Sequencing
 
 The plan may land this in stages; nothing here requires one commit. A safe

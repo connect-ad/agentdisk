@@ -59,7 +59,8 @@ export const PLANS = [
     lines: [
       '1 GB storage',
       '1 agent identity',
-      'Unlimited requests, egress and files',
+      '10 GB egress / month · 10,000 files',
+      'Unlimited requests',
       '1 workspace · 1 member · 2 API keys',
       '100 MB max file size',
     ],
@@ -76,7 +77,8 @@ export const PLANS = [
     lines: [
       '5 GB storage',
       '5 agent identities',
-      'Unlimited requests, egress and files',
+      '50 GB egress / month · 100,000 files',
+      'Unlimited requests',
       '3 workspaces · 2 members · 6 API keys',
       '500 MB max file size',
     ],
@@ -93,7 +95,8 @@ export const PLANS = [
     lines: [
       '50 GB storage',
       '10 agent identities',
-      'Unlimited requests, egress and files',
+      '500 GB egress / month · 1,000,000 files',
+      'Unlimited requests',
       '10 workspaces · 5 members · 20 API keys',
       '1 GB max file size',
     ],
@@ -110,9 +113,10 @@ export const PLANS = [
     lines: [
       '500 GB storage',
       '50 agent identities',
-      'Unlimited requests, egress and files',
+      '5,000 GB egress / month · 10,000,000 files',
+      'Unlimited requests',
       '50 workspaces · 25 members · 100 API keys',
-      '5 GB max file size',
+      '4.9 GB max file size',
     ],
   },
 ];

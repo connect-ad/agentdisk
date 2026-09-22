@@ -53,7 +53,9 @@ function limitsOf(plan) {
 
 /** `50 * GB` → "50 GB", `100 * MB` → "100 MB". */
 function sizeLabel(expr) {
-  const m = expr.match(/^(\d+)\s*\*\s*(GB|MB)$/);
+  // Decimals too: Team's max file size is 4.9 GB, because R2's single-part
+  // ceiling is 4.995 GiB and multipart upload is not built.
+  const m = expr.match(/^(\d+(?:\.\d+)?)\s*\*\s*(GB|MB)$/);
   expect(m, `unreadable size ${expr}`).not.toBeNull();
   return `${m[1]} ${m[2]}`;
 }
@@ -102,15 +104,20 @@ describe('pricing page → the plans the API actually enforces', () => {
   it('promises no cap on anything plans.ts leaves unlimited', () => {
     for (const plan of ['free', 'basic', 'pro', 'team']) {
       const { field } = limitsOf(plan);
-      // If one of these ever gains a real number, this test fails and the
-      // card has to start stating it — which is the point.
+      // This test did its job: egress and fileCount gained real numbers in
+      // migration 0021, it failed, and the cards had to start stating them.
+      // Requests are the one dimension still uncapped, so it is the one this
+      // still guards - and when metering arrives, it fails again.
       expect(field('requestsPerPeriod')).toBe('UNLIMITED');
-      expect(field('egressBytesPerPeriod')).toBe('UNLIMITED');
-      expect(field('fileCount')).toBe('UNLIMITED');
+      expect(field('egressBytesPerPeriod')).not.toBe('UNLIMITED');
+      expect(field('fileCount')).not.toBe('UNLIMITED');
     }
     mount();
+    // No card states a request cap, because there is none to state. The file
+    // counts ARE rendered now, which is why the old "100,000 must not appear"
+    // assertion is gone rather than adapted - it asserted the absence of a
+    // number the cards are now required to show.
     expect(screen.queryByText(/requests \/ month/i)).toBeNull();
-    expect(screen.queryByText(/100,000/)).toBeNull();
   });
 
   it('renders one card per plan, with its price and its CTA', () => {

@@ -156,15 +156,19 @@ export async function previewClaim(
   const workspace = await findByClaimToken(db, await sha256Hex(token));
   if (workspace === null || workspace.status !== "active") throw noSuchClaim();
 
-  // A claimed workspace answers with the fact and nothing else. The row keeps
-  // its token hash so that somebody re-opening a link from their own agent's
-  // log gets an explanation rather than a dead 404 that reads like a bug. But
-  // it is no longer a sandbox awaiting a stranger: its name, size and contents
-  // now belong to whoever claimed it, and a link that has been sitting in a log
-  // file since before that happened has no business still reporting them.
-  if (workspace.claimed_at !== null) {
-    return json({ claimed: true, claimable: false, reason: "ALREADY_CLAIMED" });
-  }
+  // A claimed link is answered exactly as an unknown one is.
+  //
+  // This used to return ALREADY_CLAIMED, so that somebody re-opening a link
+  // from their own agent's log got an explanation rather than a dead 404. The
+  // trouble is that this route takes no credential, which makes it the one
+  // place in the product where guessing tokens is free - and a distinguishable
+  // answer tells a guesser which of their guesses named a real workspace. The
+  // authentication chain has answered every failure identically since the
+  // beginning; this route was the gap.
+  //
+  // What replaces the explanation is `claim_attempts`: support can say what
+  // happened to a link without the answer being available to everyone.
+  if (workspace.claimed_at !== null) throw noSuchClaim();
 
   const expired =
     workspace.claim_token_expires_at !== null && workspace.claim_token_expires_at <= now;

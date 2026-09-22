@@ -20,6 +20,7 @@ import { provisionSandboxWorkspace } from "../src/db/bootstrap";
 import { expireUnclaimedWorkspaces } from "../src/jobs/sandbox-expiry";
 import { SANDBOX_LIMITS, PLAN_LIMITS } from "../src/lib/plans";
 import { UNCLAIMED_TTL_MS } from "../src/lib/claim";
+import { CLAIM_TOKEN_TTL_MS } from "../src/db/bootstrap";
 import { objectKey } from "../src/storage/keys";
 import { NOW } from "./helpers";
 
@@ -284,7 +285,13 @@ describe("GET /v1/workspaces/claim/:token - the preview", () => {
     expect(body.error.message).toBe("That claim link is not valid.");
   });
 
-  it("stops describing the workspace once it has been claimed", async () => {
+  it("answers a claimed link exactly as it answers one that never existed", async () => {
+    // This used to return ALREADY_CLAIMED so a person re-opening their own
+    // link got an explanation. The trouble is the route takes no credential,
+    // which makes it the one place guessing tokens is free - and telling a
+    // guesser "claimed" rather than "no such thing" confirms which guesses
+    // named a real workspace. The auth chain has answered every failure
+    // identically from the start; this route was the gap.
     const sandbox = await provision();
     const token = await mint(OWNER_UID, "claimowner@example.com");
     await SELF.fetch(
@@ -292,12 +299,24 @@ describe("GET /v1/workspaces/claim/:token - the preview", () => {
       asUser(token, { mode: "new" })
     );
 
-    const res = await SELF.fetch(`${URL_BASE}/v1/workspaces/claim/${sandbox.claimToken}`);
-    const body = (await res.json()) as Record<string, unknown>;
-    expect(body.claimed).toBe(true);
-    expect(body.claimable).toBe(false);
-    // The name, size and contents now belong to whoever claimed it.
-    expect(body.workspace).toBeUndefined();
+    const claimed = await SELF.fetch(`${URL_BASE}/v1/workspaces/claim/${sandbox.claimToken}`);
+    const never = await SELF.fetch(`${URL_BASE}/v1/workspaces/claim/tok_neverexistedatall`);
+
+    expect(claimed.status).toBe(404);
+    expect(never.status).toBe(404);
+
+    // Byte-identical, not merely both 404: a difference in the body is the
+    // same oracle by another route.
+    const a = (await claimed.json()) as { error: { code: string; message: string } };
+    const b = (await never.json()) as { error: { code: string; message: string } };
+    expect(a.error.code).toBe(b.error.code);
+    expect(a.error.message).toBe(b.error.message);
+  });
+
+  it("expires a claim link exactly when the sweep takes the workspace", async () => {
+    // A link outliving its subject is a link that lies. These are one number,
+    // not two that happen to agree.
+    expect(CLAIM_TOKEN_TTL_MS).toBe(UNCLAIMED_TTL_MS);
   });
 });
 

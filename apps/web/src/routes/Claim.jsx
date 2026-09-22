@@ -181,9 +181,20 @@ export default function Claim() {
   if (previewError) {
     return (
       <Centered>
+        {/*
+          One message for every reason a link does not work: claimed already,
+          expired, or never existed. The API answers all three identically on
+          purpose - this page takes no credential, so a message that told them
+          apart would tell anybody guessing tokens which guesses named a real
+          workspace. Saying less here is the point, not an oversight.
+        */}
         <Alert tone="danger" title="That claim link is not valid">
-          {previewError.message} If an agent gave you this link, ask it to provision a new
-          workspace — a claim link is shown once and cannot be reissued.
+          It may have been claimed already, or expired — a sandbox and its link both last
+          seven days. If an agent gave you this link, ask it to provision a new workspace: a
+          claim link is shown once and cannot be reissued.
+          {' '}
+          If you think it was yours, <Link to="/app">check your dashboard</Link> — a workspace
+          you have already claimed is in your switcher.
         </Alert>
       </Centered>
     );
@@ -199,16 +210,6 @@ export default function Claim() {
     );
   }
 
-  if (preview.claimed) {
-    return (
-      <Centered>
-        <Alert tone="neutral" title="This workspace has already been claimed">
-          Somebody has taken ownership of it. If that was you, it is in your workspace
-          switcher. <Link to="/app">Go to your dashboard</Link>.
-        </Alert>
-      </Centered>
-    );
-  }
 
   const sandbox = preview.workspace;
   const usedPct = preview.limits.storageBytes

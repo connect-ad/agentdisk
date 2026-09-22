@@ -15,6 +15,7 @@ import { generateApiKey, randomSecret, sha256Hex } from "../lib/keys";
 import { newId } from "../lib/ids";
 import { FALLBACK_SLUG, slugify } from "../lib/slug";
 import { serializeScopes, type KeyScope } from "../auth/scopes";
+import { UNCLAIMED_TTL_MS } from "../lib/claim";
 
 /** How long a sandbox workspace's usage period runs before it rolls over. */
 const PERIOD_LENGTH_MS = 30 * 24 * 60 * 60 * 1000;
@@ -34,7 +35,20 @@ const PERIOD_LENGTH_MS = 30 * 24 * 60 * 60 * 1000;
  * ordinary case, and this is a single-use token guarded by a unique index, not
  * a session.
  */
-export const CLAIM_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/**
+ * A claim link lives exactly as long as the workspace it names.
+ *
+ * It was thirty days against a seven-day sweep, so for three weeks a valid
+ * token pointed at something already deleted - and the person following it was
+ * not the agent that made it, so nobody who could explain the failure was
+ * present when it happened.
+ *
+ * The short window is the deliberate half of the trade: an agent provisioning
+ * for somebody away for a week loses the work. Accepted, because a link whose
+ * lifetime says nothing about whether it still works is worse than a short one
+ * that is honest.
+ */
+export const CLAIM_TOKEN_TTL_MS = UNCLAIMED_TTL_MS;
 
 /**
  * 40 base62 characters, wider than the 32 an API key gets.

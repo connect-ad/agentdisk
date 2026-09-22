@@ -94,12 +94,20 @@ describe('the claim preview', () => {
     expect(screen.getByRole('button', { name: /Sign in/ })).toBeTruthy();
   });
 
-  it('reports an already-claimed workspace without describing it', async () => {
-    previewClaim.mockResolvedValue({ claimed: true, claimable: false, reason: 'ALREADY_CLAIMED' });
+  it('says nothing that tells a claimed link from one that never existed', async () => {
+    // The API answers both with the same 404, because this page takes no
+    // credential and a distinguishable message tells anybody guessing tokens
+    // which guesses named a real workspace. The page must not reintroduce that
+    // distinction in its own copy.
+    previewClaim.mockRejectedValue(
+      Object.assign(new Error('No such claim link.'), { status: 404 })
+    );
     renderClaim();
 
-    expect(await screen.findByText(/already been claimed/i)).toBeTruthy();
+    expect(await screen.findByText(/not valid/i)).toBeTruthy();
+    // Neither the workspace nor which of the three reasons it was.
     expect(screen.queryByText(/Agent Scratch/)).toBeNull();
+    expect(screen.queryByText(/already been claimed/i)).toBeNull();
   });
 
   it('shows the API’s own warning text rather than recomputing it', async () => {

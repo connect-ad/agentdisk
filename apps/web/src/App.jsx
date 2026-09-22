@@ -67,7 +67,6 @@ export const NAV = [
   {
     label: 'Account',
     items: [
-      { id: 'usage', label: 'Usage', icon: 'chart', path: '/usage' },
       { id: 'settings', label: 'Settings', icon: 'gear', path: '/settings' },
     ]
   }

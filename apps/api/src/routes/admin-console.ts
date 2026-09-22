@@ -208,41 +208,12 @@ export async function adminDeleteUser(
     }
   }
 
-  return json({ ...result, firebase, restorableUntil: deps.now + 30 * 24 * 60 * 60 * 1000 });
-}
-
-export async function adminRestoreUser(
-  request: Request,
-  deps: AdminDeps,
-  userId: string
-): Promise<Response> {
-  const admin = await requireAdmin(request, deps);
-  const parsed = z.object({ reason }).safeParse(await body(request));
-  if (!parsed.success) throw validationError("A reason is required.");
-
-  const users = area(AdminUserAccess, admin, deps);
-  const user = await users.getById(userId);
-  if (user === null) throw new ApiError("NOT_FOUND", "No such user.");
-
-  const restored = await users.restore(userId, parsed.data.reason);
-
-  let firebase: "enabled" | "no_identity" | "unconfigured" | "failed" = "unconfigured";
-  if (restored && deps.firebaseAdmin !== null && user.firebaseUid !== null) {
-    try {
-      const updated = await setFirebaseUserDisabled(
-        deps.firebaseAdmin,
-        deps.kv,
-        user.firebaseUid,
-        false,
-        deps.now
-      );
-      firebase = updated ? "enabled" : "no_identity";
-    } catch {
-      firebase = "failed";
-    }
-  }
-
-  return json({ restored, firebase });
+  // No `restorableUntil`. It promised thirty days of recoverability that the
+  // deferred-deletion design removed: the workspace, its keys, its members and
+  // its folder structure are gone in this request, and only the bytes wait.
+  // Reporting a restore window for something with no restore is worse than
+  // reporting nothing.
+  return json({ ...result, firebase });
 }
 
 const transferSchema = z.object({ userId: z.string().trim().min(1), reason });
@@ -301,23 +272,7 @@ export async function adminDeleteWorkspace(
     parsed.data.confirmName,
     parsed.data.reason
   );
-  return json({ ...result, restorableUntil: deps.now + 30 * 24 * 60 * 60 * 1000 });
-}
-
-export async function adminRestoreWorkspace(
-  request: Request,
-  deps: AdminDeps,
-  workspaceId: string
-): Promise<Response> {
-  const admin = await requireAdmin(request, deps);
-  const parsed = z.object({ reason }).safeParse(await body(request));
-  if (!parsed.success) throw validationError("A reason is required.");
-
-  const restored = await area(AdminScopedAccess, admin, deps).restoreWorkspace(
-    workspaceId,
-    parsed.data.reason
-  );
-  return json({ restored });
+  return json(result);
 }
 
 export async function adminWorkspaceBlastRadius(

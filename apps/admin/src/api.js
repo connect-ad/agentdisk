@@ -125,8 +125,6 @@ export const adminApi = {
     }),
   deleteWorkspace: (id, confirmName, reason) =>
     request(`/v1/admin/workspaces/${id}`, { method: 'DELETE', body: { confirmName, reason } }),
-  restoreWorkspace: (id, reason) =>
-    request(`/v1/admin/workspaces/${id}/restore`, { method: 'POST', body: { reason } }),
 
   /* --------------------------------- users ------------------------------- */
   findUser: email => request(`/v1/admin/users${query({ email })}`),
@@ -139,8 +137,6 @@ export const adminApi = {
       method: 'DELETE',
       body: { confirmEmail, reason, revokeKeys }
     }),
-  restoreUser: (id, reason) =>
-    request(`/v1/admin/users/${id}/restore`, { method: 'POST', body: { reason } }),
   forceLogout: (userId, workspaceId) =>
     request(`/v1/admin/users/${userId}/force-logout${query({ workspaceId })}`, { method: 'POST' }),
   revokeUserKeys: userId => request(`/v1/admin/users/${userId}/revoke-keys`, { method: 'POST' }),

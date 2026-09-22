@@ -552,33 +552,6 @@ export class AdminScopedAccess extends AuditedAdminAccess {
     return { deleted, blastRadius: blast };
   }
 
-  /** Undo a soft delete inside its window. The workspace comes back suspended, not active. */
-  async restoreWorkspace(workspaceId: string, reason: string): Promise<boolean> {
-    await this.requireRole("admin", "restore workspaces");
-
-    // Restored to 'suspended' rather than 'active' on purpose: whatever caused
-    // the suspension that had to precede deletion has not been resolved by the
-    // restore, and silently handing access back would undo that decision too.
-    const result = await this.db
-      .prepare(
-        `UPDATE workspaces SET status = 'suspended', deleted_at = NULL, updated_at = ?
-          WHERE id = ? AND deleted_at IS NOT NULL`
-      )
-      .bind(this.now, workspaceId)
-      .run();
-
-    const restored = (result.meta.changes ?? 0) > 0;
-    if (restored) await this.record(workspaceId, "admin.workspace.restored", { reason });
-    await this.recordFleet({
-      action: "workspace.restore",
-      workspaceId,
-      targetType: "workspace",
-      targetId: workspaceId,
-      reason,
-      result: restored ? "success" : "denied",
-    });
-    return restored;
-  }
 
   /** What deleting this workspace would eventually take with it, from live counts. */
   async workspaceBlastRadius(workspaceId: string): Promise<Record<string, number>> {

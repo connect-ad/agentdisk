@@ -126,6 +126,20 @@ describe("the role matrix, enforced server-side", () => {
     expect(res.status).toBe(404);
   });
 
+  it("has no restore route, because a restore cannot restore the bytes", async () => {
+    // Pinned at 404 the way POST /v1/staff/users was. Restore survived the
+    // design that removed it, and could resurrect an account whose bytes a
+    // sweep had already erased - returning an empty shell and reporting
+    // success. A route answering anything but 404 here is that capability
+    // coming back.
+    expect(
+      (await call("POST", "/v1/admin/users/usr_ANY/restore", admin, { reason })).status
+    ).toBe(404);
+    expect(
+      (await call("POST", `/v1/admin/workspaces/${WORKSPACE_A}/restore`, admin, { reason })).status
+    ).toBe(404);
+  });
+
   it("refuses every console route without a credential at all", async () => {
     for (const path of [
       "/v1/admin/plans",
@@ -293,30 +307,6 @@ describe("deleting a workspace", () => {
     expect(after?.deletedAt).not.toBeNull();
   });
 
-  it("restores to suspended, never straight back to active", async () => {
-    const workspace = await env.DB.prepare(`SELECT name FROM workspaces WHERE id = ?`)
-      .bind(WORKSPACE_A)
-      .first<{ name: string }>();
-    await env.DB.prepare(`UPDATE workspaces SET status = 'suspended' WHERE id = ?`)
-      .bind(WORKSPACE_A)
-      .run();
-    await call("DELETE", `/v1/admin/workspaces/${WORKSPACE_A}`, superAdmin, {
-      confirmName: workspace?.name,
-      reason,
-    });
-
-    const res = await call("POST", `/v1/admin/workspaces/${WORKSPACE_A}/restore`, superAdmin, {
-      reason,
-    });
-    expect(res.status).toBe(200);
-
-    // Whatever caused the suspension has not been resolved by the restore, and
-    // handing access straight back would undo that decision too.
-    const after = await env.DB.prepare(`SELECT status FROM workspaces WHERE id = ?`)
-      .bind(WORKSPACE_A)
-      .first<{ status: string }>();
-    expect(after?.status).toBe("suspended");
-  });
 });
 
 /* ---------------------------- admin accounts ----------------------------- */

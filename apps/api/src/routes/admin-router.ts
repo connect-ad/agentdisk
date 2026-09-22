@@ -43,8 +43,6 @@ import {
   adminListAccounts,
   adminListPlans,
   adminNeedsAttention,
-  adminRestoreUser,
-  adminRestoreWorkspace,
   adminRetirePlan,
   adminRevokeKey,
   adminSetAccountDisabled,
@@ -140,9 +138,6 @@ export async function handleAdminRoute(
     if (resourceId !== undefined && action === "blast-radius" && request.method === "GET") {
       return await adminWorkspaceBlastRadius(request, adminDeps, resourceId);
     }
-    if (resourceId !== undefined && action === "restore" && request.method === "POST") {
-      return await adminRestoreWorkspace(request, adminDeps, resourceId);
-    }
     if (resourceId !== undefined && action === undefined && request.method === "DELETE") {
       return await adminDeleteWorkspace(request, adminDeps, resourceId);
     }
@@ -161,9 +156,6 @@ export async function handleAdminRoute(
     }
     if (action === "deletion-check" && request.method === "GET") {
       return await adminDeletionCheck(request, adminDeps, resourceId);
-    }
-    if (action === "restore" && request.method === "POST") {
-      return await adminRestoreUser(request, adminDeps, resourceId);
     }
     if (action === undefined && request.method === "DELETE") {
       return await adminDeleteUser(request, adminDeps, resourceId);

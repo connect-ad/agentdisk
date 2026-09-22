@@ -447,35 +447,6 @@ export class AdminUserAccess extends AuditedAdminAccess {
     return { deleted, keysRevoked };
   }
 
-  /**
-   * Undo a deletion inside its window.
-   *
-   * Keys are NOT un-revoked. Revocation is not part of the deletion — it is a
-   * separate choice the operator made alongside it — and a key that has been
-   * revoked has been published as revoked to every agent holding it. Reissuing
-   * is the customer's call, not a side effect of restoring their login.
-   */
-  async restore(userId: string, reason: string): Promise<boolean> {
-    await this.requireRole("admin", "restore customer accounts");
-
-    const result = await this.db
-      .prepare(
-        `UPDATE users SET deleted_at = NULL, updated_at = ?
-          WHERE id = ? AND deleted_at IS NOT NULL`
-      )
-      .bind(this.now, userId)
-      .run();
-
-    const restored = (result.meta.changes ?? 0) > 0;
-    await this.recordFleet({
-      action: "user.restore",
-      targetType: "user",
-      targetId: userId,
-      reason,
-      result: restored ? "success" : "denied",
-    });
-    return restored;
-  }
 
   /**
    * Move an organization's ownership to one of its existing members.

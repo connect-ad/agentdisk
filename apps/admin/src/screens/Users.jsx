@@ -282,14 +282,16 @@ export function Users({ role, onNavigate, onToast }) {
                 Revoke every key they created
               </button>
               {user.deletedAt ? (
-                <button
-                  type="button"
-                  style={canDelete ? secondaryBtn : disabledBtn}
-                  disabled={!canDelete || busy}
-                  onClick={() => setDialog('restore')}
-                >
-                  Restore account
-                </button>
+                /*
+                  Deleted, and there is no way back. Restore was removed with
+                  the thirty-day window: the org, its workspaces, its keys and
+                  its members go in the delete request, so a restore could only
+                  ever have returned an empty shell and reported success.
+                  Saying so is more use than a button that lies.
+                */
+                <span className="ad-meta">
+                  Deleted {'—'} not recoverable
+                </span>
               ) : (
                 <button
                   type="button"
@@ -382,17 +384,6 @@ export function Users({ role, onNavigate, onToast }) {
             onConfirm={() => act(() => adminApi.revokeUserKeys(user.id), 'Keys revoked.')}
           />
 
-          <ConfirmModal
-            open={dialog === 'restore'}
-            destructive={false}
-            title={`Restore ${user.email}?`}
-            description="They can sign in again immediately. Keys revoked alongside the deletion are NOT reissued — a revoked key has already been published as revoked to every agent holding it, and reissuing is the customer's call."
-            requireReason
-            confirmLabel="Restore"
-            busy={busy}
-            onCancel={() => setDialog(null)}
-            onConfirm={reason => act(() => adminApi.restoreUser(user.id, reason), 'Account restored.')}
-          />
 
           <DeleteUserDialog
             open={dialog === 'delete'}

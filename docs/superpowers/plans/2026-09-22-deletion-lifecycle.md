@@ -715,10 +715,291 @@ git commit -m "Say what deletion actually does"
 
 ---
 
+### Task 8: Make the claim link expire with the workspace, and answer 404
+
+The token is valid for 30 days; the workspace it names is swept after 7. Between
+day 8 and day 30 a valid link points at nothing. Separately, an already-claimed
+link identifies itself, which on an unauthenticated route is an oracle.
+
+**Files:**
+- Modify: `apps/api/src/db/bootstrap.ts:37` — `CLAIM_TOKEN_TTL_MS`
+- Modify: `apps/api/src/routes/claim.ts:165-167` — the already-claimed branch
+- Modify: `apps/web/src/routes/Claim.jsx` — handle 404 in place of `ALREADY_CLAIMED`
+- Test: `apps/api/test/claim.test.ts`
+
+**Interfaces:**
+- Consumes: `UNCLAIMED_TTL_MS` from `src/lib/claim.ts` (7 days, unchanged).
+- Produces: `GET /v1/workspaces/claim/:token` returns **404** for claimed, expired and unknown tokens alike — one indistinguishable answer.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+it("answers a claimed link the same way it answers a token that never existed", async () => {
+  // The point is indistinguishability. This route is unauthenticated, which
+  // makes it the one place probing tokens is free, and "claimed" vs "never
+  // existed" is exactly the bit a prober wants.
+  const sandbox = await provision();
+  await claimAs(OWNER_UID, sandbox.claimToken, { mode: "new" });
+
+  const claimed = await SELF.fetch(`${URL_BASE}/v1/workspaces/claim/${sandbox.claimToken}`);
+  const never = await SELF.fetch(`${URL_BASE}/v1/workspaces/claim/tok_doesnotexistatall`);
+
+  expect(claimed.status).toBe(404);
+  expect(never.status).toBe(404);
+  expect(await claimed.text()).toBe(await never.text());
+});
+
+it("expires the link exactly when the workspace is swept", async () => {
+  // A link outliving its subject is a link that lies. These are one number.
+  expect(CLAIM_TOKEN_TTL_MS).toBe(UNCLAIMED_TTL_MS);
+});
+```
+
+- [ ] **Step 2: Run them and watch them fail**
+
+Run: `cd apps/api && npx vitest run test/claim.test.ts -t "never existed"`
+Expected: FAIL — claimed returns 200 with `ALREADY_CLAIMED`, and the TTLs differ.
+
+- [ ] **Step 3: Align the TTL**
+
+```ts
+// apps/api/src/db/bootstrap.ts
+/**
+ * A claim link lives exactly as long as the workspace it names.
+ *
+ * It was 30 days against a 7-day sweep, so for three weeks a valid token
+ * pointed at something already deleted. The short window is the deliberate
+ * half of the trade: an agent provisioning for somebody away for a week loses
+ * the work. Accepted, because a link whose lifetime says nothing about whether
+ * it still works is worse than a short one.
+ */
+export const CLAIM_TOKEN_TTL_MS = UNCLAIMED_TTL_MS;
+```
+
+- [ ] **Step 4: Return 404 for a claimed link**
+
+Replace the `claimed_at !== null` branch in `routes/claim.ts` with `throw noSuchClaim();`, and replace the comment above it — the existing one argues for the behaviour being removed, so leaving it would document the opposite of the code:
+
+```ts
+  // A claimed link is answered exactly as an unknown one is. The previous
+  // behaviour returned ALREADY_CLAIMED so that somebody re-opening their own
+  // link got an explanation - but this route takes no credential, so that
+  // explanation is equally available to anybody guessing tokens, and it
+  // confirms which guesses named a real workspace. The auth chain has answered
+  // every failure identically since the beginning; this route was the gap.
+  //
+  // What replaces the explanation is `claim_attempts`: support can say what
+  // happened to a link, without the answer being free to everyone.
+  if (workspace.claimed_at !== null) throw noSuchClaim();
+```
+
+Update `Claim.jsx` to render its existing not-found state on a 404 and drop the `ALREADY_CLAIMED` branch.
+
+- [ ] **Step 5: Run everything**
+
+Run: `cd apps/api && npx vitest run && npx tsc --noEmit`, then `cd ../web && npx vitest run && npm run build`
+Expected: PASS, clean, builds.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add apps/api/src/db/bootstrap.ts apps/api/src/routes/claim.ts apps/web/src apps/api/test/claim.test.ts
+git commit -m "Expire a claim link with its workspace, and stop it identifying itself"
+```
+
+---
+
+### Task 9: Record every claim attempt, and show it in the console
+
+Task 8 removed the client's explanation. This is what replaces it, and the trail must outlive the workspace.
+
+**Files:**
+- Create: `apps/api/migrations/0020_claim_attempts.sql`
+- Create: `apps/api/src/lib/claim-log.ts`
+- Modify: `apps/api/src/routes/claim.ts` — log on every path
+- Create: `apps/admin/src/screens/ClaimLinks.jsx`
+- Modify: `apps/api/src/admin/deletions-access.ts`, `apps/api/src/routes/admin-console.ts`, `apps/admin/src/App.jsx`
+- Test: `apps/api/test/claim-log.test.ts`
+
+**Interfaces:**
+- Consumes: `sha256Hex(token)` from `src/lib/claim.ts`.
+- Produces: `recordClaimAttempt(db, entry, now): Promise<void>` where `entry` is `{ tokenHash, workspaceId?, outcome, userId?, ip?, userAgent? }`.
+- Produces: `GET /v1/admin/claim-links?workspaceId=&tokenHash=`.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+it("records a refused attempt, and keeps it after the workspace is gone", async () => {
+  const sandbox = await provision();
+  await claimAs(OWNER_UID, sandbox.claimToken, { mode: "new" });
+
+  // A second person hits the link. They are told nothing (Task 8) - this row
+  // is the only place the fact survives.
+  await SELF.fetch(`${URL_BASE}/v1/workspaces/claim/${sandbox.claimToken}`, {
+    headers: { "cf-connecting-ip": "203.0.113.7" },
+  });
+
+  const rows = await env.DB.prepare(
+    `SELECT outcome, ip, workspace_id FROM claim_attempts WHERE outcome = 'already_claimed'`
+  ).all<{ outcome: string; ip: string; workspace_id: string }>();
+
+  expect(rows.results?.length).toBe(1);
+  expect(rows.results?.[0]?.ip).toBe("203.0.113.7");
+
+  // No foreign key, so deleting the workspace must not take the evidence.
+  await deleteWorkspaceCascade(env.DB, env.FILES, sandbox.workspaceId, { defer: true });
+  const after = await env.DB.prepare(`SELECT COUNT(*) AS n FROM claim_attempts`)
+    .first<{ n: number }>();
+  expect(after?.n).toBe(rows.results?.length);
+});
+
+it("never stores the token itself", async () => {
+  const sandbox = await provision();
+  await SELF.fetch(`${URL_BASE}/v1/workspaces/claim/${sandbox.claimToken}`);
+
+  const all = await env.DB.prepare(`SELECT token_hash FROM claim_attempts`).all<{ token_hash: string }>();
+  for (const row of all.results ?? []) {
+    expect(row.token_hash).not.toBe(sandbox.claimToken);
+    expect(row.token_hash).toHaveLength(64);
+  }
+});
+```
+
+- [ ] **Step 2: Run them and watch them fail**
+
+Run: `cd apps/api && npx vitest run test/claim-log.test.ts`
+Expected: FAIL — `no such table: claim_attempts`.
+
+- [ ] **Step 3: Write the migration**
+
+```sql
+-- apps/api/migrations/0020_claim_attempts.sql
+-- Who touched which claim link, and what happened.
+--
+-- Task 8 made a claimed link answer 404, identical to a token that never
+-- existed, because this route takes no credential and a distinguishable answer
+-- tells a prober which guesses named a real workspace. That removed the
+-- client's explanation. This is where the explanation goes instead: support can
+-- say what happened to a link without the answer being free to everyone.
+--
+-- No foreign keys, deliberately, and for the same reason `pending_deletions`
+-- has none: the workspace a row names may already be deleted, and the trail is
+-- worth most precisely then. `workspace_id` is denormalised TEXT.
+--
+-- Only the HASH is stored. Same rule as `workspaces.claim_token_hash`: a
+-- support engineer can confirm which link was used and can never use it.
+CREATE TABLE claim_attempts (
+  id            TEXT PRIMARY KEY,
+  token_hash    TEXT NOT NULL,
+  workspace_id  TEXT,
+  outcome       TEXT NOT NULL,
+  user_id       TEXT,
+  ip            TEXT,
+  user_agent    TEXT,
+  created_at    INTEGER NOT NULL
+);
+
+CREATE INDEX idx_claim_attempts_token ON claim_attempts(token_hash, created_at DESC);
+CREATE INDEX idx_claim_attempts_workspace ON claim_attempts(workspace_id, created_at DESC);
+-- The retention sweep scans by age.
+CREATE INDEX idx_claim_attempts_created ON claim_attempts(created_at);
+```
+
+- [ ] **Step 4: Write the recorder and call it everywhere**
+
+```ts
+// apps/api/src/lib/claim-log.ts
+export type ClaimOutcome =
+  | "previewed" | "claimed" | "already_claimed" | "expired" | "unknown_token";
+
+/**
+ * Never throws. A failure to write the log must not fail the claim - the
+ * person's workspace matters more than our record of it, and a thrown error
+ * here would turn a successful claim into a 500 after the work was done.
+ */
+export async function recordClaimAttempt(
+  db: D1Database,
+  entry: {
+    tokenHash: string;
+    workspaceId?: string | null;
+    outcome: ClaimOutcome;
+    userId?: string | null;
+    ip?: string | null;
+    userAgent?: string | null;
+  },
+  now: number
+): Promise<void> {
+  try {
+    await db
+      .prepare(
+        `INSERT INTO claim_attempts
+           (id, token_hash, workspace_id, outcome, user_id, ip, user_agent, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        newId("claimAttempt", now), entry.tokenHash, entry.workspaceId ?? null,
+        entry.outcome, entry.userId ?? null, entry.ip ?? null,
+        entry.userAgent?.slice(0, 256) ?? null, now
+      )
+      .run();
+  } catch (err) {
+    console.log(JSON.stringify({
+      level: "warn", message: "claim attempt log failed",
+      reason: err instanceof Error ? err.message : String(err),
+    }));
+  }
+}
+```
+
+Call it from every exit of both claim handlers — preview success, claimed, expired, unknown token, and each refusal — passing `cf-connecting-ip` and `user-agent` from the request.
+
+- [ ] **Step 5: Trim the log in the sweep**
+
+These rows hold IP addresses of unauthenticated visitors — personal data, so they get a limit rather than living forever. In `jobs/pending-deletions.ts`, after the identity pass:
+
+```ts
+  // 90 days. Long enough for the investigation this table exists for, short
+  // enough that a log of strangers' IP addresses does not become a liability
+  // nobody decided to keep.
+  if (!dryRun) {
+    await db.prepare(`DELETE FROM claim_attempts WHERE created_at < ?`)
+      .bind(now - CLAIM_ATTEMPT_RETENTION_MS)
+      .run();
+  }
+```
+
+Define `CLAIM_ATTEMPT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000` in `src/lib/claim-log.ts` and import it.
+
+- [ ] **Step 6: Add the route and the screen**
+
+`GET /v1/admin/claim-links` on `AdminDeletionsAccess`, filtered by `workspaceId` or `tokenHash`. `ClaimLinks.jsx` shows one timeline per link: created by which agent, every preview with its IP, the claim and by whom, and every refusal since.
+
+- [ ] **Step 7: Run everything**
+
+Run: `cd apps/api && npx vitest run && npx tsc --noEmit`, then `cd ../admin && npx vitest run && npm run build`
+Expected: PASS, clean, builds.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add apps/api/migrations apps/api/src apps/admin/src apps/api/test
+git commit -m "Record every claim attempt, and show it in the console"
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage.** D1 weekly + on-demand → Tasks 1, 6. D2 enable → Task 1. D3 email scrub → Task 2. D4 Firebase delete → Task 3. D5 remove restore → Task 4. D6 self-service cancels / staff refuses → Task 5. D7 detach + retain + disclose → Tasks 5, 7. D8 seven-day account window → Tasks 2, 3. Console section → Task 6. Re-join test → Task 5 Step 1. No gaps.
 
 **Type consistency.** `ACCOUNT_PURGE_TTL_MS` defined in Task 2, used in Tasks 3 and 5. `purge_after` defined in Task 2's migration, read in Task 3, written in Task 5. `identitiesDeleted` added to `SweepResult` in Task 3, displayed in Task 6. `sweepPendingDeletions` gains `env` in Task 3; Task 6 calls the new signature.
 
-**One thing to watch during execution:** Task 3 changes `sweepPendingDeletions`'s signature, and Task 6 depends on the new one. Execute in order, or Task 6's call will not compile.
+**One thing to watch during execution:** Task 3 changes `sweepPendingDeletions`'s
+signature, and Tasks 6 and 9 depend on the new one. Execute in order, or their
+calls will not compile.
+
+**Claim coverage (Tasks 8, 9):** TTL alignment and the 404 in Task 8; the
+attempt log, its retention and the console screen in Task 9. Their order is not
+cosmetic — Task 8 removes the explanation the client used to get, and Task 9 is
+where that explanation goes instead. Shipping 8 alone leaves support unable to
+answer a question the product previously answered by itself.

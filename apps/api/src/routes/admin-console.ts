@@ -26,6 +26,7 @@ import { ApiError, validationError } from "../lib/errors";
 import { json, requireAdmin, type AdminDeps } from "./admin";
 import { AdminScopedAccess, type AdminUser } from "../admin/access";
 import { AdminUserAccess } from "../admin/users-access";
+import { AdminDeletionsAccess } from "../admin/deletions-access";
 import { AdminPlanAccess } from "../admin/plans-access";
 import { AdminBillingAccess } from "../admin/billing-access";
 import { AdminAuditAccess } from "../admin/audit-access";
@@ -214,6 +215,43 @@ export async function adminDeleteUser(
   // Reporting a restore window for something with no restore is worse than
   // reporting nothing.
   return json({ ...result, firebase });
+}
+
+/* ----------------------------- deletions -------------------------------- */
+
+export async function adminDeletionQueue(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
+  return json(await area(AdminDeletionsAccess, admin, deps).queue());
+}
+
+export async function adminDeletionRuns(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
+  return json({ runs: await area(AdminDeletionsAccess, admin, deps).runs() });
+}
+
+export async function adminRunDeletionSweep(
+  request: Request,
+  deps: AdminDeps
+): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
+  const parsed = z.object({ reason }).safeParse(await body(request));
+  if (!parsed.success) throw validationError("A reason is required.");
+
+  // The sweep needs R2 and the Firebase config, neither of which the other
+  // console areas use. Passed at the call site rather than widened into
+  // AdminDeps for every handler, so a screen that has no business touching
+  // object storage cannot reach it.
+  if (deps.files === undefined) {
+    throw new ApiError("INTERNAL_ERROR", "Object storage is not available to this deployment.", {
+      internalReason: "AdminDeps.files was not provided at the dispatch site",
+    });
+  }
+
+  const result = await area(AdminDeletionsAccess, admin, deps).runNow(
+    { files: deps.files, env: deps.sweepEnv ?? {}, kv: deps.kv },
+    parsed.data.reason
+  );
+  return json(result);
 }
 
 const transferSchema = z.object({ userId: z.string().trim().min(1), reason });

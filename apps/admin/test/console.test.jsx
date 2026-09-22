@@ -26,42 +26,29 @@ import { UNAVAILABLE, bytes, count, money, quota } from '../src/lib/format.js';
 afterEach(cleanup);
 
 describe('the role matrix', () => {
-  it('ranks the three roles in one order', () => {
-    expect(holds('support', 'support')).toBe(true);
-    expect(holds('support', 'admin')).toBe(false);
-    expect(holds('support', 'super_admin')).toBe(false);
-
-    expect(holds('admin', 'support')).toBe(true);
+  it('has one role, which reaches every screen', () => {
+    // Three tests here pinned a three-tier nav matrix. The server collapsed to
+    // a single `admin` role, so `holds('admin', 'super_admin')` was false and
+    // Admin Accounts was hidden from everybody - including the only role that
+    // could reach it. The tests stayed green because RANK still described the
+    // old hierarchy, which is exactly how a nav can be broken and covered at
+    // the same time.
     expect(holds('admin', 'admin')).toBe(true);
-    expect(holds('admin', 'super_admin')).toBe(false);
 
-    expect(holds('super_admin', 'super_admin')).toBe(true);
+    const visible = NAV.filter(item => holds('admin', item.role)).map(item => item.key);
+    for (const key of ['overview', 'users', 'billing', 'plans', 'audit', 'deletions', 'admin']) {
+      expect(visible).toContain(key);
+    }
   });
 
   it('refuses a role it does not recognise rather than defaulting to the most permissive', () => {
-    // The same discipline as the membership check in the customer chain: an
-    // unknown role grants nothing.
-    expect(holds('root', 'support')).toBe(false);
-    expect(holds(undefined, 'support')).toBe(false);
-  });
-
-  it('shows support every read screen, including Billing and Plans', () => {
-    // The design hides both below admin. Support is exactly who needs to see
-    // why a customer's writes are blocked, and being unable to look up the plan
-    // turns a one-minute answer into an escalation.
-    const visible = NAV.filter(item => holds('support', item.role)).map(item => item.key);
-    expect(visible).toContain('billing');
-    expect(visible).toContain('plans');
-    expect(visible).toContain('audit');
-    expect(visible).toContain('users');
-  });
-
-  it('hides admin accounts below super_admin', () => {
-    const forAdmin = NAV.filter(item => holds('admin', item.role)).map(item => item.key);
-    expect(forAdmin).not.toContain('admin');
-
-    const forSuper = NAV.filter(item => holds('super_admin', item.role)).map(item => item.key);
-    expect(forSuper).toContain('admin');
+    // Unchanged, and the one property worth keeping from the old matrix: an
+    // unknown role grants nothing. The roles it now refuses include the two
+    // that used to be real.
+    expect(holds('root', 'admin')).toBe(false);
+    expect(holds(undefined, 'admin')).toBe(false);
+    expect(holds('support', 'admin')).toBe(false);
+    expect(holds('super_admin', 'admin')).toBe(false);
   });
 });
 

@@ -71,6 +71,24 @@ export interface AdminDeps {
   /** Stripe, for the plan screens. Absent means those endpoints refuse, naming why. */
   stripeSecretKey?: string;
   /**
+   * Object storage, for the deletion sweep's run-now control only.
+   *
+   * Optional, and passed at the dispatch site rather than required of every
+   * handler: a console screen that has no business touching a tenant's bytes
+   * should not be handed a bucket binding to reach them with.
+   */
+  files?: R2Bucket;
+  /**
+   * The subset of `env` the sweep reads - the enable flag and the Firebase
+   * service account. Narrowed to those three keys so a handler cannot reach
+   * past it to a secret it was not given.
+   */
+  sweepEnv?: {
+    PENDING_DELETION_ENABLED?: string;
+    FIREBASE_SERVICE_ACCOUNT_JSON?: string;
+    FIREBASE_PROJECT_ID?: string;
+  };
+  /**
    * The same Firebase verifier the customer chain uses, and deliberately the
    * same project: one sign-in for every surface is the point of 0014.
    */

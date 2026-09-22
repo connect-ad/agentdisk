@@ -95,6 +95,10 @@ const query = params => {
 };
 
 export const adminApi = {
+  deletionQueue: () => request('/v1/admin/deletions/queue'),
+  deletionRuns: () => request('/v1/admin/deletions/runs'),
+  runDeletionSweep: reason =>
+    request('/v1/admin/deletions/run', { method: 'POST', body: { reason } }),
   /* ------------------------------- session -------------------------------
    * No login or logout call. Signing in happens in the browser against
    * Firebase; signing out is discarding the token there. `whoami` is how the

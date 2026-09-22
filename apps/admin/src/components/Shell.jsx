@@ -18,22 +18,31 @@ import { btn, ellipsis, h1, mono, secondaryBtn } from '../lib/ui.js';
  * and tells them who to ask.
  */
 
-const RANK = { support: 0, admin: 1, super_admin: 2 };
+/*
+  One role. `support` and `super_admin` are gone from the server, so a nav item
+  asking for either was asking for something nobody can hold - which made
+  `holds('admin', 'super_admin')` false and hid Admin Accounts from everyone,
+  including the person who could reach it.
+
+  Kept as a map with one entry, and `holds` kept beside it, so restoring a tier
+  is adding a line rather than rediscovering which screens were gated.
+*/
+const RANK = { admin: 0 };
 
 export const NAV = [
-  { key: 'overview', label: 'Overview', path: '/', role: 'support' },
+  { key: 'overview', label: 'Overview', path: '/', role: 'admin' },
   {
     key: 'workspaces',
     label: 'Workspaces',
     path: '/workspaces',
-    role: 'support',
+    role: 'admin',
     kids: [
       { key: 'workspaces', label: 'All Workspaces', path: '/workspaces' },
       { key: 'ws_attention', label: 'Needs Attention', path: '/workspaces/needs-attention' },
       { key: 'ws_suspended', label: 'Suspended', path: '/workspaces/suspended' }
     ]
   },
-  { key: 'users', label: 'Users', path: '/users', role: 'support' },
+  { key: 'users', label: 'Users', path: '/users', role: 'admin' },
   {
     key: 'billing',
     label: 'Billing',
@@ -41,7 +50,7 @@ export const NAV = [
     // support+, not admin. The design gates this at admin, which is one notch
     // too strict: support is exactly who needs to see why a customer's writes
     // are blocked.
-    role: 'support',
+    role: 'admin',
     kids: [
       { key: 'billing', label: 'All', path: '/billing' },
       { key: 'bill_past', label: 'Past Due', path: '/billing/past-due' },
@@ -52,18 +61,19 @@ export const NAV = [
     key: 'plans',
     label: 'Plans & Pricing',
     path: '/plans',
-    role: 'support',
+    role: 'admin',
     kids: [
       { key: 'plans', label: 'Plans', path: '/plans' },
       { key: 'sync', label: 'Sync History', path: '/plans/sync-history' }
     ]
   },
-  { key: 'audit', label: 'Audit Log', path: '/audit', role: 'support' },
+  { key: 'audit', label: 'Audit Log', path: '/audit', role: 'admin' },
+  { key: 'deletions', label: 'Deletions', path: '/deletions', role: 'admin' },
   // Readable by support on purpose: support is who gets asked whether email
   // is down, and the answer is a boolean that grants nothing. Only the test
   // send is gated higher, and the screen and the server both check that.
-  { key: 'email', label: 'Email', path: '/settings/email', role: 'support' },
-  { key: 'admin', label: 'Admin Accounts', path: '/admin', role: 'super_admin' }
+  { key: 'email', label: 'Email', path: '/settings/email', role: 'admin' },
+  { key: 'admin', label: 'Admin Accounts', path: '/admin', role: 'admin' }
 ];
 
 export function holds(role, minimum) {
@@ -71,11 +81,12 @@ export function holds(role, minimum) {
 }
 
 function restrictionNote(role) {
-  if (role === 'super_admin') return null;
-  if (role === 'admin') {
-    return 'Admin: you can suspend, adjust overrides and edit plans. Creating or retiring a plan, deleting anything, and managing admin accounts need super_admin.';
-  }
-  return 'Support: you can read every screen and act on agents and API keys. Suspending a workspace, adjusting an override and editing plans need admin.';
+  // Nothing to restrict: every console operator can do everything. Said
+  // plainly rather than left blank, because the previous copy described three
+  // tiers and a reader who remembers it needs to know it is gone, not absent.
+  return role === 'admin'
+    ? 'Every console operator can do everything here, including deletions. The only boundary is being in admin_users at all.'
+    : null;
 }
 
 /** The tab title, so a browser with six console tabs open is navigable. */

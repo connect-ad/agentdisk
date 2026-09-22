@@ -30,6 +30,9 @@ import {
 } from "./admin";
 import {
   adminAudit,
+  adminDeletionQueue,
+  adminDeletionRuns,
+  adminRunDeletionSweep,
   adminAuditExport,
   adminAuditFilters,
   adminBilling,
@@ -89,6 +92,15 @@ export async function handleAdminRoute(
     // Cloudflare sets this itself and a client cannot forge it. Read once here
     // so no handler has to remember to.
     sourceIp: request.headers.get("cf-connecting-ip"),
+    // Only the deletion sweep uses these two. Handed over here rather than
+    // added to every handler's reach: a screen with no business touching a
+    // tenant's bytes should not be given a bucket binding to reach them with.
+    files: env.FILES,
+    sweepEnv: {
+      PENDING_DELETION_ENABLED: env.PENDING_DELETION_ENABLED,
+      FIREBASE_SERVICE_ACCOUNT_JSON: env.FIREBASE_SERVICE_ACCOUNT_JSON,
+      FIREBASE_PROJECT_ID: env.FIREBASE_PROJECT_ID,
+    },
     // The same verifier and the same project as the customer chain. Admin are
     // told apart by their admin_users row, never by the credential.
     // undefined rather than an empty projectId when unset, so requireAdmin
@@ -204,6 +216,18 @@ export async function handleAdminRoute(
 
   if (area === "billing" && resourceId === undefined && request.method === "GET") {
     return await adminBilling(request, adminDeps);
+  }
+
+  if (area === "deletions") {
+    if (resourceId === "queue" && request.method === "GET") {
+      return await adminDeletionQueue(request, adminDeps);
+    }
+    if (resourceId === "runs" && request.method === "GET") {
+      return await adminDeletionRuns(request, adminDeps);
+    }
+    if (resourceId === "run" && request.method === "POST") {
+      return await adminRunDeletionSweep(request, adminDeps);
+    }
   }
 
   if (area === "audit") {

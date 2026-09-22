@@ -329,19 +329,51 @@ limit.** Neither is deleted for the payment event itself.
 **Supersedes D14's trigger, and replaces D12's timeline.**
 
 An account is deleted when it is **both over its limit and untouched** — no
-sign-in and no API call — for **90 days**, after two warnings, through the
+sign-in and no API call — for **14 days**, after two warnings, through the
 existing seven-day path.
 
 Payment status is not part of the test. An account that cancels and stays
 *under* the Free limits is never deleted at all: it costs essentially nothing
 and is a future customer.
 
-Ninety days rather than fourteen, and the arithmetic is why. At $0.015/GB-month
-a worst-case abandoned 500 GB Team account costs **$7.50 a month**, so the
-whole ninety-day exposure is about **$22.50** — for the one abandonment large
-enough to matter. Fourteen days after a bank declines a card deletes the data of
-people who were travelling, or between cards, and would have paid. The saving is
-not worth the story.
+**Fourteen days is short, and a staff extension is what makes it safe.** The
+console can grant an account more time, per account, on request — a support
+engineer hearing "I was away, my card expired" adds a fortnight rather than
+explaining that the data is gone. That converts the one case the short window
+gets wrong, somebody who would have paid, into a conversation instead of a
+loss.
+
+The extension is a column, `organizations.deletion_deferred_until`, set only by
+an audited staff action and read by the dormancy sweep. It is not a plan field
+and not something a customer can set; the point is that a person asked and
+somebody agreed.
+
+Without that valve the arithmetic argues for ninety days — a worst-case
+abandoned 500 GB account costs $7.50 a month, so the difference between two
+weeks and three months is about twenty dollars for the largest abandonment the
+product will ever see. With the valve, fourteen is defensible: the cost lands
+where it should, and the exception has a handle.
+
+### R3a — Three retention windows, deliberately different
+
+Deleting one file erases its bytes **inside the request**. `markDeleted` writes
+a marker, `storage.delete` removes the object, `hardDelete` removes the row, and
+`REAP_AFTER_MS` is sixty seconds — a crash-recovery device for a request that
+died half-way, not a recycle bin.
+
+| Act | Bytes erased |
+|---|---|
+| Delete a file | immediately |
+| Delete a workspace or account | after 7 days |
+| Dormant and over limit | after 14 days, then the 7-day path |
+
+The asymmetry is correct and was never written down. Deleting one file is small,
+targeted and deliberate — the person meant that file. Deleting a workspace is
+bulk, and a mistake costs everything at once.
+
+**It makes one UI requirement non-negotiable:** the file-delete confirmation
+must not imply recovery. Any "moved to trash", any undo affordance, any
+"restore" wording is false, and the first person to trust it loses a file.
 
 ### R4 — Countable overages are permanent, and that is fine
 

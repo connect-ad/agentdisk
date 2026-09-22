@@ -34,6 +34,7 @@ import { newId } from "../lib/ids";
 import { sha256Hex } from "../lib/keys";
 import { SANDBOX_LIMITS, limitsFor } from "../lib/plans";
 import { assertWithinQuota } from "../lib/quota";
+import { recordClaimAttempt, callerOf } from "../lib/claim-log";
 import { normalizePath, PathValidationError } from "../lib/paths";
 import { isSlugConflict, uniqueWorkspaceSlug } from "../lib/slug";
 import { UNCLAIMED_TTL_MS, sandboxQuotaWarning } from "../lib/claim";
@@ -151,10 +152,19 @@ export async function previewClaim(
   db: D1Database,
   token: string,
   now: number,
-  dashboardUrl: string | undefined
+  dashboardUrl: string | undefined,
+  caller: { ip: string | null; userAgent: string | null } = { ip: null, userAgent: null }
 ): Promise<Response> {
-  const workspace = await findByClaimToken(db, await sha256Hex(token));
-  if (workspace === null || workspace.status !== "active") throw noSuchClaim();
+  const tokenHash = await sha256Hex(token);
+  const workspace = await findByClaimToken(db, tokenHash);
+
+  // Recorded before the refusal, and with the outcome that is now invisible to
+  // the caller. The client is told one thing for all three cases; the log is
+  // where the three stay apart.
+  if (workspace === null || workspace.status !== "active") {
+    await recordClaimAttempt(db, { tokenHash, outcome: "unknown_token", ...caller }, now);
+    throw noSuchClaim();
+  }
 
   // A claimed link is answered exactly as an unknown one is.
   //
@@ -168,10 +178,28 @@ export async function previewClaim(
   //
   // What replaces the explanation is `claim_attempts`: support can say what
   // happened to a link without the answer being available to everyone.
-  if (workspace.claimed_at !== null) throw noSuchClaim();
+  if (workspace.claimed_at !== null) {
+    await recordClaimAttempt(
+      db,
+      { tokenHash, workspaceId: workspace.id, outcome: "already_claimed", ...caller },
+      now
+    );
+    throw noSuchClaim();
+  }
 
   const expired =
     workspace.claim_token_expires_at !== null && workspace.claim_token_expires_at <= now;
+
+  await recordClaimAttempt(
+    db,
+    {
+      tokenHash,
+      workspaceId: workspace.id,
+      outcome: expired ? "expired" : "previewed",
+      ...caller,
+    },
+    now
+  );
 
   const agent = await sandboxAgent(db, workspace.id);
   const deletesAt = workspace.created_at + UNCLAIMED_TTL_MS;
@@ -338,27 +366,62 @@ export async function claimWorkspace(
 
   const tokenHash = await sha256Hex(token);
   const workspace = await findByClaimToken(db, tokenHash);
-  if (workspace === null || workspace.status !== "active") throw noSuchClaim();
+
+  // Unlike the preview, this caller IS authenticated, so the refusals here can
+  // say what went wrong without becoming an oracle - a person who has signed
+  // in has not learned anything about a token they could not already try. The
+  // attempts are recorded all the same: the question support gets is "who else
+  // has had this link", and only the log answers it.
+  const caller = { ...callerOf(request), userId: user.id };
+  if (workspace === null || workspace.status !== "active") {
+    await recordClaimAttempt(db, { tokenHash, outcome: "unknown_token", ...caller }, now);
+    throw noSuchClaim();
+  }
 
   // These two produce the message a person actually needs. They are advisory:
   // the statement below is what decides, and it re-checks both conditions.
   if (workspace.claimed_at !== null) {
+    await recordClaimAttempt(
+      db,
+      { tokenHash, workspaceId: workspace.id, outcome: "already_claimed", ...caller },
+      now
+    );
     throw new ApiError("CONFLICT", "This workspace has already been claimed.");
   }
   if (workspace.claim_token_expires_at !== null && workspace.claim_token_expires_at <= now) {
+    await recordClaimAttempt(
+      db,
+      { tokenHash, workspaceId: workspace.id, outcome: "expired", ...caller },
+      now
+    );
     throw new ApiError("CONFLICT", "This claim link has expired.", {
       details: { expiredAt: workspace.claim_token_expires_at },
     });
   }
 
   if (!(await takeClaim(db, workspace.id, tokenHash, now))) {
+    // Lost the race. Recorded as already_claimed, because that is what it is
+    // from this caller's side and the row is how a "we both clicked at once"
+    // support thread gets resolved.
+    await recordClaimAttempt(
+      db,
+      { tokenHash, workspaceId: workspace.id, outcome: "already_claimed", ...caller },
+      now
+    );
     throw new ApiError("CONFLICT", "This workspace has already been claimed.");
   }
 
   try {
-    return parsed.mode === "new"
-      ? await claimAsNewWorkspace(deps, user, workspace)
-      : await claimByAttaching(deps, user, workspace, parsed.targetWorkspaceId, parsed.pathPrefix);
+    const response =
+      parsed.mode === "new"
+        ? await claimAsNewWorkspace(deps, user, workspace)
+        : await claimByAttaching(deps, user, workspace, parsed.targetWorkspaceId, parsed.pathPrefix);
+    await recordClaimAttempt(
+      db,
+      { tokenHash, workspaceId: workspace.id, outcome: "claimed", ...caller },
+      now
+    );
+    return response;
   } catch (err) {
     await releaseClaim(db, workspace.id, now);
     throw err;

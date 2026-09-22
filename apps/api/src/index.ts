@@ -47,6 +47,7 @@ import {
 } from "./routes/members";
 import { resolveVerifiedUser } from "./auth/authenticate";
 import { deleteOwnAccount } from "./routes/account";
+import { callerOf } from "./lib/claim-log";
 import { readFirebaseAdminConfig } from "./auth/firebase-admin";
 import { extractBearerToken, isApiKeyToken } from "./lib/keys";
 import { unauthorized } from "./lib/errors";
@@ -371,7 +372,7 @@ export default {
           // this product, so asking them to create an account before telling
           // them what they would be claiming inverts the order of trust.
           if (request.method === "GET") {
-            return await previewClaim(env.DB, token, now, env.DASHBOARD_URL);
+            return await previewClaim(env.DB, token, now, env.DASHBOARD_URL, callerOf(request));
           }
 
           // Claiming is a person's act. An API key is refused for the same

@@ -76,6 +76,13 @@ export const ID_PREFIX = {
   shareLink: "shr",
   /** One recorded execution of a background job. See migration 0017. */
   jobRun: "job",
+  /**
+   * One touch of a claim link - a preview, a claim, or a refusal.
+   *
+   * Not workspace-scoped and not an entity a customer owns: the row outlives
+   * the workspace it names, which is the point of it. See migration 0020.
+   */
+  claimAttempt: "cla",
   // Admin are not customers and never appear in a workspace's entity graph, but
   // they get the same sortable IDs: an investigation reads both trails.
   adminUser: "stf",

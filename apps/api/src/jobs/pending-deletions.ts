@@ -20,6 +20,7 @@
  */
 
 import { newId } from "../lib/ids";
+import { CLAIM_ATTEMPT_RETENTION_MS } from "../lib/claim-log";
 import { deleteFirebaseUser, type FirebaseAdminConfig } from "../auth/firebase-admin";
 
 /** R2 accepts up to 1000 keys in one delete. */
@@ -38,6 +39,8 @@ export interface SweepResult {
   identitiesReleased: number;
   /** True when the identity pass was skipped for want of a Firebase config. */
   identitySkipped: boolean;
+  /** Claim-attempt rows removed past their 90-day retention. */
+  claimAttemptsTrimmed: number;
   dryRun: boolean;
   /** The `job_runs` row this write produced, so a caller can link to it. */
   runId: string;
@@ -126,6 +129,7 @@ export async function sweepPendingDeletions(
     failed: 0,
     identitiesReleased: 0,
     identitySkipped: false,
+    claimAttemptsTrimmed: 0,
     dryRun,
     runId,
   };
@@ -204,6 +208,18 @@ export async function sweepPendingDeletions(
     }
 
     await releaseIdentities(db, now, dryRun, force, limit, options.identity, result);
+
+    // The claim-attempt log's retention, trimmed by the sweep that already
+    // runs. These rows hold IP addresses of unauthenticated visitors, so they
+    // are bounded rather than kept because keeping them is cheap - ninety days
+    // is long enough for the investigation the table exists for.
+    if (!dryRun) {
+      const trimmed = await db
+        .prepare(`DELETE FROM claim_attempts WHERE created_at < ?`)
+        .bind(now - CLAIM_ATTEMPT_RETENTION_MS)
+        .run();
+      result.claimAttemptsTrimmed = trimmed.meta.changes ?? 0;
+    }
 
     await finish(db, runId, now, result, null);
     return result;

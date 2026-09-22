@@ -44,6 +44,19 @@ export interface CascadeResult {
 }
 
 /** 12.4's window, and the one the privacy policy now quotes. */
+/**
+ * How long a deleted account keeps its identity and its email address.
+ *
+ * The same seven days as the bytes, deliberately: one retention window in the
+ * product rather than two, so "when is it really gone" has one answer.
+ *
+ * Both are released together by the sweep. The address in particular has to
+ * outlive the delete request - every message an account receives after
+ * deletion, including the confirmation that its bytes are gone, needs somewhere
+ * to go.
+ */
+export const ACCOUNT_PURGE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 export const PENDING_DELETION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**

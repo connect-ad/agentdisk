@@ -24,6 +24,7 @@
 
 import { AuditedAdminAccess } from "./audited";
 import { ApiError, forbidden, validationError } from "../lib/errors";
+import { ACCOUNT_PURGE_TTL_MS } from "../db/workspace-cascade";
 
 export interface AdminUserRecord {
   id: string;
@@ -362,12 +363,27 @@ export class AdminUserAccess extends AuditedAdminAccess {
       });
     }
 
+    // `purge_after` queues the two irreversible halves - the Firebase identity
+    // and the email address - for the sweep seven days from now.
+    //
+    // The address is deliberately NOT scrubbed here. It has to stay mailable
+    // for the whole window, because everything this account is still owed is
+    // sent during it: the warnings, and the confirmation that its bytes are
+    // gone. Releasing it on day zero would leave those with nowhere to go.
+    //
+    // The row itself is never removed. `audit_events.actor_id` resolves to it,
+    // and `resolveVerifiedUser` reads `deleted_at` to refuse tokens minted
+    // before the account went - those stay valid for up to an hour after
+    // Firebase disables the identity, so our own row is the only thing that can
+    // refuse them in that window.
     const result = await this.db
       .prepare(
-        `UPDATE users SET deleted_at = ?, session_revoked_after = ?, updated_at = ?
+        `UPDATE users
+            SET deleted_at = ?, session_revoked_after = ?, updated_at = ?,
+                purge_after = ?
           WHERE id = ? AND deleted_at IS NULL`
       )
-      .bind(this.now, this.now, this.now, userId)
+      .bind(this.now, this.now, this.now, this.now + ACCOUNT_PURGE_TTL_MS, userId)
       .run();
 
     const deleted = (result.meta.changes ?? 0) > 0;

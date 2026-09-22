@@ -187,6 +187,72 @@ satisfies it, so nothing is breached, but it now understates the product and
 says nothing about invoice retention. Both change together, and Legal.jsx wins
 where it and Settings → Privacy disagree.
 
+## Claim links
+
+### The link lives exactly as long as the workspace
+
+`CLAIM_TOKEN_TTL_MS` is 30 days and `UNCLAIMED_TTL_MS` is 7. An agent hands
+somebody a link good for a month pointing at a workspace swept after a week, so
+between day 8 and day 30 the token is valid and its subject is gone. Nobody has
+hit it only because the sweep has never run.
+
+**Both become 7 days.** The short window is the deliberate half of the trade: an
+agent provisioning for a person who is away for a week loses the work. Accepted,
+because the alternative is a month of unclaimed sandboxes and a link whose
+lifetime says nothing about whether it still works.
+
+### An already-claimed link answers 404
+
+Today it returns `{ claimed: true, claimable: false, reason: "ALREADY_CLAIMED" }`,
+reasoning that somebody re-opening their own link deserves an explanation rather
+than a 404 that reads like a bug.
+
+**That reverses.** A distinguishable response is an oracle: somebody probing
+tokens learns which ones named a real workspace, and "claimed" versus "never
+existed" is exactly the bit they want. The same rule the authentication chain
+already follows — every failure returns one identical body — applies here, and
+this route is *unauthenticated*, which makes it the one place probing is free.
+
+The cost is real and is paid deliberately: the legitimate claimer revisiting
+their own link sees nothing useful. What makes that acceptable is the log below
+— support can answer "what happened to my link?" from the record, which is
+better than the client being told and an attacker being told with it.
+
+### Every attempt is recorded
+
+`recordClaim` cannot serve this. It fires only on success, requires both a
+workspace and a user, hardcodes `ip` to NULL, and writes into `audit_events` —
+which is deleted along with the workspace, so the trail disappears exactly when
+an investigation would want it.
+
+New table `claim_attempts`, with no foreign keys, for the same reason
+`pending_deletions` has none: the rows it names may already be gone.
+
+```
+id, token_hash, workspace_id, outcome, user_id, ip, user_agent, created_at
+```
+
+`outcome` is one of `previewed`, `claimed`, `already_claimed`, `expired`,
+`unknown_token`. **Only the hash is stored, never the token** — the same rule as
+`workspaces.claim_token_hash`, and the reason a support engineer can confirm
+*which* link was used without ever being able to use it.
+
+Two consequences to state plainly:
+
+- **These rows hold IP addresses of unauthenticated visitors.** That is personal
+  data, so it gets a retention limit — 90 days, trimmed by the same sweep that
+  erases bytes — and a line in the privacy policy. Logging forever because
+  logging is cheap is how a log becomes a liability.
+- **The row outlives its workspace.** That is the point, and it is why the table
+  carries a denormalised `workspace_id` rather than a reference.
+
+### The console section
+
+A `Claim links` screen: search by workspace or token hash, and see one timeline
+per link — created by which agent, previewed from where and when, claimed by
+whom, and every refused attempt since. That answers the question support
+actually gets, which is not "is this token valid" but "who else has had this".
+
 ## Testing
 
 - **Re-join**, as one integration test: create, delete, sign up again with the

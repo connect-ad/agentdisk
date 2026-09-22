@@ -88,6 +88,16 @@
    repeated: it is what keeps the "New workspace" row's label aligned with the
    workspace rows' labels. */
 .wsx{position:relative;--wsx-mark:1.375rem}
+
+/* The top bar's mark carries two letters — "MW", "KL" — in a 20px square the
+   design system sizes for one, so on a wide pair the glyphs sit against their
+   own border. 3px each side, and the square grows into a rounded rectangle
+   rather than squeezing the letters; 20px stays the floor, so a single-letter
+   mark is unchanged. Bar only: the menu's rows align their marks with
+   --wsx-mark, and widening those without moving that column would step the
+   "New workspace" label out of line with the workspace names above it. */
+.shell__wsbtn--bar .shell__wsmark{width:auto;min-width:1.25rem;padding:0 0.1875rem}
+
 .wsx__menu{position:absolute;top:calc(100% + var(--s-2));left:0;right:0;z-index:30;
   background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r-3);
   box-shadow:var(--sh-3);padding:var(--s-2);

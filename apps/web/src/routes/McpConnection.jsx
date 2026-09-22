@@ -179,6 +179,7 @@ export default function McpConnection() {
   /** Why the block still says the placeholder, when it does. */
   const fillNote = (() => {
     if (secret) return 'This block carries the real key. Treat the file as a secret.';
+    if (loading) return 'Loading this workspace’s keys…';
     if (!selected) return 'Choose a key in step 1 and it is filled in here.';
     if (role !== 'owner') return 'Only the workspace owner can fill the key in. Ask them for it.';
     if (!selected.retrievable) return 'This key was created before keys were kept, so it cannot be filled in. Mint a new one.';
@@ -253,10 +254,21 @@ export default function McpConnection() {
               both follow it.
             </p>
             <div style={{ maxWidth: '28rem' }}>
+              {/*
+                The keys, the agents and 200 activity events land together, so
+                this control is empty for as long as the slowest of the three
+                takes. A disabled select with no options renders as a blank box
+                with a chevron, which reads as "this workspace has no keys"
+                rather than "not here yet" — so it says so while it waits.
+              */}
               <Select
                 aria-label="API key"
-                value={selected?.id ?? ''}
-                options={usableKeys.map(k => ({ value: k.id, label: keyLabel(k) }))}
+                value={loading ? '' : selected?.id ?? ''}
+                options={
+                  loading
+                    ? [{ value: '', label: 'Loading keys…' }]
+                    : usableKeys.map(k => ({ value: k.id, label: keyLabel(k) }))
+                }
                 onChange={e => setKeyId(e.target.value)}
                 disabled={loading}
               />

@@ -1425,39 +1425,36 @@ button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
 .kst__label{line-height:1}
 .kst__menu{min-width:9.5rem;animation:ad-fade var(--d-1) var(--ease)}
 
-/* ---- The key dialogs (view, created, rotated), to the design ----------
-   Measured off the reference in CSS pixels rather than screenshot pixels:
-   the live capture was at ~125% browser zoom, so every raw number in it was
-   1.25x its real size and a straight comparison said this dialog was already
-   the larger of the two. Normalised, the design is uniformly ~25% more
-   generous - padding, mark, title, field, footer and button all at once,
-   which is why the built one read as cramped rather than as having one
-   wrong margin.
+/* ---- The key dialogs (view, created, rotated) --------------------------
+   Sized from the reference, then taken down a quarter on the owner's call
+   (22 Sept 2026): 33.75rem wide against the 45rem it was, and every inside
+   measurement scaled with it, so the proportions the reference set are
+   kept and only the whole is smaller.
 
-   The measurements are then snapped to the 4px space scale, so this block
-   spends tokens rather than the odd numbers a ruler produces. `--kv-pad` is
-   the one exception: the scale steps 1.5rem then 2rem, so the 1.75rem the
-   design pads with has no token to name it.
-
-   Summed top to bottom these predict a 299px dialog against the
-   reference's 295, which is the check that says the values are consistent
-   rather than each one nudged by eye.
+   The mark's glyph needs its own correction. Every other icon in the set
+   fills its 24-unit box; `key` draws inside roughly x 9.3-19, y 7.7-15, so
+   it renders at about 40% of its nominal size and sits right of centre and
+   high. Hence an svg larger than the mark would otherwise want, and a
+   translate of the glyph's own offset. The translate is in percent, which
+   resolves against the svg's border box, so it stays correct whatever size
+   the icon is given. The glyph itself is wrong everywhere it is used, not
+   only here; fixing that is a change to the vendored icon set.
 
    The `!important` rules override inline styles in the vendored
    ApiKeyDisplay, whose field and copy button carry their dimensions as
    style attributes; overriding here keeps that component's third
    divergence out of its source. ---------------------------------------- */
-.ds__kview{--kv-pad:1.75rem}
-.ds__kview .modal__head{padding:var(--kv-pad) var(--kv-pad) var(--s-8);gap:var(--s-7)}
-.ds__kview .modal__body{padding:0 var(--kv-pad) var(--kv-pad);gap:var(--s-6)}
-.ds__kview .modal__mark{width:3rem;height:3rem;border-radius:var(--r-3)}
-.ds__kview .modal__title{font-size:var(--t-24)}
-.ds__kview .modal__x .icon-btn{width:2.25rem;height:2.25rem}
-.ds__kview code.ad-mono{font-size:var(--t-14);line-height:2;padding:var(--s-5) var(--s-6) !important}
-.ds__kview code.ad-mono + button{font-size:var(--t-14) !important;font-weight:var(--w-semi) !important;padding:0 var(--s-7) !important}
-.ds__kview .ad-meta{font-size:var(--t-14);color:var(--ink-2);gap:var(--s-4) !important}
-.ds__kview .ad-meta svg{width:1rem;height:1rem;margin-top:0.1875rem}
-.ds__kview .modal__foot{justify-content:space-between;padding:var(--s-6) var(--kv-pad)}
-.ds__kview .modal__foot .btn{height:3rem;padding:0 var(--s-7);font-size:var(--t-14)}
+.ds__kview{--kv-pad:1.3125rem;max-width:33.75rem}
+.ds__kview .modal__head{padding:var(--kv-pad) var(--kv-pad) var(--s-7);gap:var(--s-6)}
+.ds__kview .modal__body{padding:0 var(--kv-pad) var(--kv-pad);gap:var(--s-5)}
+.ds__kview .modal__mark{width:2.25rem;height:2.25rem;border-radius:var(--r-2)}
+.ds__kview .modal__mark svg{width:2rem;height:2rem;transform:translate(-9%,2.7%)}
+.ds__kview .modal__title{font-size:var(--t-18)}
+.ds__kview code.ad-mono{font-size:var(--t-12);line-height:2;padding:var(--s-4) var(--s-5) !important}
+.ds__kview code.ad-mono + button{font-size:var(--t-12) !important;font-weight:var(--w-semi) !important;padding:0 var(--s-6) !important}
+.ds__kview .ad-meta{font-size:var(--t-12);color:var(--ink-2);gap:var(--s-3) !important}
+.ds__kview .ad-meta svg{width:0.75rem;height:0.75rem;margin-top:0.125rem}
+.ds__kview .modal__foot{justify-content:space-between;padding:var(--s-5) var(--kv-pad)}
+.ds__kview .modal__foot .btn{height:2.25rem;padding:0 var(--s-6);font-size:var(--t-12)}
 .ds__kcap{font-family:var(--font-mono);font-size:var(--t-11);letter-spacing:var(--tr-caps);
   text-transform:uppercase;color:var(--ink-3);margin-right:auto}

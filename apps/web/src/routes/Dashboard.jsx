@@ -164,17 +164,28 @@ export default function Dashboard() {
       */}
 
       {/*
-        Quick start, from the design. Three cards rather than one code block.
-        They are links to the screens that actually do each step, so every one
-        goes somewhere real.
+        Quick start, from the design. Cards rather than one code block, each
+        linking to the screen that actually does that step, so every one goes
+        somewhere real.
+
+        It opens on the agent identity, which it did not used to. The sequence
+        ran key -> MCP -> "give an agent a folder", so the last step named an
+        agent no earlier step had told anybody to create, and the one nav
+        entry between Files and API keys was the one the walkthrough skipped.
+        An agent is optional on a key — `agentId` is nullable and a
+        workspace-level key works on its own — so nothing failed; you simply
+        reached the end holding a credential attributed to nobody, which is
+        the opposite of what this product is for. Attribution has to be chosen
+        before the key is minted: `keys.agent_id` is set at creation.
       */}
       <div>
         <h2 className="ds__h2">Quick start</h2>
         <div className="ds__quick">
           {[
-            { n: '1', title: 'Create a scoped key', body: 'Read, write, list or delete — optionally locked to one path prefix.', cta: 'Create key', to: `${root}/keys` },
-            { n: '2', title: 'Connect over MCP', body: 'Paste one config block into Claude Desktop, VS Code or the CLI.', cta: 'View setup', to: `${root}/mcp` },
-            { n: '3', title: 'Give an agent a folder', body: 'Scope it to a path prefix and watch the audit log fill in.', cta: 'Open Files', to: `${root}/files` },
+            { n: '1', title: 'Create an agent identity', body: 'The name every call is attributed to. Disabling it blocks its keys at once.', cta: 'Add agent', to: `${root}/agents` },
+            { n: '2', title: 'Mint a key for it', body: 'Read, write, list or delete — optionally locked to one path prefix.', cta: 'Create key', to: `${root}/keys` },
+            { n: '3', title: 'Connect over MCP', body: 'Paste one config block into Claude Desktop, VS Code or the CLI.', cta: 'View setup', to: `${root}/mcp` },
+            { n: '4', title: 'Watch the audit log fill in', body: 'Every call lands here named by the agent that made it, not by a key.', cta: 'Open Activity', to: `${root}/activity` },
           ].map(q => (
             <Link key={q.n} to={q.to} className="ds__qcard">
               <span className="ds__qnum">{q.n}</span>

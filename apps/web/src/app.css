@@ -993,7 +993,13 @@
    these as buttons: the hover is the border and the surface lifting, nothing
    else. Cancelling the decoration on the anchor itself is what stops it, since
    a descendant cannot remove an ancestor's underline. */
-.ds__quick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+/* Four steps, so four columns. The count is not incidental: at repeat(3) a
+   fourth card wraps onto a row of its own at a third of the width beside two
+   empty cells, which reads as a card that failed to load rather than as step
+   4. Kept as an explicit count rather than auto-fit/minmax so that adding a
+   step is a deliberate two-line change here and in Dashboard.jsx, not a
+   silent reflow. */
+.ds__quick{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
   gap:var(--s-5)}
 /* 9px and 8px are the reference's own values here and land between steps of
    the 4px space scale and the radius scale — --s-4 is 8 and --r-2 is 9, each a
@@ -1077,8 +1083,15 @@
   color:var(--ink-3);flex:none}
 
 @media (max-width:1350px){
-  .ds__quick{grid-template-columns:minmax(0,1fr)}
+  /* Two, not one. At three steps this collapsed straight to a single column
+     and that was fine; at four it puts the whole of Recent files below the
+     fold on a laptop. The steps are short enough to sit two abreast, and
+     reading order across then down still gives 1,2,3,4. */
+  .ds__quick{grid-template-columns:repeat(2,minmax(0,1fr))}
   .ds__two,.ds__cards{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:760px){
+  .ds__quick{grid-template-columns:minmax(0,1fr)}
 }
 
 /* --- accent picker (components-local/AccentPicker.jsx) ---

@@ -541,7 +541,7 @@ export class WorkspaceScopedAgents extends WorkspaceScoped {
     const result = await this.db
       .prepare(
         `SELECT * FROM agents
-          WHERE workspace_id = ? AND status != 'deleted'
+          WHERE workspace_id = ?
           ORDER BY created_at DESC`
       )
       .bind(this.workspaceId)
@@ -608,11 +608,16 @@ export class WorkspaceScopedAgents extends WorkspaceScoped {
    * and takes the agent out of every list.
    */
   async delete(id: string): Promise<boolean> {
+    // A real DELETE, since 0023. This used to set status = 'deleted' and keep
+    // the row, and UNIQUE(workspace_id, name) went on counting it: an agent
+    // you could not see still held its name, and re-creating "agent01" after
+    // deleting it answered "already exists". The product's rule is that
+    // delete means gone - a workspace goes with everything in it and only
+    // files are deferred - and the agent's keys are already removed before
+    // this runs (routes/agents.ts), which is the one table pointing here.
+    // The audit event carries the name, so nothing resolvable is lost.
     const result = await this.db
-      .prepare(
-        `UPDATE agents SET status = 'deleted'
-          WHERE workspace_id = ? AND id = ? AND status != 'deleted'`
-      )
+      .prepare(`DELETE FROM agents WHERE workspace_id = ? AND id = ?`)
       .bind(this.workspaceId, id)
       .run();
     return (result.meta.changes ?? 0) > 0;

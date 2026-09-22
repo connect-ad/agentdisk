@@ -170,10 +170,13 @@ export async function deleteAgent(
   // clear. `deleteForAgent` takes every key the agent holds, including the ones
   // already revoked or expired, since they name the same vanished agent.
   //
-  // Keys first, then mark deleted. The other order leaves a window - however
-  // short - in which the agent is no longer active but its keys still
-  // authenticate. The status check would cover it, but relying on that ordering
-  // to be safe is a worse guarantee than not needing it.
+  // Keys first, then the row. The other order would trip api_keys.agent_id's
+  // foreign key, and before the delete was real it left a window - however
+  // short - in which the agent was no longer active but its keys still
+  // authenticated. The row goes for good (migration 0023): keeping it under a
+  // 'deleted' status meant UNIQUE(workspace_id, name) still held the name,
+  // and "agent01 already exists" was the answer to re-creating an agent
+  // nobody could see. The audit event below keeps the name.
   const keysDeleted = await ctx.db.apiKeys.deleteForAgent(id);
   await ctx.db.agents.delete(id);
 

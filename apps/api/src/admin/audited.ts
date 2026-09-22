@@ -68,7 +68,14 @@ export abstract class AuditedAdminAccess {
      * — would put a forgeable value in an accountability log, which is worse
      * than an honest blank.
      */
-    protected readonly sourceIp: string | null = null
+    protected readonly sourceIp: string | null = null,
+    /**
+     * DATABASE_ENCRYPTION_KEY, for the one operator action that has to mint a
+     * credential: enabling an agent reissues its keys, and a reissued key has
+     * to be sealed or the customer can no longer view it. Null simply leaves
+     * the new key unviewable rather than failing the enable.
+     */
+    protected readonly encryptionKey: string | null = null
   ) {}
 
   /** The workspace-scoped row, visible to the customer whose workspace it is. */

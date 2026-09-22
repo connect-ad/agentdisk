@@ -147,7 +147,14 @@ export async function requireAdmin(request: Request, deps: AdminDeps): Promise<A
 }
 
 function access(admin: AdminUser, deps: AdminDeps): AdminScopedAccess {
-  return new AdminScopedAccess(deps.db, admin, deps.requestId, deps.now, deps.sourceIp ?? null);
+  return new AdminScopedAccess(
+    deps.db,
+    admin,
+    deps.requestId,
+    deps.now,
+    deps.sourceIp ?? null,
+    deps.encryptionKey ?? null
+  );
 }
 
 export async function adminWhoami(request: Request, deps: AdminDeps): Promise<Response> {

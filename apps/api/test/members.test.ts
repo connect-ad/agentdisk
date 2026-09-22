@@ -332,16 +332,16 @@ describe("removing, and the key cascade", () => {
       removeWorkspaceMember(ctx, req, "mem_ADMIN")
     , { method: "DELETE" });
     expect(res.status).toBe(200);
-    expect((await res.json()) as { keysRevoked: number }).toMatchObject({ keysRevoked: 0 });
+    expect((await res.json()) as { keysDisabled: number }).toMatchObject({ keysDisabled: 0 });
 
     // A key an agent depends on must not be severed by a request that never
     // asked for it.
-    const key = await env.DB.prepare(`SELECT revoked_at FROM api_keys WHERE id = 'key_THEIRS'`)
-      .first<{ revoked_at: number | null }>();
-    expect(key?.revoked_at).toBeNull();
+    const key = await env.DB.prepare(`SELECT disabled_at FROM api_keys WHERE id = 'key_THEIRS'`)
+      .first<{ disabled_at: number | null }>();
+    expect(key?.disabled_at).toBeNull();
   });
 
-  it("revokes their keys when asked", async () => {
+  it("disables their keys when asked, without labelling them support's doing", async () => {
     await seedKeyFor(ADMIN.id, "key_ONE");
     await seedKeyFor(ADMIN.id, "key_TWO");
     await seedKeyFor(READER.id, "key_SOMEBODY_ELSE");
@@ -350,13 +350,24 @@ describe("removing, and the key cascade", () => {
       removeWorkspaceMember(ctx, req, "mem_ADMIN")
     , { method: "DELETE", query: "&revokeKeys=true" });
     expect(res.status).toBe(200);
-    expect((await res.json()) as { keysRevoked: number }).toMatchObject({ keysRevoked: 2 });
+    expect((await res.json()) as { keysDisabled: number }).toMatchObject({ keysDisabled: 2 });
+
+    // `disabled_at`, never `revoked_at`. Revoked is the admin console's
+    // permanent switch and the dashboard renders it as "Revoked by support",
+    // which would be a lie about the customer's own act - and would leave the
+    // owner with no way to switch the key back on.
+    const severed = await env.DB.prepare(
+      `SELECT disabled_at, disabled_reason, revoked_at FROM api_keys WHERE id = 'key_ONE'`
+    ).first<{ disabled_at: number | null; disabled_reason: string | null; revoked_at: number | null }>();
+    expect(severed?.disabled_at).not.toBeNull();
+    expect(severed?.disabled_reason).toBe("key");
+    expect(severed?.revoked_at).toBeNull();
 
     // Only theirs.
     const other = await env.DB.prepare(
-      `SELECT revoked_at FROM api_keys WHERE id = 'key_SOMEBODY_ELSE'`
-    ).first<{ revoked_at: number | null }>();
-    expect(other?.revoked_at).toBeNull();
+      `SELECT disabled_at FROM api_keys WHERE id = 'key_SOMEBODY_ELSE'`
+    ).first<{ disabled_at: number | null }>();
+    expect(other?.disabled_at).toBeNull();
   });
 
   it("ends their access to the workspace immediately", async () => {

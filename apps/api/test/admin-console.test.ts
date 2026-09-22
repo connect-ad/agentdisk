@@ -565,3 +565,60 @@ describe("GET /v1/admin/workspaces", () => {
     expect(cleared.workspace.planOverride).toBeNull();
   });
 });
+
+/**
+ * The console's agent switch and the customer's must mean the same thing.
+ *
+ * They did not. Disabling an agent from here left its keys unmarked - only
+ * authentication refused them - and re-enabling handed back the very tokens
+ * the disable was meant to stop. So "disabled" meant one thing on the
+ * dashboard and another in the console, and an operator who disabled an agent
+ * during an incident gave the credentials back intact when they enabled it.
+ */
+describe("disabling an agent from the console cascades to its keys", () => {
+  const seedAgentAndKey = async () => {
+    await env.DB.prepare(
+      `INSERT INTO agents (id, workspace_id, name, status, created_by_user_id, created_at)
+       VALUES ('agt_ADM', ?, 'console-agent', 'active', 'usr_TESTUSER', ?)`
+    ).bind(WORKSPACE_A, NOW).run();
+    await env.DB.prepare(
+      `INSERT INTO api_keys
+         (id, workspace_id, agent_id, name, key_prefix, key_last_four, key_hash,
+          scopes, created_by_user_id, created_at)
+       VALUES ('key_ADM', ?, 'agt_ADM', 'k', 'ask_live_', 'aaaa', 'hash_adm',
+               '{"ops":["read"],"pathPrefix":""}', 'usr_TESTUSER', ?)`
+    ).bind(WORKSPACE_A, NOW).run();
+  };
+
+  const keyRow = () =>
+    env.DB.prepare(
+      `SELECT disabled_at, disabled_reason, key_hash FROM api_keys WHERE id = 'key_ADM'`
+    ).first<{ disabled_at: number | null; disabled_reason: string | null; key_hash: string }>();
+
+  it("really disables them, and reissues them when the agent comes back", async () => {
+    await seedAgentAndKey();
+
+    const off = await call("PATCH", "/v1/admin/agents/agt_ADM", admin, {
+      disabled: true,
+      reason: "abuse report",
+    });
+    expect(off.status).toBe(200);
+
+    const disabled = await keyRow();
+    expect(disabled?.disabled_at).not.toBeNull();
+    expect(disabled?.disabled_reason).toBe("agent");
+
+    const on = await call("PATCH", "/v1/admin/agents/agt_ADM", admin, {
+      disabled: false,
+      reason: "resolved",
+    });
+    expect(on.status).toBe(200);
+
+    const back = await keyRow();
+    expect(back?.disabled_at).toBeNull();
+    expect(back?.disabled_reason).toBeNull();
+    // A different credential. Handing back `hash_adm` would be the console
+    // undoing its own kill switch.
+    expect(back?.key_hash).not.toBe("hash_adm");
+  });
+});

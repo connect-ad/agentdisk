@@ -146,11 +146,18 @@ export class WorkspaceMembers {
    * choice somebody makes with their eyes open, defaulted to on in the UI
    * (03 §8.22) and never silently implied by "remove".
    */
-  async revokeKeysCreatedBy(userId: string, now: number): Promise<number> {
+  async disableKeysCreatedBy(userId: string, now: number): Promise<number> {
+    // `disabled_at`, not `revoked_at`. Revoked is the admin console's
+    // permanent kill switch now (migration 0024) and the dashboard renders it
+    // as "Revoked by support", which this is not: removing a colleague is the
+    // customer's own act, and writing `revoked_at` here labelled their keys as
+    // support's doing and left the owner unable to switch them back on.
+    // Disabled says what happened and leaves the owner a way back - enabling
+    // rotates, so the departed person's copy of the token is dead either way.
     const result = await this.db
       .prepare(
-        `UPDATE api_keys SET revoked_at = ?
-          WHERE workspace_id = ? AND created_by_user_id = ? AND revoked_at IS NULL`
+        `UPDATE api_keys SET disabled_at = ?, disabled_reason = 'key'
+          WHERE workspace_id = ? AND created_by_user_id = ? AND disabled_at IS NULL`
       )
       .bind(now, this.workspaceId, userId)
       .run();

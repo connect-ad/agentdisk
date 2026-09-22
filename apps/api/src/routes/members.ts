@@ -189,11 +189,15 @@ export async function removeWorkspaceMember(
     );
   }
 
-  const revokeKeys = new URL(request.url).searchParams.get("revokeKeys") === "true";
-  // Revoke before removing. Afterwards the membership row is gone and, with it,
-  // any chance to answer "whose keys were those" if the request fails halfway.
-  const keysRevoked = revokeKeys
-    ? await ctx.members.revokeKeysCreatedBy(member.userId, ctx.now)
+  // `revokeKeys` is the query parameter's established name and stays, so a
+  // script written against this endpoint keeps working; what it does is
+  // disable rather than revoke, for the reason `disableKeysCreatedBy` gives.
+  const disableKeys = new URL(request.url).searchParams.get("revokeKeys") === "true";
+  // Disable before removing. Afterwards the membership row is gone and, with
+  // it, any chance to answer "whose keys were those" if the request fails
+  // halfway.
+  const keysDisabled = disableKeys
+    ? await ctx.members.disableKeysCreatedBy(member.userId, ctx.now)
     : 0;
 
   await ctx.members.remove(membershipId);
@@ -201,9 +205,12 @@ export async function removeWorkspaceMember(
   audit(ctx, request, "member.removed", {
     resourceType: "membership",
     resourceId: membershipId,
-    metadata: { email: member.email, role: member.role, keysRevoked },
+    metadata: { email: member.email, role: member.role, keysDisabled },
   });
-  return json({ removed: true, keysRevoked });
+  // `keysRevoked` is kept beside the new name for one release: the dashboard
+  // reads `keysDisabled`, and anything still reading the old field sees the
+  // same number rather than `undefined`.
+  return json({ removed: true, keysDisabled, keysRevoked: keysDisabled });
 }
 
 export { MEMBER_ROLES };

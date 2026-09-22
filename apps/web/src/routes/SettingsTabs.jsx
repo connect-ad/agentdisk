@@ -85,9 +85,10 @@ export function MembersTab() {
     setBusy(true);
     try {
       const result = await api.removeMember(workspaceId, target.id, revokeKeys);
+      const count = result.keysDisabled ?? result.keysRevoked ?? 0;
       setToast(
-        result.keysRevoked > 0
-          ? `${target.email} removed, ${result.keysRevoked} key(s) revoked`
+        count > 0
+          ? `${target.email} removed, ${count} key(s) disabled`
           : `${target.email} removed`
       );
       void reload();
@@ -238,8 +239,8 @@ export function MembersTab() {
           is unaffected.
         </p>
         <Checkbox
-          label="Also revoke every API key they created here"
-          description="Any agent still using one stops working immediately. Leave this on unless you know a key is shared team infrastructure rather than theirs."
+          label="Also disable every API key they created here"
+          description="Any agent still using one stops working immediately. You can enable a key again later, which issues it a new value. Leave this on unless you know a key is shared team infrastructure rather than theirs."
           checked={revokeKeys}
           onChange={() => setRevokeKeys(v => !v)}
         />

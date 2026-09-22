@@ -25,6 +25,9 @@ import { newId } from "../lib/ids";
 import { ApiError } from "../lib/errors";
 import { escapeLikePattern } from "../lib/paths";
 import { AuditedAdminAccess } from "./audited";
+import { WorkspaceScopedApiKeys } from "../db/workspace-scoped";
+import { generateApiKey, TEST_PREFIX } from "../lib/keys";
+import { sealSecret } from "../lib/secretbox";
 
 /**
  * One role. `support` and `super_admin` are gone: everybody who can reach the
@@ -591,6 +594,28 @@ export class AdminScopedAccess extends AuditedAdminAccess {
       .run();
 
     const changed = (result.meta.changes ?? 0) > 0;
+
+    // The same cascade the customer's own agent switch performs
+    // (routes/agents.ts). Without it, an operator disabling an agent left its
+    // keys unmarked and, on re-enable, handed back the very tokens the
+    // disable was meant to stop - so what "disable" meant depended on which
+    // console did it.
+    if (changed) {
+      const keys = new WorkspaceScopedApiKeys(this.db, agent.workspaceId);
+      if (disabled) {
+        await keys.disableForAgent(agentId, this.now);
+      } else {
+        for (const key of await keys.listDisabledByAgent(agentId)) {
+          const mode = key.key_prefix.startsWith(TEST_PREFIX) ? "test" : "live";
+          const generated = await generateApiKey(mode);
+          const ciphertext =
+            this.encryptionKey === null
+              ? null
+              : await sealSecret(this.encryptionKey, generated.token, key.id);
+          await keys.enableWithRotation(key.id, generated, ciphertext);
+        }
+      }
+    }
     await this.record(agent.workspaceId, disabled ? "admin.agent.disabled" : "admin.agent.enabled", {
       agentId,
       name: agent.name,

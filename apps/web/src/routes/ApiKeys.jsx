@@ -185,13 +185,21 @@ export default function ApiKeys() {
     }
   };
 
+  /*
+   * Every column carries a percentage, and that is the point rather than a
+   * style: in an auto-layout table the one column *without* a width absorbs
+   * all the leftover space. Key had none, so every pixel of slack in the
+   * window piled up between the key and the scope - a gap that grew the wider
+   * the browser was, and the reason this was reported. Percentages hold the
+   * design's proportions at any width instead of only at the one size
+   * somebody happened to test.
+   */
   const columns = [
-    // Sized, so the slack goes to the key column rather than trailing the name.
-    { key: 'name', header: 'Name', primary: true, width: 200 },
+    { key: 'name', header: 'Name', primary: true, width: '23%' },
     {
       key: 'agent',
       header: 'Agent',
-      width: 150,
+      width: '12%',
       render: r =>
         r.agentId
           ? <Badge tone="accent" mono>{agentName(r.agentId) ?? r.agentId}</Badge>
@@ -200,6 +208,7 @@ export default function ApiKeys() {
     {
       key: 'key',
       header: 'Key',
+      width: '31%',
       // The eye. Owner only, because a reader who can read a write-scoped key
       // can write; disabled for a key minted before keys were kept, because
       // nothing brings that one back; absent on a revoked key, which the API
@@ -222,7 +231,7 @@ export default function ApiKeys() {
     {
       key: 'scope',
       header: 'Scope',
-      width: 150,
+      width: '13%',
       // Two lines: what it may do, then where. One line ran to the width of
       // three columns once a path was involved.
       render: r => (
@@ -235,13 +244,13 @@ export default function ApiKeys() {
     {
       key: 'lastUsed',
       header: 'Last used',
-      width: 110,
+      width: '9%',
       render: r => <span style={{ color: 'var(--ink-2)' }}>{relativeTime(r.lastUsedAt)}</span>
     },
     {
       key: 'state',
       header: 'State',
-      width: 130,
+      width: '12%',
       // The pill is the menu. Every item still opens a confirmation before
       // anything happens to the credential - Enable included, because
       // enabling rotates the secret. A key that is off because its agent is

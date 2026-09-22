@@ -250,6 +250,19 @@ describe('keys table → the eye opens a dialog', () => {
   });
 });
 
+describe('keys table → column widths', () => {
+  it('gives every column a width, so no one column absorbs the slack', async () => {
+    // The bug this replaces: Key had no width, so in an auto-layout table it
+    // took all the leftover space and the gap before Scope grew with the
+    // window. A column with no width is the defect, whatever the numbers are.
+    mount(<ApiKeys />);
+    await rowOf('live');
+    const widths = Array.from(document.querySelectorAll('.tbl thead th')).map(th => th.style.width);
+    expect(widths).toEqual(['23%', '12%', '31%', '13%', '9%', '12%']);
+    expect(widths.reduce((n, w) => n + parseFloat(w), 0)).toBe(100);
+  });
+});
+
 describe('keys table → scope on two lines', () => {
   it('puts the operations on one line and the path on the next', async () => {
     mount(<ApiKeys />);

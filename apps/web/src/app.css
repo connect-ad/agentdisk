@@ -999,35 +999,35 @@
    is the dependency drawn. The state of each step is carried three ways at
    once — a tick, a highlighted or plain number, and sr-only words — so the
    colour that also changes is never the only thing saying it. */
-.ds__steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
-.ds__step{position:relative;display:flex;gap:var(--s-5);padding-bottom:var(--s-6)}
-.ds__step:last-child{padding-bottom:0}
+.ds__qs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.ds__qsitem{position:relative;display:flex;gap:var(--s-5);padding-bottom:var(--s-6)}
+.ds__qsitem:last-child{padding-bottom:0}
 /* The connector runs from the bottom of this step's mark to the top of the
    next one's, centred under the 1.875rem mark: half of that, less half the
    line's own width. */
-.ds__step::before{content:"";position:absolute;left:calc(0.9375rem - 0.5px);
+.ds__qsitem::before{content:"";position:absolute;left:calc(0.9375rem - 0.5px);
   top:1.875rem;bottom:0;width:1px;background:var(--line)}
-.ds__step:last-child::before{display:none}
-.ds__step--done::before{background:var(--accent-line)}
-.ds__stepmark{width:1.875rem;height:1.875rem;border-radius:var(--r-full);flex:none;
+.ds__qsitem:last-child::before{display:none}
+.ds__qsitem--done::before{background:var(--accent-line)}
+.ds__qsmark{width:1.875rem;height:1.875rem;border-radius:var(--r-full);flex:none;
   display:grid;place-items:center;font-family:var(--font-mono);
   font-size:var(--t-12);font-weight:var(--w-semi);
   border:1px solid var(--line);background:var(--surface);color:var(--ink-3)}
-.ds__step--done .ds__stepmark{background:var(--accent);border-color:var(--accent);
+.ds__qsitem--done .ds__qsmark{background:var(--accent);border-color:var(--accent);
   color:var(--on-accent)}
-.ds__step--next .ds__stepmark{background:var(--accent-soft);
+.ds__qsitem--next .ds__qsmark{background:var(--accent-soft);
   border-color:var(--accent-line);color:var(--accent-ink)}
 /* 5px of top padding lines the 14px title's box up with the mark's centre. */
-.ds__steptext{display:flex;flex-direction:column;gap:var(--s-1);min-width:0;
+.ds__qstext{display:flex;flex-direction:column;gap:var(--s-1);min-width:0;
   padding-top:0.3125rem}
-.ds__steptitle{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s-4);
+.ds__qstitle{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s-4);
   font-size:var(--t-14);font-weight:var(--w-semi);color:var(--ink)}
-.ds__stepbody{font-size:var(--t-12-5);line-height:var(--lh-normal);color:var(--ink-2)}
-.ds__step--later .ds__steptitle,.ds__step--later .ds__stepbody{color:var(--ink-3)}
-.ds__stepgo{display:inline-flex;align-items:center;gap:var(--s-2);
+.ds__qsbody{font-size:var(--t-12-5);line-height:var(--lh-normal);color:var(--ink-2)}
+.ds__qsitem--later .ds__qstitle,.ds__qsitem--later .ds__qsbody{color:var(--ink-3)}
+.ds__qsgo{display:inline-flex;align-items:center;gap:var(--s-2);
   font-size:var(--t-12-5);font-weight:var(--w-semi);color:var(--accent-ink);
   text-decoration:none}
-.ds__stepgo:hover{text-decoration:underline}
+.ds__qsgo:hover{text-decoration:underline}
 
 /* two-column split */
 .ds__two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-6)}

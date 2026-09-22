@@ -239,26 +239,26 @@ export default function Dashboard() {
       {status === 'loaded' && next !== -1 ? (
         <div>
           <h2 className="ds__h2">Quick start</h2>
-          <ol className="ds__steps">
+          <ol className="ds__qs">
             {STEPS.map((step, i) => {
               const state = done[i] ? 'done' : i === next ? 'next' : 'later';
               return (
-                <li key={step.to} className={`ds__step ds__step--${state}`}>
+                <li key={step.to} className={`ds__qsitem ds__qsitem--${state}`}>
                   {/* The mark is decorative: the state is read out in words below. */}
-                  <span className="ds__stepmark" aria-hidden="true">
+                  <span className="ds__qsmark" aria-hidden="true">
                     {done[i] ? <Icon name="check" size={13} /> : i + 1}
                   </span>
-                  <span className="ds__steptext">
-                    <span className="ds__steptitle">
+                  <span className="ds__qstext">
+                    <span className="ds__qstitle">
                       <span className="sr-only">Step {i + 1}, {state}. </span>
                       {step.title}
                       {state === 'next' ? (
-                        <Link to={`${root}${step.to}`} className="ds__stepgo">
+                        <Link to={`${root}${step.to}`} className="ds__qsgo">
                           {step.cta}<Icon name="chevronRight" size={13} />
                         </Link>
                       ) : null}
                     </span>
-                    <span className="ds__stepbody">{step.body}</span>
+                    <span className="ds__qsbody">{step.body}</span>
                   </span>
                 </li>
               );

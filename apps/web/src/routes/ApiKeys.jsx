@@ -4,6 +4,7 @@ import {
   Checkbox, Modal, ConfirmModal, EmptyState, ApiKeyDisplay, Alert, Toast
 } from '../components/index.js';
 import { useResource } from '../lib/useResource.js';
+import StatePill from '../components-local/StatePill.jsx';
 import { useWorkspace } from '../lib/workspace.jsx';
 
 /**
@@ -51,23 +52,19 @@ function prefixDepth(raw) {
 }
 
 /**
- * The Status column, as one icon.
- *
- * The word is still there - as the hover text and, for a screen reader, in
- * the sr-only span - so the rule that colour never carries meaning alone
- * holds; the shape carries it too, a triangle against a tick. What moved is
- * the "why", which used to be a sentence in the Actions column and is now
- * part of this label, because a compact row has nowhere else to put it.
+ * The State column: one pill, tone plus word plus mark, and the "why" as
+ * its hover text where there is one. A green dot for a working key; the
+ * caution triangle for a disabled one, whichever switch turned it off.
  */
-function keyStatusView(r) {
-  if (r.status === 'revoked') return { icon: 'lock', tone: 'danger', label: 'Revoked by support' };
-  if (r.status === 'expired') return { icon: 'clock', tone: 'warn', label: 'Expired' };
+function keyStateView(r) {
+  if (r.status === 'revoked') return { icon: 'lock', tone: 'danger', label: 'Revoked', title: 'Revoked by support' };
+  if (r.status === 'expired') return { icon: 'clock', tone: 'warn', label: 'Expired', title: 'Expired' };
   if (r.status === 'disabled') {
     return r.disabledBy === 'agent'
-      ? { icon: 'alert', tone: 'warn', label: 'Disabled, its agent is off' }
-      : { icon: 'alert', tone: 'warn', label: 'Disabled' };
+      ? { icon: 'alert', tone: 'warn', label: 'Disabled', title: 'Disabled, its agent is off' }
+      : { icon: 'alert', tone: 'warn', label: 'Disabled', title: 'Disabled' };
   }
-  return { icon: 'check', tone: 'ok', label: 'Active' };
+  return { icon: 'dot', tone: 'ok', label: 'Active', title: 'Active' };
 }
 
 export default function ApiKeys() {
@@ -242,58 +239,27 @@ export default function ApiKeys() {
       render: r => <span style={{ color: 'var(--ink-3)' }}>{relativeTime(r.lastUsedAt)}</span>
     },
     {
-      key: 'status',
-      header: 'Status',
-      width: 70,
+      key: 'state',
+      header: 'State',
+      width: 130,
+      // The pill is the menu. Every item still opens a confirmation before
+      // anything happens to the credential - Enable included, because
+      // enabling rotates the secret. A key that is off because its agent is
+      // off gets no Enable: its own switch is already on, so pressing it
+      // would appear to work and change nothing; the hover text points at
+      // the agent instead. A reader gets the pill with no menu at all.
       render: r => {
-        const v = keyStatusView(r);
-        return (
-          <span className={`ds__kstat ds__kstat--${v.tone}`} title={v.label}>
-            <Icon name={v.icon} size={15} aria-hidden="true" />
-            <span className="sr-only">{v.label}</span>
-          </span>
-        );
-      }
-    },
-    {
-      key: 'act',
-      header: 'Actions',
-      width: 90,
-      // Icons with the verb as their accessible name and hover text. Each one
-      // still opens a confirmation before anything happens to the credential
-      // - including Enable, because enabling rotates the secret, and a
-      // misclick on a small icon must not silently change a key.
-      render: r => {
+        const v = keyStateView(r);
         const off = r.status === 'revoked' || r.status === 'expired' || r.disabledBy === 'agent';
+        const items = !canWrite ? [] : [
+          ...(off ? [] : r.status === 'disabled'
+            ? [{ label: 'Enable', icon: 'refresh', disabled: busy, onSelect: () => { setTarget(r); setDialog('enable'); } }]
+            : [{ label: 'Disable', icon: 'x', disabled: busy, onSelect: () => { setTarget(r); setDialog('disable'); } }]),
+          { label: 'Delete', icon: 'trash', danger: true, disabled: busy, onSelect: () => { setTarget(r); setDialog('delete'); } }
+        ];
         return (
-          <span className="ds__kact" onClick={e => e.stopPropagation()}>
-            {/*
-              A key that is off because its agent is off gets no Enable: its
-              own switch is already on, so pressing it would appear to work and
-              change nothing. The status icon's label points at the agent.
-            */}
-            {off ? null : r.status === 'disabled' ? (
-              <IconButton
-                icon={<Icon name="refresh" size={14} />}
-                label="Enable"
-                disabled={!canWrite || busy}
-                onClick={() => { setTarget(r); setDialog('enable'); }}
-              />
-            ) : (
-              <IconButton
-                icon={<Icon name="x" size={14} />}
-                label="Disable"
-                disabled={!canWrite || busy}
-                onClick={() => { setTarget(r); setDialog('disable'); }}
-              />
-            )}
-            <IconButton
-              icon={<Icon name="trash" size={14} />}
-              label="Delete"
-              tone="danger"
-              disabled={!canWrite || busy}
-              onClick={() => { setTarget(r); setDialog('delete'); }}
-            />
+          <span onClick={e => e.stopPropagation()}>
+            <StatePill tone={v.tone} icon={v.icon} label={v.label} title={v.title} items={items} />
           </span>
         );
       }

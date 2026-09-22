@@ -1398,16 +1398,25 @@ a.ds__qsbox:hover .ds__qsbtn{background:var(--accent-hover)}
   white-space:nowrap}
 
 /* ---- API keys table: the compact row (22 Sept 2026) --------------------
-   Status and Actions are icons so the key, scope and name get the width.
-   The word is on hover (title) and in an sr-only span; the tone is a
-   colour on a shape, never a colour alone. ---------------------------- */
-.ds__kkey{display:inline-flex;align-items:center;gap:var(--s-3);white-space:nowrap}
+   Name, agent, masked key with its eye, scope on two lines, last used, and
+   one State pill that is also the row's menu. The tone is a colour on a
+   word and a mark, never a colour alone. ----------------------------- */
+.ds__kkey{display:inline-flex;align-items:center;gap:var(--s-2);white-space:nowrap}
+.ds__kkey .icon-btn{color:var(--ink-4)}
+.ds__kkey .icon-btn:hover:not(:disabled){color:var(--ink)}
 .ds__kscope{display:flex;flex-direction:column;gap:2px;font-size:var(--t-12);
-  line-height:1.3;color:var(--ink-2);white-space:nowrap}
+  line-height:1.35;color:var(--ink);white-space:nowrap;padding:var(--s-3) 0}
 .ds__kscope>span:last-child{color:var(--ink-3)}
-.ds__kstat{display:inline-flex;align-items:center;justify-content:center;
-  width:1.75rem;height:1.75rem;border-radius:var(--r-2);border:1px solid transparent}
-.ds__kstat--ok{color:var(--ok);background:var(--ok-soft);border-color:var(--ok-line)}
-.ds__kstat--warn{color:var(--warn);background:var(--warn-soft);border-color:var(--warn-line)}
-.ds__kstat--danger{color:var(--danger);background:var(--danger-soft);border-color:var(--danger-line)}
-.ds__kact{display:inline-flex;align-items:center;gap:var(--s-2);white-space:nowrap}
+.kst{display:inline-flex;align-items:center;gap:var(--s-3);height:1.75rem;
+  padding:0 var(--s-4) 0 var(--s-5);border-radius:var(--r-full);border:1px solid var(--line-2);
+  background:var(--surface-3);color:var(--ink-2);font-family:var(--font-sans);
+  font-size:var(--t-12);font-weight:var(--w-semi);letter-spacing:var(--tr-snug);
+  white-space:nowrap;cursor:default}
+button.kst{cursor:pointer;transition:background var(--d-1) var(--ease),border-color var(--d-1) var(--ease)}
+button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
+.kst--ok{background:var(--ok-soft);border-color:var(--ok-line);color:var(--ok-ink)}
+.kst--warn{background:var(--warn-soft);border-color:var(--warn-line);color:var(--warn-ink)}
+.kst--danger{background:var(--danger-soft);border-color:var(--danger-line);color:var(--danger-ink)}
+.kst__dot{width:0.375rem;height:0.375rem;border-radius:var(--r-full);background:currentColor;flex:none}
+.kst__label{line-height:1}
+.kst__menu{min-width:9.5rem;animation:ad-fade var(--d-1) var(--ease)}

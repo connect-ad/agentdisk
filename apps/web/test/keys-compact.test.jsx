@@ -96,61 +96,91 @@ function mount(ui, { role = 'owner', api } = {}) {
 
 const rowOf = async name => (await screen.findByText(name)).closest('tr');
 
-describe('keys table → status as an icon with its word', () => {
+/** Opens the row's State pill and returns the portalled menu. */
+async function openMenu(user, row) {
+  await user.click(within(row).getByRole('button', { name: /Actions$/ }));
+  return screen.findByRole('menu');
+}
+
+describe('keys table → the State pill', () => {
   it.each([
-    ['live', 'Active'],
-    ['paused', 'Disabled'],
-    ['orphan', 'Disabled, its agent is off'],
-    ['stale', 'Expired'],
-    ['killed', 'Revoked by support']
-  ])('%s reads "%s" on hover and to a screen reader', async (name, label) => {
+    ['live', 'ok', 'Active', 'Active'],
+    ['paused', 'warn', 'Disabled', 'Disabled'],
+    ['orphan', 'warn', 'Disabled', 'Disabled, its agent is off'],
+    ['stale', 'warn', 'Expired', 'Expired'],
+    ['killed', 'danger', 'Revoked', 'Revoked by support']
+  ])('%s is a %s pill reading "%s", "%s" on hover', async (name, tone, label, title) => {
     mount(<ApiKeys />);
-    const row = await rowOf(name);
-    const stat = row.querySelector('.ds__kstat');
-    expect(stat.getAttribute('title')).toBe(label);
-    expect(within(row).getByText(label).className).toBe('sr-only');
+    const pill = (await rowOf(name)).querySelector('.kst');
+    expect(pill.className).toContain(`kst--${tone}`);
+    expect(pill.querySelector('.kst__label').textContent).toBe(label);
+    expect(pill.getAttribute('title')).toBe(title);
   });
 
-  it('marks the disabled ones with the caution triangle', async () => {
+  it('marks a working key with a dot and a disabled one with the caution triangle', async () => {
     mount(<ApiKeys />);
-    const paused = (await rowOf('paused')).querySelector('.ds__kstat');
-    expect(paused.className).toContain('ds__kstat--warn');
-    const live = (await rowOf('live')).querySelector('.ds__kstat');
-    expect(live.className).toContain('ds__kstat--ok');
-    // Same SVG path for both disabled causes: a triangle, not a tick.
-    const orphan = (await rowOf('orphan')).querySelector('.ds__kstat svg path').getAttribute('d');
-    expect(paused.querySelector('svg path').getAttribute('d')).toBe(orphan);
-    expect(live.querySelector('svg path').getAttribute('d')).not.toBe(orphan);
+    const live = (await rowOf('live')).querySelector('.kst');
+    expect(live.querySelector('.kst__dot')).toBeTruthy();
+    const paused = (await rowOf('paused')).querySelector('.kst');
+    const orphan = (await rowOf('orphan')).querySelector('.kst');
+    expect(paused.querySelector('.kst__dot')).toBeNull();
+    // The same shape for both disabled causes: the first SVG in the pill is
+    // the mark (the chevron comes after the label).
+    const path = el => el.querySelector('svg path').getAttribute('d');
+    expect(path(paused)).toBe(path(orphan));
+    expect(path(paused)).toMatch(/^M12 3\.5L21\.5 20h-19z/);
+  });
+
+  it('is a plain label, not a button, for a reader', async () => {
+    mount(<ApiKeys />, { role: 'reader' });
+    const row = await rowOf('live');
+    expect(row.querySelector('.kst')).toBeTruthy();
+    expect(within(row).queryByRole('button', { name: /Actions$/ })).toBeNull();
   });
 });
 
-describe('keys table → actions as icons that still confirm', () => {
+describe('keys table → the pill is the menu, and every item still confirms', () => {
   it('offers Disable and Delete on a live key, Enable and Delete on a paused one', async () => {
+    const user = userEvent.setup();
     mount(<ApiKeys />);
-    const live = await rowOf('live');
-    expect(within(live).getByRole('button', { name: 'Disable' })).toBeTruthy();
-    expect(within(live).getByRole('button', { name: 'Delete' })).toBeTruthy();
-    expect(within(live).queryByRole('button', { name: 'Enable' })).toBeNull();
+    let menu = await openMenu(user, await rowOf('live'));
+    expect(within(menu).getByRole('menuitem', { name: 'Disable' })).toBeTruthy();
+    expect(within(menu).getByRole('menuitem', { name: 'Delete' })).toBeTruthy();
+    expect(within(menu).queryByRole('menuitem', { name: 'Enable' })).toBeNull();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
 
-    const paused = await rowOf('paused');
-    expect(within(paused).getByRole('button', { name: 'Enable' })).toBeTruthy();
-    expect(within(paused).queryByRole('button', { name: 'Disable' })).toBeNull();
+    menu = await openMenu(user, await rowOf('paused'));
+    expect(within(menu).getByRole('menuitem', { name: 'Enable' })).toBeTruthy();
+    expect(within(menu).queryByRole('menuitem', { name: 'Disable' })).toBeNull();
   });
 
-  it('offers no switch where the switch would do nothing: agent-off, expired, revoked', async () => {
+  it('offers only Delete where a switch would do nothing: agent-off, expired, revoked', async () => {
+    const user = userEvent.setup();
     mount(<ApiKeys />);
     for (const name of ['orphan', 'stale', 'killed']) {
-      const row = await rowOf(name);
-      expect(within(row).queryByRole('button', { name: 'Enable' })).toBeNull();
-      expect(within(row).queryByRole('button', { name: 'Disable' })).toBeNull();
-      expect(within(row).getByRole('button', { name: 'Delete' })).toBeTruthy();
+      const menu = await openMenu(user, await rowOf(name));
+      expect(within(menu).getAllByRole('menuitem').map(m => m.textContent)).toEqual(['Delete']);
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
     }
+  });
+
+  it('closes on Escape and hands focus back to the pill', async () => {
+    const user = userEvent.setup();
+    mount(<ApiKeys />);
+    const row = await rowOf('live');
+    await openMenu(user, row);
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    expect(document.activeElement).toBe(within(row).getByRole('button', { name: /Actions$/ }));
   });
 
   it('confirms Enable before rotating, and then shows the new key', async () => {
     const user = userEvent.setup();
     const api = mount(<ApiKeys />);
-    await user.click(within(await rowOf('paused')).getByRole('button', { name: 'Enable' }));
+    const menu = await openMenu(user, await rowOf('paused'));
+    await user.click(within(menu).getByRole('menuitem', { name: 'Enable' }));
 
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/issues a new key/i)).toBeTruthy();
@@ -161,11 +191,21 @@ describe('keys table → actions as icons that still confirm', () => {
     await screen.findByText('ask_live_bbbb_ROTATED');
   });
 
-  it('carries the word as hover text on every action icon', async () => {
-    mount(<ApiKeys />);
-    const live = await rowOf('live');
-    expect(within(live).getByRole('button', { name: 'Disable' }).getAttribute('title')).toBe('Disable');
-    expect(within(live).getByRole('button', { name: 'Delete' }).getAttribute('title')).toBe('Delete');
+  it('confirms Disable and Delete from the menu too', async () => {
+    const user = userEvent.setup();
+    const api = mount(<ApiKeys />);
+    let menu = await openMenu(user, await rowOf('live'));
+    await user.click(within(menu).getByRole('menuitem', { name: 'Disable' }));
+    let dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/enabling issues a new key/i)).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    menu = await openMenu(user, await rowOf('live'));
+    await user.click(within(menu).getByRole('menuitem', { name: 'Delete' }));
+    dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/cannot be undone/)).toBeTruthy();
+    expect(api.deleteKey).not.toHaveBeenCalled();
   });
 });
 
@@ -187,12 +227,13 @@ describe('keys table → the eye opens a dialog', () => {
     await waitFor(() => expect(screen.queryByText('ask_live_aaaa_THE_WHOLE_SECRET_VALUE')).toBeNull());
   });
 
-  it('keeps the masked key and the eye on one line', async () => {
+  it('keeps the masked key and the eye on one line, as a bare icon', async () => {
     mount(<ApiKeys />);
     const cell = (await rowOf('live')).querySelector('.ds__kkey');
     expect(cell).toBeTruthy();
     expect(within(cell).getByText(/ask_live_aaaa/)).toBeTruthy();
-    expect(within(cell).getByRole('button', { name: 'Show live' })).toBeTruthy();
+    const eye = within(cell).getByRole('button', { name: 'Show live' });
+    expect(eye.className).toBe('icon-btn');
   });
 
   it('disables the eye on a key minted before keys were kept, and says why', async () => {
@@ -215,6 +256,7 @@ describe('keys table → scope on two lines', () => {
     const scope = (await rowOf('scoped')).querySelector('.ds__kscope');
     const lines = Array.from(scope.querySelectorAll('span')).map(s => s.textContent);
     expect(lines).toEqual(['read, list', '/demo/demo/*']);
+    expect(screen.queryByText('read, list · /demo/demo/*')).toBeNull();
     const plain = (await rowOf('live')).querySelector('.ds__kscope');
     expect(Array.from(plain.querySelectorAll('span')).map(s => s.textContent)).toEqual(['read, list', '/*']);
   });

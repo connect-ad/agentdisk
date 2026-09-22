@@ -317,28 +317,38 @@ describe('API keys → disable, enable, delete', () => {
       entry: `/w/${fixture.slug}/keys`
     });
 
+  /** The State pill is the row's menu; open it and return the portalled menu. */
+  const openMenu = async (user, row) => {
+    await user.click(within(row).getByRole('button', { name: /Actions$/ }));
+    return screen.findByRole('menu');
+  };
+
   it('offers no switch on a key support revoked, only the reason', async () => {
+    const user = userEvent.setup();
     mountKeys(BUSY);
     const row = (await screen.findByText('old one')).closest('tr');
-    expect(within(row).getByText(/Revoked by support/)).toBeTruthy();
-    // No dead control. The Status column already says Revoked; a button beside
-    // it saying the same thing looks operable and is not.
-    expect(within(row).queryByRole('button', { name: 'Enable' })).toBeNull();
-    expect(within(row).queryByRole('button', { name: 'Disable' })).toBeNull();
+    expect(row.querySelector('.kst').getAttribute('title')).toBe('Revoked by support');
+    // No dead control. The pill already says Revoked; a menu item beside it
+    // saying the same thing looks operable and is not.
+    const menu = await openMenu(user, row);
+    expect(within(menu).queryByRole('menuitem', { name: 'Enable' })).toBeNull();
+    expect(within(menu).queryByRole('menuitem', { name: 'Disable' })).toBeNull();
   });
 
   it('offers Disable and Delete on a key that is still usable', async () => {
+    const user = userEvent.setup();
     mountKeys(BUSY);
     const row = (await screen.findByText('reader')).closest('tr');
-    expect(within(row).queryByText(/Revoked by support/)).toBeNull();
-    expect(within(row).getByRole('button', { name: 'Disable' }).disabled).toBe(false);
-    expect(within(row).getByRole('button', { name: 'Delete' }).disabled).toBe(false);
+    expect(row.querySelector('.kst').getAttribute('title')).toBe('Active');
+    const menu = await openMenu(user, row);
+    expect(within(menu).getByRole('menuitem', { name: 'Disable' }).disabled).toBe(false);
+    expect(within(menu).getByRole('menuitem', { name: 'Delete' }).disabled).toBe(false);
   });
 
   it('shows no revoked note on a workspace with no keys', async () => {
     mountKeys(QUIET);
     await screen.findByText(/No API keys/i);
-    expect(screen.queryByText(/Revoked by support/)).toBeNull();
+    expect(document.querySelector('[title="Revoked by support"]')).toBeNull();
   });
 
   it('warns that enabling issues a new key, before the disable is committed', async () => {
@@ -348,7 +358,8 @@ describe('API keys → disable, enable, delete', () => {
     const user = userEvent.setup();
     mountKeys(BUSY);
     const row = (await screen.findByText('reader')).closest('tr');
-    await user.click(within(row).getByRole('button', { name: 'Disable' }));
+    const menu = await openMenu(user, row);
+    await user.click(within(menu).getByRole('menuitem', { name: 'Disable' }));
 
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/enabling issues a new key/i)).toBeTruthy();
@@ -359,7 +370,8 @@ describe('API keys → disable, enable, delete', () => {
     const user = userEvent.setup();
     mountKeys(BUSY);
     const row = (await screen.findByText('reader')).closest('tr');
-    await user.click(within(row).getByRole('button', { name: 'Delete' }));
+    const menu = await openMenu(user, row);
+    await user.click(within(menu).getByRole('menuitem', { name: 'Delete' }));
 
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/cannot be undone/)).toBeTruthy();

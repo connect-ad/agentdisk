@@ -86,14 +86,17 @@ describe("the plan catalogue", () => {
     expect(limitsFor(null, "basic")).toBe(PLAN_LIMITS.basic);
   });
 
-  it("leaves egress, requests and file count unlimited on every plan", () => {
-    // Decided 17 Sept 2026: R2 egress costs nothing, so it is free to promise,
-    // and storage already bounds file count. The CHECKS are deliberately still
-    // in place - only the values widened - so a cap can return as data.
+  it("caps egress and files, and leaves only requests unlimited", () => {
+    // Reverses D2 of the billing design, which made all three unlimited on the
+    // reasoning that "R2 egress costs $0, so it is free to promise". Verified
+    // against live pricing: the first half holds and the second does not -
+    // egress is genuinely free, but Class A writes are $4.50/million and Class
+    // B reads $0.36/million. The product was metering the free dimension and
+    // ignoring the billed one.
     for (const plan of PLAN_NAMES) {
-      expect(PLAN_LIMITS[plan].egressBytesPerPeriod).toBe(UNLIMITED);
+      expect(PLAN_LIMITS[plan].egressBytesPerPeriod).toBeLessThan(UNLIMITED);
+      expect(PLAN_LIMITS[plan].fileCount).toBeLessThan(UNLIMITED);
       expect(PLAN_LIMITS[plan].requestsPerPeriod).toBe(UNLIMITED);
-      expect(PLAN_LIMITS[plan].fileCount).toBe(UNLIMITED);
     }
   });
 
@@ -132,6 +135,43 @@ describe("the plan catalogue", () => {
   });
 });
 
+describe("what each plan actually sells", () => {
+  it("bounds the file count on every plan, including free", () => {
+    // The real cost hole, and the reason this number exists at all.
+    // `maxFileBytes` bounds one request; nothing bounded the NUMBER of
+    // requests, so a million 10 KB files cost $4.50 of Class A operations to
+    // ingest and paid nothing on Free. Storage was never the exposure.
+    for (const plan of PLAN_NAMES) {
+      expect(PLAN_LIMITS[plan].fileCount).toBeLessThan(UNLIMITED);
+    }
+  });
+
+  it("gives every plan ten times its storage as egress", () => {
+    // Not a cost control - R2 egress is $0 - but a shape customers read, and
+    // a headline against a competitor capping at five times.
+    for (const plan of PLAN_NAMES) {
+      expect(PLAN_LIMITS[plan].egressBytesPerPeriod).toBe(PLAN_LIMITS[plan].storageBytes * 10);
+    }
+  });
+
+  it("never sells a file size no upload path can carry", () => {
+    // R2's single-part ceiling is 4.995 GiB and multipart is not built, so a
+    // 5 GB limit would be a published number that always fails.
+    for (const plan of PLAN_NAMES) {
+      expect(PLAN_LIMITS[plan].maxFileBytes).toBeLessThanOrEqual(4.9 * 1024 ** 3);
+    }
+  });
+
+  it("leaves requests uncapped, because nothing counts them yet", () => {
+    // Deliberate: metering costs a D1 write per request, and the counter
+    // exists so the decision to cap can later be made from data rather than
+    // from a guess. When that changes, this test is the reminder.
+    for (const plan of PLAN_NAMES) {
+      expect(PLAN_LIMITS[plan].requestsPerPeriod).toBe(UNLIMITED);
+    }
+  });
+});
+
 describe("assertWithinQuota", () => {
   it("never trips the request counter now that requests are unlimited", () => {
     // The counter is still incremented and still compared; the comparison just
@@ -141,11 +181,13 @@ describe("assertWithinQuota", () => {
     expect(() => assertWithinQuota(busy, free, {}, NOW)).not.toThrow();
   });
 
-  it("never trips the egress allowance now that egress is unlimited", () => {
-    const busy = workspace({ egress_bytes_period: 900 * 1024 ** 3 });
-    expect(() =>
-      assertWithinQuota(busy, free, { egressBytes: 50 * 1024 ** 3 }, NOW)
-    ).not.toThrow();
+  it("trips the egress allowance, now that there is one", () => {
+    // The mirror of what this test used to assert. Egress became a real limit
+    // when it stopped being unlimited, so the check that could never fire now
+    // can - and a test asserting it cannot would be asserting the old plan
+    // table rather than any behaviour.
+    const busy = workspace({ egress_bytes_period: free.egressBytesPerPeriod });
+    expect(() => assertWithinQuota(busy, free, { egressBytes: 1 }, NOW)).toThrow(ApiError);
   });
 
   describe("storage and files are the account's allowance, not the workspace's", () => {

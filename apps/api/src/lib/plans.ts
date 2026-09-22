@@ -84,8 +84,8 @@ const MB = 1024 ** 2;
 export const PLAN_LIMITS: Record<PlanName, PlanLimits> = {
   free: {
     storageBytes: 1 * GB,
-    fileCount: UNLIMITED,
-    egressBytesPerPeriod: UNLIMITED,
+    fileCount: 10_000,
+    egressBytesPerPeriod: 10 * GB,
     requestsPerPeriod: UNLIMITED,
     maxFileBytes: 100 * MB,
     agents: 1,
@@ -96,8 +96,8 @@ export const PLAN_LIMITS: Record<PlanName, PlanLimits> = {
   },
   basic: {
     storageBytes: 5 * GB,
-    fileCount: UNLIMITED,
-    egressBytesPerPeriod: UNLIMITED,
+    fileCount: 100_000,
+    egressBytesPerPeriod: 50 * GB,
     requestsPerPeriod: UNLIMITED,
     maxFileBytes: 500 * MB,
     agents: 5,
@@ -108,8 +108,8 @@ export const PLAN_LIMITS: Record<PlanName, PlanLimits> = {
   },
   pro: {
     storageBytes: 50 * GB,
-    fileCount: UNLIMITED,
-    egressBytesPerPeriod: UNLIMITED,
+    fileCount: 1_000_000,
+    egressBytesPerPeriod: 500 * GB,
     requestsPerPeriod: UNLIMITED,
     maxFileBytes: 1 * GB,
     agents: 10,
@@ -120,10 +120,10 @@ export const PLAN_LIMITS: Record<PlanName, PlanLimits> = {
   },
   team: {
     storageBytes: 500 * GB,
-    fileCount: UNLIMITED,
-    egressBytesPerPeriod: UNLIMITED,
+    fileCount: 10_000_000,
+    egressBytesPerPeriod: 5000 * GB,
     requestsPerPeriod: UNLIMITED,
-    maxFileBytes: 5 * GB,
+    maxFileBytes: 4.9 * GB,
     agents: 50,
     apiKeys: 100,
     members: 25,

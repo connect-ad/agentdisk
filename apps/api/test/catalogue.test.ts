@@ -215,7 +215,11 @@ describe("resolveWorkspaceLimits — against the real seeded catalogue", () => {
     expect(limits.agents).toBe(5);
     expect(limits.workspaces).toBe(3);
     expect(limits.apiKeys).toBe(6);
-    expect(limits.egressBytesPerPeriod).toBe(UNLIMITED);
+    // Migration 0021 gave egress a real number - ten times storage - reversing
+    // D2 of the billing design. The catalogue is what the request path reads,
+    // so this asserts the seeded value rather than the code's floor.
+    expect(limits.egressBytesPerPeriod).toBe(50 * 1024 ** 3);
+    expect(limits.fileCount).toBe(100_000);
   });
 
   it("holds an unclaimed sandbox to SANDBOX_LIMITS whatever the catalogue says", async () => {

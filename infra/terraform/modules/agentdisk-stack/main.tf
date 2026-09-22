@@ -79,6 +79,59 @@ resource "cloudflare_r2_bucket" "files" {
   location   = var.r2_location_hint
 }
 
+# The browser uploads straight to R2, so the BUCKET needs its own CORS policy.
+#
+# `CORS_ALLOWED_ORIGINS` on the Worker does not cover this and never could: a
+# presigned PUT goes to <account>.r2.cloudflarestorage.com, an origin the Worker
+# has no part in. A cross-origin PUT carrying `Content-Type: application/...` is
+# never a simple request, so the browser preflights it, and a bucket with no CORS
+# policy answers the OPTIONS with 403 and no Access-Control-Allow-Origin. The
+# upload dies before a byte moves.
+#
+# It stayed hidden because the presigned path was only ever proven from a
+# terminal - roadmap step 27's 2 MB round trip was curl, which has no origin and
+# so never preflights. Every file at or below 1 MB travels inline through the
+# Worker (apps/web/src/lib/upload.js), which is why only larger uploads failed.
+resource "cloudflare_r2_bucket_cors" "files" {
+  account_id  = var.account_id
+  bucket_name = cloudflare_r2_bucket.files.name
+
+  rules = [{
+    id = "dashboard-presigned-upload"
+
+    allowed = {
+      # PUT alone. Downloads are an anchor click - a top-level navigation, which
+      # is not a cross-origin fetch and needs no rule here. Add GET only when
+      # something actually reads an object with fetch().
+      methods = ["PUT"]
+
+      # Only the dashboard. The admin console never uploads, and a presigned URL
+      # is a capability: widening this widens who can spend one that leaks.
+      origins = concat(
+        ["https://${local.web_hostname}"],
+        # Same allowance the Worker already makes for local dashboard work
+        # against this environment, and for the same reason - without it, an
+        # upload from `npm run dev` fails exactly the way this rule fixes.
+        var.environment == "dev" ? ["http://localhost:5173", "http://localhost:5174"] : []
+      )
+
+      # The one header the upload sets. The signature travels in the query
+      # string (aws4fetch signs `host` only), so there is no Authorization
+      # header to allow.
+      headers = ["content-type"]
+    }
+
+    # Lets the client read the stored object's ETag, which is what a future
+    # integrity check would compare against.
+    expose_headers = ["ETag"]
+
+    # One hour of preflight caching. Long enough that a multi-file upload
+    # preflights once, short enough that a policy change takes effect the
+    # same day.
+    max_age_seconds = 3600
+  }]
+}
+
 # ------------------------------------------------------------------ KV ---
 resource "cloudflare_workers_kv_namespace" "cache" {
   account_id = var.account_id

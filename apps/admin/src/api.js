@@ -95,6 +95,10 @@ const query = params => {
 };
 
 export const adminApi = {
+  claimLinks: (state, q) =>
+    request(`/v1/admin/claim-links?state=${encodeURIComponent(state)}${q ? `&q=${encodeURIComponent(q)}` : ''}`),
+  claimLinkHistory: tokenHash =>
+    request(`/v1/admin/claim-links/${encodeURIComponent(tokenHash)}`),
   deletionQueue: () => request('/v1/admin/deletions/queue'),
   deletionRuns: () => request('/v1/admin/deletions/runs'),
   runDeletionSweep: reason =>

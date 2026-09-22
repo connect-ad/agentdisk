@@ -30,6 +30,8 @@ import {
 } from "./admin";
 import {
   adminAudit,
+  adminClaimLinkHistory,
+  adminClaimLinks,
   adminDeletionQueue,
   adminDeletionRuns,
   adminRunDeletionSweep,
@@ -216,6 +218,15 @@ export async function handleAdminRoute(
 
   if (area === "billing" && resourceId === undefined && request.method === "GET") {
     return await adminBilling(request, adminDeps);
+  }
+
+  if (area === "claim-links") {
+    if (resourceId === undefined && request.method === "GET") {
+      return await adminClaimLinks(request, adminDeps);
+    }
+    if (resourceId !== undefined && request.method === "GET") {
+      return await adminClaimLinkHistory(request, adminDeps, resourceId);
+    }
   }
 
   if (area === "deletions") {

@@ -254,6 +254,33 @@ export async function adminRunDeletionSweep(
   return json(result);
 }
 
+export async function adminClaimLinks(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
+  const url = new URL(request.url);
+  const raw = url.searchParams.get("state") ?? "all";
+  // An unrecognised filter falls back to "all" rather than refusing: a bad
+  // query string should not be an error page on a screen somebody opened to
+  // answer a support question.
+  const state = ["all", "unclaimed", "claimed", "due"].includes(raw)
+    ? (raw as "all" | "unclaimed" | "claimed" | "due")
+    : "all";
+
+  const area_ = area(AdminDeletionsAccess, admin, deps);
+  const links = await area_.claimLinks(state, url.searchParams.get("q"));
+  return json({ state, links });
+}
+
+export async function adminClaimLinkHistory(
+  request: Request,
+  deps: AdminDeps,
+  tokenHash: string
+): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
+  return json({
+    attempts: await area(AdminDeletionsAccess, admin, deps).claimAttempts(tokenHash),
+  });
+}
+
 const transferSchema = z.object({ userId: z.string().trim().min(1), reason });
 
 export async function adminTransferOwner(

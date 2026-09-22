@@ -134,3 +134,89 @@ describe("POST /v1/admin/deletions/run", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("GET /v1/admin/claim-links", () => {
+  async function seedLink(id: string, opts: { claimed?: boolean; createdAt?: number } = {}) {
+    await env.DB.prepare(
+      `INSERT INTO workspaces
+         (id, org_id, name, slug, status, period_reset_at, claimed_at,
+          claim_token_hash, claim_token_expires_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)`
+    )
+      .bind(
+        id,
+        ORG_ID,
+        `Sandbox ${id}`,
+        id.toLowerCase(),
+        NOW,
+        opts.claimed === true ? NOW : null,
+        `hash-${id}`,
+        NOW + 604_800_000,
+        opts.createdAt ?? Date.now(),
+        NOW
+      )
+      .run();
+  }
+
+  it("lists a link nobody has ever touched", async () => {
+    // The query is over `workspaces`, not `claim_attempts`, precisely so these
+    // appear: a link nobody has opened is what somebody looks for when asked
+    // why a person never received theirs.
+    await seedLink("ws_UNTOUCHED");
+
+    const res = await call("GET", "/v1/admin/claim-links?state=unclaimed", token);
+    const body = (await res.json()) as { links: { workspaceId: string; attempts: number }[] };
+    const row = body.links.find(l => l.workspaceId === "ws_UNTOUCHED");
+    expect(row).toBeDefined();
+    expect(row?.attempts).toBe(0);
+  });
+
+  it("separates claimed from unclaimed", async () => {
+    await seedLink("ws_OPEN");
+    await seedLink("ws_TAKEN", { claimed: true });
+
+    const open = (await (
+      await call("GET", "/v1/admin/claim-links?state=unclaimed", token)
+    ).json()) as { links: { workspaceId: string }[] };
+    expect(open.links.map(l => l.workspaceId)).toContain("ws_OPEN");
+    expect(open.links.map(l => l.workspaceId)).not.toContain("ws_TAKEN");
+
+    const taken = (await (
+      await call("GET", "/v1/admin/claim-links?state=claimed", token)
+    ).json()) as { links: { workspaceId: string }[] };
+    expect(taken.links.map(l => l.workspaceId)).toContain("ws_TAKEN");
+  });
+
+  it("shows what the next sweep will destroy", async () => {
+    // The filter with a deadline attached, and the reason it exists: this is
+    // what you check before pressing run-now.
+    await seedLink("ws_FRESH");
+    await seedLink("ws_STALE", { createdAt: Date.now() - 8 * 24 * 60 * 60 * 1000 });
+
+    const due = (await (await call("GET", "/v1/admin/claim-links?state=due", token)).json()) as {
+      links: { workspaceId: string }[];
+    };
+    expect(due.links.map(l => l.workspaceId)).toContain("ws_STALE");
+    expect(due.links.map(l => l.workspaceId)).not.toContain("ws_FRESH");
+  });
+
+  it("finds one by workspace id or by token hash", async () => {
+    await seedLink("ws_FINDME");
+
+    const byId = (await (
+      await call("GET", "/v1/admin/claim-links?q=ws_FINDME", token)
+    ).json()) as { links: unknown[] };
+    expect(byId.links).toHaveLength(1);
+
+    const byHash = (await (
+      await call("GET", "/v1/admin/claim-links?q=hash-ws_FINDME", token)
+    ).json()) as { links: unknown[] };
+    expect(byHash.links).toHaveLength(1);
+  });
+
+  it("falls back to all rather than refusing an unrecognised filter", async () => {
+    const res = await call("GET", "/v1/admin/claim-links?state=nonsense", token);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { state: string }).state).toBe("all");
+  });
+});

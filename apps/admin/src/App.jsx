@@ -13,6 +13,7 @@ import { Billing } from './screens/Billing.jsx';
 import { Plans, SyncHistory } from './screens/Plans.jsx';
 import { Audit } from './screens/Audit.jsx';
 import { Deletions } from './screens/Deletions.jsx';
+import { ClaimLinks } from './screens/ClaimLinks.jsx';
 import { AdminAccounts } from './screens/AdminAccounts.jsx';
 import { EmailSettings } from './screens/EmailSettings.jsx';
 import { freshnessLabel } from './lib/useResource.js';
@@ -307,6 +308,7 @@ export default function App() {
     if (path === '/plans/sync-history') return <SyncHistory />;
     if (path === '/audit') return <Audit onToast={toast} />;
     if (path === '/deletions') return <Deletions onToast={toast} />;
+    if (path === '/claim-links') return <ClaimLinks />;
     if (path === '/admin') return <AdminAccounts currentAdminId={admin.id} onToast={toast} />;
     if (path === '/settings/email') return <EmailSettings role={admin.role} onToast={toast} />;
 

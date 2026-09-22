@@ -69,6 +69,7 @@ export const NAV = [
   },
   { key: 'audit', label: 'Audit Log', path: '/audit', role: 'admin' },
   { key: 'deletions', label: 'Deletions', path: '/deletions', role: 'admin' },
+  { key: 'claim_links', label: 'Claim Links', path: '/claim-links', role: 'admin' },
   // Readable by support on purpose: support is who gets asked whether email
   // is down, and the answer is a boolean that grants nothing. Only the test
   // send is gated higher, and the screen and the server both check that.

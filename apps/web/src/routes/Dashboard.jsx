@@ -12,7 +12,9 @@ import { useWorkspace } from '../lib/workspace.jsx';
  * URL: /w/{workspaceId}
  *
  * Every figure comes from the API: quotas and plan from `GET /v1/whoami`,
- * recent files from `GET /v1/files`, the agent count from `GET /v1/agents`.
+ * recent files from `GET /v1/files`, the agent count from `GET /v1/agents`,
+ * and the quick start's ticks from those plus `GET /v1/keys` and
+ * `GET /v1/activity`.
  * None of them is decorative, and none may become so — a dashboard with one
  * made-up number is worse than one with a gap in it, because you cannot tell
  * which of the others to trust. The agents tile read a fixed "Not built yet"
@@ -27,6 +29,53 @@ const QUICK_START = `curl -X POST ${API_BASE}/v1/files \\
   -H "Authorization: Bearer $AGENTDISK_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"path":"/notes.md","mimeType":"text/markdown","mode":"inline","content":"<base64>"}'`;
+
+/**
+ * The quick start, in the order the product needs it done.
+ *
+ * It opens on the agent, and used not to: the sequence ran key -> MCP ->
+ * "give an agent a folder", so the last step named an agent no earlier step
+ * had told anybody to create. Nothing failed - `keys.agent_id` is nullable
+ * and a workspace-level key works on its own - so you reached the end holding
+ * a credential attributed to nobody, which is the opposite of what this
+ * product is for. The order is not presentational: attribution is chosen when
+ * the key is minted and no screen re-attributes one afterwards, so the agent
+ * genuinely has to exist first.
+ *
+ * `to` is workspace-relative; the screen prepends its own root.
+ */
+const STEPS = [
+  { title: 'Create an agent', body: 'Give it a name.', cta: 'Add agent', to: '/agents' },
+  { title: 'Create a key', body: 'Choose what it can read and write.', cta: 'Create key', to: '/keys' },
+  { title: 'Connect it', body: 'Paste one config block into your MCP client.', cta: 'View setup', to: '/mcp' },
+  { title: 'See it work', body: 'Its actions appear in Activity, under its name.', cta: 'Open Activity', to: '/activity' }
+];
+
+/**
+ * Which steps are done, read off the same API as everything else here.
+ *
+ * Each step counts only once the one before it does. Without that, a
+ * workspace-level key that has been used would tick "connect it" while "create
+ * a key" sat untouched, and a list that says you are past a step you have not
+ * done is not a sequence any more. The "for it" in step 2 is literal: a key
+ * with no agent does not satisfy it, because the whole point of the order is
+ * that the key is attributed.
+ *
+ * Step 3 ticks on any key's first use. The key row cannot tell MCP from REST -
+ * `last_used_at` is one column - and asking activity to distinguish them would
+ * be inventing a field it does not have.
+ */
+function stepsDone({ agents, keys, events }) {
+  const each = [
+    agents.length > 0,
+    keys.some(k => k.agentId && k.revokedAt === null),
+    keys.some(k => k.lastUsedAt !== null),
+    events.some(e => e.actor?.type === 'agent')
+  ];
+  const done = [];
+  for (let i = 0; i < each.length; i += 1) done.push(each[i] && (i === 0 || done[i - 1]));
+  return done;
+}
 
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes)) return '—';
@@ -50,12 +99,20 @@ function relativeTime(iso) {
 }
 
 const loadOverview = async (api, workspaceId) => {
-  const [me, files, agents] = await Promise.all([
+  const [me, files, agents, keys, activity] = await Promise.all([
     api.whoami(workspaceId),
     api.listFiles(workspaceId, { limit: '5' }),
-    api.listAgents(workspaceId)
+    api.listAgents(workspaceId),
+    api.listKeys(workspaceId),
+    api.listActivity(workspaceId)
   ]);
-  return { me, files: files.files ?? [], agents: agents.agents ?? [] };
+  return {
+    me,
+    files: files.files ?? [],
+    agents: agents.agents ?? [],
+    keys: keys.keys ?? [],
+    events: activity.events ?? []
+  };
 };
 
 export default function Dashboard() {
@@ -81,6 +138,9 @@ export default function Dashboard() {
   const agents = data?.agents ?? [];
   const agentCount = agents.length;
   const activeAgents = agents.filter(a => a.status === 'active').length;
+
+  const done = stepsDone({ agents, keys: data?.keys ?? [], events: data?.events ?? [] });
+  const next = done.indexOf(false);
 
   const empty = status === 'loaded' && fileCount === 0;
 
@@ -164,38 +224,48 @@ export default function Dashboard() {
       */}
 
       {/*
-        Quick start, from the design. Cards rather than one code block, each
-        linking to the screen that actually does that step, so every one goes
-        somewhere real.
+        Quick start as a sequence, not four doors. The design drew four equal
+        cards, each a link, and that read as four things to choose between;
+        they are four things to do in order, and the line down the left is the
+        dependency drawn. So there is one link in the whole section, on the
+        step that is next - the other three are not somewhere to go yet.
 
-        It opens on the agent identity, which it did not used to. The sequence
-        ran key -> MCP -> "give an agent a folder", so the last step named an
-        agent no earlier step had told anybody to create, and the one nav
-        entry between Files and API keys was the one the walkthrough skipped.
-        An agent is optional on a key — `agentId` is nullable and a
-        workspace-level key works on its own — so nothing failed; you simply
-        reached the end holding a credential attributed to nobody, which is
-        the opposite of what this product is for. Attribution has to be chosen
-        before the key is minted: `keys.agent_id` is set at creation.
+        Only once loaded, because the ticks are data: rendering four grey
+        steps and then ticking them a moment later would show a state that was
+        never true. And it goes once every step is done, the way "Your first
+        file" gives way to "Recent files" - a completed quick start is not a
+        quick start.
       */}
-      <div>
-        <h2 className="ds__h2">Quick start</h2>
-        <div className="ds__quick">
-          {[
-            { n: '1', title: 'Create an agent identity', body: 'The name every call is attributed to. Disabling it blocks its keys at once.', cta: 'Add agent', to: `${root}/agents` },
-            { n: '2', title: 'Mint a key for it', body: 'Read, write, list or delete — optionally locked to one path prefix.', cta: 'Create key', to: `${root}/keys` },
-            { n: '3', title: 'Connect over MCP', body: 'Paste one config block into Claude Desktop, VS Code or the CLI.', cta: 'View setup', to: `${root}/mcp` },
-            { n: '4', title: 'Watch the audit log fill in', body: 'Every call lands here named by the agent that made it, not by a key.', cta: 'Open Activity', to: `${root}/activity` },
-          ].map(q => (
-            <Link key={q.n} to={q.to} className="ds__qcard">
-              <span className="ds__qnum">{q.n}</span>
-              <span className="ds__qtitle">{q.title}</span>
-              <span className="ds__qbody">{q.body}</span>
-              <span className="ds__qcta">{q.cta}<Icon name="chevronRight" size={13} /></span>
-            </Link>
-          ))}
+      {status === 'loaded' && next !== -1 ? (
+        <div>
+          <h2 className="ds__h2">Quick start</h2>
+          <ol className="ds__steps">
+            {STEPS.map((step, i) => {
+              const state = done[i] ? 'done' : i === next ? 'next' : 'later';
+              return (
+                <li key={step.to} className={`ds__step ds__step--${state}`}>
+                  {/* The mark is decorative: the state is read out in words below. */}
+                  <span className="ds__stepmark" aria-hidden="true">
+                    {done[i] ? <Icon name="check" size={13} /> : i + 1}
+                  </span>
+                  <span className="ds__steptext">
+                    <span className="ds__steptitle">
+                      <span className="sr-only">Step {i + 1}, {state}. </span>
+                      {step.title}
+                      {state === 'next' ? (
+                        <Link to={`${root}${step.to}`} className="ds__stepgo">
+                          {step.cta}<Icon name="chevronRight" size={13} />
+                        </Link>
+                      ) : null}
+                    </span>
+                    <span className="ds__stepbody">{step.body}</span>
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
         </div>
-      </div>
+      ) : null}
 
       {empty ? (
         <Panel title="Your first file">

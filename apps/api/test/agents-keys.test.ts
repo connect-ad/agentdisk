@@ -210,13 +210,35 @@ describe("minting keys", () => {
     const { token } = await seedApiKey({
       workspaceId: WORKSPACE_A,
       ops: ["read", "keys:create"],
-      pathPrefix: "/agents/bot",
+      pathPrefix: "/agents",
     });
 
     expect((await post("/v1/keys", token, { name: "wide", ops: ["read"], pathPrefix: "/" })).status).toBe(403);
     expect(
-      (await post("/v1/keys", token, { name: "narrow", ops: ["read"], pathPrefix: "/agents/bot/logs" })).status
+      (await post("/v1/keys", token, { name: "narrow", ops: ["read"], pathPrefix: "/agents/bot" })).status
     ).toBe(201);
+  });
+
+  it("caps a key name at 15 characters and a path restriction at two levels", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ["read", "keys:create"] });
+
+    const long = await post("/v1/keys", token, { name: "sixteen-chars-xx", ops: ["read"] });
+    expect(long.status).toBe(400);
+    expect(((await long.json()) as { error: { message: string } }).error.message).toMatch(/15 characters/);
+    expect((await post("/v1/keys", token, { name: "fifteen-chars-x", ops: ["read"] })).status).toBe(201);
+
+    const deep = await post("/v1/keys", token, { name: "deep", ops: ["read"], pathPrefix: "/abc/dev/x" });
+    expect(deep.status).toBe(400);
+    expect(((await deep.json()) as { error: { message: string } }).error.message).toMatch(/two levels|2 levels/);
+    // Trailing slash and star are tolerated as before, and do not count as a level.
+    expect((await post("/v1/keys", token, { name: "two", ops: ["read"], pathPrefix: "/abc/dev/*" })).status).toBe(201);
+    expect((await post("/v1/keys", token, { name: "one", ops: ["read"], pathPrefix: "/abc" })).status).toBe(201);
+  });
+
+  it("caps an agent name at 15 characters", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ["read", "write", "keys:create"] });
+    expect((await post("/v1/agents", token, { name: "sixteen-chars-xx" })).status).toBe(400);
+    expect((await post("/v1/agents", token, { name: "fifteen-chars-x" })).status).toBe(201);
   });
 
   it("refuses to mint without the keys:create op", async () => {

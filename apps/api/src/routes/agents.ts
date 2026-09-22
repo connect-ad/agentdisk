@@ -23,12 +23,13 @@ import type { AgentRow } from "../db/types";
 import { audit } from "../lib/audit";
 import { generateApiKey, TEST_PREFIX, type KeyMode } from "../lib/keys";
 import { sealSecret } from "../lib/secretbox";
+import { NAME_MAX } from "./keys";
 
 const NAME = z
   .string()
   .trim()
   .min(1, "An agent needs a name.")
-  .max(64)
+  .max(NAME_MAX, `Use at most ${NAME_MAX} characters for the name.`)
   // Names appear in scope path prefixes (`/agents/<name>/*`), so a name with a
   // slash in it could describe a prefix its owner never intended to grant.
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "Use letters, numbers, dots, dashes or underscores.");

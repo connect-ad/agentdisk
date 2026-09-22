@@ -39,8 +39,23 @@ import type { ApiKeyRow } from "../db/types";
 import { audit } from "../lib/audit";
 import { openSecret, sealSecret } from "../lib/secretbox";
 
+/**
+ * Fifteen characters, for keys and agents alike (22 Sept 2026). The name is
+ * a label people read in a table beside the key, the agent and the scope; a
+ * long one pushes the columns that matter off the edge.
+ */
+export const NAME_MAX = 15;
+
+/**
+ * How deep a path restriction may go: `/abc` or `/abc/dev`, never
+ * `/abc/dev/x`. Two levels is enough to give an agent its own folder and one
+ * project under it, and a deeper prefix is almost always a file path pasted in
+ * by mistake.
+ */
+export const PREFIX_MAX_DEPTH = 2;
+
 const createSchema = z.object({
-  name: z.string().trim().min(1, "A key needs a name.").max(64),
+  name: z.string().trim().min(1, "A key needs a name.").max(NAME_MAX, `Use at most ${NAME_MAX} characters for the name.`),
   /** Which agent this key acts as. Omitted means a workspace-level key. */
   agentId: z.string().trim().min(1).optional(),
   ops: z
@@ -199,6 +214,9 @@ export async function createKey(ctx: AuthContext, request: Request): Promise<Res
     ops: body.ops,
     pathPrefix: normalizePrefix(body.pathPrefix ?? ""),
   };
+  if (requested.pathPrefix.split("/").filter(Boolean).length > PREFIX_MAX_DEPTH) {
+    throw validationError(`Restrict to at most ${PREFIX_MAX_DEPTH} levels, like /abc/dev.`);
+  }
 
   // The rule that makes scoping mean anything. Without it, a read-only key
   // holding keys:create could mint itself a writer and the ceiling would be

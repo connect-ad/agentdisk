@@ -120,7 +120,7 @@ describe("what gets recorded", () => {
       agentId,
       ops: ["read", "write", "list"],
     });
-    await post("/v1/agents", token, { name: "made-by-an-agent" });
+    await post("/v1/agents", token, { name: "made-by-agent" });
 
     const row = (await events())[0];
     // The whole product thesis is that a human can see which agent did what.
@@ -204,7 +204,7 @@ describe("when the audit write itself fails", () => {
     const { token } = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ["write", "list"] });
     await env.DB.prepare(`DROP TABLE audit_events`).run();
 
-    const res = await post("/v1/agents", token, { name: "survives-a-broken-log" });
+    const res = await post("/v1/agents", token, { name: "survives-log" });
     expect(res.status).toBe(201);
 
     // Put it back for whatever runs next.

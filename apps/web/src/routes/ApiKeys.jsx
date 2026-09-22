@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  PageHead, Panel, DataTable, Button, Icon, Input, Select, Badge,
+  PageHead, Panel, DataTable, Button, IconButton, Icon, Input, Select, Badge,
   Checkbox, Modal, ConfirmModal, EmptyState, ApiKeyDisplay, Alert, Toast
 } from '../components/index.js';
 import { useResource } from '../lib/useResource.js';
@@ -41,11 +41,40 @@ function relativeTime(iso) {
 
 const EXPIRY_DAYS = { never: null, 30: 30, 90: 90 };
 
+/** Mirrors the API: keys.ts NAME_MAX and PREFIX_MAX_DEPTH. */
+const NAME_MAX = 15;
+const PREFIX_MAX_DEPTH = 2;
+
+/** How many levels a typed restriction has, ignoring a trailing `/` or `/*`. */
+function prefixDepth(raw) {
+  return raw.trim().replace(/\*$/, '').split('/').filter(Boolean).length;
+}
+
+/**
+ * The Status column, as one icon.
+ *
+ * The word is still there - as the hover text and, for a screen reader, in
+ * the sr-only span - so the rule that colour never carries meaning alone
+ * holds; the shape carries it too, a triangle against a tick. What moved is
+ * the "why", which used to be a sentence in the Actions column and is now
+ * part of this label, because a compact row has nowhere else to put it.
+ */
+function keyStatusView(r) {
+  if (r.status === 'revoked') return { icon: 'lock', tone: 'danger', label: 'Revoked by support' };
+  if (r.status === 'expired') return { icon: 'clock', tone: 'warn', label: 'Expired' };
+  if (r.status === 'disabled') {
+    return r.disabledBy === 'agent'
+      ? { icon: 'alert', tone: 'warn', label: 'Disabled, its agent is off' }
+      : { icon: 'alert', tone: 'warn', label: 'Disabled' };
+  }
+  return { icon: 'check', tone: 'ok', label: 'Active' };
+}
+
 export default function ApiKeys() {
   const { api, workspaceId, canWrite, role } = useWorkspace();
   const { status, data, error, reload } = useResource(loadKeys);
 
-  const [dialog, setDialog] = useState(null); // 'create' | 'reveal' | 'rotated' | 'disable' | 'delete'
+  const [dialog, setDialog] = useState(null); // 'create' | 'reveal' | 'rotated' | 'view' | 'enable' | 'disable' | 'delete'
   const [target, setTarget] = useState(null);
   const [toast, setToast] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -56,11 +85,9 @@ export default function ApiKeys() {
   const [pathPrefix, setPathPrefix] = useState('');
   const [expiry, setExpiry] = useState('never');
   const [ops, setOps] = useState({ read: true, write: false, delete: false, list: true });
+  // The one secret on screen at a time: a freshly minted key, a rotated one,
+  // or the one the owner asked to view. Cleared when its dialog closes.
   const [secret, setSecret] = useState('');
-  // Keys the owner has chosen to show, by id. Fetched on demand, held only
-  // while shown: Hide drops it, and a reload starts empty.
-  const [shown, setShown] = useState({});
-  const [revealError, setRevealError] = useState(null);
 
   const keys = data?.keys ?? [];
   const agents = data?.agents ?? [];
@@ -75,7 +102,12 @@ export default function ApiKeys() {
   const create = async () => {
     const chosen = Object.entries(ops).filter(([, on]) => on).map(([op]) => op);
     if (!name.trim()) { setFormError('Give the key a name so you can recognise it later.'); return; }
+    if (name.trim().length > NAME_MAX) { setFormError(`Use at most ${NAME_MAX} characters for the name.`); return; }
     if (chosen.length === 0) { setFormError('A key with no permissions could not do anything.'); return; }
+    if (prefixDepth(pathPrefix) > PREFIX_MAX_DEPTH) {
+      setFormError(`Restrict to at most ${PREFIX_MAX_DEPTH} levels, like /abc/dev.`);
+      return;
+    }
 
     setBusy(true); setFormError(null);
     try {
@@ -114,8 +146,6 @@ export default function ApiKeys() {
       } else {
         setToast(status === 'disabled' ? 'Key disabled' : 'Key enabled');
       }
-      // Whatever was shown is the old value now.
-      setShown(s => { const next = { ...s }; delete next[r.id]; return next; });
       void reload();
     } catch (err) {
       setToast(`Could not change the key: ${err.message}`);
@@ -141,23 +171,21 @@ export default function ApiKeys() {
 
   const agentName = id => agents.find(a => a.id === id)?.name ?? null;
 
-  const toggleShown = async r => {
-    if (shown[r.id]) {
-      setShown(s => { const next = { ...s }; delete next[r.id]; return next; });
-      return;
-    }
-    setRevealError(null);
+  /**
+   * The eye opens a dialog rather than unmasking in place. A 40-character
+   * secret does not fit in a compact row, and a value that lives in a dialog
+   * is gone the moment the dialog is, rather than left on screen behind
+   * whatever the person does next.
+   */
+  const view = async r => {
     try {
       const { secret: value } = await api.revealKey(workspaceId, r.id);
-      setShown(s => ({ ...s, [r.id]: value }));
+      setSecret(value);
+      setTarget(r);
+      setDialog('view');
     } catch (err) {
-      setRevealError({ id: r.id, message: err.message });
+      setToast(`Could not show the key: ${err.message}`);
     }
-  };
-
-  const copyShown = r => {
-    try { navigator.clipboard.writeText(shown[r.id]); } catch (e) { /* clipboard unavailable */ }
-    setToast('Key copied');
   };
 
   const columns = [
@@ -165,7 +193,7 @@ export default function ApiKeys() {
     {
       key: 'agent',
       header: 'Agent',
-      width: 190,
+      width: 150,
       render: r =>
         r.agentId
           ? <Badge tone="accent" mono>{agentName(r.agentId) ?? r.agentId}</Badge>
@@ -174,40 +202,22 @@ export default function ApiKeys() {
     {
       key: 'key',
       header: 'Key',
-      width: 320,
+      width: 230,
       // The eye. Owner only, because a reader who can read a write-scoped key
       // can write; disabled for a key minted before keys were kept, because
       // nothing brings that one back; absent on a revoked key, which the API
-      // refuses anyway. Show/Hide is a word beside the icon, not an icon
-      // alone - the same rule Revoke follows.
+      // refuses anyway. The masked key and the eye share one line - the
+      // secret itself never appears here, only in the dialog the eye opens.
       render: r => (
-        <span
-          className="row"
-          style={{ gap: 'var(--s-3)', alignItems: 'center', flexWrap: 'wrap' }}
-          onClick={e => e.stopPropagation()}
-        >
-          {shown[r.id]
-            ? <code className="ad-mono" style={{ userSelect: 'all' }}>{shown[r.id]}</code>
-            : <ApiKeyDisplay prefix={r.prefix} lastFour={r.lastFour} />}
+        <span className="ds__kkey" onClick={e => e.stopPropagation()}>
+          <ApiKeyDisplay prefix={r.prefix} lastFour={r.lastFour} />
           {role === 'owner' && r.status !== 'revoked' ? (
-            <Button
-              size="sm"
-              variant="secondary"
-              icon={<Icon name={shown[r.id] ? 'eyeOff' : 'eye'} size={13} />}
+            <IconButton
+              icon={<Icon name="eye" size={14} />}
+              label={r.retrievable ? `Show ${r.name}` : 'Created before keys were kept. Mint a new one to have one you can view.'}
               disabled={!r.retrievable}
-              title={r.retrievable ? undefined : 'Created before keys were kept. Mint a new one to have one you can view.'}
-              onClick={() => toggleShown(r)}
-            >
-              {shown[r.id] ? 'Hide' : 'Show'}
-            </Button>
-          ) : null}
-          {shown[r.id] ? (
-            <Button size="sm" variant="secondary" icon={<Icon name="copy" size={13} />} onClick={() => copyShown(r)}>
-              Copy
-            </Button>
-          ) : null}
-          {revealError?.id === r.id ? (
-            <span className="ad-meta" role="alert">{revealError.message}</span>
+              onClick={() => view(r)}
+            />
           ) : null}
         </span>
       )
@@ -215,78 +225,78 @@ export default function ApiKeys() {
     {
       key: 'scope',
       header: 'Scope',
-      width: 260,
+      width: 150,
+      // Two lines: what it may do, then where. One line ran to the width of
+      // three columns once a path was involved.
       render: r => (
-        <Badge mono>
-          {`${(r.scopes?.ops ?? []).join(', ') || '—'} · ${r.scopes?.pathPrefix ? `${r.scopes.pathPrefix}/*` : '/*'}`}
-        </Badge>
+        <span className="ds__kscope ad-mono">
+          <span>{(r.scopes?.ops ?? []).join(', ') || '\u2014'}</span>
+          <span>{r.scopes?.pathPrefix ? `${r.scopes.pathPrefix}/*` : '/*'}</span>
+        </span>
       )
     },
     {
       key: 'lastUsed',
       header: 'Last used',
-      width: 130,
+      width: 110,
       render: r => <span style={{ color: 'var(--ink-3)' }}>{relativeTime(r.lastUsedAt)}</span>
     },
     {
       key: 'status',
       header: 'Status',
-      width: 120,
-      // One word for "it does not work", however it came to be off, because
-      // that is the question being asked of this column. Why, and what to do
-      // about it, is the Actions column's job.
-      render: r =>
-        r.status === 'revoked' ? <Badge tone="danger" dot>Revoked</Badge>
-          : r.status === 'expired' ? <Badge tone="warn" dot>Expired</Badge>
-            : r.status === 'disabled' ? <Badge tone="warn" dot>Disabled</Badge>
-              : <Badge tone="ok" dot>Active</Badge>
+      width: 70,
+      render: r => {
+        const v = keyStatusView(r);
+        return (
+          <span className={`ds__kstat ds__kstat--${v.tone}`} title={v.label}>
+            <Icon name={v.icon} size={15} aria-hidden="true" />
+            <span className="sr-only">{v.label}</span>
+          </span>
+        );
+      }
     },
     {
       key: 'act',
       header: 'Actions',
-      width: 260,
-      // Words, not bare icons: every one of these either stops a live
-      // credential, changes it, or destroys it.
-      render: r => (
-        <span
-          className="row"
-          style={{ gap: 'var(--s-3)', alignItems: 'center', flexWrap: 'wrap' }}
-          onClick={e => e.stopPropagation()}
-        >
-          {/*
-            The agent case has no Enable button on purpose. The key's own
-            switch is already on — enabling it here would appear to work and
-            change nothing, because the refusal is the agent's. The sentence
-            points at the control that would actually help.
-          */}
-          {r.disabledBy === 'agent' ? (
-            <span className="ad-meta">Its agent is disabled.</span>
-          ) : r.status === 'revoked' ? (
-            <span className="ad-meta">Revoked by support.</span>
-          ) : r.status === 'expired' ? (
-            <span className="ad-meta">Expired.</span>
-          ) : (
-            <Button
-              size="sm"
-              variant="secondary"
+      width: 90,
+      // Icons with the verb as their accessible name and hover text. Each one
+      // still opens a confirmation before anything happens to the credential
+      // - including Enable, because enabling rotates the secret, and a
+      // misclick on a small icon must not silently change a key.
+      render: r => {
+        const off = r.status === 'revoked' || r.status === 'expired' || r.disabledBy === 'agent';
+        return (
+          <span className="ds__kact" onClick={e => e.stopPropagation()}>
+            {/*
+              A key that is off because its agent is off gets no Enable: its
+              own switch is already on, so pressing it would appear to work and
+              change nothing. The status icon's label points at the agent.
+            */}
+            {off ? null : r.status === 'disabled' ? (
+              <IconButton
+                icon={<Icon name="refresh" size={14} />}
+                label="Enable"
+                disabled={!canWrite || busy}
+                onClick={() => { setTarget(r); setDialog('enable'); }}
+              />
+            ) : (
+              <IconButton
+                icon={<Icon name="x" size={14} />}
+                label="Disable"
+                disabled={!canWrite || busy}
+                onClick={() => { setTarget(r); setDialog('disable'); }}
+              />
+            )}
+            <IconButton
+              icon={<Icon name="trash" size={14} />}
+              label="Delete"
+              tone="danger"
               disabled={!canWrite || busy}
-              onClick={() => (r.status === 'disabled'
-                ? setStatus(r, 'active')
-                : (setTarget(r), setDialog('disable')))}
-            >
-              {r.status === 'disabled' ? 'Enable' : 'Disable'}
-            </Button>
-          )}
-          <Button
-            size="sm"
-            variant="danger-outline"
-            disabled={!canWrite || busy}
-            onClick={() => { setTarget(r); setDialog('delete'); }}
-          >
-            Delete
-          </Button>
-        </span>
-      )
+              onClick={() => { setTarget(r); setDialog('delete'); }}
+            />
+          </span>
+        );
+      }
     }
   ];
 
@@ -351,7 +361,9 @@ export default function ApiKeys() {
         <Input
           label="Name"
           required
-          placeholder="prod-research-bot"
+          placeholder="research-bot"
+          maxLength={NAME_MAX}
+          hint={`Up to ${NAME_MAX} characters.`}
           value={name}
           onChange={e => setName(e.target.value)}
         />
@@ -380,7 +392,7 @@ export default function ApiKeys() {
           optional
           mono
           placeholder="/projects/demo"
-          hint="Leave empty for full workspace access."
+          hint="Up to two levels, like /abc/dev. Leave empty for full workspace access."
           value={pathPrefix}
           onChange={e => setPathPrefix(e.target.value)}
         />
@@ -429,6 +441,33 @@ export default function ApiKeys() {
         </p>
         <ApiKeyDisplay revealed secret={secret} />
       </Modal>
+
+      {/* --- the eye: one key, in a dialog, gone when it closes --- */}
+      <Modal
+        open={dialog === 'view'}
+        title={target ? target.name : 'API key'}
+        tone="accent"
+        size="md"
+        mark={<Icon name="key" size={16} />}
+        onClose={() => { setSecret(''); setDialog(null); }}
+        footer={<Button onClick={() => { setSecret(''); setDialog(null); }}>Done</Button>}
+      >
+        <ApiKeyDisplay revealed secret={secret} />
+      </Modal>
+
+      {/*
+        Enabling is not "back as it was": the secret changes. Confirmed for
+        that reason, and because the control is now an icon a hand can brush.
+      */}
+      <ConfirmModal
+        open={dialog === 'enable'}
+        destructive={false}
+        title={`Enable ${target ? target.name : 'this key'}?`}
+        description="Enabling issues a new key. Whatever was using the old one will need updating before it works again."
+        confirmLabel="Enable key"
+        onClose={() => setDialog(null)}
+        onConfirm={() => { const t = target; setDialog(null); return setStatus(t, 'active'); }}
+      />
 
       {/*
         Disabling is reversible and still worth confirming: it stops a live

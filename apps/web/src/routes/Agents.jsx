@@ -97,6 +97,7 @@ export default function Agents() {
 
   const create = async () => {
     if (!name.trim()) { setFormError('An agent needs a name.'); return; }
+    if (name.trim().length > 15) { setFormError('Use at most 15 characters for the name.'); return; }
     setBusy(true); setFormError(null);
     try {
       const { agent } = await api.createAgent(workspaceId, {
@@ -289,7 +290,8 @@ export default function Agents() {
           label="Name"
           required
           placeholder="e.g. research-bot"
-          hint="Letters, numbers, dots, dashes and underscores. Shown next to everything this agent does."
+          maxLength={15}
+          hint="Up to 15 characters: letters, numbers, dots, dashes and underscores. Shown next to everything this agent does."
           value={name}
           onChange={e => setName(e.target.value)}
         />

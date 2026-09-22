@@ -1396,3 +1396,18 @@ a.ds__qsbox:hover .ds__qsbtn{background:var(--accent-hover)}
   color:var(--ink);background:var(--surface-3);border:1px solid var(--line);
   border-radius:var(--r-1);padding:var(--s-1) var(--s-3);
   white-space:nowrap}
+
+/* ---- API keys table: the compact row (22 Sept 2026) --------------------
+   Status and Actions are icons so the key, scope and name get the width.
+   The word is on hover (title) and in an sr-only span; the tone is a
+   colour on a shape, never a colour alone. ---------------------------- */
+.ds__kkey{display:inline-flex;align-items:center;gap:var(--s-3);white-space:nowrap}
+.ds__kscope{display:flex;flex-direction:column;gap:2px;font-size:var(--t-12);
+  line-height:1.3;color:var(--ink-2);white-space:nowrap}
+.ds__kscope>span:last-child{color:var(--ink-3)}
+.ds__kstat{display:inline-flex;align-items:center;justify-content:center;
+  width:1.75rem;height:1.75rem;border-radius:var(--r-2);border:1px solid transparent}
+.ds__kstat--ok{color:var(--ok);background:var(--ok-soft);border-color:var(--ok-line)}
+.ds__kstat--warn{color:var(--warn);background:var(--warn-soft);border-color:var(--warn-line)}
+.ds__kstat--danger{color:var(--danger);background:var(--danger-soft);border-color:var(--danger-line)}
+.ds__kact{display:inline-flex;align-items:center;gap:var(--s-2);white-space:nowrap}

@@ -44,9 +44,15 @@ export function ApiKeyDisplay({ secret, lastFour, prefix = '', revealed = false,
           color: 'var(--ink)', fontSize: 12, fontWeight: 500, cursor: 'pointer'
         }}><Icon name={copied ? 'check' : 'copy'} size={13} />{copied ? 'Copied' : 'Copy'}</button>
       </div>
+      {/*
+        The vendored original warned "stored only as a hash, so we cannot
+        show it again". Keys have been kept since migration 0022 and the
+        owner can view one from the table, so that sentence became false in
+        every place this renders. Second divergence, recorded in CLAUDE.md.
+      */}
       <p className="ad-meta" style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
         <Icon name="alert" size={13} style={{ marginTop: 2, flex: 'none', color: 'var(--warn)' }} />
-        <span>Copy this key now. It is stored only as a hash, so we cannot show it again. If you lose it, revoke the key and create a new one.</span>
+        <span>Anyone holding this key can act as the agent. Keep it out of shared documents and chat.</span>
       </p>
       {onAcknowledge ? <div><Button variant="secondary" size="sm" onClick={onAcknowledge}>I&rsquo;ve stored this key</Button></div> : null}
     </div>

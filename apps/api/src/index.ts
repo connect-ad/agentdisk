@@ -46,6 +46,7 @@ import {
   removeWorkspaceMember,
 } from "./routes/members";
 import { resolveVerifiedUser } from "./auth/authenticate";
+import { readFirebaseAdminConfig } from "./auth/firebase-admin";
 import { extractBearerToken, isApiKeyToken } from "./lib/keys";
 import { unauthorized } from "./lib/errors";
 import {
@@ -894,6 +895,12 @@ export default {
           const sweep = await sweepPendingDeletions(env.DB, env.FILES, now, {
             dryRun: !pendingDeletionEnabled(env),
             trigger: "cron",
+            // The identity half. A null config skips it rather than
+            // part-completing: releasing the email address while Firebase
+            // still holds the identity frees it here and leaves it claimed
+            // there, so the person's next signup fails on EMAIL_EXISTS with
+            // nothing on our side explaining why.
+            identity: { config: readFirebaseAdminConfig(env), kv: env.CACHE },
           });
           console.log(
             JSON.stringify({

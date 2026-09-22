@@ -20,6 +20,7 @@
  */
 
 import { newId } from "../lib/ids";
+import { deleteFirebaseUser, type FirebaseAdminConfig } from "../auth/firebase-admin";
 
 /** R2 accepts up to 1000 keys in one delete. */
 const R2_DELETE_CHUNK = 1000;
@@ -33,6 +34,10 @@ export interface SweepResult {
   rowsDeleted: number;
   bytesFreed: number;
   failed: number;
+  /** Accounts whose Firebase identity and email address were both released. */
+  identitiesReleased: number;
+  /** True when the identity pass was skipped for want of a Firebase config. */
+  identitySkipped: boolean;
   dryRun: boolean;
   /** The `job_runs` row this write produced, so a caller can link to it. */
   runId: string;
@@ -56,6 +61,17 @@ export interface SweepOptions {
   trigger?: "cron" | "admin";
   actorId?: string | null;
   actorEmail?: string | null;
+  /**
+   * What the identity pass needs. Absent - or present with a null config -
+   * skips that half entirely and says so in the result.
+   *
+   * Skipping is the only safe response to a missing Firebase config. Releasing
+   * the email address while Firebase still holds the identity would free the
+   * address in our database and leave it claimed in theirs, so the person's
+   * next signup fails on EMAIL_EXISTS with nothing in our data explaining why.
+   * The two are released together or not at all.
+   */
+  identity?: { config: FirebaseAdminConfig | null; kv: KVNamespace };
 }
 
 interface PendingRow {
@@ -108,6 +124,8 @@ export async function sweepPendingDeletions(
     rowsDeleted: 0,
     bytesFreed: 0,
     failed: 0,
+    identitiesReleased: 0,
+    identitySkipped: false,
     dryRun,
     runId,
   };
@@ -185,12 +203,101 @@ export async function sweepPendingDeletions(
       }
     }
 
+    await releaseIdentities(db, now, dryRun, force, limit, options.identity, result);
+
     await finish(db, runId, now, result, null);
     return result;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await finish(db, runId, now, result, message.slice(0, 500));
     throw err;
+  }
+}
+
+/**
+ * Release the identity and the email address of accounts past their window.
+ *
+ * Runs after the bytes, and its failures never stop them: the objects are the
+ * expensive half and the half a customer actually asked for. An identity that
+ * could not be deleted is retried on the next sweep, because `purge_after` is
+ * only cleared once the deletion succeeded.
+ *
+ * **Both halves move together or neither does.** Scrubbing the address while
+ * Firebase still holds the identity would release it here and leave it claimed
+ * there, so the person's next signup fails on EMAIL_EXISTS with nothing on our
+ * side to explain it. That is why a missing config skips rather than
+ * part-completes.
+ *
+ * The scrubbed address uses `.invalid`, reserved by RFC 2606 so it can never
+ * resolve or receive mail - the same pattern `db/bootstrap.ts` uses for
+ * provisional sandbox owners.
+ */
+async function releaseIdentities(
+  db: D1Database,
+  now: number,
+  dryRun: boolean,
+  force: boolean,
+  limit: number,
+  identity: { config: FirebaseAdminConfig | null; kv: KVNamespace } | undefined,
+  result: SweepResult
+): Promise<void> {
+  const due = await db
+    .prepare(
+      `SELECT id, firebase_uid FROM users
+        WHERE purge_after IS NOT NULL
+          AND purge_after <= ?
+          AND deleted_at IS NOT NULL
+          AND firebase_uid IS NOT NULL
+        ORDER BY purge_after LIMIT ?`
+    )
+    .bind(force ? Number.MAX_SAFE_INTEGER : now, limit)
+    .all<{ id: string; firebase_uid: string }>();
+
+  const rows = due.results ?? [];
+  if (rows.length === 0) return;
+
+  if (identity === undefined || identity.config === null) {
+    result.identitySkipped = true;
+    console.log(
+      JSON.stringify({
+        level: "warn",
+        message: "identity release skipped: no Firebase config",
+        due: rows.length,
+      })
+    );
+    return;
+  }
+
+  for (const user of rows) {
+    if (dryRun) {
+      result.identitiesReleased += 1;
+      continue;
+    }
+    try {
+      await deleteFirebaseUser(identity.config, identity.kv, user.firebase_uid, now);
+      // Only now, and all three together: the address is freed, the uid is
+      // cleared so a retry cannot repeat the call, and purge_after is cleared
+      // so the row reads as finished rather than perpetually due.
+      await db
+        .prepare(
+          `UPDATE users
+              SET email = ?, firebase_uid = NULL, purge_after = NULL, updated_at = ?
+            WHERE id = ?`
+        )
+        .bind(`deleted-${user.id}@agentdisk.invalid`, now, user.id)
+        .run();
+      result.identitiesReleased += 1;
+    } catch (err) {
+      result.failed += 1;
+      console.log(
+        JSON.stringify({
+          level: "warn",
+          message: "identity release failed",
+          userId: user.id,
+          reason: err instanceof Error ? err.message : String(err),
+        })
+      );
+    }
   }
 }
 

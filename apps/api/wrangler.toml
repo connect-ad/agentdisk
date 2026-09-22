@@ -65,7 +65,7 @@ dead_letter_queue = "agentdisk-dev-jobs-dlq"
 # no cost. The purge only acts on files past their 24-hour grace period, so the
 # exact minute is irrelevant to correctness.
 [env.dev.triggers]
-crons = ["17 3 * * 0"]
+crons = ["17 * * * *"]
 
 # --------------------------------------------------------------- prod ---
 [env.prod]
@@ -96,4 +96,4 @@ max_retries = 5
 dead_letter_queue = "agentdisk-prod-jobs-dlq"
 
 [env.prod.triggers]
-crons = ["17 3 * * 0"]
+crons = ["17 * * * *"]

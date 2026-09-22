@@ -16,6 +16,7 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ACCOUNT_PURGE_TTL_MS } from "../src/db/workspace-cascade";
+import { sweepPendingDeletions } from "../src/jobs/pending-deletions";
 import { NOW, ORG_ID, seedTwoWorkspaces } from "./helpers";
 import { AdminUserAccess } from "../src/admin/users-access";
 import type { AdminUser } from "../src/admin/access";
@@ -108,5 +109,78 @@ describe("deleting an account", () => {
       .catch(() => undefined);
 
     expect((await readUser("usr_PURGE4"))?.purge_after).toBe(first?.purge_after);
+  });
+});
+
+describe("releasing the identity and the address", () => {
+  async function queued(id: string, email: string, purgeAfter: number): Promise<void> {
+    await seedDeletableUser(id, email);
+    await env.DB.prepare(
+      `UPDATE users SET deleted_at = ?, purge_after = ? WHERE id = ?`
+    )
+      .bind(NOW, purgeAfter, id)
+      .run();
+  }
+
+  it("skips entirely when Firebase is not configured", async () => {
+    // Not a partial run. Scrubbing the address here would free it in our
+    // database and leave it claimed in Firebase, so the person's next signup
+    // fails on EMAIL_EXISTS with nothing on our side explaining why. The two
+    // move together or neither does.
+    await queued("usr_PURGE5", "erin@example.com", NOW - 1);
+
+    const result = await sweepPendingDeletions(env.DB, env.FILES, NOW, {
+      dryRun: false,
+      identity: { config: null, kv: env.CACHE },
+    });
+
+    expect(result.identitySkipped).toBe(true);
+    expect(result.identitiesReleased).toBe(0);
+
+    const row = await readUser("usr_PURGE5");
+    expect(row?.email).toBe("erin@example.com");
+    expect(row?.firebase_uid).toBe("fb-usr_PURGE5");
+  });
+
+  it("leaves an account whose window has not passed", async () => {
+    await queued("usr_PURGE6", "frank@example.com", NOW + 60_000);
+
+    const result = await sweepPendingDeletions(env.DB, env.FILES, NOW, {
+      dryRun: false,
+      identity: { config: null, kv: env.CACHE },
+    });
+
+    // Not even skipped - there was nothing due to skip.
+    expect(result.identitySkipped).toBe(false);
+    expect(result.identitiesReleased).toBe(0);
+  });
+
+  it("counts what it would release on a dry run, and releases nothing", async () => {
+    await queued("usr_PURGE7", "grace@example.com", NOW - 1);
+
+    const result = await sweepPendingDeletions(env.DB, env.FILES, NOW, {
+      identity: { config: null, kv: env.CACHE },
+    });
+
+    expect(result.dryRun).toBe(true);
+    expect(await readUser("usr_PURGE7")).toMatchObject({ email: "grace@example.com" });
+  });
+
+  it("ignores an account that was never deleted", async () => {
+    // purge_after without deleted_at is not a state the product can reach, but
+    // the query guards on both rather than trusting that - the consequence of
+    // being wrong is deleting a live person's identity.
+    await seedDeletableUser("usr_PURGE8", "heidi@example.com");
+    await env.DB.prepare(`UPDATE users SET purge_after = ? WHERE id = ?`)
+      .bind(NOW - 1, "usr_PURGE8")
+      .run();
+
+    const result = await sweepPendingDeletions(env.DB, env.FILES, NOW, {
+      dryRun: false,
+      identity: { config: null, kv: env.CACHE },
+    });
+
+    expect(result.identitySkipped).toBe(false);
+    expect(result.identitiesReleased).toBe(0);
   });
 });

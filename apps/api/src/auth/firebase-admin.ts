@@ -319,6 +319,57 @@ export async function generatePasswordResetLink(
  * `auth/authenticate.ts` is what takes effect immediately. If this call fails,
  * the account is still refused by us — which is the point of doing both.
  */
+/**
+ * Remove a Firebase identity outright.
+ *
+ * Disabling is right for a suspension and wrong for a deletion. A disabled
+ * identity still owns its email address, so the person can neither sign in
+ * (disabled) nor sign up (`EMAIL_EXISTS`) - their own account closure locks
+ * them out of their own address permanently. Deletion frees it.
+ *
+ * Returns false rather than throwing when Firebase does not recognise the uid.
+ * The sweep may retry after a partial run, and "already gone" is the state it
+ * is trying to reach; treating it as failure would leave a row retrying
+ * forever against an identity nobody can delete twice.
+ */
+export async function deleteFirebaseUser(
+  config: FirebaseAdminConfig,
+  kv: KVNamespace,
+  firebaseUid: string,
+  now: number
+): Promise<boolean> {
+  const accessToken = await getAccessToken(config, kv, now);
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `${IDENTITY_TOOLKIT_BASE}/${encodeURIComponent(config.projectId)}/accounts:delete`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ localId: firebaseUid }),
+      }
+    );
+  } catch (cause) {
+    throw new ApiError("INTERNAL_ERROR", "The identity could not be deleted.", {
+      internalReason: `Identity Toolkit unreachable: ${String(cause)}`,
+    });
+  }
+
+  if (!response.ok) {
+    const detail = (await response.text().catch(() => "")).slice(0, 300);
+    if (detail.includes("USER_NOT_FOUND")) return false;
+    throw new ApiError("INTERNAL_ERROR", "The identity could not be deleted.", {
+      internalReason: `Identity Toolkit returned ${response.status}: ${detail}`,
+    });
+  }
+
+  return true;
+}
+
 export async function setFirebaseUserDisabled(
   config: FirebaseAdminConfig,
   kv: KVNamespace,

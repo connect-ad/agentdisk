@@ -210,6 +210,85 @@ Listed explicitly; nothing is deleted that is not named here.
 - **Mutation check** on the five newly-enforced limits, matching the discipline
   applied to the storage core — a deliberate break must turn the suite red.
 
+## Billing lifecycle
+
+Subscriptions are `mode: "subscription"` against a recurring monthly price, so
+they **auto-renew** until somebody cancels. Nothing sets `cancel_at_period_end`.
+There is therefore no passive "expiry" to manage: a subscription ends only
+because a card failed or because a person cancelled, and those two are treated
+differently below.
+
+| # | Decision | Why |
+|---|---|---|
+| D9 | **Over limit means read-only, never deletion** | Reads, downloads and *deletes* keep working; writes refuse with the exact figure to clear. Same shape as `past_due`, so there is one behaviour with several triggers. At $0.015/GB-month even 500 GB parked on Free is $7.50 — pennies against being a product that destroys files. |
+| D10 | **A downgrade cannot be refused** | Plan changes happen in Stripe's hosted portal; we learn afterwards from `customer.subscription.updated`. "Delete files before downgrading" is not available to us, so the over-limit state must be a supported condition rather than an error. |
+| D11 | **A failed payment and a cancellation are different events** | Both arrive as `customer.subscription.deleted`, and treating them alike is the mistake. Somebody whose bank declined a card has decided nothing. Somebody who cancelled has. |
+| D12 | **Failed payment: locked at day 0, deleted at day 14** | The owner's call. Guardrail below. |
+| D13 | **Voluntary cancellation: drops to Free, keeps files read-only** | They chose to leave and did nothing wrong. Deleting here would destroy the data of a customer who paid every invoice they were sent. |
+| D14 | **Dormancy, not downgrade, bounds the tail** | No sign-in and no API call for 12 months, two warnings, then the same 7-day deletion path. Different trigger, different justification, and it is the only case where an untouched over-limit account is genuinely abandoned. |
+
+### The failed-payment timeline
+
+| Day | State | Email |
+|---|---|---|
+| 0 | `past_due`. Writes refuse, reads and deletes continue. | **#1** the card failed, with the portal link |
+| 3 | still failing | **#2** warning, naming the deletion date |
+| 7 | Stripe gives up → `canceled` → account queued for deletion | **#3** "your data will be erased on the 14th" |
+| 14 | the existing `pending_deletions` sweep erases the bytes | **#4** deletion confirmed |
+
+Paying at **any point before day 14** restores everything. Nothing is destroyed
+until the final step, and that step is the deletion machinery already built
+rather than a second one.
+
+### The guardrail this depends on
+
+**Stripe's dunning schedule must be shortened to give up at 7 days.** Its
+default retries run roughly three weeks. Left alone, Stripe may successfully
+charge a card on day 14 for an account whose files were erased on day 14 — two
+systems disagreeing about whether somebody is a customer, with the irreversible
+half already done.
+
+This is a setting in the Stripe dashboard, in the same category as the Firebase
+password policy: enforced somewhere nothing in CI can read, and a change on one
+side that is not mirrored on the other silently breaks the design. It belongs
+in `CLAUDE.md` beside the password-policy rule, for the same reason.
+
+### Cancelling from the product
+
+The billing page gains a **Cancel subscription** control that deep-links into
+Stripe's portal cancellation flow, rather than a second in-product
+implementation. `Billing.jsx` already draws the line — cards, plan changes and
+cancellation live on the portal, because a plan-change UI here would be a second
+place for pricing to drift out of step with Stripe. A deep link satisfies the
+request without crossing it.
+
+Note that Stripe's portal defaults to **cancel at period end**, so somebody
+cancelling on the 3rd keeps their plan until the 30th and
+`customer.subscription.deleted` fires then. That is correct — they paid for the
+month — and the webhook already acts on the event rather than the click.
+
+## Email
+
+The product sends two emails today: a password reset and a test. Every message
+below is new, and all of them go through `lib/email.ts`.
+
+| Trigger | Contents |
+|---|---|
+| `invoice.upcoming` (Stripe fires ~7 days ahead) | What renews, when, for how much, and how to cancel |
+| `invoice.payment_failed` | The card failed, what stops working now, the portal link |
+| Day 3 and day 7 of `past_due` | Escalating, each naming the deletion date |
+| Workspace deleted | What went immediately, what goes in 7 days, no restore |
+| Account deleted | The same, plus subscription cancelled and invoice retention |
+| Bytes erased by the sweep | Confirmation that deletion has completed |
+
+**Dunning stays Stripe's job.** Its retry emails handle timing, localisation and
+deliverability, and a second message from us on a different schedule is how
+somebody ends up unsure who to pay. Ours say what happens *to the product* —
+what is locked, what is queued, when it goes — which is the half Stripe cannot
+know.
+
+`invoice.upcoming` is not currently handled by the webhook and must be added.
+
 ## Sequencing
 
 The plan may land this in stages; nothing here requires one commit. A safe
@@ -221,7 +300,10 @@ order, each independently shippable and verifiable:
 3. Scope collapse for egress and requests (D4), and the requests counter (D3).
 4. `usage_daily`, the sweep, and the dashboard charts.
 5. `past_due` (routes declaring `demand`).
-6. Removals.
+6. Billing lifecycle: the `past_due` timeline, `invoice.upcoming`, the six
+   emails, and the billing page (current package, invoices, plan chooser,
+   cancel deep-link).
+7. Removals.
 
 Step 1 before step 2 matters: shipping real limit values while nothing enforces
 them is inert, whereas shipping enforcement against the current `UNLIMITED`

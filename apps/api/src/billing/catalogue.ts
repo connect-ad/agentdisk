@@ -215,8 +215,14 @@ export function limitsForPlan(
 
 /** What the workspace the resolver was handed may actually do. */
 export type WorkspacePlanState = ClaimState & {
-  plan_override: string | null;
   org_plan: string;
+  /**
+   * The ACCOUNT's override. Workspaces no longer carry one: a per-workspace
+   * ceiling over an account-wide pool of usage meant the same bytes were
+   * measured against different limits depending on which workspace the write
+   * came through.
+   */
+  org_plan_override: string | null;
 };
 
 /**
@@ -235,5 +241,5 @@ export async function resolveWorkspaceLimits(
   if (isSandboxWorkspace(workspace)) return SANDBOX_LIMITS;
 
   const catalogue = await loadCatalogue(db, now);
-  return limitsForPlan(catalogue, workspace.plan_override, workspace.org_plan);
+  return limitsForPlan(catalogue, workspace.org_plan_override, workspace.org_plan);
 }

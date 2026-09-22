@@ -208,7 +208,7 @@ describe("resolveWorkspaceLimits — against the real seeded catalogue", () => {
   it("enforces what migration 0012 seeded, not what the code hardcodes", async () => {
     const limits = await resolveWorkspaceLimits(
       env.DB,
-      { ...claimed, plan_override: null, org_plan: "basic" },
+      { ...claimed, org_plan_override: null, org_plan: "basic" },
       NOW
     );
     expect(limits.storageBytes).toBe(5 * 1024 ** 3);
@@ -226,7 +226,7 @@ describe("resolveWorkspaceLimits — against the real seeded catalogue", () => {
       {
         claimed_at: null,
         claim_token_hash: "deadbeef",
-        plan_override: "team",
+        org_plan_override: "team",
         org_plan: "team",
       },
       NOW
@@ -237,7 +237,7 @@ describe("resolveWorkspaceLimits — against the real seeded catalogue", () => {
   it("does not widen a workspace whose plan column is nonsense", async () => {
     const limits = await resolveWorkspaceLimits(
       env.DB,
-      { ...claimed, plan_override: "platinum", org_plan: "platinum" },
+      { ...claimed, org_plan_override: "platinum", org_plan: "platinum" },
       NOW
     );
     expect(limits.storageBytes).toBe(PLAN_LIMITS.free.storageBytes);

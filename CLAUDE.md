@@ -264,7 +264,7 @@ were not touched. See `backlog/002`.
   `mcpTools` fixture and matches nothing in this product.
 - **An unclaimed sandbox is a claim state, never a plan.** `SANDBOX_LIMITS`
   exists in `lib/plans.ts` but is deliberately absent from `PLAN_NAMES`, because
-  that union gates `workspaces.plan_override` and `organizations.plan` — the
+  that union gates `organizations.plan_override` and `organizations.plan` — the
   columns a human can set. "sandbox" is derived fresh from `claimed_at` on every
   request; making it selectable would let somebody be *placed* on it, and the
   unclaimed sweep would then become eligible to delete their workspace.
@@ -296,9 +296,14 @@ were not touched. See `backlog/002`.
   the workspace copies survive because a person looking at one workspace wants
   to know what it holds. **Egress and requests stay per workspace**, because
   they are period counters resetting on the workspace's own `period_reset_at`
-  and there is no account-level period to reset them on. `plan_override` is
-  untouched — it answers "which limits", still a per-workspace question a admin
-  operator may need; these columns answer "how much is used", which is not.
+  and there is no account-level period to reset them on. **`plan_override` moved
+  up too, in migration 0018** — leaving it on the workspace kept the ceiling
+  per-workspace while the usage it was measured against was pooled, so the same
+  bytes were checked against Basic through one workspace and Free through its
+  sibling, and which limit applied depended on where the write came in. It is
+  `organizations.plan_override` now, the column is gone from `workspaces`, and
+  the console's quota bump is addressed by workspace but applied to the whole
+  account — the dialog says so, because it previously said the opposite.
   The type is the guard: `assertWithinQuota` takes `WorkspaceRow &
   AccountUsage`, so a caller holding only a workspace row cannot call it at
   all. **Every surface that divides usage by a plan limit had to move with it**

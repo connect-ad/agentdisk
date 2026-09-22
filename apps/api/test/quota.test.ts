@@ -33,7 +33,6 @@ function workspace(
     name: "Test",
     slug: "test",
     status: "active",
-    plan_override: null,
     storage_bytes_used: 0,
     file_count: 0,
     egress_bytes_period: 0,

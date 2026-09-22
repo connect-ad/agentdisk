@@ -46,6 +46,12 @@ export async function findApiKeyByHash(
  */
 export interface WorkspaceWithPlan extends WorkspaceRow, AccountUsage {
   org_plan: string;
+  /**
+   * The account's plan override, or null. On `organizations` since migration
+   * 0018 - it was on the workspace, which made the ceiling per-workspace while
+   * the usage it is compared against was account-wide.
+   */
+  org_plan_override: string | null;
 }
 
 export async function findWorkspaceById(
@@ -56,6 +62,7 @@ export async function findWorkspaceById(
     .prepare(
       `SELECT w.*,
               o.plan               AS org_plan,
+              o.plan_override      AS org_plan_override,
               o.storage_bytes_used AS org_storage_bytes_used,
               o.file_count         AS org_file_count
          FROM workspaces w

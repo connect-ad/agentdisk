@@ -60,7 +60,7 @@ export async function whoami(ctx: AuthContext): Promise<Response> {
     workspace: {
       id: workspace.id,
       name: workspace.name,
-      plan: resolvePlan(workspace.plan_override, workspace.org_plan),
+      plan: resolvePlan(workspace.org_plan_override, workspace.org_plan),
     },
     usage: {
       /**

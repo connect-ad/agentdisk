@@ -542,13 +542,36 @@ describe("GET /v1/admin/workspaces", () => {
     expect(detail.workspace.planOverride).toBe("basic");
   });
 
-  it("leaves planOverride null for a workspace on its organization's plan", async () => {
-    // null and "the same value as the org" have to stay distinguishable, or the
-    // detail screen cannot say which of the two it is looking at.
-    const detail = (await (
+  it("shows the same override on every workspace of the account", async () => {
+    // This used to assert null here, on the grounds that only WORKSPACE_A had
+    // been bumped. Since migration 0018 the override lives on the
+    // organization, so a bump applied through one workspace is visible from
+    // its sibling - which is the whole point: the ceiling and the usage it is
+    // compared against are now the same unit.
+    const a = (await (
+      await call("GET", `/v1/admin/workspaces/${WORKSPACE_A}`, support)
+    ).json()) as { workspace: { plan: string; planOverride: string | null } };
+    const b = (await (
       await call("GET", `/v1/admin/workspaces/${WORKSPACE_B}`, support)
     ).json()) as { workspace: { plan: string; planOverride: string | null } };
-    expect(detail.workspace.planOverride).toBeNull();
-    expect(detail.workspace.plan).toBe("free");
+
+    expect(b.workspace.planOverride).toBe(a.workspace.planOverride);
+    expect(b.workspace.plan).toBe(a.workspace.plan);
+  });
+
+  it("keeps null distinguishable from an override equal to the plan", async () => {
+    // Still matters, and is the reason planOverride is reported beside plan
+    // rather than folded into it: "on the account's plan" and "explicitly
+    // pinned to the plan it is already on" are different states, and only one
+    // of them survives the subscription changing.
+    await call("PATCH", `/v1/admin/workspaces/${WORKSPACE_A}/plan-override`, admin, {
+      planId: null,
+      reason: "a reason long enough to be one",
+    });
+
+    const cleared = (await (
+      await call("GET", `/v1/admin/workspaces/${WORKSPACE_A}`, support)
+    ).json()) as { workspace: { plan: string; planOverride: string | null } };
+    expect(cleared.workspace.planOverride).toBeNull();
   });
 });

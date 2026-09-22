@@ -342,16 +342,21 @@ export function WorkspaceDetail({ workspaceId, role, onNavigate, onToast }) {
             </Fact>
             {/*
               The resolved plan, and whether it was resolved from an override.
-              Two facts, not one: "on Pro" and "granted Pro on this workspace
-              alone" are different situations, and the second is the one an
-              operator is checking after using the dialog below.
+              Two facts, not one: "on Pro" and "granted Pro by an override" are
+              different situations, and the second is the one an operator is
+              checking after using the dialog below.
+
+              The override is the ACCOUNT's, not this workspace's. It used to
+              be per-workspace and the label said so; saying that now would be
+              actively wrong, because the bump moves every workspace on the
+              bill.
             */}
             <Fact name="Plan">
               {planLabel(workspace.plan)}
               {workspace.planOverride != null && (
                 <span style={{ color: 'var(--tx2)' }}>
                   {' '}
-                  · override on this workspace, not the organization&apos;s plan
+                  · override on the whole account, not the subscription&apos;s plan
                 </span>
               )}
             </Fact>
@@ -628,8 +633,11 @@ function PlanOverrideDialog({ open, workspace, plans, busy, error, onCancel, onS
       open={open}
       title="Adjust plan override"
       description={
-        'An override gives this one workspace another plan’s entitlements, whatever the ' +
-        'organization is on. Clearing it returns the workspace to the organization’s plan.'
+        'An override gives this account another plan’s entitlements, whatever its ' +
+        'subscription is on. It applies to EVERY workspace on the bill, not just this ' +
+        'one — storage and file quota are pooled across the account, so a ceiling that ' +
+        'applied to one workspace would be measured against usage from all of them. ' +
+        'Clearing it returns the account to its subscription’s plan.'
       }
       onClose={onCancel}
       onSubmit={() => onSubmit(planId === '' ? null : planId, reason)}
@@ -647,7 +655,7 @@ function PlanOverrideDialog({ open, workspace, plans, busy, error, onCancel, onS
         onChange={event => setPlanId(event.target.value)}
         style={{ ...input, marginBottom: '14px' }}
       >
-        <option value="">No override — use the organization&apos;s plan</option>
+        <option value="">No override — use the subscription&apos;s plan</option>
         {plans.map(plan => (
           <option key={plan.id} value={plan.id}>
             {plan.name} ({plan.id})

@@ -550,7 +550,7 @@ async function claimByAttaching(
   // deleted from the only other place they existed.
   assertWithinQuota(
     target,
-    limitsFor(target.plan_override, target.org_plan),
+    limitsFor(target.org_plan_override, target.org_plan),
     { bytes: totalBytes, files: rows.length },
     now,
     billing?.billingStatus ?? "active"

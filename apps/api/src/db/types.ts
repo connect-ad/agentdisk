@@ -83,7 +83,6 @@ export interface WorkspaceRow {
    */
   slug: string | null;
   status: "active" | "suspended" | "deleted";
-  plan_override: string | null;
   storage_bytes_used: number;
   file_count: number;
   egress_bytes_period: number;

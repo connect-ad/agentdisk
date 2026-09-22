@@ -161,8 +161,8 @@ export class AdminScopedAccess extends AuditedAdminAccess {
     binds.push(limit);
 
     const sql = `SELECT w.id, w.name, w.status, w.org_id AS orgId, o.name AS orgName,
-                        COALESCE(w.plan_override, o.plan) AS plan,
-                        w.plan_override AS planOverride,
+                        COALESCE(o.plan_override, o.plan) AS plan,
+                        o.plan_override AS planOverride,
                         o.billing_status AS billingStatus,
                         w.storage_bytes_used AS storageBytesUsed, w.file_count AS fileCount,
                         w.created_at AS createdAt
@@ -180,8 +180,8 @@ export class AdminScopedAccess extends AuditedAdminAccess {
     const row = await this.db
       .prepare(
         `SELECT w.id, w.name, w.status, w.org_id AS orgId, o.name AS orgName,
-                COALESCE(w.plan_override, o.plan) AS plan,
-                w.plan_override AS planOverride,
+                COALESCE(o.plan_override, o.plan) AS plan,
+                o.plan_override AS planOverride,
                 o.billing_status AS billingStatus,
                 w.storage_bytes_used AS storageBytesUsed, w.file_count AS fileCount,
                 w.created_at AS createdAt
@@ -418,13 +418,25 @@ export class AdminScopedAccess extends AuditedAdminAccess {
   /* ------------------------ console actions (32 PART 6) ------------------- */
 
   /**
-   * Set or clear a workspace's plan override - the "quota bump" action.
+   * Set or clear the plan override - the "quota bump" action.
+   *
+   * **Addressed by workspace, applied to the ACCOUNT.** The console reaches
+   * this from a workspace's page, because that is where somebody is standing
+   * when they decide a customer needs more room, but the override lives on
+   * `organizations` since migration 0018 and every workspace on that bill
+   * moves with it. The alternative - a per-workspace ceiling - is what 0018
+   * removed: usage is pooled across the account, so a per-workspace limit
+   * meant the same bytes were measured against different ceilings depending on
+   * which workspace the write arrived through.
+   *
+   * Both the workspace-scoped audit row and the fleet row therefore name the
+   * organization as the target, so the log cannot be read as "workspace A was
+   * bumped" when workspace B's limits moved too.
    *
    * The design draws this ungated, which is a real privilege escalation as
-   * drawn: `workspaces.plan_override` is what `resolveWorkspaceLimits` reads
-   * first, so it hands somebody another plan's entitlements outright. admin+.
+   * drawn: the override hands somebody another plan's entitlements outright.
    *
-   * Clearing it (null) returns the workspace to its organization's plan, which
+   * Clearing it (null) returns the account to its subscription's plan, which
    * is why null is a legitimate value here rather than a missing argument.
    */
   async setPlanOverride(
@@ -445,23 +457,33 @@ export class AdminScopedAccess extends AuditedAdminAccess {
       if (plan === null) throw new ApiError("VALIDATION_ERROR", "No such plan.");
     }
 
+    // Through the workspace to its account, rather than taking an org id as an
+    // argument: the caller can only reach the account it has already named a
+    // workspace of, and a subquery cannot be pointed at a different tenant.
     const result = await this.db
-      .prepare(`UPDATE workspaces SET plan_override = ?, updated_at = ? WHERE id = ?`)
+      .prepare(
+        `UPDATE organizations
+            SET plan_override = ?, updated_at = ?
+          WHERE id = (SELECT org_id FROM workspaces WHERE id = ?)`
+      )
       .bind(planId, this.now, workspaceId)
       .run();
 
     const changed = (result.meta.changes ?? 0) > 0;
     if (changed) {
-      await this.record(workspaceId, "admin.plan_override", { planId });
+      // Still written against the workspace, because that is the customer-
+      // visible activity log somebody will look at - but the metadata says
+      // plainly that the whole account moved.
+      await this.record(workspaceId, "admin.plan_override", { planId, scope: "account" });
     }
     await this.recordFleet({
-      action: "workspace.plan_override",
+      action: "account.plan_override",
       workspaceId: changed ? workspaceId : null,
-      targetType: "workspace",
+      targetType: "organization",
       targetId: workspaceId,
       reason,
       result: changed ? "success" : "denied",
-      metadata: { planId },
+      metadata: { planId, appliesTo: "every workspace on this account" },
     });
     return changed;
   }
@@ -669,8 +691,8 @@ export class AdminScopedAccess extends AuditedAdminAccess {
     const rows = await this.db
       .prepare(
         `SELECT w.id, w.name, w.status, w.org_id AS orgId, o.name AS orgName,
-                COALESCE(w.plan_override, o.plan) AS plan,
-                w.plan_override AS planOverride,
+                COALESCE(o.plan_override, o.plan) AS plan,
+                o.plan_override AS planOverride,
                 o.billing_status AS billingStatus,
                 w.storage_bytes_used AS storageBytesUsed, w.file_count AS fileCount,
                 o.storage_bytes_used AS orgStorageBytesUsed,
@@ -678,7 +700,7 @@ export class AdminScopedAccess extends AuditedAdminAccess {
                 p.storage_bytes AS planStorageBytes
            FROM workspaces w
            JOIN organizations o ON o.id = w.org_id
-           LEFT JOIN plans p ON p.id = COALESCE(w.plan_override, o.plan)
+           LEFT JOIN plans p ON p.id = COALESCE(o.plan_override, o.plan)
           WHERE w.status != 'deleted'
             AND (
               o.billing_status != 'active'

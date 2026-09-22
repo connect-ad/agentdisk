@@ -974,6 +974,13 @@
   color:var(--ink);text-transform:capitalize}
 .plan__note{margin:0;font-size:var(--t-12-5);line-height:var(--lh-normal);
   color:var(--ink-2)}
+/* Everywhere else the plan stands on its own as a label rather than as a name
+   in a sentence, and it is drawn in caps — the Layer 1 strip pill already was
+   (`.shell__stripplan`), so the Usage badge and the stat tiles arriving in the
+   raw lowercase identifier read as a different field. Done here rather than
+   with `toUpperCase()` so the accessible name stays the value the API returned;
+   the surfaces this lands on already carry caps tracking. */
+.planname{text-transform:uppercase}
 .plan__rows{margin:0;display:flex;flex-direction:column;gap:var(--s-5)}
 .plan__rows dt{font-size:var(--t-12);color:var(--ink-3)}
 .plan__rows dd{margin:var(--s-2) 0 0;font-size:var(--t-13);color:var(--ink);

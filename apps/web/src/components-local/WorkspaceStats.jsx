@@ -245,7 +245,7 @@ export default function WorkspaceStats() {
               </div>
             ) : (
               <div className="wstat__meterfoot wstat__meterfoot--bare">
-                <span>{plan ? `on ${plan}` : ''}</span>
+                <span>{plan ? <>on <span className="planname">{plan}</span></> : ''}</span>
               </div>
             )}
           </div>

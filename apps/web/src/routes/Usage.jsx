@@ -96,7 +96,7 @@ export default function Usage() {
       <PageHead
         title="Usage"
         subtitle={resetDays === null ? undefined : `Resets in ${resetDays} day${resetDays === 1 ? '' : 's'}.`}
-        meta={<Badge tone="accent">{plan}</Badge>}
+        meta={<Badge tone="accent" className="planname">{plan}</Badge>}
       />
 
       {atLimit.length > 0 ? (
@@ -107,7 +107,12 @@ export default function Usage() {
 
       <Panel
         title="Plan"
-        subtitle={resetDays === null ? plan : `${plan} — resets in ${resetDays} day${resetDays === 1 ? '' : 's'}`}
+        subtitle={
+          <>
+            <span className="planname">{plan}</span>
+            {resetDays === null ? null : ` — resets in ${resetDays} day${resetDays === 1 ? '' : 's'}`}
+          </>
+        }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s-7)' }}>
           {metrics.map(m => {

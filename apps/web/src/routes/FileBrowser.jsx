@@ -7,6 +7,7 @@ import {
 import { Drawer } from '../components-local/Drawer.jsx';
 import ShareModal from '../components-local/ShareModal.jsx';
 import { useResource } from '../lib/useResource.js';
+import { fetchFiles } from '../lib/resources.js';
 import { useWorkspace } from '../lib/workspace.jsx';
 import { useWorkspaceUsage } from '../lib/usage.jsx';
 import { uploadFile } from '../lib/upload.js';
@@ -69,11 +70,11 @@ function toRow(file) {
   };
 }
 
-const loadFiles = (api, workspaceId) => api.listFiles(workspaceId);
+const loadFiles = (api, workspaceId) => fetchFiles(api, workspaceId);
 
 export default function FileBrowser() {
   const { ws } = useParams();
-  const { status, data, error, reload } = useResource(loadFiles);
+  const { status, data, error, reload } = useResource(loadFiles, [], 'files');
   const loading = status === 'loading';
   const failed = status === 'failed';
   const files = useMemo(() => (data?.files ?? []).map(toRow), [data]);

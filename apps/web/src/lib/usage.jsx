@@ -26,19 +26,20 @@
 
 import React, { createContext, useContext } from 'react';
 import { useResource } from './useResource.js';
+import { fetchAgents, fetchWhoami } from './resources.js';
 
 const UsageContext = createContext(null);
 
 const loadUsage = async (api, workspaceId) => {
   const [me, agents] = await Promise.all([
-    api.whoami(workspaceId),
-    api.listAgents(workspaceId),
+    fetchWhoami(api, workspaceId),
+    fetchAgents(api, workspaceId),
   ]);
   return { me, agents: agents.agents ?? [] };
 };
 
 export function WorkspaceUsageProvider({ children }) {
-  const resource = useResource(loadUsage);
+  const resource = useResource(loadUsage, [], 'usage');
   return <UsageContext.Provider value={resource}>{children}</UsageContext.Provider>;
 }
 

@@ -4,6 +4,7 @@ import {
   Checkbox, Modal, ConfirmModal, EmptyState, ApiKeyDisplay, Alert, Toast
 } from '../components/index.js';
 import { useResource } from '../lib/useResource.js';
+import { fetchAgents, fetchKeys } from '../lib/resources.js';
 import StatePill from '../components-local/StatePill.jsx';
 import { useWorkspace } from '../lib/workspace.jsx';
 
@@ -21,10 +22,12 @@ import { useWorkspace } from '../lib/workspace.jsx';
 
 const loadKeys = async (api, workspaceId) => {
   // Agents are needed for the create form's picker, so both come together
-  // rather than making the modal fetch on open and stutter.
+  // rather than making the modal fetch on open and stutter. Both go through
+  // `resources.js`, so arriving here from the MCP tab — which has just fetched
+  // the same two lists — costs no request at all.
   const [keys, agents] = await Promise.all([
-    api.listKeys(workspaceId),
-    api.listAgents(workspaceId).catch(() => ({ agents: [] }))
+    fetchKeys(api, workspaceId),
+    fetchAgents(api, workspaceId).catch(() => ({ agents: [] }))
   ]);
   return { keys: keys.keys ?? [], agents: agents.agents ?? [] };
 };
@@ -69,7 +72,7 @@ function keyStateView(r) {
 
 export default function ApiKeys() {
   const { api, workspaceId, canWrite, role } = useWorkspace();
-  const { status, data, error, reload } = useResource(loadKeys);
+  const { status, data, error, reload } = useResource(loadKeys, [], 'keys');
 
   const [dialog, setDialog] = useState(null); // 'create' | 'reveal' | 'rotated' | 'view' | 'enable' | 'disable' | 'delete'
   const [target, setTarget] = useState(null);

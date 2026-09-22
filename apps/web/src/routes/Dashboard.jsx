@@ -5,6 +5,7 @@ import {
   EmptyState, CodeBlock, Alert
 } from '../components/index.js';
 import { useResource } from '../lib/useResource.js';
+import { fetchActivity, fetchAgents, fetchFiles, fetchKeys, fetchWhoami } from '../lib/resources.js';
 import { useWorkspace } from '../lib/workspace.jsx';
 
 /**
@@ -100,11 +101,11 @@ function relativeTime(iso) {
 
 const loadOverview = async (api, workspaceId) => {
   const [me, files, agents, keys, activity] = await Promise.all([
-    api.whoami(workspaceId),
-    api.listFiles(workspaceId, { limit: '5' }),
-    api.listAgents(workspaceId),
-    api.listKeys(workspaceId),
-    api.listActivity(workspaceId)
+    fetchWhoami(api, workspaceId),
+    fetchFiles(api, workspaceId, { limit: '5' }),
+    fetchAgents(api, workspaceId),
+    fetchKeys(api, workspaceId),
+    fetchActivity(api, workspaceId)
   ]);
   return {
     me,
@@ -119,7 +120,7 @@ export default function Dashboard() {
   const { ws } = useParams();
   const { canWrite, workspaceId } = useWorkspace();
   const root = `/w/${ws}`;
-  const { status, data, error, reload } = useResource(loadOverview);
+  const { status, data, error, reload } = useResource(loadOverview, [], 'overview');
 
   const loading = status === 'loading';
   const usage = data?.me?.usage ?? {};

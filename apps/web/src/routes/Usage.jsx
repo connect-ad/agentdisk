@@ -1,6 +1,7 @@
 import React from 'react';
 import { PageHead, Panel, Meter, Button, Icon, Badge, Alert, EmptyState } from '../components/index.js';
 import { useResource } from '../lib/useResource.js';
+import { fetchWhoami } from '../lib/resources.js';
 
 /**
  * 8.19 Usage — MVP-0 (numbers) / MVP-1 (time-series charts).
@@ -14,7 +15,7 @@ import { useResource } from '../lib/useResource.js';
  * nothing.
  */
 
-const loadUsage = (api, workspaceId) => api.whoami(workspaceId);
+const loadUsage = (api, workspaceId) => fetchWhoami(api, workspaceId);
 
 /** Bytes to something a person reads, at the precision the size deserves. */
 function formatBytes(bytes) {
@@ -40,7 +41,7 @@ function daysUntil(iso) {
 }
 
 export default function Usage() {
-  const { status, data, error, reload } = useResource(loadUsage);
+  const { status, data, error, reload } = useResource(loadUsage, [], 'usage-page');
 
   if (status === 'loading') {
     return (

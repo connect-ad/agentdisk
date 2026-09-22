@@ -16,6 +16,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: false,
+    // Empties the resource cache between tests. See test/setup.js.
+    setupFiles: ['./test/setup.js'],
     // `.js` as well as `.jsx`: the build-tooling tests (the security-header
     // policy) render no components and would be misleading with a JSX
     // extension. A pattern that silently collects nothing is how a test file

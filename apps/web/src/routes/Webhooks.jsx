@@ -45,7 +45,7 @@ function relativeTime(iso) {
 
 export default function Webhooks() {
   const { api, workspaceId, canWrite } = useWorkspace();
-  const { status, data, error, reload } = useResource(loadWebhooks);
+  const { status, data, error, reload } = useResource(loadWebhooks, [], 'webhooks');
 
   const [dialog, setDialog] = useState(null); // 'create' | 'reveal' | 'delete'
   const [target, setTarget] = useState(null);

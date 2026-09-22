@@ -4,6 +4,7 @@ import {
   EmptyState, Skeleton, CodeBlock
 } from '../components/index.js';
 import { useResource } from '../lib/useResource.js';
+import { fetchActivity } from '../lib/resources.js';
 
 /**
  * 8.20 Activity / Audit Log — MVP-1
@@ -16,7 +17,7 @@ import { useResource } from '../lib/useResource.js';
  * States: loading | populated | empty-filtered | empty-none
  */
 
-const loadActivity = (api, workspaceId) => api.listActivity(workspaceId, 200);
+const loadActivity = (api, workspaceId) => fetchActivity(api, workspaceId, 200);
 
 function relativeTime(iso) {
   const then = new Date(iso).getTime();
@@ -39,7 +40,7 @@ function describeResource(event) {
 }
 
 export default function ActivityLog() {
-  const { status, data, error, reload } = useResource(loadActivity);
+  const { status, data, error, reload } = useResource(loadActivity, [], 'activity');
   const loading = status === 'loading';
 
   const [actor, setActor] = useState('all');

@@ -17,6 +17,7 @@
  */
 
 import { beginRequest, endRequest } from './pending.js';
+import { clearCache } from './resourceCache.js';
 
 /**
  * Exported so a screen that *names* the API — the auth pages print the REST
@@ -141,6 +142,15 @@ export function createApiClient(getToken) {
       });
 
       if (!response.ok) throw await toError(response);
+
+      // Any write invalidates every cached read, here rather than at the call
+      // site. A per-mutation invalidation list is a list somebody eventually
+      // forgets to extend, and the symptom is the worst one a cache has: the
+      // product showing somebody their own change not having happened. This
+      // cannot be forgotten, because there is no way to write through this
+      // client without going past it.
+      if (method !== 'GET') clearCache();
+
       if (response.status === 204) return null;
       return response.json();
     } finally {

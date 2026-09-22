@@ -5,6 +5,7 @@ import {
   McpToolList, ActivityRow, EmptyState
 } from '../components/index.js';
 import { useResource } from '../lib/useResource.js';
+import { fetchActivity, fetchAgents, fetchKeys } from '../lib/resources.js';
 import { useWorkspace } from '../lib/workspace.jsx';
 
 /**
@@ -65,9 +66,9 @@ const ACTIVE_WINDOW_MS = 15 * 60 * 1000;
 
 const loadMcp = async (api, workspaceId) => {
   const [keys, agents, activity] = await Promise.all([
-    api.listKeys(workspaceId),
-    api.listAgents(workspaceId),
-    api.listActivity(workspaceId, 200)
+    fetchKeys(api, workspaceId),
+    fetchAgents(api, workspaceId),
+    fetchActivity(api, workspaceId, 200)
   ]);
   return {
     keys: keys.keys ?? [],
@@ -92,7 +93,7 @@ export default function McpConnection() {
   const [keyId, setKeyId] = useState(null);
   const [secret, setSecret] = useState(null);
   const [revealError, setRevealError] = useState(null);
-  const { status, data, error, reload } = useResource(loadMcp);
+  const { status, data, error, reload } = useResource(loadMcp, [], 'mcp');
 
   const loading = status === 'loading';
   const keys = data?.keys ?? [];

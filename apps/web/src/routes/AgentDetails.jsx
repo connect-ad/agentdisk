@@ -5,6 +5,7 @@ import {
   ApiKeyDisplay, ActivityRow, ConfirmModal, Modal, Input, EmptyState, Toast, StatTile
 } from '../components/index.js';
 import { useResource } from '../lib/useResource.js';
+import { fetchActivity, fetchKeys } from '../lib/resources.js';
 import { useWorkspace } from '../lib/workspace.jsx';
 
 /**
@@ -51,8 +52,8 @@ const OVERVIEW_EVENTS = 6;
 const loadAgent = async (api, workspaceId, agentId) => {
   const [agent, keys, activity] = await Promise.allSettled([
     api.getAgent(workspaceId, agentId),
-    api.listKeys(workspaceId),
-    api.listActivity(workspaceId, ACTIVITY_WINDOW)
+    fetchKeys(api, workspaceId),
+    fetchActivity(api, workspaceId, ACTIVITY_WINDOW)
   ]);
 
   if (agent.status === 'rejected') throw agent.reason;
@@ -122,7 +123,7 @@ export default function AgentDetails() {
   const { api, workspaceId, canWrite } = useWorkspace();
 
   const load = useCallback((client, id) => loadAgent(client, id, agentId), [agentId]);
-  const { status, data, error, reload } = useResource(load, [agentId]);
+  const { status, data, error, reload } = useResource(load, [agentId], `agent:${agentId}`);
 
   const [tab, setTab] = useState('overview');
   const [confirmDisable, setConfirmDisable] = useState(false);

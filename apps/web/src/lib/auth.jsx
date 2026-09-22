@@ -13,7 +13,7 @@
  * one message, matching what the API does for a bad API key.
  */
 
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -34,6 +34,7 @@ import {
   EmailAuthProvider
 } from 'firebase/auth';
 import { auth, firebaseConfigured, googleProvider, githubProvider } from './firebase.js';
+import { clearCache } from './resourceCache.js';
 import { POLICY_SENTENCE } from './password.js';
 
 const AuthContext = createContext(null);
@@ -108,6 +109,8 @@ export function AuthProvider({ children }) {
   // nothing React can see. This counter is what says 'the object you are
   // already holding is different now'.
   const [profileVersion, setProfileVersion] = useState(0);
+  /** The uid the cache currently belongs to. See the listener below. */
+  const uidRef = useRef(null);
 
   useEffect(() => {
     if (!auth) return undefined;
@@ -115,6 +118,17 @@ export function AuthProvider({ children }) {
     // SDK's silent hourly token refresh, so anything reading the token stays
     // current instead of holding one that quietly expired.
     return onIdTokenChanged(auth, next => {
+      // Whose data is cached, not whether a token was refreshed. This fires on
+      // the SDK's silent hourly renewal too, and throwing away every cached
+      // list once an hour for the same person would be pointless refetching —
+      // but a *different* uid, or none, means the cache holds somebody else's
+      // workspace. Sign out on a shared machine is the case that matters: the
+      // next person at the keyboard must not find the last one's key names and
+      // agents still in memory.
+      if (next?.uid !== uidRef.current) {
+        uidRef.current = next?.uid ?? null;
+        clearCache();
+      }
       setUser(next);
       setLoading(false);
     });

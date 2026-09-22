@@ -5,6 +5,7 @@ import {
   Modal, ConfirmModal, EmptyState, Alert, Toast
 } from '../components/index.js';
 import { useResource } from '../lib/useResource.js';
+import { fetchAgents, fetchKeys } from '../lib/resources.js';
 import { useWorkspace } from '../lib/workspace.jsx';
 
 /**
@@ -27,8 +28,8 @@ const STATUS = {
  */
 const loadAgents = async (api, workspaceId) => {
   const [agents, keys] = await Promise.all([
-    api.listAgents(workspaceId),
-    api.listKeys(workspaceId).catch(() => ({ keys: [] }))
+    fetchAgents(api, workspaceId),
+    fetchKeys(api, workspaceId).catch(() => ({ keys: [] }))
   ]);
   return { agents: agents.agents ?? [], keys: keys.keys ?? [] };
 };
@@ -48,7 +49,7 @@ export default function Agents() {
   const { ws } = useParams();
   const navigate = useNavigate();
   const { api, workspaceId, canWrite } = useWorkspace();
-  const { status, data, error, reload } = useResource(loadAgents);
+  const { status, data, error, reload } = useResource(loadAgents, [], 'agents');
 
   const [query, setQuery] = useState('');
   const [dialog, setDialog] = useState(null); // 'create' | 'delete'

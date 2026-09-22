@@ -36,7 +36,7 @@ function formatJoined(iso) {
 
 export function MembersTab() {
   const { api, workspaceId, role: myRole } = useWorkspace();
-  const { status, data, error, reload } = useResource(loadMembers);
+  const { status, data, error, reload } = useResource(loadMembers, [], 'members');
 
   const [dialog, setDialog] = useState(null);
   const [target, setTarget] = useState(null);
@@ -311,7 +311,7 @@ export function PrivacyTab() {
   // Computed, never passed in. Settings.jsx used to hand this a literal 0, so
   // the "only owner" block could not render and the button it gates could not
   // disable -- a guard that was permanently off while looking present.
-  const { data } = useResource(loadSoleOwnership);
+  const { data } = useResource(loadSoleOwnership, [], 'sole-ownership');
   const soleOwnerOf = data?.soleOwnerOf ?? 0;
 
   const columns = [
@@ -429,7 +429,7 @@ const STATUS_LABEL = { active: 'Active', past_due: 'Payment overdue', canceled: 
 
 export function BillingTab() {
   const { api, workspaceId, role, workspaceSlug } = useWorkspace();
-  const { status, data, error, reload } = useResource(loadBilling);
+  const { status, data, error, reload } = useResource(loadBilling, [], 'billing');
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState(null);
 

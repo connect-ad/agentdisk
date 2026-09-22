@@ -329,14 +329,14 @@ limit.** Neither is deleted for the payment event itself.
 **Supersedes D14's trigger, and replaces D12's timeline.**
 
 An account is deleted when it is **both over its limit and untouched** — no
-sign-in and no API call — for **14 days**, after two warnings, through the
+sign-in and no API call — for **30 days**, after two warnings, through the
 existing seven-day path.
 
 Payment status is not part of the test. An account that cancels and stays
 *under* the Free limits is never deleted at all: it costs essentially nothing
 and is a future customer.
 
-**Fourteen days is short, and a staff extension is what makes it safe.** The
+**Thirty days, and a staff extension on top of it.** The
 console can grant an account more time, per account, on request — a support
 engineer hearing "I was away, my card expired" adds a fortnight rather than
 explaining that the data is gone. That converts the one case the short window
@@ -348,11 +348,15 @@ an audited staff action and read by the dormancy sweep. It is not a plan field
 and not something a customer can set; the point is that a person asked and
 somebody agreed.
 
-Without that valve the arithmetic argues for ninety days — a worst-case
-abandoned 500 GB account costs $7.50 a month, so the difference between two
-weeks and three months is about twenty dollars for the largest abandonment the
-product will ever see. With the valve, fourteen is defensible: the cost lands
-where it should, and the exception has a handle.
+Thirty rather than fourteen for a reason that costs nothing: `routes/Legal.jsx`
+already promises a purge "within roughly 30 days". Choosing thirty makes the
+existing legal copy correct; choosing fourteen would mean rewriting our own
+policy to something more aggressive than we published, and defending it. The
+storage difference is about four dollars for the largest abandonment the
+product will ever see, and fourteen days does not survive a holiday — the
+clock runs from last activity, so somebody who cancels and goes away for three
+weeks is deleted while they are gone, when the staff extension cannot help them
+because they are not there to ask.
 
 ### R3a — Three retention windows, deliberately different
 
@@ -365,7 +369,7 @@ died half-way, not a recycle bin.
 |---|---|
 | Delete a file | immediately |
 | Delete a workspace or account | after 7 days |
-| Dormant and over limit | after 14 days, then the 7-day path |
+| Dormant and over limit | after 30 days, then the 7-day path |
 
 The asymmetry is correct and was never written down. Deleting one file is small,
 targeted and deliberate — the person meant that file. Deleting a workspace is

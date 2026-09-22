@@ -108,6 +108,11 @@ function keyStatus(
   // the token they are the same fact: it does not work. `disabledBy` below
   // says which, since only one of them is theirs to undo here.
   if (row.disabled_at !== null) return "disabled";
+  // The agent's switch cascades onto the rows (migration 0025), so this is
+  // belt and braces rather than the mechanism. It still earns its place: if a
+  // cascade ever half-finished, authentication would refuse the key while
+  // this said "active", which is the disagreement between the list and the
+  // authenticator that `blocked` was introduced to end.
   if (row.agent_id !== null && agentStatus !== "active") return "disabled";
   return "active";
 }
@@ -129,7 +134,7 @@ function disabledBy(
   row: ApiKeyRow,
   agentStatus: string | undefined
 ): "key" | "agent" | null {
-  if (row.disabled_at !== null) return "key";
+  if (row.disabled_at !== null) return row.disabled_reason ?? "key";
   if (row.agent_id !== null && agentStatus !== "active") return "agent";
   return null;
 }
@@ -230,6 +235,7 @@ export async function createKey(ctx: AuthContext, request: Request): Promise<Res
     key_last_four: generated.keyLastFour,
     key_hash: generated.keyHash,
     disabled_at: null,
+    disabled_reason: null,
     // Kept, sealed, bound to this row's id, so the owner can view it again
     // (migration 0022). Null when the deployment has no secret to seal under -
     // then this key is shown once below and never again, as every key was.
@@ -341,6 +347,16 @@ export async function patchKey(
   if (existing.expires_at !== null && existing.expires_at <= ctx.now) {
     throw new ApiError("CONFLICT", "That key has expired. Create a new one rather than enabling this.");
   }
+  // A key whose agent is off cannot be switched on from here. Rotating it
+  // would hand back a new secret that authentication refuses on sight, which
+  // is a success message for something that did not work.
+  const agentStatus = await agentStatusOf(ctx, existing);
+  if (existing.agent_id !== null && agentStatus !== "active") {
+    throw new ApiError(
+      "CONFLICT",
+      "That key's agent is disabled. Enable the agent, which switches its keys back on."
+    );
+  }
   if (existing.disabled_at === null) {
     // Already on. Nothing to rotate - and rotating anyway would silently break
     // whatever is using the key right now, on a request that asked for no
@@ -364,7 +380,7 @@ export async function patchKey(
 
   const row = await ctx.db.apiKeys.getById(id);
   return json({
-    key: toResource(row ?? existing, ctx.now, await agentStatusOf(ctx, existing)),
+    key: toResource(row ?? existing, ctx.now, agentStatus),
     secret: generated.token,
     secretRetrievable: ciphertext !== null,
     // Said plainly, because the caller's old token is now dead and anything

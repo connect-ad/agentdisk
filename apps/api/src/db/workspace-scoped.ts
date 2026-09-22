@@ -649,8 +649,8 @@ export class WorkspaceScopedApiKeys extends WorkspaceScoped {
         `INSERT INTO api_keys
            (id, workspace_id, agent_id, name, key_prefix, key_last_four, key_hash,
             key_ciphertext, scopes, created_by_user_id, parent_key_id, expires_at,
-            last_used_at, disabled_at, revoked_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?)`
+            last_used_at, disabled_at, disabled_reason, revoked_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?)`
       )
       .bind(
         row.id, this.workspaceId, row.agent_id, row.name, row.key_prefix,
@@ -675,12 +675,43 @@ export class WorkspaceScopedApiKeys extends WorkspaceScoped {
   async disable(id: string, now: number): Promise<boolean> {
     const result = await this.db
       .prepare(
-        `UPDATE api_keys SET disabled_at = ?
+        `UPDATE api_keys SET disabled_at = ?, disabled_reason = 'key'
           WHERE workspace_id = ? AND id = ? AND disabled_at IS NULL`
       )
       .bind(now, this.workspaceId, id)
       .run();
     return (result.meta.changes ?? 0) > 0;
+  }
+
+  /**
+   * Turn off every key of one agent, as part of disabling that agent.
+   *
+   * `disabled_at IS NULL` is what keeps this from swallowing a key the
+   * customer had already switched off themselves: that one keeps
+   * `disabled_reason = 'key'` and so is not among the ones the agent brings
+   * back later.
+   */
+  async disableForAgent(agentId: string, now: number): Promise<number> {
+    const result = await this.db
+      .prepare(
+        `UPDATE api_keys SET disabled_at = ?, disabled_reason = 'agent'
+          WHERE workspace_id = ? AND agent_id = ? AND disabled_at IS NULL`
+      )
+      .bind(now, this.workspaceId, agentId)
+      .run();
+    return result.meta.changes ?? 0;
+  }
+
+  /** The keys that went off with this agent, and so should come back with it. */
+  async listDisabledByAgent(agentId: string): Promise<ApiKeyRow[]> {
+    const result = await this.db
+      .prepare(
+        `SELECT * FROM api_keys
+          WHERE workspace_id = ? AND agent_id = ? AND disabled_reason = 'agent'`
+      )
+      .bind(this.workspaceId, agentId)
+      .all<ApiKeyRow>();
+    return result.results ?? [];
   }
 
   /**
@@ -703,8 +734,8 @@ export class WorkspaceScopedApiKeys extends WorkspaceScoped {
     const result = await this.db
       .prepare(
         `UPDATE api_keys
-            SET disabled_at = NULL, key_prefix = ?, key_last_four = ?,
-                key_hash = ?, key_ciphertext = ?
+            SET disabled_at = NULL, disabled_reason = NULL, key_prefix = ?,
+                key_last_four = ?, key_hash = ?, key_ciphertext = ?
           WHERE workspace_id = ? AND id = ? AND disabled_at IS NOT NULL`
       )
       .bind(

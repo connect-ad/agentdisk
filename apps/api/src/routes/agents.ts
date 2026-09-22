@@ -21,6 +21,8 @@ import { newId } from "../lib/ids";
 import type { AuthContext } from "../middleware/auth";
 import type { AgentRow } from "../db/types";
 import { audit } from "../lib/audit";
+import { generateApiKey, TEST_PREFIX, type KeyMode } from "../lib/keys";
+import { sealSecret } from "../lib/secretbox";
 
 const NAME = z
   .string()
@@ -143,6 +145,22 @@ export async function patchAgent(
     throw err;
   }
 
+  // The agent's switch drives its keys' switches (migration 0025). Before
+  // this, disabling an agent only made authentication refuse its keys while
+  // they sat in the list looking untouched, and enabling it brought the same
+  // secrets back - so "disabled" meant two different things depending on
+  // which screen you were on, and the rotation the key switch promises did
+  // not happen on the path most people actually use.
+  let keysDisabled = 0;
+  let keysRotated = 0;
+  if (body.status !== undefined && body.status !== existing.status) {
+    if (body.status === "disabled") {
+      keysDisabled = await ctx.db.apiKeys.disableForAgent(id, ctx.now);
+    } else if (body.status === "active") {
+      keysRotated = await rotateAgentKeys(ctx, id);
+    }
+  }
+
   const updated = await ctx.db.agents.getById(id);
   audit(ctx, request, "agent.updated", {
     resourceType: "agent",
@@ -152,9 +170,40 @@ export async function patchAgent(
     metadata: {
       name: body.name ?? null,
       status: body.status ?? null,
+      keysDisabled,
+      keysRotated,
     },
   });
-  return json({ agent: toResource(updated ?? existing) });
+  return json({ agent: toResource(updated ?? existing), keysDisabled, keysRotated });
+}
+
+/**
+ * Switch every key that went off with this agent back on, each with a new
+ * secret.
+ *
+ * Only the keys carrying `disabled_reason = 'agent'`. One the customer
+ * switched off themselves stays off: re-enabling an agent must not quietly
+ * undo a decision they made about one particular credential.
+ *
+ * The new secrets are not returned. There could be any number of them, and
+ * they are all retrievable from the keys screen by the owner anyway
+ * (`GET /v1/keys/:id/secret`), which is a better place to copy one from than
+ * a response to a request about an agent. The count is returned so the
+ * dashboard can say plainly that the old tokens are dead.
+ */
+async function rotateAgentKeys(ctx: AuthContext, agentId: string): Promise<number> {
+  const keys = await ctx.db.apiKeys.listDisabledByAgent(agentId);
+  let rotated = 0;
+  for (const key of keys) {
+    const mode: KeyMode = key.key_prefix.startsWith(TEST_PREFIX) ? "test" : "live";
+    const generated = await generateApiKey(mode);
+    const ciphertext =
+      ctx.encryptionKey === null
+        ? null
+        : await sealSecret(ctx.encryptionKey, generated.token, key.id);
+    if (await ctx.db.apiKeys.enableWithRotation(key.id, generated, ciphertext)) rotated += 1;
+  }
+  return rotated;
 }
 
 export async function deleteAgent(

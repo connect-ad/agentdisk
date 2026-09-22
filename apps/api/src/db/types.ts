@@ -67,6 +67,13 @@ export interface ApiKeyRow {
    */
   disabled_at: number | null;
   /**
+   * Which switch turned it off: "key" for the customer's own, "agent" for the
+   * cascade from its agent, NULL when on. Stored rather than derived because
+   * once the agent is active again nothing else would say which keys should
+   * come back with it (migration 0025).
+   */
+  disabled_reason: "key" | "agent" | null;
+  /**
    * The admin console's permanent kill switch, and nothing the customer can
    * set or clear. Distinct from `disabled_at` because an operator revoke must
    * not be something the customer can simply switch back on.

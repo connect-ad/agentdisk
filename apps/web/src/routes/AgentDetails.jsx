@@ -170,15 +170,27 @@ export default function AgentDetails() {
 
   const eventRows = useMemo(() => (events ?? []).map(toRow), [events]);
 
+  /** "1 key", "3 keys" — a count people read rather than parse. */
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
   const setStatus = async next => {
     setBusy(true);
     setActionError(null);
     try {
-      await api.updateAgent(workspaceId, agentId, { status: next });
+      // `?? 0` rather than trusting the shape: an older Worker, or a proxy
+      // that trimmed the body, would otherwise put "undefined keys" on screen.
+      const result = await api.updateAgent(workspaceId, agentId, { status: next });
+      const disabledCount = result?.keysDisabled ?? 0;
+      const rotatedCount = result?.keysRotated ?? 0;
+      // The rotation is the part somebody has to act on: every client using
+      // one of these keys is now holding a dead token. Saying only "enabled"
+      // would let them find that out from a failing agent instead.
       setToast(
         next === 'disabled'
-          ? 'Agent disabled — its keys stop working on their next request'
-          : 'Agent enabled'
+          ? `Agent disabled — ${plural(disabledCount, 'key')} stopped working`
+          : rotatedCount > 0
+            ? `Agent enabled — ${plural(rotatedCount, 'key')} reissued. Update your clients from API keys.`
+            : 'Agent enabled'
       );
       void reload();
     } catch (err) {
@@ -520,7 +532,11 @@ export default function AgentDetails() {
       <ConfirmModal
         open={confirmDisable}
         title={`Disable ${agent?.name ?? 'this agent'}?`}
-        description="All of its API keys stop authenticating on their next request. Nothing is deleted, and you can re-enable it at any time."
+        /* "You can re-enable it at any time" was true and, on its own,
+           misleading: re-enabling reissues every one of those keys, so the
+           clients holding them need updating afterwards. That belongs before
+           the decision, not in the toast after it. */
+        description="All of its API keys stop authenticating on their next request. Nothing is deleted, and you can enable it again at any time — but enabling reissues its keys, so whatever is using them will need the new values."
         confirmLabel="Disable agent"
         loading={busy}
         onClose={() => setConfirmDisable(false)}

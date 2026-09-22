@@ -1401,16 +1401,7 @@ a.ds__qsbox:hover .ds__qsbtn{background:var(--accent-hover)}
    Name, agent, masked key with its eye, scope on two lines, last used, and
    one State pill that is also the row's menu. The tone is a colour on a
    word and a mark, never a colour alone. ----------------------------- */
-/* Row and header heights measured off the reference and expressed as a
-   fraction of its dialog width, so the capture's zoom cancels: the design
-   gives a row 9.9% of that width and a header row 6.7%, which against our
-   720px dialog is 71px and 48px. Ours were 47 and 33 - the same tightness
-   the key dialog carried before it was measured. 4.5rem is the scale's own
-   step nearest 71. Scoped to this table: the other screens have no
-   reference to match, and guessing one for them would be inventing a
-   design rather than following it. */
-.ds__ktbl th{font-family:var(--font-mono);letter-spacing:0.08em;padding:var(--s-6)}
-.ds__ktbl td{height:var(--s-12)}
+.ds__ktbl th{font-family:var(--font-mono);letter-spacing:0.08em}
 .ds__ktbl .tbl__primary{font-weight:var(--w-semi);color:var(--ink);font-size:var(--t-14)}
 .ds__kkey{display:inline-flex;align-items:center;gap:var(--s-2);white-space:nowrap}
 .ds__kmask{color:var(--ink);letter-spacing:0.04em}
@@ -1419,7 +1410,7 @@ a.ds__qsbox:hover .ds__qsbtn{background:var(--accent-hover)}
 .ds__kscope{display:flex;flex-direction:column;gap:2px;font-size:var(--t-12);
   line-height:1.35;color:var(--ink);white-space:nowrap;padding:var(--s-3) 0}
 .ds__kscope>span:last-child{color:var(--ink-3)}
-.kst{display:inline-flex;align-items:center;gap:var(--s-3);height:2rem;
+.kst{display:inline-flex;align-items:center;gap:var(--s-3);height:1.75rem;
   padding:0 var(--s-4) 0 var(--s-5);border-radius:var(--r-full);border:1px solid var(--line-2);
   background:var(--surface-3);color:var(--ink-2);font-family:var(--font-sans);
   font-size:var(--t-12);font-weight:var(--w-semi);letter-spacing:var(--tr-snug);
@@ -1470,9 +1461,3 @@ button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
 .ds__kview .modal__foot .btn{height:3rem;padding:0 var(--s-7);font-size:var(--t-14)}
 .ds__kcap{font-family:var(--font-mono);font-size:var(--t-11);letter-spacing:var(--tr-caps);
   text-transform:uppercase;color:var(--ink-3);margin-right:auto}
-
-/* The primary action in a page header: the reference draws it at 6.1% of
-   its dialog width, 44px against ours, where the shared `md` button is 36.
-   Left on the shared class rather than scoped to the keys page, because a
-   page header's action should not be one size on one screen. */
-.page-head__actions .btn{height:2.75rem;padding:0 var(--s-7)}

@@ -146,19 +146,58 @@ async function fetchJwks(cache: JwksCache): Promise<JwkSet> {
   return parsed;
 }
 
-async function loadJwks(cache: JwksCache, forceRefresh: boolean): Promise<JwkSet> {
+/**
+ * How long a verified JWKS is reused inside one isolate without asking KV.
+ *
+ * The KV entry is already the cache; this is the read in front of it. Every
+ * authenticated request needs the keys, so without this a warm isolate pays a
+ * KV round trip per request for a document that changes on the order of days.
+ * The same shape as `loadCatalogue` in billing/catalogue.ts, and short for the
+ * same reason: there is no way to invalidate across isolates without a network
+ * call that would cost more than the read it saved.
+ *
+ * Safe to hold because the freshness that matters here is not time-based. An
+ * unrecognised `kid` - which is what Google's rotation looks like from our side
+ * - forces a refetch past both this and KV, so a rotated key is picked up the
+ * first time a token needs it rather than when a timer says so.
+ */
+const JWKS_MEMO_TTL_MS = 60_000;
+
+/**
+ * Keyed on the cache binding rather than held in a bare module global.
+ *
+ * In the Worker there is one `env.CACHE` per isolate, so this behaves exactly
+ * like a global. In tests every case builds its own `JwksCache` literal, so one
+ * test's keys can never be served to another - which a bare global would do,
+ * silently, and only for whichever test happened to run second.
+ */
+const jwksMemo = new WeakMap<JwksCache, { at: number; jwks: JwkSet }>();
+
+async function loadJwks(cache: JwksCache, forceRefresh: boolean, now: number): Promise<JwkSet> {
   if (!forceRefresh) {
+    const memo = jwksMemo.get(cache);
+    if (memo !== undefined && now - memo.at < JWKS_MEMO_TTL_MS) return memo.jwks;
+
     const cached = await cache.get(JWKS_CACHE_KEY).catch(() => null);
     if (cached !== null) {
       try {
         const parsed: unknown = JSON.parse(cached);
-        if (isJwkSet(parsed)) return parsed;
+        if (isJwkSet(parsed)) {
+          jwksMemo.set(cache, { at: now, jwks: parsed });
+          return parsed;
+        }
       } catch {
         // A corrupt cache entry is not an auth failure - fall through and refetch.
       }
     }
   }
-  return fetchJwks(cache);
+
+  const fetched = await fetchJwks(cache);
+  // Refreshed on the forced path too. A rotation that got here through an
+  // unknown kid must not leave the previous keys memoized, or every request
+  // behind this one pays the same forced fetch until the TTL expires.
+  jwksMemo.set(cache, { at: now, jwks: fetched });
+  return fetched;
 }
 
 function findKey(jwks: JwkSet, kid: string): JsonWebKey | null {
@@ -232,10 +271,10 @@ export async function verifyFirebaseToken(
   // An unrecognised kid is the normal shape of Google's key rotation, so it
   // earns exactly one forced refetch - not one per request, which would turn
   // any garbage kid into a way to hammer Google's endpoint through us.
-  let jwks = await loadJwks(deps.cache, false);
+  let jwks = await loadJwks(deps.cache, false, deps.now);
   let jwk = findKey(jwks, header.kid);
   if (jwk === null) {
-    jwks = await loadJwks(deps.cache, true);
+    jwks = await loadJwks(deps.cache, true, deps.now);
     jwk = findKey(jwks, header.kid);
   }
   if (jwk === null) {

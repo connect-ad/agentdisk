@@ -37,6 +37,29 @@ name = "agentdisk-dev-api"
 # separately by CI. Left empty the check is skipped.
 vars = { ENVIRONMENT = "dev", TURNSTILE_ALLOWED_HOSTNAMES = "app-dev.agentdisk.io,api-dev.agentdisk.io", R2_ACCOUNT_ID = "TF_OUTPUT_account_id", R2_BUCKET_NAME = "TF_OUTPUT_r2_bucket_name", FIREBASE_PROJECT_ID = "agentdisk-dev", CORS_ALLOWED_ORIGINS = "https://app-dev.agentdisk.io,https://securepanel-dev.agentdisk.io,http://localhost:5173,http://localhost:5174", DASHBOARD_URL = "https://app-dev.agentdisk.io", SANDBOX_EXPIRY_ENABLED = "true", PENDING_DELETION_ENABLED = "true" }
 
+# Smart Placement. Every authenticated request walks the authorization chain in
+# middleware/auth.ts before a handler runs, and that chain is three sequential D1
+# reads - the user, their membership, the workspace. D1 lives in one region; the
+# Worker, left alone, runs in whichever colo the caller reached, so each of those
+# reads is a full round trip across that distance, paid one after another - and
+# the dashboard opens five such requests at once.
+#
+# Smart Placement moves the isolate next to D1, so the distance is paid once by
+# the caller instead of three times by the chain. It changes no behaviour and
+# caches nothing, which is why it came before any of the caching also on the
+# table: there is no staleness to reason about.
+#
+# Declared per environment rather than once at the top. `placement` is an
+# inheritable key, so a top-level block would reach both - but every other
+# binding here is already written out per environment, and a reader checking
+# what prod runs should not have to know which keys inherit.
+#
+# Placed after `vars` deliberately: in TOML every bare key below a table header
+# belongs to that table, so putting this above `vars` would file the whole vars
+# map under placement.
+[env.dev.placement]
+mode = "smart"
+
 [[env.dev.d1_databases]]
 binding = "DB"
 database_name = "agentdisk-dev-db"
@@ -71,6 +94,10 @@ crons = ["17 * * * *"]
 [env.prod]
 name = "agentdisk-prod-api"
 vars = { ENVIRONMENT = "prod", TURNSTILE_ALLOWED_HOSTNAMES = "app.agentdisk.io,api.agentdisk.io", R2_ACCOUNT_ID = "TF_OUTPUT_account_id", R2_BUCKET_NAME = "TF_OUTPUT_r2_bucket_name", FIREBASE_PROJECT_ID = "agentdisk", CORS_ALLOWED_ORIGINS = "https://app.agentdisk.io,https://securepanel.agentdisk.io", DASHBOARD_URL = "https://app.agentdisk.io", SANDBOX_EXPIRY_ENABLED = "false" }
+
+# See the note under [env.dev.placement].
+[env.prod.placement]
+mode = "smart"
 
 [[env.prod.d1_databases]]
 binding = "DB"

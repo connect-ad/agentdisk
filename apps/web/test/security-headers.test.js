@@ -143,6 +143,27 @@ describe('the sources the app genuinely needs', () => {
 });
 
 describe('the _headers file', () => {
+
+  /**
+   * The reason this file grew a second rule. Hashed asset URLs are immutable by
+   * construction, and serving them under the asset server’s
+   * `max-age=0, must-revalidate` default made every reload re-fetch the bundle.
+   */
+  it('lets browsers keep hashed assets forever', () => {
+    const file = renderHeadersFile(OPTIONS);
+    expect(file).toContain('/assets/*');
+    expect(file).toMatch(/^ {2}Cache-Control: public, max-age=31536000, immutable$/m);
+  });
+
+  /**
+   * `index.html` keeps the revalidating default. If it were ever cached, a
+   * person would hold a document naming a bundle the next deploy deleted.
+   */
+  it('sets no Cache-Control on the catch-all rule', () => {
+    const catchAll = renderHeadersFile(OPTIONS).split('/assets/*')[0];
+    expect(catchAll).not.toContain('Cache-Control');
+  });
+
   it('applies to every path, so SPA deep links are covered too', () => {
     const file = renderHeadersFile(OPTIONS);
     expect(file.split('\n')[1]).toBe('/*');
@@ -150,7 +171,7 @@ describe('the _headers file', () => {
 
   it('indents each header under the rule, as the format requires', () => {
     for (const line of renderHeadersFile(OPTIONS).split('\n')) {
-      if (line === '' || line.startsWith('#') || line === '/*') continue;
+      if (line === '' || line.startsWith('#') || line.startsWith('/')) continue;
       expect(line).toMatch(/^ {2}[A-Za-z-]+: .+/);
     }
   });

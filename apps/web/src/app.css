@@ -27,14 +27,25 @@
 .scrim{z-index:var(--z-modal)}
 
 /* --- Modal scroll contract, points 1-3 (docs/ui-layering.md §2) ---
-   Point 1 is already met: .modal declares max-height:100% inside a grid scrim
-   that carries the padding.
+   Point 1 looked met and was not. .modal declares max-height:100% inside a
+   grid scrim, and a percentage resolves against the grid area -- the row
+   track. That track is `auto`, and an auto track is sized by its content:
+   when the dialog is taller than the window the track grows to the dialog's
+   own height, so 100% resolves to the dialog's own height and the cap caps
+   nothing. It bit only when it was not needed. A minmax(0,1fr) track is
+   sized by the container instead, so 100% is the window minus the scrim's
+   padding, which is what the doc always said it was. The admin console met
+   the same bug and answered it with a flex scrim (Overlay.jsx); this is the
+   grid-native equivalent and keeps place-items.
 
-   Point 2 is the one that looks solved and is not. .modal__body already has
-   overflow-y:auto, but in a flex column a child's default min-height:auto
-   refuses to shrink below its content, so the body never gets smaller than its
-   contents, overflow-y never engages, and the column grows past its own cap --
-   pushing the footer off screen. min-height:0 is the fix, not overflow-y.
+   Point 2 is the one that looked solved and was not, for a different reason.
+   .modal__body already has overflow-y:auto, but in a flex column a child's
+   default min-height:auto refuses to shrink below its content, so the body
+   never gets smaller than its contents, overflow-y never engages, and the
+   column grows past its own cap -- pushing the footer off screen.
+   min-height:0 is the fix, not overflow-y. It was in place before point 1
+   was, which is why the footer still fell off: a body that may shrink, under
+   a cap that never asked it to.
 
    Point 3: without flex:none the browser resolves the overflow by compressing
    exactly the head and footer, the two regions that must never move.
@@ -43,6 +54,7 @@
    main.jsx imports styles.css first, so these win at equal specificity.
    Point 4, Enter-to-submit, needs markup and lives in Modal.jsx -- see
    backlog/031. */
+.scrim{grid-template-rows:minmax(0,1fr)}
 .modal__body{min-height:0}
 .modal__head,.modal__foot{flex:none}
 

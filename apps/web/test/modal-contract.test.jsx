@@ -33,6 +33,15 @@ const app = readFileSync(resolve(process.cwd(), 'src/app.css'), 'utf8');
 const rules = app.replace(/\/\*[\s\S]*?\*\//g, '');
 
 describe('modal scroll contract (docs/ui-layering.md §2)', () => {
+  it('bounds the dialog by sizing the scrim row from the window, not from the dialog', () => {
+    // Point 1 was recorded as already met by max-height:100% and was not: a
+    // percentage resolves against the grid row, an auto row grows to fit its
+    // content, so the cap was the dialog's own height whenever the dialog
+    // was taller than the window. The Create API key footer fell off screen
+    // with points 2 and 3 both in place. The row must be container-sized.
+    expect(app).toMatch(/\.scrim\{[^}]*grid-template-rows:minmax\(0,1fr\)/);
+  });
+
   it('lets the scrollable body shrink, which is what engages overflow-y', () => {
     // The fix is min-height, not overflow-y. The vendored sheet has had
     // overflow-y:auto all along and the footer still fell off the screen.

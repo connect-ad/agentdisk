@@ -91,8 +91,17 @@ scroll and no keyboard submit, so the key cannot be created at all — and that 
 step 1 of the product's own Quick start.
 
 **1. A bounded height.** The dialog never exceeds the viewport minus the scrim's
-padding. `.modal` already declares `max-height: 100%` inside a `display: grid`
-scrim; keep it.
+padding. `.modal` declares `max-height: 100%` inside a `display: grid` scrim,
+and **that alone is not a bound** — this doc said it was, and the Create API key
+footer went on falling off screen for a week after points 2 and 3 landed. A
+percentage resolves against the grid row track, and the scrim's row is `auto`,
+which is sized by its content: when the dialog is taller than the window the
+track grows to the dialog's own height, `100%` resolves to that, and the cap
+caps nothing. The track has to be sized by the container instead —
+`grid-template-rows: minmax(0, 1fr)` on the scrim, in `app.css` — or the scrim
+has to be a flex container with `align-items: center`, which is what the admin
+console's `Overlay.jsx` does. Either way `100%` then means the window minus the
+padding, and only then do points 2 and 3 have anything to do.
 
 **2. A body that scrolls internally.** `.modal__body` already has
 `overflow-y: auto`, which is why this looks fixed and is not. In a flex column a

@@ -380,8 +380,29 @@ export default function Settings() {
           </>
         }
       >
-        <Alert tone="danger" title="This destroys everything in the workspace">
-          All files, agents, and API keys are permanently removed. Agents using its keys lose access immediately.
+        {/*
+          Two halves with different timing, and the old copy described neither.
+          It said files were "permanently removed", which stopped being true
+          when deletion was deferred: the credentials go now and the bytes go
+          in seven days. Saying "permanently removed" of something that has not
+          happened yet is the kind of promise somebody discovers is wrong at
+          the worst moment.
+        */}
+        <Alert tone="danger" title="This cannot be undone">
+          <p style={{ margin: 0 }}>
+            <strong>Now, and permanently:</strong> API keys, agents, webhooks, share links,
+            members and folder structure. Any agent using this workspace&apos;s keys loses
+            access immediately.
+          </p>
+          <p style={{ marginBottom: 0 }}>
+            <strong>In 7 days:</strong> the files themselves. They are already unreachable —
+            this is only when the bytes are erased.
+          </p>
+          <p style={{ marginBottom: 0 }}>
+            There is no restore. Tags and metadata are removed at once, so even inside those
+            7 days we cannot reconstruct what was here. Need it erased sooner? Email support
+            and we will run it on request.
+          </p>
         </Alert>
         {deleteError ? <Alert tone="danger" title={deleteError} /> : null}
         <Input

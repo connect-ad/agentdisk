@@ -332,6 +332,8 @@ export function PrivacyTab() {
           <dt>Audit events</dt><dd>Actor, action, resource, source IP and client string. Kept for the life of the workspace; raw request logs are deleted or aggregated after about 90 days.</dd>
           <dt>Account data</dt><dd>Your email address, your display name, and the account identifier Firebase issues for you. <strong>No password.</strong> Firebase Authentication owns sign-in, so one never reaches AgentDisk to be stored or hashed.</dd>
           <dt>API keys</dt><dd>Stored only as a hash. We cannot recover a key you lose.</dd>
+          <dt>When you delete</dt><dd>A single file is erased <strong>immediately</strong> — there is no recycle bin. Deleting a workspace or an account destroys its keys, agents and structure at once, and erases the files seven days later. Nothing is recoverable in that window.</dd>
+          <dt>Invoices</dt><dd>Kept for seven years, because tax law requires it. They hold your billing name, address and amounts — nothing else about your account. Your saved card is removed the moment you close the account.</dd>
         </dl>
       </Panel>
 

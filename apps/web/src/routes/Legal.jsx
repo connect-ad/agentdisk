@@ -213,15 +213,29 @@ export function Privacy() {
         because it is the one case where file content leaves our storage boundary.
       </Clause>
       <Clause n="12" heading="Data retention">
-        Account and file data is retained while your account and workspace are active. Deleted files
-        enter a recoverable state before being permanently purged from object storage. Deleted
-        workspaces are permanently purged within roughly 30 days, except where a legal obligation or
-        active dispute requires holding them longer.
+        Account and file data is retained while your account and workspace are active.
+        {' '}
+        <strong>Deleting a single file erases it immediately.</strong> There is no recycle bin and
+        no undo — the object is removed from storage as part of the request.
+        {' '}
+        Deleting a <strong>workspace or an account</strong> destroys its keys, agents, webhooks,
+        share links, members and structure immediately; the files themselves are erased seven days
+        later. Nothing is recoverable in that window — tags and metadata are removed at once — so
+        the delay is only when the bytes go, not a chance to change your mind.
+        {' '}
+        A closed account keeps its email address for those seven days so we can tell you what
+        happened, then releases it. You can sign up again with the same address afterwards, but
+        nothing is restored.
+        {' '}
+        Two things outlive all of this, because the law requires it: <strong>invoices</strong> are
+        kept for seven years and hold your billing name, address and amounts; and we may hold data
+        longer where an active dispute or legal obligation demands it.
       </Clause>
       <Clause n="13" heading="Deletion and export">
-        You can delete individual files, folders, agents, keys, or an entire workspace at any time
-        from the dashboard or API, and request an export of your account and workspace data in a
-        structured, machine-readable format.
+        You can delete individual files, folders, agents, keys, an entire workspace, or your whole
+        account at any time from the dashboard or API. To export your data, download your files
+        through the dashboard or the API before deleting anything — we do not yet produce a single
+        packaged export, and we would rather say so than imply a button that does not exist.
       </Clause>
       <Clause n="14" heading="Security">
         TLS for all traffic, encryption at rest as provided by Cloudflare, API keys stored only as

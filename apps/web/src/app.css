@@ -1424,3 +1424,21 @@ button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
 .kst--ok .kst__dot{background:var(--ok)}
 .kst__label{line-height:1}
 .kst__menu{min-width:9.5rem;animation:ad-fade var(--d-1) var(--ease)}
+
+/* ---- The key dialogs (view, created, rotated), to the design ----------
+   Wider than the form dialogs, a larger mark and title, a taller field in
+   bigger mono, and the footer's caption on the left. The two `!important`
+   rules override inline sizes in the vendored ApiKeyDisplay, whose copy
+   button and field carry their dimensions as style attributes; overriding
+   here keeps that component's third divergence out of its source. ------ */
+.ds__kview .modal__mark{width:2.75rem;height:2.75rem;border-radius:var(--r-3)}
+.ds__kview .modal__title{font-size:var(--t-18)}
+.ds__kview .modal__body{gap:var(--s-5)}
+.ds__kview code.ad-mono{font-size:var(--t-14);line-height:2;padding:var(--s-4) var(--s-6) !important}
+.ds__kview code.ad-mono + button{font-size:var(--t-14) !important;font-weight:var(--w-semi) !important;padding:0 var(--s-7) !important}
+.ds__kview .ad-meta{font-size:var(--t-14);color:var(--ink-2);gap:var(--s-4) !important}
+.ds__kview .ad-meta svg{width:1rem;height:1rem;margin-top:0.1875rem}
+.ds__kview .modal__foot{justify-content:space-between}
+.ds__kview .modal__foot .btn{height:2.5rem;padding:0 var(--s-7);font-size:var(--t-14)}
+.ds__kcap{font-family:var(--font-mono);font-size:var(--t-11);letter-spacing:var(--tr-caps);
+  text-transform:uppercase;color:var(--ink-3);margin-right:auto}

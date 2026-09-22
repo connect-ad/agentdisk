@@ -378,9 +378,10 @@ export default function ApiKeys() {
       {/* --- the new key: no onClose, so it cannot be dismissed by accident --- */}
       <Modal
         open={dialog === 'reveal'}
+        className="ds__kview"
         title="Your API key"
         tone="accent"
-        size="md"
+        size="lg"
         mark={<Icon name="key" size={16} />}
         footer={
           <Button
@@ -412,12 +413,21 @@ export default function ApiKeys() {
       {/* --- the eye: one key, in a dialog, gone when it closes --- */}
       <Modal
         open={dialog === 'view'}
+        className="ds__kview"
         title={target ? target.name : 'API key'}
         tone="accent"
-        size="md"
-        mark={<Icon name="key" size={16} />}
+        size="lg"
+        mark={<Icon name="key" size={18} />}
         onClose={() => { setSecret(''); setDialog(null); }}
-        footer={<Button onClick={() => { setSecret(''); setDialog(null); }}>Done</Button>}
+        footer={
+          <>
+            {/* True, and worth saying here: the API writes key.revealed on
+                every success, so the owner learns the log exists at the one
+                moment it concerns them. */}
+            <span className="ds__kcap">Reveal logged to activity</span>
+            <Button onClick={() => { setSecret(''); setDialog(null); }}>Done</Button>
+          </>
+        }
       >
         <ApiKeyDisplay revealed secret={secret} />
       </Modal>
@@ -463,9 +473,10 @@ export default function ApiKeys() {
       {/* The rotation, shown the way a new key is - because it is one. */}
       <Modal
         open={dialog === 'rotated'}
+        className="ds__kview"
         title="Your new API key"
         tone="accent"
-        size="md"
+        size="lg"
         mark={<Icon name="key" size={16} />}
         footer={
           <Button onClick={() => { setSecret(''); setDialog(null); setToast('Key enabled'); }}>

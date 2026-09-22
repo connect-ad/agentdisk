@@ -77,6 +77,18 @@ describe('the quick start walks a real path through the product', () => {
     expect(agents).toBeLessThan(keys);
   });
 
+  it('lays out one column per step, so the arrows between them mean something', () => {
+    // The arrow into each box is drawn in the grid gap to its left, which only
+    // reads as "then" while every step sits on one row. A fifth step in a
+    // four-column grid would wrap under the first with an arrow pointing at
+    // the margin.
+    const css = read('src/app.css');
+    const grid = /\.ds__qs\{[^}]*grid-template-columns:repeat\((\d)/.exec(css);
+
+    expect(grid, '.ds__qs still declares an explicit column count').not.toBeNull();
+    expect(Number(grid[1])).toBe(titles.length);
+  });
+
   it('ticks a step only once the one before it is done', () => {
     // The dependency the list draws has to be the dependency it computes. A
     // used workspace-level key must not tick "connect it" over an unticked

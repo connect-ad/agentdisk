@@ -993,23 +993,46 @@
    these as buttons: the hover is the border and the surface lifting, nothing
    else. Cancelling the decoration on the anchor itself is what stops it, since
    a descendant cannot remove an ancestor's underline. */
-/* quick start — one list, one connector, no cards.
-   The card version was four equal links and read as four things to choose
-   between; these are four things to do in order, and the line down the left
-   is the dependency drawn. The state of each step is carried three ways at
-   once — a tick, a highlighted or plain number, and sr-only words — so the
-   colour that also changes is never the only thing saying it. */
-.ds__qs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
-.ds__qsitem{position:relative;display:flex;gap:var(--s-5);padding-bottom:var(--s-6)}
-.ds__qsitem:last-child{padding-bottom:0}
-/* The connector runs from the bottom of this step's mark to the top of the
-   next one's, centred under the 1.875rem mark: half of that, less half the
-   line's own width. */
-.ds__qsitem::before{content:"";position:absolute;left:calc(0.9375rem - 0.5px);
-  top:1.875rem;bottom:0;width:1px;background:var(--line)}
-.ds__qsitem:last-child::before{display:none}
-.ds__qsitem--done::before{background:var(--accent-line)}
-.ds__qsmark{width:1.875rem;height:1.875rem;border-radius:var(--r-full);flex:none;
+/* quick start — four boxes left to right, the progress drawn between them.
+   Own prefix, because .ds__step is the MCP page's setup panel and sharing
+   the name once put a connector line through it. The state of each step is
+   carried three ways at once — a tick, a highlighted or plain number, and
+   the words in the box's footer — so the colours that also change are never
+   the only thing saying it. */
+.ds__qshead{display:flex;align-items:baseline;justify-content:space-between;
+  gap:var(--s-5)}
+.ds__qscount{font-family:var(--font-mono);font-size:var(--t-12);color:var(--ink-3);
+  flex:none}
+/* Four steps, four columns, explicitly: an auto-fit grid would let a fifth
+   step wrap silently, and the arrows below assume the row is the sequence. */
+.ds__qs{list-style:none;margin:0;padding:0;display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--s-6)}
+.ds__qsitem{position:relative;min-width:0;display:flex}
+/* The arrow sits in the gap to the left of every box but the first: a line
+   the width of the gap, and a chevron at its head drawn from two borders of a
+   rotated square. Accent once the box it points at has been reached. */
+.ds__qsitem+.ds__qsitem::before{content:"";position:absolute;top:50%;right:100%;
+  width:var(--s-6);height:1px;background:var(--ink-4);transform:translateY(-50%)}
+.ds__qsitem+.ds__qsitem::after{content:"";position:absolute;top:50%;right:100%;
+  width:0.5rem;height:0.5rem;margin-right:0.1875rem;
+  border-top:1px solid var(--ink-4);border-right:1px solid var(--ink-4);
+  transform:translateY(-50%) rotate(45deg)}
+.ds__qsitem--reached::before{background:var(--accent)}
+.ds__qsitem--reached::after{border-color:var(--accent)}
+.ds__qsbox{flex:1;display:flex;flex-direction:column;gap:var(--s-3);min-width:0;
+  border:1px solid var(--line);background:var(--surface);border-radius:var(--r-3);
+  padding:var(--s-5);text-decoration:none;color:inherit;
+  transition:border-color var(--d-1) var(--ease),background var(--d-1) var(--ease),
+    transform var(--d-1) var(--ease)}
+/* Only the boxes that are links lift. `a` in the selector is the point: a
+   later step renders as a div and must not look like it goes anywhere. */
+a.ds__qsbox:hover{border-color:var(--accent-line);background:var(--surface-2);
+  transform:translateY(-1px);text-decoration:none}
+.ds__qsitem--done .ds__qsbox{border-color:var(--accent-line)}
+.ds__qsitem--next .ds__qsbox{border-color:var(--accent);
+  box-shadow:0 0 0 1px var(--accent)}
+.ds__qsitem--later .ds__qsbox{background:var(--surface-2)}
+.ds__qsmark{width:1.75rem;height:1.75rem;border-radius:var(--r-full);flex:none;
   display:grid;place-items:center;font-family:var(--font-mono);
   font-size:var(--t-12);font-weight:var(--w-semi);
   border:1px solid var(--line);background:var(--surface);color:var(--ink-3)}
@@ -1017,17 +1040,20 @@
   color:var(--on-accent)}
 .ds__qsitem--next .ds__qsmark{background:var(--accent-soft);
   border-color:var(--accent-line);color:var(--accent-ink)}
-/* 5px of top padding lines the 14px title's box up with the mark's centre. */
-.ds__qstext{display:flex;flex-direction:column;gap:var(--s-1);min-width:0;
-  padding-top:0.3125rem}
-.ds__qstitle{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s-4);
-  font-size:var(--t-14);font-weight:var(--w-semi);color:var(--ink)}
-.ds__qsbody{font-size:var(--t-12-5);line-height:var(--lh-normal);color:var(--ink-2)}
-.ds__qsitem--later .ds__qstitle,.ds__qsitem--later .ds__qsbody{color:var(--ink-3)}
-.ds__qsgo{display:inline-flex;align-items:center;gap:var(--s-2);
-  font-size:var(--t-12-5);font-weight:var(--w-semi);color:var(--accent-ink);
-  text-decoration:none}
-.ds__qsgo:hover{text-decoration:underline}
+.ds__qstitle{font-size:var(--t-14);font-weight:var(--w-semi);color:var(--ink)}
+.ds__qsbody{flex:1;font-size:var(--t-12-5);line-height:var(--lh-normal);
+  color:var(--ink-2)}
+.ds__qsfoot{display:flex;align-items:center;gap:var(--s-2);margin-top:var(--s-2);
+  font-size:var(--t-12);font-weight:var(--w-semi);color:var(--accent-ink)}
+.ds__qsitem--later .ds__qstitle,.ds__qsitem--later .ds__qsbody,
+.ds__qsitem--later .ds__qsfoot{color:var(--ink-3)}
+/* Looks like the primary button and is not one: the whole box is the link,
+   and a button inside a link is a nested control. */
+.ds__qsbtn{display:inline-flex;align-items:center;gap:var(--s-2);
+  padding:var(--s-2) var(--s-4);border-radius:var(--r-2);
+  background:var(--accent);color:var(--on-accent);
+  transition:background var(--d-1) var(--ease)}
+a.ds__qsbox:hover .ds__qsbtn{background:var(--accent-hover)}
 
 /* two-column split */
 .ds__two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-6)}
@@ -1090,7 +1116,14 @@
   color:var(--ink-3);flex:none}
 
 @media (max-width:1350px){
+  /* Two by two, and the arrows go: an arrow into the first box of the second
+     row would point at the left margin. The numbers still give the order. */
+  .ds__qs{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-5)}
+  .ds__qsitem+.ds__qsitem::before,.ds__qsitem+.ds__qsitem::after{display:none}
   .ds__two,.ds__cards{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:760px){
+  .ds__qs{grid-template-columns:minmax(0,1fr)}
 }
 
 /* --- accent picker (components-local/AccentPicker.jsx) ---

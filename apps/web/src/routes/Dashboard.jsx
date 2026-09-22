@@ -141,6 +141,7 @@ export default function Dashboard() {
 
   const done = stepsDone({ agents, keys: data?.keys ?? [], events: data?.events ?? [] });
   const next = done.indexOf(false);
+  const doneCount = done.filter(Boolean).length;
 
   const empty = status === 'loaded' && fileCount === 0;
 
@@ -224,42 +225,62 @@ export default function Dashboard() {
       */}
 
       {/*
-        Quick start as a sequence, not four doors. The design drew four equal
-        cards, each a link, and that read as four things to choose between;
-        they are four things to do in order, and the line down the left is the
-        dependency drawn. So there is one link in the whole section, on the
-        step that is next - the other three are not somewhere to go yet.
+        Quick start: four boxes left to right, with the progress drawn between
+        them. They are four things to do in order - the second cannot be done
+        before the first, because a key is attributed to its agent when it is
+        minted - so the arrows carry the state: accent up to the step that is
+        next, grey after it.
+
+        A box you have reached is a link. Done ones open the screen that shows
+        what you made there; the next one is the highlighted box and carries
+        the button. Later ones are not links at all, because there is nothing
+        to do on that screen yet, and they say which step unlocks them rather
+        than merely looking dim.
 
         Only once loaded, because the ticks are data: rendering four grey
-        steps and then ticking them a moment later would show a state that was
+        boxes and then ticking them a moment later would show a state that was
         never true. And it goes once every step is done, the way "Your first
         file" gives way to "Recent files" - a completed quick start is not a
         quick start.
       */}
       {status === 'loaded' && next !== -1 ? (
         <div>
-          <h2 className="ds__h2">Quick start</h2>
+          <div className="ds__qshead">
+            <h2 className="ds__h2">Quick start</h2>
+            <span className="ds__qscount">{doneCount} of {STEPS.length} done</span>
+          </div>
           <ol className="ds__qs">
             {STEPS.map((step, i) => {
               const state = done[i] ? 'done' : i === next ? 'next' : 'later';
+              // Reached means done or next. Because ticks are cumulative it is
+              // the same fact as "the box before this one is done", which is
+              // what colours the arrow coming into it.
+              const reached = state !== 'later';
+              const Box = reached ? Link : 'div';
+              const boxProps = reached ? { to: `${root}${step.to}` } : { 'aria-disabled': true };
               return (
-                <li key={step.to} className={`ds__qsitem ds__qsitem--${state}`}>
-                  {/* The mark is decorative: the state is read out in words below. */}
-                  <span className="ds__qsmark" aria-hidden="true">
-                    {done[i] ? <Icon name="check" size={13} /> : i + 1}
-                  </span>
-                  <span className="ds__qstext">
+                <li
+                  key={step.to}
+                  className={`ds__qsitem ds__qsitem--${state}${reached ? ' ds__qsitem--reached' : ''}`}
+                >
+                  <Box className="ds__qsbox" {...boxProps}>
+                    {/* The mark is decorative: the state is read out in words. */}
+                    <span className="ds__qsmark" aria-hidden="true">
+                      {done[i] ? <Icon name="check" size={13} /> : i + 1}
+                    </span>
                     <span className="ds__qstitle">
                       <span className="sr-only">Step {i + 1}, {state}. </span>
                       {step.title}
-                      {state === 'next' ? (
-                        <Link to={`${root}${step.to}`} className="ds__qsgo">
-                          {step.cta}<Icon name="chevronRight" size={13} />
-                        </Link>
-                      ) : null}
                     </span>
                     <span className="ds__qsbody">{step.body}</span>
-                  </span>
+                    <span className="ds__qsfoot">
+                      {state === 'done' ? <><Icon name="check" size={12} />Done</> : null}
+                      {state === 'next' ? (
+                        <span className="ds__qsbtn">{step.cta}<Icon name="chevronRight" size={13} /></span>
+                      ) : null}
+                      {state === 'later' ? `After step ${i}` : null}
+                    </span>
+                  </Box>
                 </li>
               );
             })}

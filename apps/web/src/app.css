@@ -1492,3 +1492,22 @@ button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
   font-size:var(--t-13-5);border-radius:var(--r-2)}
 .ds__kcap{font-family:var(--font-mono);font-size:var(--t-10);letter-spacing:0.07em;
   text-transform:uppercase;color:var(--ink-3);margin-right:auto}
+
+/* ---- Table cells breathe when their content wraps (23 Sept 2026) -------
+   `.tbl td` is `padding:0 var(--s-6);height:2.75rem`, and that pair only
+   works while every cell is one line: the height is a minimum the row grows
+   past, and with no vertical padding the extra lines press straight onto the
+   borders above and below. The webhooks Events column is where it shows —
+   five `file.*` badges wrap to three rows and the first and last sit on the
+   header rule and the row rule.
+
+   8px is chosen rather than eyeballed: an icon button is 1.75rem and the
+   cell's minimum is 2.75rem, so 8px top and bottom is exactly the slack
+   already inside that minimum. Every existing single-line row — files, keys,
+   agents, members — therefore stays 44px and nothing in the product shifts;
+   only a cell that was already taller than its minimum gains anything.
+
+   Top and bottom, never the shorthand: `.tbl__check` zeroes its padding-right
+   and this rule outranks it, so a shorthand here would push the checkbox
+   column off its edge. */
+.tbl td{padding-top:var(--s-4);padding-bottom:var(--s-4)}

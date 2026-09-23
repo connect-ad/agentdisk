@@ -166,4 +166,10 @@ export interface WebhookRow {
   events: string;
   status: string;
   created_at: number;
+  /**
+   * When a delivery last succeeded. NULL means none ever has - which is what
+   * the dashboard renders as "Never". Only a success writes it; see the
+   * migration.
+   */
+  last_delivery_at: number | null;
 }

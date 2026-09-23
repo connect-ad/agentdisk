@@ -35,6 +35,7 @@ function hook(overrides: Partial<WebhookRow> = {}): WebhookRow {
     events: JSON.stringify(["file.created"]),
     status: "active",
     created_at: NOW,
+    last_delivery_at: null,
     ...overrides,
   };
 }
@@ -198,6 +199,34 @@ describe("handling a queued delivery", () => {
     await seedHook(hook());
     captureFetch(new Response(null, { status: 200 }));
     expect(await handleDelivery(env.DB, event(), NOW)).toMatchObject({ ack: true });
+  });
+
+  /**
+   * The dashboard's "Last delivery" column reads this and nothing else, so a
+   * delivery that lands without writing it here shows as "Never" forever.
+   */
+  async function lastDeliveryAt(id: string): Promise<number | null> {
+    const row = await env.DB.prepare(`SELECT last_delivery_at FROM webhooks WHERE id = ?`)
+      .bind(id)
+      .first<{ last_delivery_at: number | null }>();
+    return row?.last_delivery_at ?? null;
+  }
+
+  it("records the moment a delivery succeeded", async () => {
+    await seedHook(hook());
+    captureFetch(new Response(null, { status: 200 }));
+    await handleDelivery(env.DB, event(), NOW);
+    expect(await lastDeliveryAt("whk_TEST")).toBe(NOW);
+  });
+
+  it("records nothing when the endpoint refused the delivery", async () => {
+    // The column says "Last delivery", so only a delivery may write it. A
+    // failed attempt that stamped it would read as healthy on the screen
+    // somebody opens precisely because deliveries have stopped arriving.
+    await seedHook(hook());
+    captureFetch(new Response(null, { status: 500 }));
+    await handleDelivery(env.DB, event(), NOW);
+    expect(await lastDeliveryAt("whk_TEST")).toBeNull();
   });
 
   it("retries a 500", async () => {

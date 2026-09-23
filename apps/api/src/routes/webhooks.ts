@@ -85,6 +85,11 @@ function toResource(row: WebhookRow) {
     events,
     status: row.status,
     createdAt: new Date(row.created_at).toISOString(),
+    // null, not omitted: the dashboard distinguishes "no delivery yet" from a
+    // field it did not receive, and only one of those is a fact about the
+    // endpoint.
+    lastDeliveryAt:
+      row.last_delivery_at === null ? null : new Date(row.last_delivery_at).toISOString(),
   };
 }
 
@@ -132,6 +137,10 @@ export async function createWebhook(ctx: AuthContext, request: Request): Promise
     events: JSON.stringify(body.events),
     status: "active",
     created_at: ctx.now,
+    // Explicit rather than left off: this literal is what the 201 is rendered
+    // from, so an absent field here reaches the response as `undefined` and
+    // not as the "no delivery yet" the column means.
+    last_delivery_at: null,
   };
 
   await ctx.db.webhooks.insert(row);

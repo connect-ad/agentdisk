@@ -168,6 +168,34 @@ export async function handleDelivery(
   }
 
   const outcome = await deliverOnce(hook, event, now);
+
+  // Only a success. The dashboard's column says "Last delivery", and stamping
+  // it on a failed attempt would make an endpoint that has been refusing
+  // everything for a week look like it was delivering a moment ago - on the
+  // screen somebody opens precisely because deliveries stopped arriving.
+  //
+  // Best-effort, and deliberately after the send rather than before: the
+  // delivery is the thing that matters, and a D1 write that fails here must
+  // not turn a delivered event into a retry the receiver sees twice.
+  if (outcome.delivered) {
+    try {
+      await db
+        .prepare(`UPDATE webhooks SET last_delivery_at = ? WHERE id = ? AND workspace_id = ?`)
+        .bind(now, hook.id, hook.workspace_id)
+        .run();
+    } catch (err) {
+      console.log(
+        JSON.stringify({
+          level: "warn",
+          message: "delivered but could not record last_delivery_at",
+          webhookId: hook.id,
+          workspaceId: hook.workspace_id,
+          reason: err instanceof Error ? err.message : String(err),
+        })
+      );
+    }
+  }
+
   return { ack: outcome.delivered || !outcome.retryable, outcome };
 }
 

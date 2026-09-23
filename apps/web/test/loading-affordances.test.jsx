@@ -106,7 +106,9 @@ describe('workspace stats band', () => {
     const { container } = render(<WorkspaceStats />);
 
     expect(container.querySelectorAll('.wstat')).toHaveLength(4);
-    for (const label of ['STORAGE', 'FILES', 'AGENTS', 'REQUESTS THIS PERIOD']) {
+    // The same four the band shows once loaded, scope qualifiers and all - a
+    // label that changed as the figures arrived would be its own small jump.
+    for (const label of ['ACCOUNT STORAGE', 'ACCOUNT FILES', 'AGENTS', 'REQUESTS THIS PERIOD']) {
       expect(screen.getByText(label)).toBeTruthy();
     }
     expect(container.querySelectorAll('[aria-busy="true"]')).toHaveLength(4);

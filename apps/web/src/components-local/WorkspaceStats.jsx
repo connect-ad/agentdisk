@@ -16,6 +16,22 @@ import { useWorkspaceUsage } from '../lib/usage.jsx';
  * same result. The overview used to make that call for itself; now it does not
  * have to.
  *
+ * ── Two of these four count the whole account ─────────────────────────────
+ * STORAGE and FILES are the billing account's totals across every workspace on
+ * it, because migration 0017 moved that quota up and `whoami` reports the
+ * number the request path actually enforces - a meter dividing this
+ * workspace's bytes by an account-wide ceiling is the backlog/017 failure
+ * exactly. REQUESTS and AGENTS are this workspace's own.
+ *
+ * So the labels name their scope. Unlabelled, a brand-new workspace in an
+ * account that already held data opened showing those bytes as if they were
+ * its own, and every upload into it looked like it was adding to a baseline
+ * the workspace had never created. The figures were right the whole time;
+ * nothing said what they were of. `routes/Usage.jsx` states the same split in
+ * words on the full screen, and these labels are its compressed form.
+ *
+ * The contrast carries it: qualifying all four would tell nobody anything.
+ *
  * ── Figures are real or absent ────────────────────────────────────────────
  * The design shows 39.1 GB, 12,481 objects, 4 identities and 1.94 M requests.
  * Those are mockup values. A card whose metric has no limit configured renders
@@ -64,8 +80,8 @@ function formatBytes(bytes) {
  * and the band's height is set by the tallest tile in the row either way.
  */
 const PLACEHOLDERS = [
-  { label: 'STORAGE', seed: '62%' },
-  { label: 'FILES', seed: '78%' },
+  { label: 'ACCOUNT STORAGE', seed: '62%' },
+  { label: 'ACCOUNT FILES', seed: '78%' },
   { label: 'AGENTS', seed: '38%' },
   { label: 'REQUESTS THIS PERIOD', seed: '70%' },
 ];
@@ -148,7 +164,7 @@ export default function WorkspaceStats() {
 
   const cards = [
     {
-      label: 'STORAGE',
+      label: 'ACCOUNT STORAGE',
       ...formatBytes(usage.storageBytes?.used ?? 0),
       used: usage.storageBytes?.used,
       max: usage.storageBytes?.max,
@@ -157,7 +173,7 @@ export default function WorkspaceStats() {
         : null,
     },
     {
-      label: 'FILES',
+      label: 'ACCOUNT FILES',
       ...formatCount(usage.files?.used ?? 0, 'objects'),
       used: usage.files?.used,
       max: usage.files?.max,

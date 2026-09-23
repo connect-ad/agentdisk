@@ -89,7 +89,7 @@ function contextFor(fixture) {
     loading: false,
     error: null,
     api: {
-      whoami: vi.fn().mockResolvedValue(QUOTA),
+      whoami: vi.fn().mockResolvedValue(fixture.quota ?? QUOTA),
       listFiles: vi.fn().mockResolvedValue({ files: [] }),
       listAgents: vi.fn().mockResolvedValue({ agents: fixture.agents }),
       listKeys: vi.fn().mockResolvedValue({ keys: fixture.keys }),
@@ -121,6 +121,48 @@ function mount(ui, fixture, { auth } = {}) {
     </MemoryRouter>
   );
 }
+
+/* ---------------------- Stats band · what each tile counts ---------------- */
+
+describe('Stats band scope', () => {
+  /**
+   * STORAGE and FILES are the *account's* totals, deliberately - migration 0017
+   * moved the quota to the billing account, and whoami reports the number the
+   * request path actually enforces so the meter cannot divide by a limit it is
+   * not measured against (backlog/017).
+   *
+   * The band did not say so. Two of its four tiles are workspace-scoped
+   * (REQUESTS, AGENTS) and two are not, with nothing to tell them apart - so a
+   * brand-new workspace in an account that already holds data opened showing
+   * those bytes as if they were its own, and every upload into it appeared to
+   * add to a baseline it had never created.
+   *
+   * The figures are right and stay untouched. The labels now name their scope,
+   * in the same terms routes/Usage.jsx already uses for the same four rows.
+   */
+  const ACCOUNT_ALREADY_USED = {
+    ...QUOTA,
+    usage: {
+      storageBytes: { used: 41_000_000, max: 1073741824 },
+      files: { used: 120, max: 1000 },
+      requests: { used: 0, max: 10000 }
+    }
+  };
+
+  it('names the account on the tiles that count every workspace', async () => {
+    mount(<WorkspaceStats />, { ...WITHOUT, quota: ACCOUNT_ALREADY_USED });
+    expect(await screen.findByText('ACCOUNT STORAGE')).toBeTruthy();
+    expect(await screen.findByText('ACCOUNT FILES')).toBeTruthy();
+  });
+
+  it('leaves the workspace-scoped tiles unqualified', async () => {
+    // The contrast is what carries the meaning: if everything were labelled,
+    // nothing would be.
+    mount(<WorkspaceStats />, { ...WITHOUT, quota: ACCOUNT_ALREADY_USED });
+    expect(await screen.findByText('REQUESTS THIS PERIOD')).toBeTruthy();
+    expect(await screen.findByText('AGENTS')).toBeTruthy();
+  });
+});
 
 /* ------------------------- 18 #1 · Dashboard agents ----------------------- */
 

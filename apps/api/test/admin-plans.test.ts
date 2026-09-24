@@ -117,7 +117,10 @@ describe("metadata round trip", () => {
                 active: true,
                 currency: "usd",
                 unit_amount: before?.amount_cents,
-                recurring: { interval: "month" },
+                // One-time. AgentDisk sells a month and stops, so the catalogue
+                // only ever selects a non-recurring price — a recurring one
+                // cannot be charged through `mode: "payment"` checkout.
+                recurring: null,
               },
             ],
           }),
@@ -415,7 +418,7 @@ describe("sync from Stripe", () => {
         // it must never appear in a pricing diff.
         { id: "prod_consulting", name: "Consulting day", active: true, metadata: {} },
       ],
-      prices: [{ id: "price_pro", active: true, unit_amount: 2000, recurring: { interval: "month" } }],
+      prices: [{ id: "price_pro", active: true, unit_amount: 2000, recurring: null }],
     });
 
     const diffs = await access("admin").stripeDiff(stripe.client);

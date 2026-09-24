@@ -193,11 +193,16 @@ export class AdminPlanAccess extends AuditedAdminAccess {
       patch.amount_cents !== undefined && patch.amount_cents !== current.amount_cents;
 
     if (repriced) {
+      // One-time, not recurring. AgentDisk sells a month and stops; checkout
+      // runs in `mode: "payment"`, and Stripe refuses a recurring price there.
+      // `tax_behavior` is required once automatic tax is on — a price that does
+      // not declare inclusive or exclusive cannot be calculated on, and the
+      // session fails rather than under-taxing.
       const created = await stripe.prices.create({
         product: current.stripe_product_id,
         currency: merged.currency,
         unit_amount: merged.amount_cents,
-        recurring: { interval: merged.interval as "month" | "year" },
+        tax_behavior: "exclusive",
         metadata: { plan_id: planId },
       });
       newPriceId = created.id;
@@ -326,11 +331,12 @@ export class AdminPlanAccess extends AuditedAdminAccess {
     // a product and no price.
     let priceId: string | null = null;
     if (amount > 0) {
+      // One-time and tax-declaring, for the reasons on the repricing path above.
       const price = await stripe.prices.create({
         product: product.id,
         currency,
         unit_amount: amount,
-        recurring: { interval: interval as "month" | "year" },
+        tax_behavior: "exclusive",
         metadata: { plan_id: input.id },
       });
       priceId = price.id;

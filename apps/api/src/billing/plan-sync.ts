@@ -108,22 +108,33 @@ export function planIdOf(product: Stripe.Product): string | null {
   return packageId.slice(PACKAGE_PREFIX.length);
 }
 
-/** The monthly recurring price this product can currently be sold at. */
+/**
+ * The price this product can currently be sold at.
+ *
+ * **One-time, not recurring, and the inversion is load-bearing.** This function
+ * used to do the exact opposite — it filtered to `price.recurring !== null` and
+ * discarded one-off prices as "a mistake". That was right while AgentDisk sold
+ * subscriptions. When checkout moved to `mode: "payment"` the catalogue went on
+ * handing it recurring price ids, and **Stripe refuses a recurring price in
+ * payment mode**, so every purchase failed. Nothing caught it: every checkout
+ * test is a refusal that returns before the outbound Stripe call.
+ *
+ * So a recurring price is now the thing to ignore. One is not harmful to have
+ * sitting on the product — the four created in September still exist — it
+ * simply cannot be sold through a one-off checkout, and selecting it would
+ * reintroduce the failure.
+ *
+ * Returning null rather than falling back to a recurring price is deliberate.
+ * `purchasablePlanIds` drops a plan with no price and the dashboard renders it
+ * as unavailable, which is a visible, correct state; a price that cannot be
+ * charged is an invisible, broken one.
+ */
 async function activeMonthlyPrice(
   stripe: Stripe,
   productId: string
 ): Promise<Stripe.Price | null> {
   const prices = await stripe.prices.list({ product: productId, active: true, limit: 100 });
-
-  // Recurring only: a one-off price attached to a plan product would be a
-  // mistake, and subscribing somebody to it would be a worse one.
-  const recurring = prices.data.filter((price) => price.recurring !== null);
-  const monthly = recurring.find((price) => price.recurring?.interval === "month");
-
-  // Falls back to any recurring price rather than none, so an annual-only plan
-  // is still sellable. `interval` is mirrored into the row, so the catalogue
-  // records which it actually found rather than assuming monthly.
-  return monthly ?? recurring[0] ?? null;
+  return prices.data.find((price) => price.recurring === null) ?? null;
 }
 
 export interface PlanUpsert {
@@ -206,6 +217,9 @@ export async function syncProductToPlan(
       product.description ?? null,
       price?.unit_amount ?? 0,
       price?.currency ?? "usd",
+      // A one-time price carries no interval; the period is this product's own
+      // (`BILLING_PERIOD_MONTHS`). The column stays as the word a screen prints,
+      // not as a fact read back from Stripe.
       price?.recurring?.interval ?? "month",
       product.id,
       price?.id ?? null,

@@ -28,12 +28,12 @@ const NOW = 1_780_000_000_000;
 /** A price as `prices.list` returns it. */
 function price(overrides: Record<string, unknown> = {}): unknown {
   return {
-    id: "price_monthly",
+    id: "price_once",
     object: "price",
     active: true,
     currency: "usd",
     unit_amount: 2000,
-    recurring: { interval: "month" },
+    recurring: null,
     ...overrides,
   };
 }
@@ -123,7 +123,7 @@ describe("syncProductToPlan", () => {
       product(fullMetadata),
       NOW
     );
-    expect(result).toEqual({ planId: "pro", priceId: "price_monthly" });
+    expect(result).toEqual({ planId: "pro", priceId: "price_once" });
 
     const row = await planRow("pro");
     expect(row?.storage_bytes).toBe(53687091200);
@@ -131,7 +131,7 @@ describe("syncProductToPlan", () => {
     expect(row?.workspaces).toBe(10);
     expect(row?.amount_cents).toBe(2000);
     expect(row?.stripe_product_id).toBe("prod_test");
-    expect(row?.stripe_price_id).toBe("price_monthly");
+    expect(row?.stripe_price_id).toBe("price_once");
     expect(row?.priority_support).toBe(1);
   });
 
@@ -183,32 +183,41 @@ describe("syncProductToPlan", () => {
     expect(await planRow("pro")).toEqual(first);
   });
 
-  it("picks the monthly recurring price out of several", async () => {
+  it("picks the one-time price, and ignores the recurring ones beside it", async () => {
+    // The inversion that matters. This used to assert the opposite, and that
+    // assertion is why every checkout failed: the catalogue handed a recurring
+    // price id to a `mode: "payment"` session, which Stripe refuses. The four
+    // subscription prices created in September still sit on these products, so
+    // "ignores them" is a live condition rather than a hypothetical.
     await syncProductToPlan(
       env.DB,
       stripeStub([
         price({ id: "price_yearly", recurring: { interval: "year" }, unit_amount: 20000 }),
         price({ id: "price_monthly", recurring: { interval: "month" }, unit_amount: 2000 }),
+        price({ id: "price_once", recurring: null, unit_amount: 2000 }),
       ]),
-      product(fullMetadata),
+      product({ package_id: "agentdisk-pro" }),
       NOW
     );
 
-    const row = await planRow("pro");
-    expect(row?.stripe_price_id).toBe("price_monthly");
-    expect(row?.amount_cents).toBe(2000);
-    expect(row?.interval).toBe("month");
+    expect((await planRow("pro"))?.stripe_price_id).toBe("price_once");
   });
 
-  it("never picks a one-off price", async () => {
-    // A non-recurring price on a plan product is a mistake; subscribing
-    // somebody to it would be a worse one.
+  it("records no price at all rather than one that cannot be charged", async () => {
+    // A product carrying only its old subscription prices — which is exactly
+    // the state of the live catalogue until the prices are re-minted.
+    //
+    // Null is the right answer: `purchasablePlanIds` drops a plan without a
+    // price and the dashboard renders it unavailable, which is visible and
+    // correct. Falling back to the recurring price would be invisible and
+    // broken — a button whose only outcome is a Stripe error.
     await syncProductToPlan(
       env.DB,
-      stripeStub([price({ id: "price_once", recurring: null })]),
-      product(fullMetadata),
+      stripeStub([price({ id: "price_monthly", recurring: { interval: "month" } })]),
+      product({ package_id: "agentdisk-pro" }),
       NOW
     );
+
     expect((await planRow("pro"))?.stripe_price_id).toBeNull();
   });
 

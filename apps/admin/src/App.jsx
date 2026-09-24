@@ -11,6 +11,7 @@ import { WorkspaceDetail, WorkspaceList } from './screens/Workspaces.jsx';
 import { Users } from './screens/Users.jsx';
 import { Billing } from './screens/Billing.jsx';
 import { Plans, SyncHistory } from './screens/Plans.jsx';
+import { Promos } from './screens/Promos.jsx';
 import { Audit } from './screens/Audit.jsx';
 import { Deletions } from './screens/Deletions.jsx';
 import { ClaimLinks } from './screens/ClaimLinks.jsx';
@@ -121,6 +122,13 @@ function describe(path) {
       key: 'plans',
       title: 'Sync history',
       subtitle: 'Every plan change, from the admin audit log.'
+    };
+  }
+  if (path === '/promos') {
+    return {
+      key: 'plans',
+      title: 'Promo codes',
+      subtitle: 'Discount codes, held in Stripe.'
     };
   }
   if (path === '/audit') {
@@ -305,6 +313,7 @@ export default function App() {
     if (path === '/billing/past-due') return <Billing filter="past_due" />;
     if (path === '/billing/canceled') return <Billing filter="canceled" />;
     if (path === '/plans') return <Plans role={admin.role} onToast={toast} />;
+    if (path === '/promos') return <Promos role={admin.role} onToast={toast} />;
     if (path === '/plans/sync-history') return <SyncHistory />;
     if (path === '/audit') return <Audit onToast={toast} />;
     if (path === '/deletions') return <Deletions onToast={toast} />;

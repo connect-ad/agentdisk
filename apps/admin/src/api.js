@@ -189,6 +189,16 @@ export const adminApi = {
     request('/v1/admin/plans/sync-from-stripe', { method: 'POST', body: { selections, reason } }),
   syncCatalogue: reason => request('/v1/admin/plans/sync', { method: 'POST', body: { reason } }),
 
+  /* --------------------------------- promos ------------------------------ */
+  //
+  // Stripe holds these outright; there is no local table to read instead. A
+  // failed request therefore empties the screen rather than falling back to a
+  // stale list — a list of codes that may no longer work is worse than none.
+  listPromos: () => request('/v1/admin/promos'),
+  createPromo: input => request('/v1/admin/promos', { method: 'POST', body: input }),
+  deactivatePromo: (id, reason) =>
+    request(`/v1/admin/promos/${id}/deactivate`, { method: 'POST', body: { reason } }),
+
   /* --------------------------------- audit ------------------------------- */
   audit: filter => request(`/v1/admin/audit${query(filter ?? {})}`),
   auditFilters: () => request('/v1/admin/audit/filters'),

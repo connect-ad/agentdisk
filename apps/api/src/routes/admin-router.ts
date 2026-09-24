@@ -38,6 +38,9 @@ import {
   adminAuditExport,
   adminAuditFilters,
   adminBilling,
+  adminListPromos,
+  adminCreatePromo,
+  adminDeactivatePromo,
   adminCreateAccount,
   adminCreatePlan,
   adminDeleteUser,
@@ -218,6 +221,19 @@ export async function handleAdminRoute(
 
   if (area === "billing" && resourceId === undefined && request.method === "GET") {
     return await adminBilling(request, adminDeps);
+  }
+
+  // Discount codes. Stripe is the record; nothing is mirrored into D1, so there
+  // is no list here that could disagree with what a customer can actually
+  // redeem on the payment page.
+  if (area === "promos") {
+    if (resourceId === undefined) {
+      if (request.method === "GET") return await adminListPromos(request, adminDeps);
+      if (request.method === "POST") return await adminCreatePromo(request, adminDeps);
+    }
+    if (resourceId !== undefined && action === "deactivate" && request.method === "POST") {
+      return await adminDeactivatePromo(request, adminDeps, resourceId);
+    }
   }
 
   if (area === "claim-links") {

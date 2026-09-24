@@ -64,6 +64,7 @@ export const NAV = [
     role: 'admin',
     kids: [
       { key: 'plans', label: 'Plans', path: '/plans' },
+      { key: 'promos', label: 'Promo Codes', path: '/promos' },
       { key: 'sync', label: 'Sync History', path: '/plans/sync-history' }
     ]
   },

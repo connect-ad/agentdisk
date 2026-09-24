@@ -29,6 +29,7 @@ import { AdminUserAccess } from "../admin/users-access";
 import { AdminDeletionsAccess } from "../admin/deletions-access";
 import { AdminPlanAccess } from "../admin/plans-access";
 import { AdminBillingAccess } from "../admin/billing-access";
+import { AdminPromoAccess } from "../admin/promos-access";
 import { AdminAuditAccess } from "../admin/audit-access";
 import { AdminAccountAccess } from "../admin/accounts-access";
 import { setFirebaseUserDisabled } from "../auth/firebase-admin";
@@ -656,4 +657,67 @@ export async function adminSetAccountDisabled(
     parsed.data.reason
   );
   return json({ changed });
+}
+
+/* -------------------------------- promos --------------------------------- */
+/**
+ * Discount codes. Stripe holds them; this is an audited window onto that.
+ *
+ * `stripeOf` rather than the null-tolerant read the billing screen uses: a
+ * billing table without live Stripe data still tells an operator something
+ * useful, whereas a promo screen without Stripe has nothing at all to show and
+ * a create form on it could only fail.
+ */
+export async function adminListPromos(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
+  return json(await area(AdminPromoAccess, admin, deps).list(stripeOf(deps)));
+}
+
+/**
+ * The shape of a code, checked before Stripe sees it.
+ *
+ * `maxRedemptions` absent means unlimited and `1` means single-use — the two
+ * cases the console's form has to distinguish in words, because an empty box
+ * standing for "no limit" is the ambiguity `plans` already forbids between
+ * `NULL` and `-1`.
+ */
+const promoSchema = z.object({
+  code: z.string().trim().min(4).max(32),
+  percentOff: z.number().int().min(1).max(100).optional(),
+  amountOffCents: z.number().int().positive().optional(),
+  currency: z.string().trim().length(3).toLowerCase().optional(),
+  duration: z.enum(["once", "forever", "repeating"]),
+  durationMonths: z.number().int().positive().max(36).optional(),
+  maxRedemptions: z.number().int().positive().optional(),
+  expiresAt: z.number().int().positive().optional(),
+});
+
+export async function adminCreatePromo(request: Request, deps: AdminDeps): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
+  const parsed = promoSchema.safeParse(await body(request));
+  if (!parsed.success) {
+    throw validationError("A code and a discount are required.");
+  }
+
+  const promo = await area(AdminPromoAccess, admin, deps).create(stripeOf(deps), parsed.data);
+  return json({ promo });
+}
+
+const deactivateSchema = z.object({ reason });
+
+export async function adminDeactivatePromo(
+  request: Request,
+  deps: AdminDeps,
+  promoId: string
+): Promise<Response> {
+  const admin = await requireAdmin(request, deps);
+  const parsed = deactivateSchema.safeParse(await body(request));
+  if (!parsed.success) throw validationError("A reason is required.");
+
+  const promo = await area(AdminPromoAccess, admin, deps).deactivate(
+    stripeOf(deps),
+    promoId,
+    parsed.data.reason
+  );
+  return json({ promo });
 }

@@ -29,6 +29,7 @@
  */
 
 import { deleteWorkspaceCascade } from "../db/workspace-cascade";
+import { isPayingNow } from "../billing/organizations";
 
 /** Thirty days, in ms. The window both delete endpoints promise. */
 export const ADMIN_PURGE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
@@ -82,7 +83,8 @@ export async function purgeAdminDeleted(
   const workspaces = await db
     .prepare(
       `SELECT w.id, w.name, w.org_id AS orgId,
-              o.stripe_customer_id AS stripeCustomerId, o.billing_status AS billingStatus
+              o.stripe_customer_id AS stripeCustomerId, o.billing_status AS billingStatus,
+              o.current_period_end AS currentPeriodEnd
          FROM workspaces w
          JOIN organizations o ON o.id = w.org_id
         WHERE w.deleted_at IS NOT NULL AND w.deleted_at <= ?`
@@ -94,15 +96,22 @@ export async function purgeAdminDeleted(
       orgId: string;
       stripeCustomerId: string | null;
       billingStatus: string;
+      currentPeriodEnd: number | null;
     }>();
 
   for (const workspace of workspaces.results ?? []) {
     result.workspaceCandidates += 1;
 
-    const liveBilling =
-      workspace.stripeCustomerId !== null &&
-      workspace.billingStatus !== "canceled" &&
-      workspace.billingStatus !== "cancelled";
+    // `isPayingNow`, not "is not cancelled". The old test treated an EXPIRED
+    // account as a paying customer — `expired` is not `canceled`, so the guard
+    // held — and skipped it forever, logging "live billing" about somebody who
+    // had stopped paying weeks earlier. Combined with the same bug in
+    // `users-access.ts` and a purge that was never written, a lapsed account
+    // could not be removed by any route at all.
+    const liveBilling = isPayingNow(
+      { billingStatus: workspace.billingStatus, currentPeriodEnd: workspace.currentPeriodEnd },
+      now
+    );
 
     if (liveBilling) {
       result.skippedForBilling += 1;
@@ -157,11 +166,15 @@ export async function purgeAdminDeleted(
               (SELECT COUNT(*) FROM organizations o
                  JOIN memberships m ON m.org_id = o.id AND m.user_id = u.id AND m.role = 'owner'
                 WHERE o.stripe_customer_id IS NOT NULL
-                  AND o.billing_status NOT IN ('canceled', 'cancelled')) AS liveBilling
+                  AND o.billing_status = 'active'
+                  AND o.current_period_end IS NOT NULL
+                  AND o.current_period_end > ?) AS liveBilling
          FROM users u
         WHERE u.deleted_at IS NOT NULL AND u.deleted_at <= ?`
     )
-    .bind(cutoff)
+    // `now` first: the correlated subquery's placeholder comes before the outer
+    // WHERE's in statement order, not in reading order.
+    .bind(now, cutoff)
     .all<{ id: string; email: string; liveBilling: number }>();
 
   for (const user of users.results ?? []) {

@@ -62,25 +62,67 @@ describe("what it does by default", () => {
   });
 });
 
+/**
+ * The gate is "is this account paying right now", not "is it uncancelled".
+ *
+ * These tests used to assert the second, and that is exactly how an expired
+ * account became unpurgeable: `expired` is not `canceled`, so the old guard
+ * held and the job logged "skipped: live billing" about somebody who had
+ * stopped paying weeks earlier. Combined with the same test in
+ * `users-access.ts` and a purge that was never written, a lapsed account could
+ * not be removed by any route at all.
+ */
 describe("live billing stops it", () => {
-  it("skips a workspace whose organization still has an uncancelled subscription", async () => {
-    // The delete endpoint already blocks on this, but a subscription can be
-    // created - or a block lifted - in the thirty days between the two, and a
-    // cascade is not the place to discover that.
-    await env.DB.prepare(
-      `UPDATE organizations SET stripe_customer_id = 'cus_X', billing_status = 'active' WHERE id = ?`
-    )
-      .bind(ORG_ID)
-      .run();
+  async function markDeleted(): Promise<void> {
     await env.DB.prepare(`UPDATE workspaces SET status = 'deleted', deleted_at = ? WHERE id = ?`)
       .bind(LONG_AGO, WORKSPACE_A)
       .run();
+  }
+
+  async function billing(status: string, periodEnd: number | null): Promise<void> {
+    await env.DB.prepare(
+      `UPDATE organizations SET stripe_customer_id = 'cus_X', billing_status = ?,
+              current_period_end = ? WHERE id = ?`
+    )
+      .bind(status, periodEnd, ORG_ID)
+      .run();
+  }
+
+  it("skips a workspace whose organization has paid for a period still running", async () => {
+    // The delete endpoint already blocks on this, but a purchase can land - or
+    // a block be lifted - in the thirty days between the two, and a cascade is
+    // not the place to discover that.
+    await billing("active", NOW + 20 * 24 * 60 * 60 * 1000);
+    await markDeleted();
 
     const result = await purgeAdminDeleted(env.DB, env.FILES, NOW, false);
 
     expect(result.skippedForBilling).toBeGreaterThan(0);
     expect(result.workspacesPurged).toBe(0);
     expect(await workspaceRow(WORKSPACE_A)).not.toBeNull();
+  });
+
+  it("purges an EXPIRED account, which the old guard treated as a paying one", async () => {
+    await billing("expired", NOW - 20 * 24 * 60 * 60 * 1000);
+    await markDeleted();
+
+    const result = await purgeAdminDeleted(env.DB, env.FILES, NOW, false);
+
+    expect(result.skippedForBilling).toBe(0);
+    expect(result.workspacesPurged).toBeGreaterThan(0);
+  });
+
+  it("purges a free account that once bought something", async () => {
+    // `active` with no period is somebody who has never bought, or bought long
+    // ago and lapsed back to free. A Stripe customer id is a historical fact,
+    // not evidence of a live relationship.
+    await billing("active", null);
+    await markDeleted();
+
+    const result = await purgeAdminDeleted(env.DB, env.FILES, NOW, false);
+
+    expect(result.skippedForBilling).toBe(0);
+    expect(result.workspacesPurged).toBeGreaterThan(0);
   });
 
   it("proceeds once the subscription is cancelled", async () => {

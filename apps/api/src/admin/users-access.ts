@@ -25,6 +25,7 @@
 import { AuditedAdminAccess } from "./audited";
 import { ApiError, forbidden, validationError } from "../lib/errors";
 import { ACCOUNT_PURGE_TTL_MS } from "../db/workspace-cascade";
+import { isPayingNow } from "../billing/organizations";
 
 export interface AdminUserRecord {
   id: string;
@@ -247,6 +248,7 @@ export class AdminUserAccess extends AuditedAdminAccess {
       .prepare(
         `SELECT o.id AS orgId, o.name AS orgName, o.stripe_customer_id AS stripeCustomerId,
                 o.billing_status AS billingStatus, o.owner_user_id AS ownerUserId,
+                o.current_period_end AS currentPeriodEnd,
                 (SELECT COUNT(*) FROM memberships m2
                   WHERE m2.org_id = o.id AND m2.user_id != ?) AS otherMembers,
                 (SELECT COUNT(*) FROM memberships m3
@@ -262,6 +264,7 @@ export class AdminUserAccess extends AuditedAdminAccess {
         orgName: string;
         stripeCustomerId: string | null;
         billingStatus: string;
+        currentPeriodEnd: number | null;
         ownerUserId: string;
         otherMembers: number;
         otherOwners: number;
@@ -283,17 +286,23 @@ export class AdminUserAccess extends AuditedAdminAccess {
         });
       }
 
-      if (
-        soleOwner &&
-        org.stripeCustomerId !== null &&
-        org.billingStatus !== "canceled" &&
-        org.billingStatus !== "cancelled"
-      ) {
+      // `isPayingNow`, not "is not cancelled". The old test read an EXPIRED
+      // account as a paying one — it is not `canceled`, so the gate held — and
+      // then told the operator to "cancel it in Stripe", for a subscription
+      // that does not exist and cannot be cancelled. Every lapsed account was
+      // undeletable, by an instruction nobody could follow.
+      if (soleOwner && isPayingNow(org, this.now)) {
         blockers.push({
           kind: "live_billing",
           orgId: org.orgId,
           orgName: org.orgName,
-          detail: `Subscription is ${org.billingStatus}. Cancel it in Stripe before deleting the account.`,
+          // Names the real consequence. Nothing needs cancelling first: this is
+          // a one-off payment, so the only thing lost is the rest of a period
+          // the customer has already paid for, and no refund follows it.
+          detail:
+            `This account has paid for service until ` +
+            `${new Date(org.currentPeriodEnd ?? this.now).toISOString().slice(0, 10)}. ` +
+            `Deleting it now forfeits the remainder, and no refund is issued.`,
         });
       }
 

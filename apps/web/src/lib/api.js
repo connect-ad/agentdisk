@@ -278,6 +278,17 @@ export function createApiClient(getToken) {
     /** Resolves to { url } — a one-time link into Stripe's hosted portal. */
     createPortalSession: workspaceId =>
       request('/v1/billing/portal-session', { method: 'POST', workspaceId }),
+    /**
+     * Resolves to { url } — a one-time Stripe Checkout link for one month of
+     * `plan`.
+     *
+     * The plan is named by OUR id, never a Stripe price: the mapping stays on
+     * the server, where a caller cannot reach past it and buy an archived
+     * price. The card is entered on Stripe's own page and never touches this
+     * origin, which is what keeps AgentDisk in PCI SAQ-A.
+     */
+    createCheckoutSession: (workspaceId, plan) =>
+      request('/v1/billing/checkout-session', { method: 'POST', body: { plan }, workspaceId }),
 
     listFolders: workspaceId => request('/v1/folders', { workspaceId }),
     createFolder: (workspaceId, path) =>

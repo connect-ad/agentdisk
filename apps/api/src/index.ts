@@ -72,6 +72,8 @@ import { readSigningConfig, type R2SigningConfig } from "./storage/presign";
 import { preflightResponse, withCorsHeaders } from "./lib/cors";
 import { expireUnclaimedWorkspaces } from "./jobs/sandbox-expiry";
 import { purgeAdminDeleted } from "./jobs/admin-purge";
+import { runRenewalLadder } from "./jobs/billing-renewal";
+import { readEmailConfig } from "./lib/email";
 
 export interface Env {
   DB: D1Database;
@@ -148,6 +150,18 @@ export interface Env {
    * candidate logs has been read. See jobs/admin-purge.ts.
    */
   ADMIN_PURGE_ENABLED?: string;
+  /**
+   * Real work for the renewal ladder: expiring periods, scheduling deletions
+   * and sending the three lifecycle emails. Absent or anything but "true" means
+   * report-only.
+   *
+   * The same default as the sweeps above, and for a sharper reason. Every
+   * account in dev has `current_period_end` NULL and is therefore untouched —
+   * but the moment one is bought, or backfilled by hand during testing, a
+   * delete-enabled deploy can stamp it and mail its owner in the same tick.
+   * Read a window of `renewal ladder candidates` lines first.
+   */
+  BILLING_EXPIRY_ENABLED?: string;
   /**
    * Real deletion for the seven-day pending-deletion sweep. Absent or anything
    * but "true" means report-only.
@@ -949,6 +963,54 @@ export default {
             JSON.stringify({
               level: "error",
               message: "pending deletion sweep failed",
+              reason: err instanceof Error ? err.message : String(err),
+            })
+          );
+        }
+
+        // The seventh: the renewal ladder. Its own try/catch like the six
+        // above, and **defaults to reporting** for the same reason — see
+        // BILLING_EXPIRY_ENABLED on Env.
+        //
+        // It sends mail, which none of the others do, so it is deliberately
+        // last: a provider outage that made it throw must not cost the sweeps
+        // that keep D1 and R2 in agreement. The job itself is built so a failed
+        // send never blocks a state change, but ordering it here means a
+        // failure of the whole job cannot either.
+        try {
+          const ladder = await runRenewalLadder({
+            db: env.DB,
+            // The purge pass needs the bucket. Without it the ladder reports its
+            // due accounts and deletes nothing — see RenewalDeps.files.
+            files: env.FILES,
+            email: readEmailConfig(env),
+            dashboardUrl: env.DASHBOARD_URL ?? "https://app-dev.agentdisk.io",
+            now,
+            dryRun: env.BILLING_EXPIRY_ENABLED !== "true",
+          });
+          console.log(
+            JSON.stringify({
+              level: "info",
+              message: "renewal ladder run",
+              dryRun: ladder.dryRun,
+              reminded: ladder.reminded,
+              expired: ladder.expired,
+              deletionsScheduled: ladder.deletionsScheduled,
+              purged: ladder.purged,
+              objectsDeleted: ladder.objectsDeleted,
+              purgeSkipped: ladder.purgeSkipped,
+              purgeFailed: ladder.purgeFailed,
+              emailsSent: ladder.emailsSent,
+              emailsFailed: ladder.emailsFailed,
+              unreachable: ladder.unreachable,
+              emailSkipped: ladder.emailSkipped,
+            })
+          );
+        } catch (err) {
+          console.log(
+            JSON.stringify({
+              level: "error",
+              message: "renewal ladder run failed",
               reason: err instanceof Error ? err.message : String(err),
             })
           );

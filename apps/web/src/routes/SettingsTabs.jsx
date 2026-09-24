@@ -6,6 +6,10 @@ import {
 } from '../components/index.js';
 import { useResource } from '../lib/useResource.js';
 import { useWorkspace } from '../lib/workspace.jsx';
+// The one public copy of the pricing numbers. The server sends only
+// `purchasable` — a list of plan ids — and deliberately restates no prices, so
+// this module is where every figure on the picker comes from.
+import { COUNTING_NOTE, PLANS } from '../lib/pricing.js';
 
 /**
  * 8.22 Members · 8.24 Privacy · 8.25 Billing — MVP-1 settings tabs.
@@ -423,17 +427,142 @@ export function PrivacyTab() {
  */
 const loadBilling = (api, workspaceId) => api.getBilling(workspaceId);
 
-const STATUS_TONE = { active: 'ok', past_due: 'warn', canceled: 'danger' };
-const STATUS_LABEL = { active: 'Active', past_due: 'Payment overdue', canceled: 'Canceled' };
+const STATUS_TONE = {
+  active: 'ok', past_due: 'warn', canceled: 'danger', expired: 'warn'
+};
+const STATUS_LABEL = {
+  active: 'Active',
+  past_due: 'Payment overdue',
+  canceled: 'Canceled',
+  // The state manual renewal actually produces. Named for what happened rather
+  // than for what it costs — "Expired" is a fact, "Blocked" would be a verdict.
+  expired: 'Expired'
+};
+
+/** "14 October 2026", matching the wording the renewal emails use. */
+function planDate(at) {
+  if (typeof at !== 'number' || !Number.isFinite(at)) return null;
+  return new Date(at).toLocaleDateString('en-GB', {
+    day: 'numeric', month: 'long', year: 'numeric'
+  });
+}
+
+/**
+ * What a plan card offers, given who is looking and where the period stands.
+ *
+ * All of it in one function, because the interesting cases are the
+ * combinations — an expired owner looking at a plan that is not theirs, a
+ * reader looking at anything — and spreading those across JSX conditionals is
+ * how one of them ends up unreachable.
+ *
+ * Returns `{ label, action }`, where a null action means render no button.
+ * `action` is 'checkout' or 'portal'; nothing else exists.
+ */
+function cardAction(plan, billing, purchasable, isOwner) {
+  if (!isOwner) return { label: null, action: null };
+
+  const isCurrent = plan.id === billing?.plan;
+  const hasSubscription = billing?.subscribed === true;
+
+  // A real Stripe subscription, from before manual renewal or made by hand.
+  // Checkout refuses these outright, so the only honest offer is the portal.
+  if (hasSubscription) {
+    return isCurrent
+      ? { label: 'Manage subscription', action: 'portal' }
+      : { label: 'Change plan', action: 'portal' };
+  }
+
+  // Free is the absence of a purchase. There is nothing to buy, and leaving a
+  // paid plan means letting it lapse rather than pressing a button here.
+  if (plan.id === 'free') return { label: null, action: null };
+
+  // The catalogue has the plan but this environment has no Stripe price for
+  // it, which means the sync has not run. Saying so beats a button whose only
+  // possible outcome is a 500.
+  if (!purchasable.includes(plan.id)) {
+    return { label: 'Not available yet', action: null, disabled: true };
+  }
+
+  if (isCurrent) {
+    // Only inside the last seven days, or once it has lapsed. The server
+    // decides this — `renewalOpen` — so a clock-skewed browser cannot offer a
+    // button that is about to be refused.
+    return billing?.renewalOpen
+      ? { label: 'Renew', action: 'checkout' }
+      : { label: null, action: null };
+  }
+
+  // Switching plans mid-period is refused server-side, because proration is
+  // out of scope. Said in words on the card rather than discovered on a 409.
+  if (billing?.renewalOpen === false) return { label: null, action: null };
+
+  return { label: 'Subscribe', action: 'checkout' };
+}
+
+/**
+ * When this plan runs out, and what happens then.
+ *
+ * Under manual renewal this is the fact a customer most needs and the one the
+ * product was least able to tell them — there was no column for it until
+ * migration 0027. Free accounts get nothing here rather than a reassuring
+ * "never expires", because they have no period at all and inventing one would
+ * be the same kind of lie in the other direction.
+ */
+function RenewalLine({ billing }) {
+  const ends = planDate(billing?.periodEndsAt);
+  if (ends === null) return null;
+
+  const graceEnds = planDate(billing?.graceEndsAt);
+
+  if (billing?.status === 'expired') {
+    return (
+      <p className="plan__note">
+        <strong>Ended {ends}.</strong> Uploads are paused and everything you have stored
+        stays readable.{' '}
+        {graceEnds === null
+          ? null
+          : `Renew before ${graceEnds} to keep it — after that this account's data is scheduled for deletion.`}
+      </p>
+    );
+  }
+
+  return (
+    <p className="plan__note">
+      <strong>Ends {ends}.</strong> This plan does not renew automatically — we never
+      charge a card without you asking. We will email you a week before.
+    </p>
+  );
+}
 
 export function BillingTab() {
   const { api, workspaceId, role, workspaceSlug } = useWorkspace();
   const { status, data, error, reload } = useResource(loadBilling, [], 'billing');
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState(null);
+  /**
+   * Which card is mid-checkout, by plan id.
+   *
+   * A single boolean would spin every button on the grid at once, which reads
+   * as "the whole page is thinking" rather than "the thing you pressed is".
+   */
+  const [buying, setBuying] = useState(null);
 
   const billing = data?.billing;
   const isOwner = role === 'owner';
+  const purchasable = data?.purchasable ?? [];
+
+  const startCheckout = async planId => {
+    setBuying(planId); setOpenError(null);
+    try {
+      const { url } = await api.createCheckoutSession(workspaceId, planId);
+      // Same tab, matching openPortal: this is a checkout-shaped flow and a
+      // blocked popup here reads as a broken button.
+      window.location.assign(url);
+    } catch (err) {
+      setOpenError(`${err.message}${err.requestId ? ` (request ${err.requestId})` : ''}`);
+      setBuying(null);
+    }
+  };
 
   const openPortal = async () => {
     setOpening(true); setOpenError(null);
@@ -493,6 +622,10 @@ export function BillingTab() {
               {STATUS_LABEL[billing?.status] ?? billing?.status ?? '—'}
             </Badge>
           </div>
+          {/* The single most important fact on this screen under manual
+              renewal: when it runs out, and that nothing will renew it. */}
+          <RenewalLine billing={billing} />
+
           {/* The reference prints the plan's allowance here. It is real data,
               but it is not on this response — `/v1/whoami` carries it, against
               this workspace's actual usage — so this points at the screen that
@@ -534,6 +667,74 @@ export function BillingTab() {
           </dl>
         </section>
       </div>
+
+      <Panel
+        title="All plans"
+        subtitle="Pick a plan to subscribe. Each purchase covers one month and does not renew on its own."
+      >
+        <div className="plan plan--picker">
+          {PLANS.map(plan => {
+            const offer = cardAction(plan, billing, purchasable, isOwner);
+            const isCurrent = plan.id === billing?.plan;
+            return (
+              <section
+                key={plan.id}
+                className={`plan__card${isCurrent ? ' plan__card--accent' : ''}`}
+              >
+                <h4 className="plan__eyebrow">{plan.kicker}</h4>
+                <div className="plan__head">
+                  <span className="plan__name">{plan.price}</span>
+                  <span className="plan__unit">{plan.unit}</span>
+                </div>
+
+                {/* A word, never a tint alone. "Your plan" rather than
+                    "Current plan", which the hero card above already uses as
+                    its eyebrow — two elements with the same words on one
+                    screen read as a rendering mistake. */}
+                {isCurrent ? <Badge tone="ok" dot>Your plan</Badge> : null}
+
+                <ul className="plan__lines">
+                  {plan.lines.map(line => (
+                    <li key={line}>
+                      <Icon name="check" size={15} aria-hidden="true" />
+                      <span>{line}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="plan__foot">
+                  {offer.label === null ? null : (
+                    <Button
+                      variant={isCurrent ? 'primary' : 'secondary'}
+                      disabled={offer.disabled === true}
+                      loading={buying === plan.id}
+                      onClick={
+                        offer.action === 'checkout'
+                          ? () => startCheckout(plan.id)
+                          : offer.action === 'portal'
+                            ? openPortal
+                            : undefined
+                      }
+                    >
+                      {offer.label}
+                    </Button>
+                  )}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+
+        <p className="ad-meta plan__promo">
+          {/* No field and no endpoint. Stripe's own page carries the promotion
+              code box — `allow_promotion_codes` at checkout — and validating a
+              code here would mean passing `discounts` instead, which Stripe
+              refuses to accept alongside it. */}
+          Have a promo code? Enter it on the payment page after you choose a plan.
+        </p>
+
+        <p className="ad-meta">{COUNTING_NOTE}</p>
+      </Panel>
 
       <Panel title="Invoices">
         <EmptyState

@@ -130,18 +130,49 @@ function refundEvent(): string {
   });
 }
 
-async function orgState(): Promise<{
+interface OrgState {
   plan: string;
   billing_status: string;
   stripe_subscription_id: string | null;
-}> {
+  current_period_end: number | null;
+  purge_after: number | null;
+}
+
+async function orgState(): Promise<OrgState> {
   const row = await env.DB.prepare(
-    `SELECT plan, billing_status, stripe_subscription_id FROM organizations WHERE id = ?`
+    `SELECT plan, billing_status, stripe_subscription_id, current_period_end, purge_after
+       FROM organizations WHERE id = ?`
   )
     .bind(ORG_ID)
-    .first<{ plan: string; billing_status: string; stripe_subscription_id: string | null }>();
+    .first<OrgState>();
   if (row === null) throw new Error("organization missing");
   return row;
+}
+
+/**
+ * A one-off purchase, which is what checkout actually creates since AgentDisk
+ * stopped auto-renewing. The plan rides in the session's own metadata because
+ * there is no subscription to hang it from.
+ */
+function paymentEvent(overrides: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    id: "evt_payment",
+    object: "event",
+    type: "checkout.session.completed",
+    data: {
+      object: {
+        id: "cs_pay",
+        object: "checkout.session",
+        mode: "payment",
+        payment_status: "paid",
+        customer: "cus_test",
+        client_reference_id: ORG_ID,
+        subscription: null,
+        metadata: { agentdisk_org_id: ORG_ID, agentdisk_plan: "pro" },
+        ...overrides,
+      },
+    },
+  });
 }
 
 async function signedPost(payload: string): Promise<Response> {
@@ -176,18 +207,92 @@ describe("checkout.session.completed", () => {
     expect((await orgState()).stripe_subscription_id).toBe("sub_new");
   });
 
-  it("ignores a one-off payment session", async () => {
-    // mode: "payment" is not a subscription and must not be recorded as one.
-    const res = await signedPost(checkoutEvent({ mode: "payment", subscription: null }));
-    expect(res.status).toBe(200);
-    expect((await res.json() as { handled: boolean }).handled).toBe(false);
-    expect((await orgState()).stripe_subscription_id).toBeNull();
-  });
-
   it("ignores a client_reference_id naming an organization that is gone", async () => {
     const res = await signedPost(checkoutEvent({ client_reference_id: "org_DELETED", customer: null }));
     expect(res.status).toBe(200);
     expect((await orgState()).stripe_subscription_id).toBeNull();
+  });
+});
+
+/**
+ * The purchase path since manual renewal (23 September 2026). Unlike the
+ * subscription case above, this one event settles everything: the plan, the
+ * paid-through date, and the cancellation of any deletion already scheduled.
+ */
+describe("checkout.session.completed · one-off payment", () => {
+  beforeEach(async () => {
+    await env.DB.prepare(
+      `UPDATE organizations SET plan = 'free', current_period_end = NULL, purge_after = NULL
+        WHERE id = ?`
+    ).bind(ORG_ID).run();
+  });
+
+  it("grants the plan and a month of service", async () => {
+    const res = await signedPost(paymentEvent());
+    expect(res.status).toBe(200);
+    expect((await res.json() as { handled: boolean }).handled).toBe(true);
+
+    const org = await orgState();
+    expect(org.plan).toBe("pro");
+    expect(org.billing_status).toBe("active");
+    expect(org.current_period_end).not.toBeNull();
+    // A month out, give or take the day-clamping in addMonths.
+    const days = (org.current_period_end! - Date.now()) / (24 * 60 * 60 * 1000);
+    expect(days).toBeGreaterThan(27);
+    expect(days).toBeLessThan(32);
+  });
+
+  it("refuses a session that completed without being paid", async () => {
+    // Some payment methods settle asynchronously and fire this event while
+    // still unpaid. Granting a month there hands out service for a charge that
+    // may yet fail.
+    const res = await signedPost(paymentEvent({ payment_status: "unpaid" }));
+    expect((await res.json() as { handled: boolean }).handled).toBe(false);
+
+    const org = await orgState();
+    expect(org.plan).toBe("free");
+    expect(org.current_period_end).toBeNull();
+  });
+
+  it("refuses a plan id no row describes", async () => {
+    // The metadata arrives inside a signed event so it is not forgeable, but
+    // it is still a string we wrote months ago and the plan may be retired.
+    // Writing it anyway would leave entitlements resolving to the Free floor
+    // with nothing to explain why.
+    const res = await signedPost(
+      paymentEvent({ metadata: { agentdisk_org_id: ORG_ID, agentdisk_plan: "enterprise" } })
+    );
+    expect((await res.json() as { handled: boolean }).handled).toBe(false);
+    expect((await orgState()).plan).toBe("free");
+  });
+
+  it("extends from the existing period end when renewing early", async () => {
+    // The day-seven reminder exists to make people buy before their period
+    // ends. Restarting the clock from today would charge them for a month and
+    // silently take back the days they had already paid for.
+    const inFiveDays = Date.now() + 5 * 24 * 60 * 60 * 1000;
+    await env.DB.prepare(`UPDATE organizations SET current_period_end = ? WHERE id = ?`)
+      .bind(inFiveDays, ORG_ID).run();
+
+    await signedPost(paymentEvent());
+
+    const org = await orgState();
+    const days = (org.current_period_end! - Date.now()) / (24 * 60 * 60 * 1000);
+    expect(days).toBeGreaterThan(32);
+  });
+
+  it("cancels a deletion the sweep already scheduled", async () => {
+    // The single worst failure this feature can have: somebody pays on day ten
+    // and is deleted anyway by a job that stamped them on day seven.
+    await env.DB.prepare(
+      `UPDATE organizations SET billing_status = 'expired', purge_after = ? WHERE id = ?`
+    ).bind(Date.now() + 1000, ORG_ID).run();
+
+    await signedPost(paymentEvent());
+
+    const org = await orgState();
+    expect(org.purge_after).toBeNull();
+    expect(org.billing_status).toBe("active");
   });
 });
 
@@ -345,11 +450,34 @@ describe("what an unpaid account may still do", () => {
       .toThrow(ApiError);
   });
 
+  it("blocks a write while expired", () => {
+    // The state manual renewal actually produces — a period that ran out with
+    // nobody buying another. `past_due` needs an invoice to have failed, and a
+    // one-off payment has no invoice to fail.
+    expect(() => assertWithinQuota(workspace, limits, { bytes: 100, files: 1 }, NOW, "expired"))
+      .toThrow(ApiError);
+  });
+
+  it("tells an expired account how long it has, and that nothing is gone", () => {
+    // Somebody who meets this on a failed upload with no explanation concludes
+    // their data has been deleted. It has not, and the message has to say so.
+    try {
+      assertWithinQuota(workspace, limits, { bytes: 1 }, NOW, "expired");
+      throw new Error("expected a throw");
+    } catch (err) {
+      const message = (err as ApiError).message;
+      expect(message).toMatch(/does not renew automatically/i);
+      expect(message).toMatch(/readable and downloadable/i);
+      expect(message).toMatch(/7 days/);
+    }
+  });
+
   it("still allows reads", () => {
     // Locking somebody out of their own files to chase a payment turns a
     // billing problem into a support crisis.
     expect(() => assertWithinQuota(workspace, limits, {}, NOW, "past_due")).not.toThrow();
     expect(() => assertWithinQuota(workspace, limits, {}, NOW, "canceled")).not.toThrow();
+    expect(() => assertWithinQuota(workspace, limits, {}, NOW, "expired")).not.toThrow();
   });
 
   it("reports it as a limit, not as a permission failure", () => {

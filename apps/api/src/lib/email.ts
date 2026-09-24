@@ -283,3 +283,168 @@ export async function sendTestEmail(
     text,
   });
 }
+
+/* --------------------------- the renewal ladder --------------------------- */
+/**
+ * Three messages, sent by `jobs/billing-renewal.ts` as a period runs out.
+ *
+ * AgentDisk does not auto-renew, so these are not a courtesy — they are the
+ * only thing standing between a customer and losing access to their files by
+ * forgetting. Stripe used to send this class of message on our behalf; under
+ * manual renewal there is no subscription for it to dun, so it falls to us.
+ *
+ * Every one of them states the same two facts, deliberately repeated rather
+ * than assumed remembered: **nothing has been deleted**, and **reading and
+ * downloading keep working**. Somebody who meets the write lock on a failed
+ * upload with no explanation concludes their data is gone, and that is a
+ * support crisis manufactured out of a billing event.
+ */
+
+export interface RenewalEmail {
+  to: string;
+  /** The plan's display name, as the customer knows it: "Pro", "Team". */
+  planName: string;
+  /** The end of the paid period, already formatted for a human. */
+  periodEndDate: string;
+  /** Where to go and pay. The Manage Subscription page. */
+  renewUrl: string;
+}
+
+/** Day −7: the plan is running out and will not renew by itself. */
+export async function sendRenewalReminderEmail(
+  config: EmailConfig,
+  options: RenewalEmail
+): Promise<SendResult> {
+  const { to, planName, periodEndDate, renewUrl } = options;
+
+  // Said in the first sentence, because it is the fact the whole message
+  // exists to convey and the one a reader is most likely to assume otherwise.
+  const opening =
+    `Your ${planName} plan ends on ${periodEndDate}. ` +
+    `It will not renew automatically — AgentDisk never charges a card without you asking.`;
+  const closing =
+    "If you let it end, uploads pause but everything you have stored stays readable and " +
+    "downloadable for a further 7 days, and you can renew at any point in that window.";
+
+  const html = layout(
+    `Your plan ends on ${periodEndDate}`,
+    [
+      `<p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#374151">${opening}</p>`,
+      button(renewUrl, `Renew ${planName}`),
+      `<p style="margin:0;font-size:13px;line-height:1.6;color:#5f6875">${closing}</p>`,
+    ].join("")
+  );
+
+  const text = [opening, "", "Renew:", renewUrl, "", closing].join("\n");
+
+  return await sendEmail(config, {
+    to,
+    subject: `Your ${planName} plan ends on ${periodEndDate}`,
+    html,
+    text,
+  });
+}
+
+export interface RenewalExpiredEmail extends RenewalEmail {
+  /** When the data gets scheduled for deletion, formatted. */
+  graceEndDate: string;
+}
+
+/** Day 0: the period has ended, writes are locked, the grace clock starts. */
+export async function sendPlanExpiredEmail(
+  config: EmailConfig,
+  options: RenewalExpiredEmail
+): Promise<SendResult> {
+  const { to, planName, periodEndDate, graceEndDate, renewUrl } = options;
+
+  const opening =
+    `Your ${planName} plan ended on ${periodEndDate}. New uploads are paused.`;
+  const reassurance =
+    "Nothing has been deleted. Every file you have stored is still readable and downloadable, " +
+    "and your API keys still work for reads.";
+  const deadline =
+    `Renew before ${graceEndDate} and everything resumes exactly as it was. ` +
+    `If the account is still unrenewed on ${graceEndDate}, its data is scheduled for deletion.`;
+
+  const html = layout(
+    "Your plan has ended",
+    [
+      `<p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#374151">${opening}</p>`,
+      `<p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#374151">${reassurance}</p>`,
+      button(renewUrl, `Renew ${planName}`),
+      `<p style="margin:0;font-size:13px;line-height:1.6;color:#5f6875">${deadline}</p>`,
+    ].join("")
+  );
+
+  const text = [opening, "", reassurance, "", "Renew:", renewUrl, "", deadline].join("\n");
+
+  return await sendEmail(config, {
+    to,
+    subject: `Your ${planName} plan has ended`,
+    html,
+    text,
+  });
+}
+
+export interface DeletionScheduledEmail extends RenewalEmail {
+  /** Where the customer can still get their files out. */
+  dashboardUrl: string;
+}
+
+/**
+ * Day +7: the grace window is over and the data is queued for removal.
+ *
+ * This message is not in the original specification and was added deliberately.
+ * Scheduling the deletion of a paying customer's files without telling them at
+ * the moment it happens is indefensible — the two earlier messages warned about
+ * a future event, and this is the one that says it has now been set in motion
+ * and how to stop it.
+ *
+ * It says "scheduled", not "deleted", because that is the truth: the stamp is
+ * written here and the bytes go later, so renewing still undoes it.
+ */
+export async function sendDeletionScheduledEmail(
+  config: EmailConfig,
+  options: DeletionScheduledEmail
+): Promise<SendResult> {
+  const { to, planName, periodEndDate, renewUrl, dashboardUrl } = options;
+
+  const opening =
+    `Your ${planName} plan ended on ${periodEndDate} and the 7-day grace period is over. ` +
+    `The data in this account has been scheduled for deletion.`;
+  const escape =
+    "This is reversible. Renewing the plan cancels the deletion and restores the account " +
+    "exactly as it was — nothing has been removed yet.";
+  const exportNote =
+    "If you would rather not renew, sign in and download what you need first. Reads and " +
+    "downloads still work until the deletion runs.";
+
+  const html = layout(
+    "Your data is scheduled for deletion",
+    [
+      `<p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#374151">${opening}</p>`,
+      `<p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#374151">${escape}</p>`,
+      button(renewUrl, `Renew ${planName} and keep everything`),
+      `<p style="margin:0;font-size:13px;line-height:1.6;color:#5f6875">${exportNote} <a href="${dashboardUrl}" style="color:#6d28d9">Open AgentDisk</a>.</p>`,
+    ].join("")
+  );
+
+  const text = [
+    opening,
+    "",
+    escape,
+    "",
+    "Renew and keep everything:",
+    renewUrl,
+    "",
+    exportNote,
+    dashboardUrl,
+  ].join("\n");
+
+  return await sendEmail(config, {
+    to,
+    subject: "Your AgentDisk data is scheduled for deletion",
+    html,
+    text,
+  });
+}

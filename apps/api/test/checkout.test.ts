@@ -72,7 +72,8 @@ beforeEach(async () => {
   await seedTwoWorkspaces();
   invalidateCatalogue();
   await env.DB.prepare(
-    `UPDATE organizations SET stripe_subscription_id = NULL, plan = 'free' WHERE id = ?`
+    `UPDATE organizations SET stripe_subscription_id = NULL, plan = 'free',
+            current_period_end = NULL, purge_after = NULL WHERE id = ?`
   )
     .bind(ORG_ID)
     .run();
@@ -190,5 +191,81 @@ describe("POST /v1/billing/checkout-session", () => {
 
     const err = await refusal(owner(), { plan: "team" });
     expect(err.message).not.toMatch(/stripe_price_id/);
+  });
+});
+
+/**
+ * The renewal window — since AgentDisk stopped auto-renewing (23 Sept 2026).
+ *
+ * A purchase buys one month and nothing charges the card again, so the server
+ * has to answer a question it never used to: may this account buy *now*? Open
+ * it too wide and somebody pays twice for the same weeks; close it too tight
+ * and the day-seven reminder email points at a button that refuses them.
+ */
+describe("POST /v1/billing/checkout-session — the renewal window", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  async function periodEndingIn(ms: number): Promise<void> {
+    await env.DB.prepare(`UPDATE organizations SET current_period_end = ?, plan = 'pro' WHERE id = ?`)
+      .bind(NOW + ms, ORG_ID)
+      .run();
+  }
+
+  it("refuses while a paid period is comfortably live", async () => {
+    // Both a duplicate purchase and a mid-period plan change land here.
+    // Proration is deliberately out of scope, so the honest answer is "not yet".
+    await periodEndingIn(20 * DAY);
+
+    const err = await refusal(owner(), { plan: "pro" });
+    expect(err.code).toBe("CONFLICT");
+    expect(err.message).toMatch(/last 7 days/i);
+  });
+
+  it("refuses a different plan mid-period too, not just the same one", async () => {
+    await periodEndingIn(20 * DAY);
+
+    const err = await refusal(owner(), { plan: "team" });
+    expect(err.code).toBe("CONFLICT");
+  });
+
+  it("says so in `renewalOpen` rather than leaving the client to work it out", async () => {
+    // A browser an hour behind would otherwise decide for itself and disagree
+    // with the server that will actually refuse the checkout.
+    await periodEndingIn(20 * DAY);
+    const res = await getBilling(owner(), deps);
+    const { billing } = (await res.json()) as {
+      billing: { renewalOpen: boolean; periodEndsAt: number | null; graceEndsAt: number | null };
+    };
+
+    expect(billing.renewalOpen).toBe(false);
+    expect(billing.periodEndsAt).toBe(NOW + 20 * DAY);
+    // Seven days past the end: projected, not yet real.
+    expect(billing.graceEndsAt).toBe(NOW + 27 * DAY);
+  });
+
+  it("opens in the last seven days, which is when the reminder lands", async () => {
+    await periodEndingIn(3 * DAY);
+    const res = await getBilling(owner(), deps);
+    const { billing } = (await res.json()) as { billing: { renewalOpen: boolean } };
+    expect(billing.renewalOpen).toBe(true);
+  });
+
+  it("opens once the period has ended", async () => {
+    await periodEndingIn(-2 * DAY);
+    const res = await getBilling(owner(), deps);
+    const { billing } = (await res.json()) as { billing: { renewalOpen: boolean } };
+    expect(billing.renewalOpen).toBe(true);
+  });
+
+  it("opens for an account that has never bought anything", async () => {
+    const res = await getBilling(owner(), deps);
+    const { billing } = (await res.json()) as {
+      billing: { renewalOpen: boolean; periodEndsAt: number | null; graceEndsAt: number | null };
+    };
+    // NULL is "never bought one", which is not the same as expired and must
+    // not be reported as a grace deadline that has already passed.
+    expect(billing.renewalOpen).toBe(true);
+    expect(billing.periodEndsAt).toBeNull();
+    expect(billing.graceEndsAt).toBeNull();
   });
 });

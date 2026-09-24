@@ -1,12 +1,29 @@
 /**
  * Billing — 14 PART 29.1/29.3.
  *
- * Portal depth, deliberately: AgentDisk creates the Stripe Customer and hands
- * the person to Stripe's own hosted portal for everything after that. No card
- * form, no plan-change UI, no invoice list of our own. That is not laziness —
- * every one of those screens is a PCI surface and a thing to keep in step with
- * Stripe's own behaviour, and none of them makes the product better at storing
- * files for agents.
+ * ── No card ever reaches us ─────────────────────────────────────────────────
+ * The card is entered on Stripe's own hosted page, on Stripe's domain. This
+ * Worker creates the session and receives back a URL, and the only
+ * payment-shaped things in D1 are opaque Stripe ids that are useless without
+ * our secret key. That is what keeps AgentDisk in PCI DSS SAQ-A — the lightest
+ * scope there is — and the rule that preserves it is absolute: never let a card
+ * number touch this origin, not even in transit, not even to forward it.
+ *
+ * ── And nothing renews by itself ────────────────────────────────────────────
+ * Owner's decision, 23 September 2026. A purchase buys one month and stops; the
+ * customer is reminded seven days out, locked at expiry, and their data is
+ * scheduled for deletion seven days after that. `lib/renewal.ts` owns the
+ * clock, `jobs/billing-renewal.ts` walks it.
+ *
+ * The consequence for this file is that checkout creates a **payment**, not a
+ * subscription — see the session below for why that distinction is a safety
+ * property and not a preference.
+ *
+ * Stripe's hosted portal survives as invoice history and nothing else. There is
+ * no subscription left for it to cancel and no card kept on file for it to
+ * update, but it is still the only place a receipt lives, and rebuilding an
+ * invoice list here would mean re-implementing a compliance-sensitive surface
+ * with none of the controls Stripe already has.
  */
 
 import { ApiError, forbidden, validationError } from "../lib/errors";
@@ -17,6 +34,7 @@ import {
   type OrgBilling,
 } from "../billing/organizations";
 import { loadCatalogue, type Catalogue } from "../billing/catalogue";
+import { RENEWAL_REMINDER_MS, deletionScheduledAt } from "../lib/renewal";
 import type { AuthContext } from "../middleware/auth";
 
 function json(body: unknown, status = 200): Response {
@@ -82,8 +100,52 @@ export async function getBilling(ctx: AuthContext, deps: BillingDeps): Promise<R
       // Said explicitly rather than left for the UI to infer from the status
       // string, so the rule lives in one place.
       writesBlocked: org.billingStatus !== "active",
+
+      /* ------------------------ the renewal clock ------------------------ */
+      //
+      // These four are the whole reason this response grew. Under manual
+      // renewal the date a plan runs out is the single most important fact a
+      // customer has, and until now the API returned nothing about it — there
+      // was no column to return. They come straight off `organizations`, so
+      // none of this costs a Stripe call.
+
+      /** When the paid period ends. Null for an account that never bought one. */
+      periodEndsAt: org.currentPeriodEnd,
+      /**
+       * Stated rather than left to the client's clock. A browser an hour behind
+       * would otherwise decide for itself whether a renewal window is open, and
+       * disagree with the server that will actually refuse the checkout.
+       */
+      renewalOpen: renewalWindowOpen(org.currentPeriodEnd, ctx.now),
+      /** When the grace ends and data is scheduled for deletion, once expired. */
+      graceEndsAt:
+        org.currentPeriodEnd === null ? null : deletionScheduledAt(org.currentPeriodEnd),
+      /**
+       * Set once a sweep has actually stamped the account. Distinct from
+       * `graceEndsAt`, which is only ever a projection: this one means it has
+       * happened, and renewing is what clears it.
+       */
+      purgeAfter: org.purgeAfter,
     },
   });
+}
+
+/**
+ * Whether a purchase is allowed right now.
+ *
+ * Closed while a paid period is comfortably live, for two different reasons
+ * that happen to share an answer. Buying the same plan twice would charge for a
+ * month already paid for; buying a *different* one mid-period is a plan change,
+ * and proration is deliberately out of scope — Stripe's own machinery for it is
+ * the part of a billing system most likely to bill somebody wrongly.
+ *
+ * It opens for the last seven days, which is exactly when the reminder email
+ * lands. That email's whole purpose is to get somebody to renew before their
+ * period ends, so a window that refused them would make the reminder a lie.
+ */
+function renewalWindowOpen(currentPeriodEnd: number | null, now: number): boolean {
+  if (currentPeriodEnd === null) return true;
+  return currentPeriodEnd - now <= RENEWAL_REMINDER_MS;
 }
 
 /**
@@ -175,18 +237,24 @@ export async function createCheckoutSession(
   const org = await findOrgForWorkspace(deps.db, ctx.workspaceId);
   if (org === null) throw new ApiError("NOT_FOUND", "No billing account for this workspace.");
 
-  // One live subscription per organization. amardrive enforces this with a
-  // partial unique index because its subscriptions are rows; here it is a
-  // single column on `organizations`, so the invariant is structural and this
-  // check exists to give it a readable answer rather than to create it.
-  //
-  // Refused rather than silently redirected: a second checkout would produce a
-  // second subscription on the same card, which is the kind of duplicate
-  // nobody notices until the second invoice.
+  // A real Stripe Subscription, from before this product stopped using them or
+  // created by hand in the dashboard. Nothing in this code path makes one any
+  // more, but if one exists it is the thing actually billing the customer, and
+  // selling them a one-off month on top would charge twice for the same weeks.
   if (org.stripeSubscriptionId !== null) {
     throw new ApiError(
       "CONFLICT",
       "This account already has a subscription. Change or cancel it from the billing portal."
+    );
+  }
+
+  // Already paid up, and not yet near the end. See `renewalWindowOpen`: this
+  // refuses both a duplicate purchase and a mid-period plan change, and the
+  // message has to serve both because the caller knows which they attempted.
+  if (!renewalWindowOpen(org.currentPeriodEnd, ctx.now)) {
+    throw new ApiError(
+      "CONFLICT",
+      "This plan is paid for until it ends. You can renew, or switch plans, in the last 7 days of the period."
     );
   }
 
@@ -219,17 +287,35 @@ export async function createCheckoutSession(
   // redirect - through Stripe's return, which is a worse place to bounce.
   const workspacePath = `${deps.dashboardUrl}/w/${ctx.workspace.slug ?? ctx.workspaceId}/billing`;
 
+  // `payment`, not `subscription`, and this is the whole expression of the
+  // owner's decision that AgentDisk does not auto-renew.
+  //
+  // The obvious alternative is a Subscription with `cancel_at_period_end` set.
+  // It was rejected because its failure mode is charging somebody without
+  // consent: one missed flag and the customer is billed again, silently, which
+  // is exactly the outcome being ruled out. A one-off payment cannot do that —
+  // Stripe holds no mandate and has nothing to charge against. The property is
+  // structural rather than a setting that could be wrong.
+  //
+  // `invoice_creation` because the receipt still has to exist. Without it a
+  // `payment` session leaves a charge and no invoice, and the billing portal —
+  // which is now only good for invoice history — would have nothing to show.
   const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
+    mode: "payment",
     customer: customerId,
     line_items: [{ price: plan.stripe_price_id, quantity: 1 }],
     success_url: `${workspacePath}?checkout=success`,
     cancel_url: `${workspacePath}?checkout=cancelled`,
     // Both so that a Stripe-side investigation can reach the account from
-    // either the session or the subscription it produces, without matching on
-    // an email that may be shared.
+    // either the session or the charge it produces, without matching on an
+    // email that may be shared.
     client_reference_id: org.id,
-    subscription_data: { metadata: { agentdisk_org_id: org.id, agentdisk_plan: plan.id } },
+    // On the session itself now. There is no subscription to hang metadata
+    // from, and `checkout.session.completed` is the only event that resolves
+    // this purchase back to a plan — `findPlanByPriceId` cannot help, because a
+    // one-off session's line items are not re-read on the webhook.
+    metadata: { agentdisk_org_id: org.id, agentdisk_plan: plan.id },
+    invoice_creation: { enabled: true },
     allow_promotion_codes: true,
   });
 

@@ -1000,6 +1000,25 @@
 .plan__foot{margin-top:auto;display:flex;align-items:center;gap:var(--s-4);
   flex-wrap:wrap}
 
+/* --- the plan picker (Manage Subscription) ------------------------------- */
+/* Narrower columns than the two-card hero above it: four plans on one row at
+   full width, and it still folds to one column inside the Settings tab. */
+.plan--picker{grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))}
+/* The price is the headline here, so the name sits above it as the eyebrow and
+   `.plan__name` carries the figure. No capitalize — "$9" has no case, and the
+   rule on `.plan__name` exists for the lowercase plan identifiers the hero
+   renders. */
+.plan--picker .plan__name{font-size:var(--t-28);text-transform:none}
+.plan__unit{font-size:var(--t-12-5);color:var(--ink-3)}
+.plan__lines{margin:0;padding:0;list-style:none;display:flex;
+  flex-direction:column;gap:var(--s-3)}
+.plan__lines li{display:flex;align-items:flex-start;gap:var(--s-3);
+  font-size:var(--t-12-5);line-height:var(--lh-normal);color:var(--ink-2)}
+/* The tick is decoration; the sentence beside it carries the meaning, so it
+   takes the muted ink rather than a status colour. */
+.plan__lines svg{flex:none;margin-top:0.1em;color:var(--ink-3)}
+.plan__promo{margin-top:var(--s-5)}
+
 /* The band that replaces the workspace strip while you are in the account
    area. Accent-tinted, because the point of it is that this is not one of your
    workspaces and nothing you do here belongs to one. */

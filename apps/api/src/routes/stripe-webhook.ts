@@ -28,18 +28,31 @@
  * the failure is silent in the worst direction: an event we handle but no
  * longer receive looks exactly like an event that never fired.
  *
- *   checkout.session.completed      a subscription was paid for
- *   customer.subscription.created    *   customer.subscription.updated    | lifecycle: plan, status, renewal
- *   customer.subscription.deleted   /
- *   invoice.payment_failed          card trouble -> writes stop, reads do not
- *   invoice.payment_succeeded       lifts past_due, and nothing else
+ *   checkout.session.completed      ** a month was paid for — see below
  *   product.created                  *   product.updated                  | the catalogue, mirrored into D1
  *   product.deleted                 /
  *   charge.refunded                 recorded, entitlements deliberately untouched
+ *   customer.subscription.created    *   customer.subscription.updated    | dormant — see below
+ *   customer.subscription.deleted   /
+ *   invoice.payment_failed          dormant
+ *   invoice.payment_succeeded       dormant
  *
- * The subscription events own the plan; checkout.session.completed only records
- * which subscription belongs to which organization. charge.refunded owns
- * nothing — see its case for why a refund must not move entitlements.
+ * ── Which of them actually fire ─────────────────────────────────────────────
+ * Since AgentDisk stopped auto-renewing (23 September 2026) checkout creates a
+ * one-off **payment**, not a subscription. So `checkout.session.completed` is
+ * the only event that grants service, and it now settles everything a purchase
+ * means: the plan, the paid-through date, and the cancellation of any deletion
+ * already scheduled. It used to be the thin half of a pair.
+ *
+ * The six marked dormant cannot be reached by anything this product creates —
+ * there is no subscription to have a lifecycle and no invoice to fail. They are
+ * kept, subscribed and working because a subscription made by hand in the
+ * Stripe dashboard still arrives here, and because deleting them would turn
+ * "return to auto-renewal" from a decision into a rewrite. Do not mistake their
+ * silence for dead code.
+ *
+ * charge.refunded owns nothing — see its case for why a refund must not move
+ * entitlements.
  */
 
 import { ApiError } from "../lib/errors";
@@ -51,6 +64,7 @@ import {
   type BillingStatus,
 } from "../billing/organizations";
 import { retirePlanForProduct, syncProductToPlan } from "../billing/plan-sync";
+import { nextPeriodEnd } from "../lib/renewal";
 
 export interface WebhookDeps {
   db: D1Database;
@@ -111,10 +125,17 @@ function customerIdOf(value: string | { id: string } | null | undefined): string
 async function orgFromCustomer(
   db: D1Database,
   customer: string | { id: string } | null | undefined
-): Promise<{ id: string; plan: string } | null> {
+): Promise<OrgRef | null> {
   const customerId = customerIdOf(customer);
   if (customerId === null) return null;
   return findOrgByCustomerId(db, customerId);
+}
+
+/** What every handler here needs about an organization, and no more. */
+interface OrgRef {
+  id: string;
+  plan: string;
+  currentPeriodEnd: number | null;
 }
 
 /**
@@ -124,14 +145,42 @@ async function orgFromCustomer(
  * signed event, so it is not forgeable, but it is still a string we put into
  * Stripe months ago and an organization can have been deleted since.
  */
-async function findOrgById(
-  db: D1Database,
-  orgId: string
-): Promise<{ id: string; plan: string } | null> {
+async function findOrgById(db: D1Database, orgId: string): Promise<OrgRef | null> {
   return db
-    .prepare(`SELECT id, plan FROM organizations WHERE id = ?`)
+    .prepare(
+      `SELECT id, plan, current_period_end AS currentPeriodEnd
+         FROM organizations WHERE id = ?`
+    )
     .bind(orgId)
-    .first<{ id: string; plan: string }>();
+    .first<OrgRef>();
+}
+
+/**
+ * The plan a completed one-off purchase was for.
+ *
+ * Read from the session metadata this product wrote at checkout, then checked
+ * against `plans` rather than trusted. The value arrives inside a signed event
+ * so it is not forgeable, but it is still a string we put into Stripe — a plan
+ * can have been retired since, and writing an id no row describes would leave
+ * the account's entitlements resolving to the Free floor with no way to tell
+ * why.
+ *
+ * Undefined rather than a guess, on the same reasoning as
+ * `planFromSubscription`: leaving the plan alone beats resolving an unknown to
+ * something arbitrary.
+ */
+async function planFromSession(
+  db: D1Database,
+  session: Stripe.Checkout.Session
+): Promise<string | undefined> {
+  const claimed = session.metadata?.["agentdisk_plan"];
+  if (claimed === undefined || claimed === "") return undefined;
+
+  const row = await db
+    .prepare(`SELECT id FROM plans WHERE id = ?`)
+    .bind(claimed)
+    .first<{ id: string }>();
+  return row?.id;
 }
 
 export async function handleStripeWebhook(
@@ -207,28 +256,32 @@ async function apply(event: Stripe.Event, deps: WebhookDeps): Promise<boolean> {
       // The plan drops to free rather than staying on the paid one it was.
       // Leaving it would keep enforcing a paid quota for somebody who has
       // stopped paying, which is the wrong direction to be generous in.
+      //
+      // `currentPeriodEnd` is cleared with it. The period was that
+      // subscription's; leaving it behind would have the renewal job counting
+      // down to an expiry for service that has already stopped, and would make
+      // the dashboard promise a date nothing will honour.
       await applySubscriptionState(
         deps.db,
         org.id,
-        { plan: "free", billingStatus: "canceled", subscriptionId: null },
+        {
+          plan: "free",
+          billingStatus: "canceled",
+          subscriptionId: null,
+          currentPeriodEnd: null,
+        },
         deps.now
       );
       return true;
     }
 
     case "checkout.session.completed": {
-      // The moment a subscription is actually paid for. Thin on purpose: it
-      // records WHICH subscription belongs to this organization and that the
-      // account is in good standing, and leaves the plan to the
-      // customer.subscription.* events, which carry the price and are
-      // guaranteed to fire for a subscription checkout.
-      //
-      // Splitting it that way avoids retrieving the subscription here just to
-      // learn a price another event is about to hand us, and it means the two
-      // deliveries can arrive in either order without disagreeing - both writes
-      // are idempotent and neither depends on the other having happened.
+      // The moment a month is actually paid for, and under manual renewal this
+      // is now the ONLY event that grants service. There is no subscription
+      // behind it to carry the plan in a later event, so everything the
+      // purchase means is settled here: which plan, paid through when, and the
+      // cancellation of any deletion already scheduled.
       const session = event.data.object as Stripe.Checkout.Session;
-      if (session.mode !== "subscription") return false;
 
       // client_reference_id first: it is ours, we set it at checkout, and it
       // survives a customer object being merged or replaced on Stripe's side.
@@ -240,16 +293,56 @@ async function apply(event: Stripe.Event, deps: WebhookDeps): Promise<boolean> {
         (await orgFromCustomer(deps.db, session.customer));
       if (org === null) return false;
 
-      const subscriptionId =
-        typeof session.subscription === "string"
-          ? session.subscription
-          : (session.subscription?.id ?? null);
-      if (subscriptionId === null) return false;
+      if (session.mode === "subscription") {
+        // A subscription checkout, which this product no longer creates. Kept
+        // because a subscription made by hand in the Stripe dashboard still
+        // arrives here, and recording which subscription belongs to which
+        // organization is the right response. The plan is left to the
+        // customer.subscription.* events, which carry the price.
+        const subscriptionId =
+          typeof session.subscription === "string"
+            ? session.subscription
+            : (session.subscription?.id ?? null);
+        if (subscriptionId === null) return false;
+
+        await applySubscriptionState(
+          deps.db,
+          org.id,
+          { billingStatus: "active", subscriptionId },
+          deps.now
+        );
+        return true;
+      }
+
+      if (session.mode !== "payment") return false;
+
+      // A completed session is not a paid one. Some payment methods settle
+      // asynchronously, and Stripe fires this event with `payment_status`
+      // still `unpaid` while it waits — granting a month there would hand out
+      // service for a charge that may yet fail.
+      if (session.payment_status !== "paid") return false;
+
+      const plan = await planFromSession(deps.db, session);
+      if (plan === undefined) return false;
+
+      // Extends from the existing period end when one is still live, so
+      // renewing early on the strength of the day-seven reminder adds a month
+      // rather than discarding the days already paid for.
+      const periodEnd = nextPeriodEnd(deps.now, org.currentPeriodEnd);
 
       await applySubscriptionState(
         deps.db,
         org.id,
-        { billingStatus: "active", subscriptionId },
+        {
+          plan,
+          billingStatus: "active",
+          currentPeriodEnd: periodEnd,
+          // The single most important write in this feature. A sweep may
+          // already have stamped this account for deletion during the grace
+          // window; paying has to take it back, or somebody who renewed on day
+          // ten is deleted anyway by a job that ran on day seven.
+          purgeAfter: null,
+        },
         deps.now
       );
       return true;

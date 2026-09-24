@@ -17,20 +17,22 @@ import { BillingTab } from './SettingsTabs.jsx';
  * it is so an existing bookmark or habit does not break.
  *
  * ── What this page deliberately does not do ───────────────────────────────
- * 14 PART 29.1 puts everything past "who is this account" on Stripe's hosted
- * portal: cards, plan changes, cancellation. A card form here would be a PCI
- * surface and a plan-change UI would be a second place for pricing to drift
- * out of step with Stripe. Reading invoices and the card's brand back from
- * Stripe to *display* breaks neither rule, which is why that is the only
- * direction this page grows in.
+ * No card form, ever. The card is entered on Stripe's own hosted page, on
+ * Stripe's domain, and nothing card-shaped reaches this origin — that is what
+ * keeps AgentDisk in PCI SAQ-A, and a "convenient" field here would end it.
+ * Picking a plan and sending somebody to Stripe breaks neither rule, which is
+ * why that is the direction this page grows in.
+ *
+ * Invoices stay on Stripe's portal rather than being copied here, so the two
+ * cannot disagree about what somebody was charged.
  */
 export default function Billing() {
   return (
     <div className="acct acct--billing">
-      <h2 className="ds__h2">Billing</h2>
+      <h2 className="ds__h2">Manage Subscription</h2>
       <p className="ds__sub acct__sub">
         Plan and payment for the organization that owns this workspace. One bill covers
-        every workspace on the account.
+        every workspace on the account, and nothing renews automatically.
       </p>
       <BillingTab />
     </div>

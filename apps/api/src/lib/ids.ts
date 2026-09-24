@@ -90,6 +90,11 @@ export const ID_PREFIX = {
   // A row in admin_actions - the fleet-wide admin log, whose rows are not
   // workspace-scoped and so cannot live in audit_events. See migration 0011.
   adminAction: "sac",
+  // One lifecycle message actually sent to a customer - the send-once ledger
+  // behind the renewal ladder. Not workspace-scoped: it is about a billing
+  // account and a period, not about anything inside a workspace. See migration
+  // 0027.
+  notification: "ntf",
   // Not an entity: request IDs are never stored, only echoed in error bodies
   // and logs (05 PART 13's envelope). Same generator, same sortability.
   request: "req",

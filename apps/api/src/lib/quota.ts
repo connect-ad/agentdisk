@@ -77,13 +77,37 @@ function assertBillingAllowsWrite(billingStatus: string, demand: QuotaDemand): v
     (demand.files !== undefined && demand.files > 0);
   if (!writing) return;
 
-  throw new ApiError(
-    "LIMIT_EXCEEDED",
-    billingStatus === "past_due"
-      ? "This account has an unpaid invoice. New uploads are paused until it is settled; your files remain readable."
-      : "This account's subscription has ended. New uploads are paused; your files remain readable.",
-    { details: { limit: "billing", status: billingStatus } }
-  );
+  throw new ApiError("LIMIT_EXCEEDED", refusal(billingStatus), {
+    details: { limit: "billing", status: billingStatus },
+  });
+}
+
+/**
+ * What to tell somebody whose account cannot write.
+ *
+ * Each one names the state, says plainly that nothing has been deleted, and
+ * gives the action that fixes it. The deadline is deliberately relative rather
+ * than an exact date: this message is built on the request path, which does not
+ * carry the period end, and the dashboard already shows the real date from
+ * `GET /v1/billing`. A wrong date here would be worse than no date.
+ */
+function refusal(billingStatus: string): string {
+  switch (billingStatus) {
+    case "expired":
+      // The one a live account actually reaches under manual renewal.
+      return (
+        "This plan has ended and does not renew automatically. New uploads are paused; " +
+        "everything you have stored is still readable and downloadable. Renew within 7 days " +
+        "of the end date to keep it — after that the account's data is scheduled for deletion."
+      );
+    case "past_due":
+      return (
+        "This account has an unpaid invoice. New uploads are paused until it is settled; " +
+        "your files remain readable."
+      );
+    default:
+      return "This account's subscription has ended. New uploads are paused; your files remain readable.";
+  }
 }
 
 export function assertWithinQuota(

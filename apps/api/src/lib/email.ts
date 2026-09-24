@@ -286,12 +286,14 @@ export async function sendTestEmail(
 
 /* --------------------------- the renewal ladder --------------------------- */
 /**
- * Three messages, sent by `jobs/billing-renewal.ts` as a period runs out.
+ * Three messages, sent by `jobs/billing-renewal.ts` around a renewal.
  *
- * AgentDisk does not auto-renew, so these are not a courtesy — they are the
- * only thing standing between a customer and losing access to their files by
- * forgetting. Stripe used to send this class of message on our behalf; under
- * manual renewal there is no subscription for it to dun, so it falls to us.
+ * AgentDisk auto-renews (owner's decision, 25 September 2026), so the first of
+ * these is **advance notice of a charge** rather than a request to act. That is
+ * not a courtesy: a subscription that bills without warning is the pattern
+ * consumer-protection rules across the US and EU were written about, and
+ * several jurisdictions require notice before a renewal charge specifically.
+ * The other two are the dunning ladder, which Stripe drives and we narrate.
  *
  * Every one of them states the same two facts, deliberately repeated rather
  * than assumed remembered: **nothing has been deleted**, and **reading and
@@ -306,81 +308,105 @@ export interface RenewalEmail {
   planName: string;
   /** The end of the paid period, already formatted for a human. */
   periodEndDate: string;
-  /** Where to go and pay. The Manage Subscription page. */
+  /** Where the subscription is managed. The Manage Subscription page. */
   renewUrl: string;
 }
 
-/** Day −7: the plan is running out and will not renew by itself. */
+export interface RenewalReminderEmail extends RenewalEmail {
+  /** What will be charged, already formatted: "$20.00". */
+  amount: string;
+  /** "month" or "year", for the sentence that names the cadence. */
+  interval: "month" | "year";
+}
+
+/**
+ * Day −7: the plan renews on this date, for this amount.
+ *
+ * The amount is not optional and the date is not approximate. A renewal notice
+ * that says only "your plan renews soon" leaves the customer unable to check it
+ * against their statement, which is the one thing the message is for.
+ */
 export async function sendRenewalReminderEmail(
   config: EmailConfig,
-  options: RenewalEmail
+  options: RenewalReminderEmail
 ): Promise<SendResult> {
-  const { to, planName, periodEndDate, renewUrl } = options;
+  const { to, planName, periodEndDate, renewUrl, amount, interval } = options;
 
-  // Said in the first sentence, because it is the fact the whole message
-  // exists to convey and the one a reader is most likely to assume otherwise.
+  // Amount and date in the first sentence, because together they are the whole
+  // content of the notice and a reader should not have to hunt for either.
   const opening =
-    `Your ${planName} plan ends on ${periodEndDate}. ` +
-    `It will not renew automatically — AgentDisk never charges a card without you asking.`;
+    `Your ${planName} plan renews automatically on ${periodEndDate}, ` +
+    `and the card on file will be charged ${amount} for another ${interval}.`;
   const closing =
-    "If you let it end, uploads pause but everything you have stored stays readable and " +
-    "downloadable for a further 7 days, and you can renew at any point in that window.";
+    "Nothing is needed from you if that is what you want. If you would rather stop, " +
+    "you can cancel from the billing page at any time before that date — you keep the " +
+    "plan until the period you have already paid for runs out.";
 
   const html = layout(
-    `Your plan ends on ${periodEndDate}`,
+    `Your plan renews on ${periodEndDate}`,
     [
       `<p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#374151">${opening}</p>`,
-      button(renewUrl, `Renew ${planName}`),
+      button(renewUrl, "Manage subscription"),
       `<p style="margin:0;font-size:13px;line-height:1.6;color:#5f6875">${closing}</p>`,
     ].join("")
   );
 
-  const text = [opening, "", "Renew:", renewUrl, "", closing].join("\n");
+  const text = [opening, "", "Manage subscription:", renewUrl, "", closing].join("\n");
 
   return await sendEmail(config, {
     to,
-    subject: `Your ${planName} plan ends on ${periodEndDate}`,
+    subject: `Your ${planName} plan renews on ${periodEndDate} — ${amount}`,
     html,
     text,
   });
 }
 
-export interface RenewalExpiredEmail extends RenewalEmail {
+export interface PaymentFailedEmail extends RenewalEmail {
   /** When the data gets scheduled for deletion, formatted. */
   graceEndDate: string;
 }
 
-/** Day 0: the period has ended, writes are locked, the grace clock starts. */
-export async function sendPlanExpiredEmail(
+/**
+ * Day 0: the renewal charge failed, writes are locked, the grace clock starts.
+ *
+ * Written to be actionable rather than alarming, because the overwhelming
+ * majority of these are an expired card rather than somebody leaving. The fix
+ * is one link, and it is the first thing in the message.
+ */
+export async function sendPaymentFailedEmail(
   config: EmailConfig,
-  options: RenewalExpiredEmail
+  options: PaymentFailedEmail
 ): Promise<SendResult> {
   const { to, planName, periodEndDate, graceEndDate, renewUrl } = options;
 
   const opening =
-    `Your ${planName} plan ended on ${periodEndDate}. New uploads are paused.`;
+    `We could not take payment for your ${planName} plan on ${periodEndDate}. ` +
+    `This is usually an expired or replaced card. New uploads are paused until it is sorted out.`;
   const reassurance =
     "Nothing has been deleted. Every file you have stored is still readable and downloadable, " +
     "and your API keys still work for reads.";
   const deadline =
-    `Renew before ${graceEndDate} and everything resumes exactly as it was. ` +
-    `If the account is still unrenewed on ${graceEndDate}, its data is scheduled for deletion.`;
+    `We will keep retrying the card until ${graceEndDate}, and everything resumes the moment ` +
+    `one succeeds. If it is still unpaid on ${graceEndDate}, the account's data is scheduled ` +
+    `for deletion.`;
 
   const html = layout(
-    "Your plan has ended",
+    "We could not take payment",
     [
       `<p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#374151">${opening}</p>`,
+      button(renewUrl, "Update payment method"),
       `<p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#374151">${reassurance}</p>`,
-      button(renewUrl, `Renew ${planName}`),
       `<p style="margin:0;font-size:13px;line-height:1.6;color:#5f6875">${deadline}</p>`,
     ].join("")
   );
 
-  const text = [opening, "", reassurance, "", "Renew:", renewUrl, "", deadline].join("\n");
+  const text = [opening, "", "Update payment method:", renewUrl, "", reassurance, "", deadline].join(
+    "\n"
+  );
 
   return await sendEmail(config, {
     to,
-    subject: `Your ${planName} plan has ended`,
+    subject: `Payment failed for your ${planName} plan`,
     html,
     text,
   });
@@ -410,10 +436,11 @@ export async function sendDeletionScheduledEmail(
   const { to, planName, periodEndDate, renewUrl, dashboardUrl } = options;
 
   const opening =
-    `Your ${planName} plan ended on ${periodEndDate} and the 7-day grace period is over. ` +
-    `The data in this account has been scheduled for deletion.`;
+    `We were unable to collect payment for your ${planName} plan, and the 7-day grace period ` +
+    `that began on ${periodEndDate} is now over. The data in this account has been scheduled ` +
+    `for deletion.`;
   const escape =
-    "This is reversible. Renewing the plan cancels the deletion and restores the account " +
+    "This is reversible. Starting a plan again cancels the deletion and restores the account " +
     "exactly as it was — nothing has been removed yet.";
   const exportNote =
     "If you would rather not renew, sign in and download what you need first. Reads and " +
@@ -424,7 +451,7 @@ export async function sendDeletionScheduledEmail(
     [
       `<p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#374151">${opening}</p>`,
       `<p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#374151">${escape}</p>`,
-      button(renewUrl, `Renew ${planName} and keep everything`),
+      button(renewUrl, `Restart ${planName} and keep everything`),
       `<p style="margin:0;font-size:13px;line-height:1.6;color:#5f6875">${exportNote} <a href="${dashboardUrl}" style="color:#6d28d9">Open AgentDisk</a>.</p>`,
     ].join("")
   );
@@ -434,7 +461,7 @@ export async function sendDeletionScheduledEmail(
     "",
     escape,
     "",
-    "Renew and keep everything:",
+    "Restart the plan and keep everything:",
     renewUrl,
     "",
     exportNote,

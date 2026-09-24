@@ -117,10 +117,10 @@ describe("metadata round trip", () => {
                 active: true,
                 currency: "usd",
                 unit_amount: before?.amount_cents,
-                // One-time. AgentDisk sells a month and stops, so the catalogue
-                // only ever selects a non-recurring price — a recurring one
-                // cannot be charged through `mode: "payment"` checkout.
-                recurring: null,
+                // Recurring, monthly. AgentDisk sells subscriptions, and the
+                // catalogue only selects a price Stripe will accept in
+                // `mode: "subscription"` — a one-time price is refused there.
+                recurring: { interval: "month", interval_count: 1 },
               },
             ],
           }),

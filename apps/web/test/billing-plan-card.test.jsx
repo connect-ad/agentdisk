@@ -1,32 +1,36 @@
 /**
- * The Billing hero.
+ * The Billing screen.
  *
- * The reference draws this screen as two cards: an accent CURRENT PLAN card
- * and a neutral one beside it. It fills them with a monthly price, a
- * next-invoice estimate and a card's last four digits — and `GET /v1/billing`
- * returns none of those, because Stripe holds them and this product never
+ * The reference draws this as two cards: an accent CURRENT PLAN card and a
+ * neutral one beside it. It fills them with a monthly price, a next-invoice
+ * estimate and a card's last four digits — and `GET /v1/billing` returns
+ * neither of the last two, because Stripe holds them and this product never
  * reads them back (14 PART 29.1). Borrowing the chrome is therefore one edit
  * away from borrowing the numbers too, which is exactly the class of thing
- * `backlog/023` exists about: a screen that looks authoritative about money
- * it invented.
+ * `backlog/023` exists about: a screen that looks authoritative about money it
+ * invented.
  *
- * So what is asserted here is not "the card renders" but "the card renders
- * the fields the API actually returned, and invents nothing about this
- * account's money" — the property that has to survive the next person who
- * opens the reference beside this file.
+ * So what is asserted here is not "the card renders" but "the card renders the
+ * fields the API actually returned, and invents nothing about this account's
+ * money" — the property that has to survive the next person who opens the
+ * reference beside this file.
  *
- * **The screen now carries prices**, since the plan picker landed: a picker
- * without them is useless. That narrows the rule rather than repealing it.
- * Every figure comes from `lib/pricing.js`, the one public copy of the
- * catalogue, and none of them is a claim about what *this* customer will be
- * charged. A next-invoice estimate or a card's last four still would be.
+ * **Prices now come from the server**, since auto-renewal and yearly billing
+ * landed. That narrows the rule rather than repealing it: the two amounts are
+ * what Stripe will actually charge, so quoting them is the opposite of
+ * inventing. A next-invoice estimate or a card's last four still would be.
+ *
+ * ── The verb is the thing most worth testing here ──────────────────────────
+ * "Renews 14 October" and "Ends 14 October" differ by one field —
+ * `cancelAtPeriodEnd` — and getting it backwards on a cancelled subscription
+ * reads to the customer as the cancellation having failed. Several tests below
+ * exist only to pin that.
  */
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { PLANS } from '../src/lib/pricing.js';
 
 let workspaceState = {
   api: {},
@@ -51,14 +55,31 @@ const BILLING = {
   configured: true,
   subscribed: true,
   ownerEmail: 'rina@kesslerlabs.example',
-  writesBlocked: false
+  writesBlocked: false,
+  interval: 'month',
+  cancelAtPeriodEnd: false,
+  periodEndsAt: Date.UTC(2026, 9, 14),
+  renewalAmountCents: 8000,
+  pastDueSince: null,
+  graceEndsAt: null,
+  purgeAfter: null
 };
 
-/** The ids the server says have a synced Stripe price in this environment. */
-const PURCHASABLE = ['basic', 'pro', 'team'];
+/**
+ * What the server says is buyable here, and at what.
+ *
+ * Objects rather than ids since migration 0029: a plan is purchasable
+ * *monthly*, *yearly* or both, and a yearly button for a plan with no yearly
+ * price produces a checkout that can only fail.
+ */
+const PURCHASABLE = [
+  { id: 'basic', monthlyCents: 900, yearlyCents: 9100, savePercent: 15 },
+  { id: 'pro', monthlyCents: 2000, yearlyCents: 20400, savePercent: 15 },
+  { id: 'team', monthlyCents: 8000, yearlyCents: 81600, savePercent: 15 }
+];
 
-function show(billing = BILLING, role = 'owner', purchasable = PURCHASABLE) {
-  workspaceState = { ...workspaceState, role };
+function show(billing = BILLING, role = 'owner', purchasable = PURCHASABLE, api = {}) {
+  workspaceState = { ...workspaceState, role, api };
   billingState = {
     status: 'ready',
     data: { billing, purchasable },
@@ -67,6 +88,8 @@ function show(billing = BILLING, role = 'owner', purchasable = PURCHASABLE) {
   };
   return render(<MemoryRouter><BillingTab /></MemoryRouter>).container;
 }
+
+const buttons = () => screen.getAllByRole('button').map(el => el.textContent.trim());
 
 afterEach(cleanup);
 
@@ -78,65 +101,59 @@ describe('Billing hero', () => {
     expect(screen.getByText('Active')).toBeTruthy();
   });
 
-  it('puts the billing email and the payment line in the second card', () => {
+  it('puts the billing email, cadence and payment line in the second card', () => {
     show();
     expect(screen.getByText('Billing account')).toBeTruthy();
     expect(screen.getByText('rina@kesslerlabs.example')).toBeTruthy();
+    // The word appears on the interval toggle too, so this asks for the one
+    // inside the Billing account card specifically.
+    expect(screen.getByText('Billing period').closest('div').textContent).toContain('Monthly');
     expect(screen.getByText('Managed on Stripe')).toBeTruthy();
   });
 
   it('says there is no subscription rather than describing a card', () => {
-    show({ ...BILLING, subscribed: false, configured: false });
-    expect(screen.getByText('No active subscription')).toBeTruthy();
+    show({ ...BILLING, subscribed: false, configured: false, interval: null });
+    expect(screen.getAllByText('No active subscription').length).toBeGreaterThan(0);
     // Unconfigured billing asks you to set it up, not to "manage" nothing.
     expect(screen.getByRole('button', { name: 'Set up billing' })).toBeTruthy();
   });
 
-  it('invents no figure about THIS account, whatever the plan picker shows', () => {
-    // The screen now carries prices, because a plan picker without them is
-    // useless. The property that has to survive is narrower and unchanged:
-    // every figure comes from `lib/pricing.js`, the one public copy of the
-    // catalogue, and none is a claim about what this customer will be charged.
-    // An invoice estimate, an overage line or a card's last four would all be
-    // inventions — `GET /v1/billing` returns none of them.
+  it('invents no figure about THIS account beyond what Stripe will charge', () => {
+    // The narrowed rule. Prices are now server data and quoting them is the
+    // opposite of inventing; an invoice estimate, an overage line or a card's
+    // last four would all still be inventions, because `GET /v1/billing`
+    // returns none of them.
     const container = show();
-
-    const prices = [...container.textContent.matchAll(/[$£€]\s?[\d.,]+/g)].map(m => m[0]);
-    // Exactly the four catalogue prices, nothing else.
-    expect(prices).toEqual(['$0', '$9', '$20', '$80']);
-
     expect(container.textContent).not.toMatch(/next invoice|estimate|ending in|•••/i);
   });
 
-  it('takes its prices from the pricing module, not from the API response', () => {
-    // `GET /v1/billing` deliberately sends `purchasable` — ids only — and no
-    // numbers. If the server ever starts restating a price, this is where the
-    // two copies would begin to disagree.
+  it('shows only the amounts the server sent, not a second hardcoded copy', () => {
+    // If a figure appears here that the API never sent, a second copy of the
+    // pricing table has crept back in and the two will drift.
     const container = show();
-    for (const plan of PLANS) {
-      expect(container.textContent).toContain(plan.price);
+    const prices = [...container.textContent.matchAll(/\$[\d,]+(?:\.\d{2})?/g)].map(m => m[0]);
+    for (const price of prices) {
+      expect(['$0', '$9.00', '$20.00', '$80.00']).toContain(price);
     }
   });
 
   it('gives a reader the reason instead of a button that would be refused', () => {
     show(BILLING, 'reader');
-    expect(screen.queryByRole('button', { name: 'Manage billing' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Payment method/ })).toBeNull();
     expect(screen.getByText(/Only the account owner can change billing/)).toBeTruthy();
   });
 });
 
 /**
- * The plan picker — the screen that finally reaches checkout.
+ * The plan picker.
  *
- * `POST /v1/billing/checkout-session` shipped with `backlog/001` task 6 and no
- * UI ever called it, so three paid plans were priced, synced to Stripe and
- * unbuyable from inside the product. These tests are about which button each
- * card offers, because the combinations are where one state ends up
- * unreachable: an expired owner looking at a plan that is not theirs, a reader
- * looking at anything, a plan whose price was never synced.
+ * These tests are about which button each card offers, because the
+ * combinations are where one state ends up unreachable: an owner mid-dunning
+ * looking at a plan that is not theirs, a reader looking at anything, a plan
+ * whose yearly price was never minted.
  */
 describe('the plan picker', () => {
-  /** Never subscribed, no live period — the state a new account is in. */
+  /** Never subscribed — the state a new account is in. */
   const FRESH = {
     plan: 'free',
     status: 'active',
@@ -144,25 +161,24 @@ describe('the plan picker', () => {
     subscribed: false,
     ownerEmail: 'rina@kesslerlabs.example',
     writesBlocked: false,
+    interval: null,
+    cancelAtPeriodEnd: false,
     periodEndsAt: null,
-    renewalOpen: true,
+    renewalAmountCents: null,
+    pastDueSince: null,
     graceEndsAt: null,
     purgeAfter: null
   };
 
-  const buttons = () =>
-    screen.getAllByRole('button').map(el => el.textContent.trim());
-
   it('offers Subscribe on every plan with a synced price', () => {
     show(FRESH);
-    const labels = buttons();
-    expect(labels.filter(label => label === 'Subscribe')).toHaveLength(3);
+    expect(buttons().filter(label => label === 'Subscribe')).toHaveLength(3);
   });
 
   it('never offers to buy Free, which is the absence of a purchase', () => {
     const container = show(FRESH);
     // Free's card renders — people need to see what they are on — but it
-    // carries no button, because leaving a paid plan means letting it lapse.
+    // carries no button, because leaving a paid plan means cancelling it.
     expect(container.textContent).toContain('1 GB storage');
     expect(buttons().filter(label => label === 'Subscribe')).toHaveLength(3);
   });
@@ -170,77 +186,192 @@ describe('the plan picker', () => {
   it('disables a plan whose price this environment has not synced', () => {
     // Migration 0012 seeds the catalogue with NULL price ids. Saying so beats
     // a button whose only possible outcome is a 500.
-    show(FRESH, 'owner', ['basic', 'team']);
+    show(FRESH, 'owner', PURCHASABLE.filter(row => row.id !== 'pro'));
     const disabled = screen
       .getAllByRole('button')
       .filter(el => el.disabled)
       .map(el => el.textContent.trim());
-    expect(disabled).toEqual(['Not available yet']);
+    expect(disabled).toEqual(['Not available']);
   });
 
   it('gives a reader no buttons at all', () => {
     show(FRESH, 'reader');
     expect(screen.queryByRole('button', { name: 'Subscribe' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Renew' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Cancel subscription/ })).toBeNull();
   });
 
   it('marks the current plan with a word, not only a colour', () => {
     show({ ...FRESH, plan: 'pro' });
     expect(screen.getByText('Your plan')).toBeTruthy();
   });
+
+  it('offers a switch, not a second Subscribe, when a subscription is live', () => {
+    // Buying again would be a second subscription on the same card — the kind
+    // of duplicate nobody notices until the second invoice, and the server
+    // refuses it outright.
+    show(BILLING);
+    expect(buttons()).not.toContain('Subscribe');
+    expect(buttons().filter(label => label === 'Switch to this')).toHaveLength(2);
+  });
 });
 
+/**
+ * The interval toggle.
+ *
+ * Yearly is sold at a discount, so the saving has to be visible on the control
+ * itself — it is the reason to press it — and the percentage has to come from
+ * the real amounts rather than a constant, or a price edit leaves the badge
+ * advertising a discount nobody is giving.
+ */
+describe('monthly and yearly', () => {
+  it('shows the saving on the control that switches to it', () => {
+    show();
+    expect(screen.getByRole('button', { name: /Yearly · save 15%/ })).toBeTruthy();
+  });
+
+  it('swaps every card to the yearly amount when pressed', () => {
+    const container = show();
+    expect(container.textContent).toContain('$20.00');
+
+    fireEvent.click(screen.getByRole('button', { name: /Yearly/ }));
+
+    expect(container.textContent).toContain('$204.00');
+    expect(container.textContent).toContain('/ year');
+  });
+
+  it('opens on the cadence the account already bills at', () => {
+    // Somebody on a yearly plan must not open this screen to a grid of monthly
+    // prices that disagree with their own invoice.
+    const container = show({ ...BILLING, interval: 'year', renewalAmountCents: 81600 });
+    expect(container.textContent).toContain('$816.00');
+    expect(screen.getByRole('button', { name: /Yearly/ }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('disables a plan at a cadence it is not sold at', () => {
+    show(BILLING, 'owner', [
+      ...PURCHASABLE.filter(row => row.id !== 'pro'),
+      { id: 'pro', monthlyCents: 2000, yearlyCents: null, savePercent: null }
+    ]);
+    fireEvent.click(screen.getByRole('button', { name: /Yearly/ }));
+
+    const disabled = screen
+      .getAllByRole('button')
+      .filter(el => el.disabled)
+      .map(el => el.textContent.trim());
+    expect(disabled).toEqual(['Not available']);
+  });
+});
+
+/**
+ * The renewal clock — and the verb.
+ *
+ * "Renews 14 October" and "Ends 14 October" differ by one boolean. Saying
+ * "renews" to somebody who cancelled last week is the single most alarming
+ * message this screen can produce.
+ */
 describe('the renewal clock', () => {
-  const LIVE = {
-    plan: 'pro',
-    status: 'active',
-    configured: true,
-    subscribed: false,
-    ownerEmail: 'rina@kesslerlabs.example',
-    writesBlocked: false,
-    periodEndsAt: Date.UTC(2026, 9, 14),
-    renewalOpen: false,
-    graceEndsAt: Date.UTC(2026, 9, 21),
-    purgeAfter: null
-  };
+  it('names the next charge, the date and the cadence', () => {
+    const container = show();
+    expect(container.textContent).toContain('Renews 14 October 2026 for $80.00');
+    expect(container.textContent).toMatch(/renews automatically every month/i);
+  });
 
-  it('says when the plan ends and that nothing renews it', () => {
-    // The single most important fact under manual renewal, and one the API
-    // could not report at all before migration 0027.
-    const container = show(LIVE);
+  it('says Ends, not Renews, once it has been cancelled', () => {
+    const container = show({ ...BILLING, cancelAtPeriodEnd: true, renewalAmountCents: null });
     expect(container.textContent).toContain('Ends 14 October 2026');
-    expect(container.textContent).toMatch(/does not renew automatically/i);
+    expect(container.textContent).not.toMatch(/Renews 14 October/);
+    expect(container.textContent).toMatch(/will not renew/i);
   });
 
-  it('offers no Renew while the period is comfortably live', () => {
-    // The server refuses this window, so a button here would be a 409 waiting
-    // to happen.
-    show(LIVE);
-    expect(screen.queryByRole('button', { name: 'Renew' })).toBeNull();
+  it('offers Resume on a cancelled subscription, and Cancel on a live one', () => {
+    show({ ...BILLING, cancelAtPeriodEnd: true });
+    expect(screen.getByRole('button', { name: 'Resume subscription' })).toBeTruthy();
+
+    cleanup();
+    show(BILLING);
+    expect(screen.getByRole('button', { name: 'Cancel subscription' })).toBeTruthy();
   });
 
-  it('offers Renew once the server says the window is open', () => {
-    show({ ...LIVE, renewalOpen: true });
-    expect(screen.getByRole('button', { name: 'Renew' })).toBeTruthy();
-  });
-
-  it('names the deletion deadline once expired, and says nothing is gone', () => {
+  it('names the likely cause and the deadline while a card is being retried', () => {
     const container = show({
-      ...LIVE,
+      ...BILLING,
+      status: 'past_due',
+      writesBlocked: true,
+      pastDueSince: Date.UTC(2026, 9, 14),
+      graceEndsAt: Date.UTC(2026, 9, 21)
+    });
+    expect(container.textContent).toMatch(/could not take payment/i);
+    expect(container.textContent).toMatch(/expired or replaced card/i);
+    expect(container.textContent).toContain('21 October 2026');
+    expect(container.textContent).toMatch(/stays readable/i);
+  });
+
+  it('says what is scheduled once expired, and that nothing is gone yet', () => {
+    const container = show({
+      ...BILLING,
       status: 'expired',
       writesBlocked: true,
-      renewalOpen: true
+      pastDueSince: Date.UTC(2026, 9, 14)
     });
-    expect(container.textContent).toContain('Ended 14 October 2026');
-    expect(container.textContent).toMatch(/stays readable/i);
-    expect(container.textContent).toContain('21 October 2026');
     expect(container.textContent).toMatch(/scheduled for deletion/i);
+    expect(container.textContent).toMatch(/nothing has been removed yet/i);
   });
 
   it('says nothing about a period for an account that never bought one', () => {
     // NULL is "never had a plan", not "expired". Inventing a date here would
     // be the same lie in the other direction.
-    const container = show({ ...LIVE, plan: 'free', periodEndsAt: null, graceEndsAt: null });
-    expect(container.textContent).not.toMatch(/Ends \d|Ended \d/);
+    const container = show({
+      ...BILLING,
+      plan: 'free',
+      subscribed: false,
+      interval: null,
+      periodEndsAt: null,
+      renewalAmountCents: null
+    });
+    expect(container.textContent).not.toMatch(/Renews \d|Ends \d/);
+  });
+});
+
+/**
+ * Cancelling — the one flow that has to be reversible and has to say so.
+ */
+describe('cancelling', () => {
+  it('confirms first, and the dialog says what is actually lost', () => {
+    show(BILLING);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel subscription' }));
+
+    expect(screen.getByText('Cancel this subscription?')).toBeTruthy();
+    expect(screen.getByRole('dialog').textContent).toMatch(/14 October 2026/);
+    expect(screen.getByRole('dialog').textContent).toMatch(/nothing is deleted/i);
+  });
+
+  it('does not dress a reversible act in the danger treatment', async () => {
+    // `ConfirmModal` defaults `destructive` to true. Red is right for deleting
+    // a workspace and wrong here: nothing is deleted, and the decision can be
+    // taken back until the date arrives. Teaching people to click through red
+    // dialogs is how the ones that matter stop working.
+    show(BILLING);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel subscription' }));
+    expect(screen.getByRole('dialog').textContent).not.toMatch(/cannot be undone/i);
+    expect(screen.getByRole('button', { name: 'Keep it' })).toBeTruthy();
+  });
+
+  it('calls the cancel endpoint, not the Stripe portal', async () => {
+    // The whole reason this endpoint exists. Sending somebody to a hosted
+    // portal to stop paying is the friction consumer-protection rules were
+    // written to remove.
+    const cancelSubscription = vi.fn().mockResolvedValue({
+      cancelAtPeriodEnd: true,
+      periodEndsAt: Date.UTC(2026, 9, 14)
+    });
+    const createPortalSession = vi.fn();
+
+    show(BILLING, 'owner', PURCHASABLE, { cancelSubscription, createPortalSession });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel subscription' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, cancel it' }));
+
+    await screen.findByText(/Subscription cancelled/);
+    expect(cancelSubscription).toHaveBeenCalledWith('ws_test');
+    expect(createPortalSession).not.toHaveBeenCalled();
   });
 });

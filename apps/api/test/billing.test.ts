@@ -19,6 +19,7 @@ import { ApiError } from "../src/lib/errors";
 import { NOW, WORKSPACE_A, bearer, seedApiKey, seedTwoWorkspaces } from "./helpers";
 
 const URL_BASE = "https://api-dev.agentdisk.io";
+const DAY = 24 * 60 * 60 * 1000;
 const ORG_ID = "org_TESTORG";
 
 /** Matches the value vitest.config.ts binds; the signature must agree with it. */
@@ -150,28 +151,39 @@ async function orgState(): Promise<OrgState> {
 }
 
 /**
- * A one-off purchase, which is what checkout actually creates since AgentDisk
- * stopped auto-renewing. The plan rides in the session's own metadata because
- * there is no subscription to hang it from.
+ * A subscription as Stripe sends it, with the fields this product reads.
+ *
+ * `current_period_end` sits on the ITEM, not the subscription: the top-level
+ * field was removed in recent API versions, and a period genuinely belongs to
+ * the items once more than one price can sit on a subscription. We sell exactly
+ * one item, so the first is the answer.
  */
-function paymentEvent(overrides: Record<string, unknown> = {}): string {
-  return JSON.stringify({
-    id: "evt_payment",
-    object: "event",
-    type: "checkout.session.completed",
-    data: {
-      object: {
-        id: "cs_pay",
-        object: "checkout.session",
-        mode: "payment",
-        payment_status: "paid",
-        customer: "cus_test",
-        client_reference_id: ORG_ID,
-        subscription: null,
-        metadata: { agentdisk_org_id: ORG_ID, agentdisk_plan: "pro" },
-        ...overrides,
-      },
+function subscription(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: "sub_live",
+    object: "subscription",
+    customer: "cus_test",
+    status: "active",
+    cancel_at_period_end: false,
+    items: {
+      data: [
+        {
+          id: "si_1",
+          price: { id: "price_test" },
+          current_period_end: Math.floor((Date.now() + 30 * DAY) / 1000),
+        },
+      ],
     },
+    ...overrides,
+  };
+}
+
+function subEvent(type: string, overrides: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    id: "evt_sub",
+    object: "event",
+    type,
+    data: { object: subscription(overrides) },
   });
 }
 
@@ -179,120 +191,332 @@ async function signedPost(payload: string): Promise<Response> {
   return post(payload, await stripeSignature(payload, Math.floor(Date.now() / 1000)));
 }
 
-describe("checkout.session.completed", () => {
-  it("records which subscription belongs to this organization", async () => {
-    const res = await signedPost(checkoutEvent());
-    expect(res.status).toBe(200);
-
-    const org = await orgState();
-    expect(org.stripe_subscription_id).toBe("sub_new");
-    expect(org.billing_status).toBe("active");
+function invoiceEvent(type: string): string {
+  return JSON.stringify({
+    id: "evt_invoice",
+    object: "event",
+    type,
+    data: {
+      object: { id: "in_test", object: "invoice", customer: "cus_test" },
+    },
   });
-
-  it("leaves the plan to the subscription events, which carry the price", async () => {
-    // Deliberately thin. Retrieving the subscription here to learn a price that
-    // customer.subscription.created is about to hand us would be a second API
-    // call for the same fact, and would make the two deliveries order-dependent.
-    await env.DB.prepare(`UPDATE organizations SET plan = 'free' WHERE id = ?`).bind(ORG_ID).run();
-
-    await signedPost(checkoutEvent());
-    expect((await orgState()).plan).toBe("free");
-  });
-
-  it("resolves the organization by customer when there is no client_reference_id", async () => {
-    // A session created outside our checkout endpoint - from a payment link,
-    // say - carries no reference of ours.
-    const res = await signedPost(checkoutEvent({ client_reference_id: null }));
-    expect(res.status).toBe(200);
-    expect((await orgState()).stripe_subscription_id).toBe("sub_new");
-  });
-
-  it("ignores a client_reference_id naming an organization that is gone", async () => {
-    const res = await signedPost(checkoutEvent({ client_reference_id: "org_DELETED", customer: null }));
-    expect(res.status).toBe(200);
-    expect((await orgState()).stripe_subscription_id).toBeNull();
-  });
-});
+}
 
 /**
- * The purchase path since manual renewal (23 September 2026). Unlike the
- * subscription case above, this one event settles everything: the plan, the
- * paid-through date, and the cancellation of any deletion already scheduled.
+ * The subscription lifecycle — where entitlement actually comes from.
+ *
+ * `customer.subscription.created` / `.updated` are the events that decide what
+ * an account is allowed and until when. `checkout.session.completed` is
+ * deliberately the thin half of the pair: it binds the subscription id and
+ * nothing else, so there is one code path settling entitlements rather than two
+ * that must agree forever.
  */
-describe("checkout.session.completed · one-off payment", () => {
+describe("customer.subscription.* · where entitlement comes from", () => {
   beforeEach(async () => {
     await env.DB.prepare(
-      `UPDATE organizations SET plan = 'free', current_period_end = NULL, purge_after = NULL
+      `UPDATE organizations SET plan = 'free', current_period_end = NULL, purge_after = NULL,
+              billing_interval = NULL, past_due_since = NULL, cancel_at_period_end = 0
         WHERE id = ?`
-    ).bind(ORG_ID).run();
+    )
+      .bind(ORG_ID)
+      .run();
   });
 
-  it("grants the plan and a month of service", async () => {
-    const res = await signedPost(paymentEvent());
+  it("grants the plan and mirrors Stripe's period", async () => {
+    const res = await signedPost(subEvent("customer.subscription.created"));
     expect(res.status).toBe(200);
-    expect((await res.json() as { handled: boolean }).handled).toBe(true);
+    expect(((await res.json()) as { handled: boolean }).handled).toBe(true);
 
     const org = await orgState();
     expect(org.plan).toBe("pro");
     expect(org.billing_status).toBe("active");
-    expect(org.current_period_end).not.toBeNull();
-    // A month out, give or take the day-clamping in addMonths.
-    const days = (org.current_period_end! - Date.now()) / (24 * 60 * 60 * 1000);
-    expect(days).toBeGreaterThan(27);
-    expect(days).toBeLessThan(32);
+    expect(org.stripe_subscription_id).toBe("sub_live");
+    // Mirrored, not computed. This product stopped owning the period when
+    // auto-renewal returned; the only correct value is Stripe's.
+    const days = (org.current_period_end! - Date.now()) / DAY;
+    expect(days).toBeGreaterThan(29);
+    expect(days).toBeLessThan(31);
   });
 
-  it("refuses a session that completed without being paid", async () => {
-    // Some payment methods settle asynchronously and fire this event while
-    // still unpaid. Granting a month there hands out service for a charge that
-    // may yet fail.
-    const res = await signedPost(paymentEvent({ payment_status: "unpaid" }));
-    expect((await res.json() as { handled: boolean }).handled).toBe(false);
+  it("records the cadence the subscription actually bills at", async () => {
+    // Read from the PRICE, which is the only place it is true. An account
+    // billed yearly must be recorded as yearly, or the renewal notice quotes a
+    // monthly figure against a charge twelve times larger.
+    await env.DB.prepare(
+      `UPDATE plans SET stripe_yearly_price_id = 'price_year', amount_cents_yearly = 20400
+        WHERE id = 'pro'`
+    ).run();
+
+    await signedPost(
+      subEvent("customer.subscription.created", {
+        items: {
+          data: [
+            {
+              id: "si_1",
+              price: { id: "price_year" },
+              current_period_end: Math.floor((Date.now() + 365 * DAY) / 1000),
+            },
+          ],
+        },
+      })
+    );
+
+    const row = await env.DB.prepare(
+      `SELECT billing_interval FROM organizations WHERE id = ?`
+    )
+      .bind(ORG_ID)
+      .first<{ billing_interval: string | null }>();
+    expect(row?.billing_interval).toBe("year");
+    expect((await orgState()).plan).toBe("pro");
+  });
+
+  it("carries the cancellation flag, so the screen can say Ends and not Renews", async () => {
+    await signedPost(
+      subEvent("customer.subscription.updated", { cancel_at_period_end: true })
+    );
+
+    const row = await env.DB.prepare(
+      `SELECT cancel_at_period_end, billing_status FROM organizations WHERE id = ?`
+    )
+      .bind(ORG_ID)
+      .first<{ cancel_at_period_end: number; billing_status: string }>();
+
+    // Still active and still entitled — a cancelling subscription has paid for
+    // the period it is in. Only the flag moves.
+    expect(row?.cancel_at_period_end).toBe(1);
+    expect(row?.billing_status).toBe("active");
+  });
+
+  it("leaves the plan alone when the price maps to nothing we sell", async () => {
+    // Undefined rather than a guess. Resolving an unknown price to something
+    // arbitrary would silently upgrade or downgrade somebody because a price
+    // was renamed in Stripe.
+    await env.DB.prepare(`UPDATE organizations SET plan = 'pro' WHERE id = ?`)
+      .bind(ORG_ID)
+      .run();
+
+    await signedPost(
+      subEvent("customer.subscription.updated", {
+        items: {
+          data: [
+            {
+              id: "si_1",
+              price: { id: "price_unknown" },
+              current_period_end: Math.floor((Date.now() + 30 * DAY) / 1000),
+            },
+          ],
+        },
+      })
+    );
+
+    expect((await orgState()).plan).toBe("pro");
+  });
+
+  it("clears the deletion stamp when a subscription comes back from dunning", async () => {
+    // **The single most important write in this feature.** Somebody whose card
+    // clears on day ten must not be deleted by a sweep that stamped them on day
+    // seven. Under manual renewal this was a customer pressing a button; under
+    // auto-renewal it is Stripe's own retry, which makes it easier to miss and
+    // no less important.
+    await env.DB.prepare(
+      `UPDATE organizations SET billing_status = 'past_due', past_due_since = ?,
+              purge_after = ? WHERE id = ?`
+    )
+      .bind(Date.now() - 3 * DAY, Date.now() + 4 * DAY, ORG_ID)
+      .run();
+
+    await signedPost(subEvent("customer.subscription.updated", { status: "active" }));
+
+    const org = await orgState();
+    expect(org.billing_status).toBe("active");
+    expect(org.purge_after).toBeNull();
+
+    const row = await env.DB.prepare(`SELECT past_due_since FROM organizations WHERE id = ?`)
+      .bind(ORG_ID)
+      .first<{ past_due_since: number | null }>();
+    expect(row?.past_due_since).toBeNull();
+  });
+});
+
+/**
+ * The two ways a subscription ends.
+ *
+ * Answering them identically would be wrong in one direction or the other: a
+ * customer who chose to leave has not earned a deletion countdown, and an
+ * account we could not collect from must not keep its paid quota forever.
+ */
+describe("customer.subscription.deleted · the two endings", () => {
+  beforeEach(async () => {
+    await env.DB.prepare(
+      `UPDATE organizations SET plan = 'pro', billing_status = 'active',
+              stripe_subscription_id = 'sub_live', current_period_end = ?,
+              billing_interval = 'month', past_due_since = NULL WHERE id = ?`
+    )
+      .bind(Date.now() + 2 * DAY, ORG_ID)
+      .run();
+  });
+
+  it("drops a cancelled account to free, and schedules nothing", async () => {
+    await signedPost(
+      subEvent("customer.subscription.deleted", {
+        cancellation_details: { reason: "cancellation_requested" },
+      })
+    );
 
     const org = await orgState();
     expect(org.plan).toBe("free");
+    expect(org.billing_status).toBe("canceled");
+    expect(org.stripe_subscription_id).toBeNull();
+    // The period was that subscription's. Leaving it behind would have the
+    // dashboard promising a date nothing will honour.
     expect(org.current_period_end).toBeNull();
-  });
-
-  it("refuses a plan id no row describes", async () => {
-    // The metadata arrives inside a signed event so it is not forgeable, but
-    // it is still a string we wrote months ago and the plan may be retired.
-    // Writing it anyway would leave entitlements resolving to the Free floor
-    // with nothing to explain why.
-    const res = await signedPost(
-      paymentEvent({ metadata: { agentdisk_org_id: ORG_ID, agentdisk_plan: "enterprise" } })
-    );
-    expect((await res.json() as { handled: boolean }).handled).toBe(false);
-    expect((await orgState()).plan).toBe("free");
-  });
-
-  it("extends from the existing period end when renewing early", async () => {
-    // The day-seven reminder exists to make people buy before their period
-    // ends. Restarting the clock from today would charge them for a month and
-    // silently take back the days they had already paid for.
-    const inFiveDays = Date.now() + 5 * 24 * 60 * 60 * 1000;
-    await env.DB.prepare(`UPDATE organizations SET current_period_end = ? WHERE id = ?`)
-      .bind(inFiveDays, ORG_ID).run();
-
-    await signedPost(paymentEvent());
-
-    const org = await orgState();
-    const days = (org.current_period_end! - Date.now()) / (24 * 60 * 60 * 1000);
-    expect(days).toBeGreaterThan(32);
-  });
-
-  it("cancels a deletion the sweep already scheduled", async () => {
-    // The single worst failure this feature can have: somebody pays on day ten
-    // and is deleted anyway by a job that stamped them on day seven.
-    await env.DB.prepare(
-      `UPDATE organizations SET billing_status = 'expired', purge_after = ? WHERE id = ?`
-    ).bind(Date.now() + 1000, ORG_ID).run();
-
-    await signedPost(paymentEvent());
-
-    const org = await orgState();
+    // They chose to stop paying, which is not the same as failing to. Nothing
+    // is queued for deletion.
     expect(org.purge_after).toBeNull();
+  });
+
+  it("expires an account Stripe could not collect from, and keeps its plan", async () => {
+    // The plan stays on the paid tier deliberately. Dropping a 500 GB account
+    // to Free's 1 GB puts it instantly over quota through no act of its own,
+    // during the exact window we are asking it to fix its card — and every
+    // usage screen would report a breach it cannot resolve except by deleting
+    // the data we are simultaneously threatening to delete.
+    await env.DB.prepare(
+      `UPDATE organizations SET billing_status = 'past_due', past_due_since = ? WHERE id = ?`
+    )
+      .bind(Date.now() - 7 * DAY, ORG_ID)
+      .run();
+
+    await signedPost(
+      subEvent("customer.subscription.deleted", {
+        cancellation_details: { reason: "payment_failed" },
+      })
+    );
+
+    const org = await orgState();
+    expect(org.billing_status).toBe("expired");
+    expect(org.plan).toBe("pro");
+
+    // The dunning stamp survives, because it is what the deletion schedule
+    // counts from. Clearing it here would leave the scheduling pass with
+    // nothing to anchor on and the account would never be swept.
+    const row = await env.DB.prepare(`SELECT past_due_since FROM organizations WHERE id = ?`)
+      .bind(ORG_ID)
+      .first<{ past_due_since: number | null }>();
+    expect(row?.past_due_since).not.toBeNull();
+  });
+
+  it("falls back to our own dunning state when Stripe names no reason", async () => {
+    // An API version or a path that does not populate `cancellation_details`
+    // must not turn a collection failure into a voluntary cancellation — that
+    // would drop the account to free and skip the deletion ladder entirely,
+    // which is the generous direction but also the one that loses the audit
+    // trail for why somebody's data went.
+    await env.DB.prepare(
+      `UPDATE organizations SET billing_status = 'past_due', past_due_since = ? WHERE id = ?`
+    )
+      .bind(Date.now() - 7 * DAY, ORG_ID)
+      .run();
+
+    await signedPost(subEvent("customer.subscription.deleted"));
+
+    expect((await orgState()).billing_status).toBe("expired");
+  });
+});
+
+/**
+ * Dunning: the seven days between a failed charge and the end of the ladder.
+ *
+ * The same seven days as Stripe's own retry window, by configuration rather
+ * than coincidence — see `lib/renewal.ts`.
+ */
+describe("invoice.payment_failed / succeeded · the dunning stamp", () => {
+  beforeEach(async () => {
+    await env.DB.prepare(
+      `UPDATE organizations SET plan = 'pro', billing_status = 'active',
+              stripe_subscription_id = 'sub_live', past_due_since = NULL,
+              purge_after = NULL WHERE id = ?`
+    )
+      .bind(ORG_ID)
+      .run();
+  });
+
+  async function pastDueSince(): Promise<number | null> {
+    const row = await env.DB.prepare(`SELECT past_due_since FROM organizations WHERE id = ?`)
+      .bind(ORG_ID)
+      .first<{ past_due_since: number | null }>();
+    return row?.past_due_since ?? null;
+  }
+
+  it("opens a dunning run on the first failure", async () => {
+    await signedPost(invoiceEvent("invoice.payment_failed"));
+
+    expect((await orgState()).billing_status).toBe("past_due");
+    expect(await pastDueSince()).not.toBeNull();
+  });
+
+  it("does not restart the clock on a retry, or the grace would never end", async () => {
+    // Stripe attempts a failing card several times across the window and each
+    // attempt sends this event. Overwriting the stamp every time would push the
+    // deletion date back with each retry, so an account could sit in grace
+    // indefinitely precisely BECAUSE its card kept failing. A redelivered
+    // event is the same hazard and the same guard covers it.
+    const opened = Date.now() - 4 * DAY;
+    await env.DB.prepare(
+      `UPDATE organizations SET billing_status = 'past_due', past_due_since = ? WHERE id = ?`
+    )
+      .bind(opened, ORG_ID)
+      .run();
+
+    await signedPost(invoiceEvent("invoice.payment_failed"));
+
+    expect(await pastDueSince()).toBe(opened);
+  });
+
+  it("closes the run and cancels a scheduled deletion when payment succeeds", async () => {
+    await env.DB.prepare(
+      `UPDATE organizations SET billing_status = 'past_due', past_due_since = ?,
+              purge_after = ? WHERE id = ?`
+    )
+      .bind(Date.now() - 3 * DAY, Date.now() + 4 * DAY, ORG_ID)
+      .run();
+
+    await signedPost(invoiceEvent("invoice.payment_succeeded"));
+
+    const org = await orgState();
     expect(org.billing_status).toBe("active");
+    expect(org.purge_after).toBeNull();
+    expect(await pastDueSince()).toBeNull();
+  });
+
+  it("does not un-cancel a subscription somebody deliberately ended", async () => {
+    // A payment landing against a canceled subscription is a late settlement of
+    // an old invoice, not a renewal. Quietly reactivating would restore access
+    // somebody chose to give up.
+    await env.DB.prepare(
+      `UPDATE organizations SET billing_status = 'canceled' WHERE id = ?`
+    )
+      .bind(ORG_ID)
+      .run();
+
+    await signedPost(invoiceEvent("invoice.payment_succeeded"));
+
+    expect((await orgState()).billing_status).toBe("canceled");
+  });
+
+  it("does not lift an expiry, because there is nothing left to bill", async () => {
+    // By `expired` Stripe has deleted the subscription. Unlocking here would
+    // give back an account with no way to charge it again; coming back from
+    // expiry is a new checkout.
+    await env.DB.prepare(
+      `UPDATE organizations SET billing_status = 'expired' WHERE id = ?`
+    )
+      .bind(ORG_ID)
+      .run();
+
+    await signedPost(invoiceEvent("invoice.payment_succeeded"));
+
+    expect((await orgState()).billing_status).toBe("expired");
   });
 });
 
@@ -451,24 +675,39 @@ describe("what an unpaid account may still do", () => {
   });
 
   it("blocks a write while expired", () => {
-    // The state manual renewal actually produces — a period that ran out with
-    // nobody buying another. `past_due` needs an invoice to have failed, and a
-    // one-off payment has no invoice to fail.
+    // The end of the ladder: Stripe exhausted its retries and gave up.
     expect(() => assertWithinQuota(workspace, limits, { bytes: 100, files: 1 }, NOW, "expired"))
       .toThrow(ApiError);
   });
 
-  it("tells an expired account how long it has, and that nothing is gone", () => {
+  it("names the likely cause while a card is still being retried", () => {
+    // `past_due` is where most accounts that reach this point actually are, and
+    // it is almost always an expired card rather than a dispute. "An unpaid
+    // invoice" sends somebody to look for a bill; naming the card sends them to
+    // the one screen that fixes it.
+    try {
+      assertWithinQuota(workspace, limits, { bytes: 1 }, NOW, "past_due");
+      throw new Error("expected a throw");
+    } catch (err) {
+      const message = (err as ApiError).message;
+      expect(message).toMatch(/could not take payment/i);
+      expect(message).toMatch(/card/i);
+      expect(message).toMatch(/readable and downloadable/i);
+    }
+  });
+
+  it("tells an expired account what is scheduled, and that nothing is gone", () => {
     // Somebody who meets this on a failed upload with no explanation concludes
-    // their data has been deleted. It has not, and the message has to say so.
+    // their data has been deleted. It has not, and the message has to say so —
+    // together with the fact that paying still undoes it.
     try {
       assertWithinQuota(workspace, limits, { bytes: 1 }, NOW, "expired");
       throw new Error("expected a throw");
     } catch (err) {
       const message = (err as ApiError).message;
-      expect(message).toMatch(/does not renew automatically/i);
-      expect(message).toMatch(/readable and downloadable/i);
-      expect(message).toMatch(/7 days/);
+      expect(message).toMatch(/scheduled for deletion/i);
+      expect(message).toMatch(/nothing has been removed/i);
+      expect(message).toMatch(/7-day grace/i);
     }
   });
 

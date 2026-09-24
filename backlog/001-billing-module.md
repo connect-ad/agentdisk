@@ -1,6 +1,8 @@
 # 001 · Billing module
 
-**Status:** In progress — 11 of 12 tasks shipped
+**Status:** In progress — 11 of 12 tasks shipped, plus auto-renewal and yearly
+billing (25 Sept 2026). Task 10 — the agent/key/member/workspace count gates —
+is the one left, and **nothing has touched real Stripe yet.**
 **Priority: TOP.** This is the only item in the backlog.
 **Design:** [docs/superpowers/specs/2026-09-17-billing-module-design.md](../docs/superpowers/specs/2026-09-17-billing-module-design.md)
 **Branch:** `dev` · rollback tag `pre-billing-module` (c0bbc1c)
@@ -35,6 +37,22 @@ Four things were broken rather than merely missing:
 
 Authoritative. Replaces every other pricing table in the repository, including
 07 PART 19.0.
+
+### Yearly, added 25 September 2026
+
+15% off twelve months, rounded **down** to the dollar so the advertised saving is
+never an over-claim — Basic's exact 15% is $91.80, and rounding up would print a
+15% badge over a 14.8% discount.
+
+| | Basic | Pro | Team |
+|---|---|---|---|
+| Monthly | $9 | $20 | $80 |
+| Yearly | **$91** | **$204** | **$816** |
+| Effective / month | $7.58 | $17.00 | $68.00 |
+
+Free has no price at either cadence, by design: it is the absence of a
+subscription, and a $0 recurring price would give every free account a real
+Stripe subscription that can go `past_due`.
 
 | | Free | Basic | Pro | Team |
 |---|---|---|---|---|

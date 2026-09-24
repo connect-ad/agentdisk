@@ -42,6 +42,8 @@ function row(overrides: Partial<PlanRow> = {}): PlanRow {
     interval: "month",
     stripe_product_id: null,
     stripe_price_id: null,
+    stripe_yearly_price_id: null,
+    amount_cents_yearly: null,
     storage_bytes: 50 * 1024 ** 3,
     file_count: -1,
     egress_bytes_period: -1,

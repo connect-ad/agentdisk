@@ -299,32 +299,80 @@ were not touched. See `backlog/002`.
   request path. The dashboard's eye button and the MCP page's key dropdown
   both go through this route; the sandbox key an agent provisions is sealed
   the same way, so it becomes viewable to whoever claims the workspace.
-- **Nothing auto-renews, and checkout creates a `payment` rather than a
-  `subscription`.** Owner's decision, 23 September 2026, against the industry
-  norm and against the amardrive reference — whose own notes say an earlier
-  no-auto-renewal design "was replaced in June 2026 and should not be
-  reproposed". It was raised, reaffirmed, and is settled. A purchase buys one
-  month; `lib/renewal.ts` owns the clock and `jobs/billing-renewal.ts` walks it:
-  remind at day −7, `expired` and write-locked at day 0, `purge_after` stamped at
-  day +7. **The reason it is `mode: "payment"` and not a subscription with
-  `cancel_at_period_end` is the failure mode**, not taste: one unapplied flag and
-  the customer is charged again without consent, which is the single outcome
-  being ruled out. A one-off payment cannot do that — Stripe holds no mandate.
-  It also removes the early-renewal trap, since a live subscription would make
-  the day −7 email point at a button that 409s. The cost is that
-  `customer.subscription.*` and both `invoice.*` handlers are now dormant: they
-  are kept, subscribed and working, because a subscription made by hand in the
-  Stripe dashboard still arrives, and because deleting them makes returning to
-  auto-renewal a rewrite instead of a decision. **`past_due` is therefore no
-  longer reachable through checkout** — a one-off payment has no invoice to fail.
-- **A renewal clears `purge_after`, and that write is the feature.** Somebody who
-  pays on day ten must not be deleted by a sweep that stamped them on day seven.
-  It is the one assertion in `billing.test.ts` worth protecting above the others.
-  The ladder also **defaults to reporting** (`BILLING_EXPIRY_ENABLED`), like the
-  sandbox sweep and the admin purge, and **expiry deliberately leaves
-  `organizations.plan` on the paid tier** — dropping a 40 GB account to Free's
-  1 GB puts it instantly over quota through no act of its own, during the exact
-  window we are asking it to renew in.
+- **Subscriptions auto-renew, and are sold monthly or yearly.** Owner's
+  decision, 25 September 2026, reversing a two-day experiment with manual
+  renewal and returning to the industry norm and the amardrive reference — whose
+  own notes say a no-auto-renewal design "was replaced in June 2026 and should
+  not be reproposed". Yearly is 15% off twelve months, rounded **down** to the
+  dollar so "save 15%" is never an over-claim: $91 / $204 / $816.
+  **`plans` holds two prices per row** (`stripe_price_id` is the monthly one and
+  keeps its 0007 name; `stripe_yearly_price_id` is the other), and the client
+  names our plan id plus an interval, never a Stripe price.
+- **The price type and the checkout mode are one contract.** Stripe refuses a
+  one-time price in `mode: "subscription"` and a recurring price in
+  `mode: "payment"`, and for two days in September this repository had the pair
+  inverted — the catalogue selected one-off prices while checkout asked for a
+  subscription. It synced cleanly, typechecked, went green, and could not have
+  sold anything, because **every checkout test is a refusal that returns before
+  the outbound Stripe call**. `plan-sync.ts` and `admin/plans-access.ts` both
+  carry the rule in their headers; change either end and you must change both.
+- **Stripe owns the period; `organizations.current_period_end` is a mirror.**
+  Migration 0027 moved it here for manual renewal and 0029 moved the authority
+  back. Only `stripe-webhook.ts` may write it (plus the console's comp
+  override). `customer.subscription.created`/`.updated` settle everything an
+  account is entitled to and until when; `checkout.session.completed` is
+  deliberately the thin half of the pair and binds the subscription id alone,
+  so there is one code path settling entitlements rather than two that must
+  agree forever.
+- **The grace window and Stripe's dunning are the same seven days, by
+  configuration.** Stripe is configured to retry a failed card for 7 days and
+  then cancel, matching `RENEWAL_GRACE_MS`. Its default Smart Retries schedule
+  is roughly three weeks, which would purge an account eleven days before Stripe
+  stopped trying to collect from it. **Nothing in this repository can assert
+  that setting** — it lives in the Stripe dashboard, same category as the
+  webhook endpoint's subscribed event list. The ladder is anchored on
+  `organizations.past_due_since`, never on the period end: under auto-renewal a
+  period end is a non-event, so expiring on it would lock out paying customers
+  on every renewal day.
+- **Both halves of the ladder are belt and braces, deliberately.** The webhook
+  moves an account to `expired` when Stripe gives up, and the job's first pass
+  reaches the same state from our own clock once the grace elapses. Either alone
+  is a single point of failure for the state that decides whether somebody's
+  data is deleted.
+- **A successful payment clears `purge_after`, and that write is the feature.**
+  Somebody whose card clears on day ten must not be deleted by a sweep that
+  stamped them on day seven. Under auto-renewal the recovery is Stripe's own
+  retry rather than a customer pressing a button, which makes it easier to miss
+  and no less important; it is the one assertion in `billing.test.ts` worth
+  protecting above the others. The ladder also **defaults to reporting**
+  (`BILLING_EXPIRY_ENABLED`), like the sandbox sweep and the admin purge, and
+  **expiry deliberately leaves `organizations.plan` on the paid tier** —
+  dropping a 40 GB account to Free's 1 GB puts it instantly over quota through
+  no act of its own, during the exact window we are asking it to fix its card.
+- **Cancellation is ours, not Stripe's portal.** `POST /v1/billing/cancel` sets
+  `cancel_at_period_end`, never an immediate cancellation: the customer paid for
+  the period, and taking it away the moment they press Cancel is keeping their
+  money and withdrawing the service. `resume` takes it back until the date
+  arrives. Sending somebody to a hosted portal to stop paying is the friction
+  consumer-protection rules exist to remove, and the resume path is only
+  possible because the cancel path is ours. The portal survives for the two
+  things it is good at: the card and invoice history.
+  **`organizations.cancel_at_period_end` is the only thing that distinguishes
+  "Renews 14 October" from "Ends 14 October"** — a cancelling subscription is
+  still `active`, still paid up, still entitled to everything it bought — and
+  saying "renews" to somebody who cancelled last week reads as the cancellation
+  having failed.
+- **Upgrades are immediate and prorated; downgrades wait for the period end.**
+  What Dropbox does, what amardrive does, and not arbitrary: somebody paying
+  more should get it now, and somebody paying less should not be cut down inside
+  weeks they have already bought. The downgrade has a second reason specific to
+  storage — dropping a 500 GB Team account to Pro's 50 GB the instant they press
+  the button puts them 450 GB over quota with every write refused. Both
+  directions compare **effective monthly cost** (`yearly / 12`), so
+  monthly-to-yearly reads as the lateral move it is rather than a 10× upgrade. A
+  downgrade builds a Stripe Subscription Schedule and **D1 deliberately stays on
+  the current plan** until `customer.subscription.updated` says Stripe crossed
+  the boundary.
 - **All mail is Cloudflare Email Service, and it goes through `lib/email.ts`.**
   The Worker uses the `EMAIL` `send_email` binding — no secret, nothing for CI
   to push — and Firebase uses the same service over SMTP, so the two share one
@@ -604,9 +652,9 @@ live deployment rather than inferred from the code — see
 person can follow.
 
 ```
-apps/api    869 tests across 47 files · typecheck clean
-apps/web    324 tests across 24 files · build clean
-apps/admin   47 tests across 4 files · build clean · 108 KiB gzipped
+apps/api    914 tests across 47 files · typecheck clean
+apps/web    333 tests across 24 files · build clean
+apps/admin   52 tests across 4 files · build clean · 110 KiB gzipped
 Worker      226 KiB gzipped, against Cloudflare's 1 MB limit
 ```
 
@@ -659,17 +707,11 @@ reconciles the usage counters against the rows.
 
 ### What is not built
 
-- **Yearly billing.** Monthly only; `plans` holds one `stripe_price_id` and one
-  `interval` per plan, so adding it is a migration plus a catalogue-sync change,
-  not a toggle.
-- **Mid-period plan changes**, and any proration with them. Checkout refuses
-  while a period is comfortably live and opens in the last seven days; switching
-  plans takes effect from the next period.
 - **Customer-side promo validation.** Codes are typed on Stripe's page. See the
   `allow_promotion_codes` rule above for why the two cannot both exist.
-- **Stripe Tax.** No `automatic_tax`, no `tax_behavior`, no billing-address
-  collection. Cheapest to turn on before the first non-US sale, which has not
-  happened.
+- **Invoice PDFs of our own.** amardrive renders branded ones; we send people to
+  Stripe's portal, which is also where the card lives.
+- **Multi-currency.** USD only, every money column in minor units.
 - **Multipart upload** and **signed permanent links**.
 - **Full-text search inside files.** Search covers names, paths, captions and
   tags, and the response names the fields it looked at.
@@ -683,8 +725,8 @@ never happened. The isolation and authentication core is sound; the wiring
 around it is not finished. See `backlog/017`–`backlog/025`.
 
 **The billing write block is no longer one of them.** `assertBillingAllowsWrite`
-is on every write path, and `expired` — not `past_due` — is the state this
-product now actually reaches. **The count gates still are**: `PLAN_LIMITS.agents`,
+is on every write path, and both `past_due` (a failing card, mid-dunning) and
+`expired` (Stripe gave up) reach it with their own messages. **The count gates still are**: `PLAN_LIMITS.agents`,
 `.apiKeys`, `.members` and `.workspaces` are read by nothing on a write path, so
 only `shareLinks` is enforced (`routes/shares.ts`). That is `backlog/001` task 10.
 

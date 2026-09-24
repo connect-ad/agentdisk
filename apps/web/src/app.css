@@ -636,6 +636,9 @@
   font-weight:var(--w-semi);letter-spacing:var(--tr-mid);color:var(--ink);
   line-height:1;font-variant-numeric:tabular-nums}
 .mk__planunit{font-size:var(--t-13);color:var(--ink-2)}
+/* The yearly alternative, under the headline price rather than behind a
+   toggle: a toggle hides half the pricing from anybody who does not find it. */
+.mk__planyear{margin:var(--s-2) 0 0;font-size:var(--t-12-5);color:var(--ink-3)}
 .mk__feats{display:flex;flex-direction:column;gap:var(--s-4);flex:1}
 .mk__feat{display:flex;gap:var(--s-4);align-items:flex-start;
   font-size:var(--t-13);line-height:var(--lh-normal);color:var(--ink-2)}
@@ -1018,6 +1021,12 @@
    takes the muted ink rather than a status colour. */
 .plan__lines svg{flex:none;margin-top:0.1em;color:var(--ink-3)}
 .plan__promo{margin-top:var(--s-5)}
+
+/* Monthly / yearly, as two buttons rather than a switch: a switch needs a
+   label saying which way is which, and the saving has to sit on the control
+   itself because it is the reason to press it. They wrap to their own line on
+   a phone, where the panel header has no room beside the title. */
+.plan__toggle{display:flex;gap:var(--s-2);flex-wrap:wrap}
 
 /* The band that replaces the workspace strip while you are in the account
    area. Accent-tinted, because the point of it is that this is not one of your

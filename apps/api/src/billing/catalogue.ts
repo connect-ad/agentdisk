@@ -63,7 +63,11 @@ export interface PlanRow {
   currency: string;
   interval: string;
   stripe_product_id: string | null;
+  /** The MONTHLY price. Keeps its 0007 name; see migration 0029 for why. */
   stripe_price_id: string | null;
+  stripe_yearly_price_id: string | null;
+  /** NULL when this plan is not sold by the year. `amount_cents` is monthly. */
+  amount_cents_yearly: number | null;
   storage_bytes: number | null;
   file_count: number | null;
   egress_bytes_period: number | null;

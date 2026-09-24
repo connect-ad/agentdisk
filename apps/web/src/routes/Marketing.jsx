@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { Button, Icon } from '../components/index.js';
 import { useAuth } from '../lib/auth.jsx';
-import { PLANS, OVERAGES, FREE_SUMMARY, COUNTING_NOTE } from '../lib/pricing.js';
+import {
+  PLANS, OVERAGES, FREE_SUMMARY, COUNTING_NOTE, YEARLY_NOTE, RENEWAL_NOTE
+} from '../lib/pricing.js';
 import Logo from '../components-local/Logo.jsx';
 import { SupportDialog } from '../components-local/SupportDialog.jsx';
 
@@ -325,6 +327,15 @@ export function Pricing() {
                   <span className="mk__price">{p.price}</span>
                   <span className="mk__planunit">{p.unit}</span>
                 </div>
+                {/* The yearly figure sits under the monthly one rather than
+                    behind a toggle. A toggle on a marketing page hides half the
+                    pricing from anybody who does not find it, and the saving is
+                    the reason to read on. */}
+                {p.yearlyPrice ? (
+                  <p className="mk__planyear">
+                    or {p.yearlyPrice} {p.yearlyUnit} — save 15%
+                  </p>
+                ) : null}
                 <div className="mk__feats">
                   {p.lines.map(l => (
                     <span key={l} className="mk__feat">
@@ -349,6 +360,10 @@ export function Pricing() {
               account-wide total, and a reader who assumes per-workspace will be
               surprised by the first refusal rather than by the page. */}
           <p className="mk__pricenote">{COUNTING_NOTE}</p>
+          {/* Disclosed before the charge, not explained after it. An
+              auto-renewing subscription advertised without its terms is the
+              pattern consumer-protection rules were written about. */}
+          <p className="mk__pricenote">{YEARLY_NOTE} {RENEWAL_NOTE}</p>
         </section>
 
         {/*

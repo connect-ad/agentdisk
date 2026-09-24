@@ -248,7 +248,18 @@ export function Plans({ role, onToast }) {
                     </span>
 
                     <span style={{ ...cell(), ...mono, fontSize: '11.5px', color: 'var(--tx)', justifyContent: 'flex-end' }}>
-                      {money(plan.amount_cents, plan.currency)}
+                      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                        <span>{money(plan.amount_cents, plan.currency)}</span>
+                        {/* The yearly price beneath, in muted ink. Its absence
+                            is a real state — a plan sold monthly only — so an
+                            empty line here means something rather than being a
+                            gap in the data. */}
+                        {plan.amount_cents_yearly ? (
+                          <span style={{ color: 'var(--tx3)', fontSize: '10.5px' }}>
+                            {money(plan.amount_cents_yearly, plan.currency)} / yr
+                          </span>
+                        ) : null}
+                      </span>
                     </span>
                     <span style={{ ...cell(), ...mono, fontSize: '11.5px', color: 'var(--tx2)', justifyContent: 'flex-end' }}>
                       {quota(plan.storage_bytes) === 'Unlimited' ? 'Unlimited' : bytes(plan.storage_bytes)}
@@ -554,11 +565,12 @@ function PlanEditor({
     setInitialised(seedKey);
     setDraft(
       creating
-        ? { id: '', name: '', amount_cents: 0, is_public: 1 }
+        ? { id: '', name: '', amount_cents: 0, amount_cents_yearly: null, is_public: 1 }
         : {
             name: plan.name,
             description: plan.description,
             amount_cents: plan.amount_cents,
+            amount_cents_yearly: plan.amount_cents_yearly,
             ...Object.fromEntries(DIMENSIONS.map(d => [d.key, plan[d.key]])),
             priority_support: plan.priority_support,
             is_public: plan.is_public,
@@ -572,6 +584,16 @@ function PlanEditor({
 
   const set = (key, value) => setDraft(current => ({ ...current, [key]: value }));
   const repriced = !creating && plan && draft.amount_cents !== plan.amount_cents;
+  const repricedYearly =
+    !creating && plan && draft.amount_cents_yearly !== plan.amount_cents_yearly;
+  /**
+   * 15% off twelve months, rounded DOWN to the dollar.
+   *
+   * Down rather than to-nearest so "save 15%" is never an over-claim: $9/month
+   * gives $91.80, which becomes $91 and a real saving of 15.7%. Rounding up
+   * would print a 15% badge over a 14.8% discount.
+   */
+  const suggestedYearly = Math.floor(((draft.amount_cents ?? 0) * 12 * 0.85) / 100) * 100;
   const reasonOk = reason.trim().length >= 3;
   const ready = reasonOk && (!creating || String(draft.id ?? '').length >= 2);
 
@@ -714,7 +736,68 @@ function PlanEditor({
             </p>
           </div>
 
-        {repriced && (
+          <div>
+            <label htmlFor="plan-price-year" style={label}>
+              Price, cents / year
+            </label>
+            <input
+              id="plan-price-year"
+              type="number"
+              min="0"
+              step="1"
+              value={draft.amount_cents_yearly ?? ''}
+              placeholder="not sold yearly"
+              onChange={event =>
+                set(
+                  'amount_cents_yearly',
+                  // Empty is null, not zero. Null withdraws the cadence — the
+                  // yearly price is archived and checkout refuses `year`
+                  // rather than quietly selling the monthly price at a yearly
+                  // interval. Zero would be a real price of nothing.
+                  event.target.value === '' ? null : Number(event.target.value)
+                )
+              }
+              style={{ ...input, ...mono, fontSize: '13px' }}
+            />
+            <p style={{ margin: '6px 0 0', fontSize: '11.5px', color: 'var(--tx3)' }}>
+              {draft.amount_cents_yearly === null || draft.amount_cents_yearly === undefined ? (
+                <>Leave empty to sell this plan monthly only.</>
+              ) : (
+                <>
+                  {money(draft.amount_cents_yearly)} / year
+                  {(draft.amount_cents ?? 0) > 0 && draft.amount_cents_yearly < draft.amount_cents * 12
+                    ? ` — ${Math.round(
+                        ((draft.amount_cents * 12 - draft.amount_cents_yearly) /
+                          (draft.amount_cents * 12)) *
+                          100
+                      )}% off twelve months`
+                    : null}
+                </>
+              )}
+              {(draft.amount_cents ?? 0) > 0 && draft.amount_cents_yearly !== suggestedYearly ? (
+                <>
+                  {' '}
+                  <button
+                    type="button"
+                    onClick={() => set('amount_cents_yearly', suggestedYearly)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      font: 'inherit',
+                      color: 'var(--ac)',
+                      cursor: 'pointer',
+                      textDecoration: 'underline'
+                    }}
+                  >
+                    Use {money(suggestedYearly)} (15% off)
+                  </button>
+                </>
+              ) : null}
+            </p>
+          </div>
+
+        {(repriced || repricedYearly) && (
           <div
             style={{
               border: '1px solid var(--warnBd)',
@@ -727,9 +810,16 @@ function PlanEditor({
               color: 'var(--warnTx)'
             }}
           >
-            A Stripe price cannot be changed. Saving mints a <strong>new</strong> price at{' '}
-            {money(draft.amount_cents)} and archives the old one — everyone already subscribed keeps
-            billing the archived price until they change plan.
+            A Stripe price cannot be changed. Saving mints a <strong>new</strong> price
+            {repriced ? ` at ${money(draft.amount_cents)} / month` : ''}
+            {repriced && repricedYearly ? ' and' : ''}
+            {repricedYearly
+              ? draft.amount_cents_yearly === null
+                ? ', and withdraws the yearly option entirely'
+                : ` at ${money(draft.amount_cents_yearly)} / year`
+              : ''}
+            , archiving what it replaces — everyone already subscribed keeps billing the
+            archived price until their next renewal.
           </div>
         )}
 

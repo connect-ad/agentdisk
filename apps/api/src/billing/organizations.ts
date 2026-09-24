@@ -8,14 +8,23 @@
  * it does not reach through a workspace it was already authorized for.
  */
 
+import { isBillingInterval, type BillingInterval } from "../lib/renewal";
+
 /**
- * `expired` is the state manual renewal actually produces — a period that ran
- * out with nobody buying another. `past_due` and `canceled` belong to the
- * subscription model and are no longer reachable through checkout, because a
- * one-off payment has no invoice to fail and no subscription to cancel. They
- * are kept because their handlers are kept: a Stripe account can still emit
- * those events for a subscription created by hand, and answering them by
- * blocking writes is the right response either way.
+ * The four states an account's billing can be in, and the order they happen in.
+ *
+ *   active    paying, or free and never having paid. Writes allowed.
+ *   past_due  a renewal charge failed and Stripe is retrying. Writes blocked,
+ *             reads open. This is the grace window, and it is the SAME seven
+ *             days as Stripe's dunning — see `lib/renewal.ts`.
+ *   expired   Stripe gave up collecting. Writes blocked, deletion scheduled.
+ *   canceled  the customer ended it themselves, or the subscription was
+ *             deleted outright. Drops to free.
+ *
+ * `expired` arrived with manual renewal in migration 0027 and survives the
+ * return to auto-renewal, because the state it names still exists: an account
+ * that stopped paying and is counting down to deletion. What changed is how it
+ * is reached — no longer "nobody bought another month" but "dunning ran out".
  */
 export type BillingStatus = "active" | "past_due" | "canceled" | "expired";
 
@@ -28,10 +37,24 @@ export interface OrgBilling {
   stripeSubscriptionId: string | null;
   ownerEmail: string;
   /**
-   * When the paid period runs out. NULL means nothing was ever bought — every
-   * free account — which is not the same as expired and must not be read as it.
+   * When the paid period runs out — a MIRROR of Stripe's
+   * `subscription.current_period_end` since migration 0029, not a value this
+   * product computes. NULL means nothing was ever bought — every free account —
+   * which is not the same as expired and must not be read as it.
    */
   currentPeriodEnd: number | null;
+  /** 'month' | 'year' | null. Null is an account with no subscription. */
+  billingInterval: BillingInterval | null;
+  /**
+   * Whether the live subscription stops at the end of the paid period.
+   *
+   * Independent of `billingStatus`: a cancelling subscription is still `active`
+   * and still entitled to everything it bought until the date arrives. This is
+   * the whole difference between "Renews 24 October" and "Ends 24 October".
+   */
+  cancelAtPeriodEnd: boolean;
+  /** When the current run of failed charges began. NULL means not in dunning. */
+  pastDueSince: number | null;
   /** When this account's data is scheduled for deletion. NULL means not queued. */
   purgeAfter: number | null;
 }
@@ -54,6 +77,9 @@ export async function findOrgForWorkspace(
               o.stripe_customer_id AS stripeCustomerId,
               o.stripe_subscription_id AS stripeSubscriptionId,
               o.current_period_end AS currentPeriodEnd,
+              o.billing_interval AS billingInterval,
+              o.cancel_at_period_end AS cancelAtPeriodEnd,
+              o.past_due_since AS pastDueSince,
               o.purge_after AS purgeAfter,
               u.email AS ownerEmail
          FROM organizations o
@@ -62,23 +88,51 @@ export async function findOrgForWorkspace(
         WHERE w.id = ?`
     )
     .bind(workspaceId)
-    .first<Omit<OrgBilling, "billingStatus"> & { billingStatus: string }>();
+    .first<
+      Omit<OrgBilling, "billingStatus" | "billingInterval" | "cancelAtPeriodEnd"> & {
+        billingStatus: string;
+        billingInterval: string | null;
+        cancelAtPeriodEnd: number;
+      }
+    >();
 
   if (row === null) return null;
-  return { ...row, billingStatus: asStatus(row.billingStatus) };
+  return {
+    ...row,
+    billingStatus: asStatus(row.billingStatus),
+    billingInterval: isBillingInterval(row.billingInterval) ? row.billingInterval : null,
+    cancelAtPeriodEnd: row.cancelAtPeriodEnd === 1,
+  };
 }
 
 export async function findOrgByCustomerId(
   db: D1Database,
   customerId: string
-): Promise<{ id: string; plan: string; currentPeriodEnd: number | null } | null> {
+): Promise<OrgRef | null> {
   return db
     .prepare(
-      `SELECT id, plan, current_period_end AS currentPeriodEnd
+      `SELECT id, plan, current_period_end AS currentPeriodEnd,
+              past_due_since AS pastDueSince, billing_status AS billingStatus
          FROM organizations WHERE stripe_customer_id = ?`
     )
     .bind(customerId)
-    .first<{ id: string; plan: string; currentPeriodEnd: number | null }>();
+    .first<OrgRef>();
+}
+
+/**
+ * What a webhook handler needs about an organization, and no more.
+ *
+ * `pastDueSince` is here because the deletion schedule is anchored on it: a
+ * handler that clears or preserves dunning has to know whether a run is already
+ * open, or a redelivered `invoice.payment_failed` would restart the customer's
+ * grace from zero and buy them another week on every retry.
+ */
+export interface OrgRef {
+  id: string;
+  plan: string;
+  currentPeriodEnd: number | null;
+  pastDueSince: number | null;
+  billingStatus: string;
 }
 
 export async function attachStripeCustomer(
@@ -113,6 +167,16 @@ export async function applySubscriptionState(
      * paid on day ten is deleted anyway.
      */
     purgeAfter?: number | null;
+    /** Which cadence the live subscription bills at. */
+    billingInterval?: BillingInterval | null;
+    /** Whether it stops at the end of the paid period. */
+    cancelAtPeriodEnd?: boolean;
+    /**
+     * When the current dunning run began. `null` clears it, and that is the
+     * direction that matters: a successful payment has to close the run, or the
+     * scheduling pass goes on counting from a failure that was already resolved.
+     */
+    pastDueSince?: number | null;
   },
   now: number
 ): Promise<void> {
@@ -135,6 +199,18 @@ export async function applySubscriptionState(
   if (changes.purgeAfter !== undefined) {
     sets.push("purge_after = ?");
     values.push(changes.purgeAfter);
+  }
+  if (changes.billingInterval !== undefined) {
+    sets.push("billing_interval = ?");
+    values.push(changes.billingInterval);
+  }
+  if (changes.cancelAtPeriodEnd !== undefined) {
+    sets.push("cancel_at_period_end = ?");
+    values.push(changes.cancelAtPeriodEnd ? 1 : 0);
+  }
+  if (changes.pastDueSince !== undefined) {
+    sets.push("past_due_since = ?");
+    values.push(changes.pastDueSince);
   }
 
   await db
@@ -177,13 +253,37 @@ export function isPayingNow(
   );
 }
 
-/** Resolve a Stripe price back to one of our plans (29.6). */
+/**
+ * Resolve a Stripe price back to one of our plans, and to the cadence it sells
+ * that plan at (29.6).
+ *
+ * Both columns are searched because a plan has two prices since migration 0029.
+ * Looking only at `stripe_price_id` — which is what this did — would leave every
+ * yearly subscriber's `customer.subscription.updated` resolving to no plan at
+ * all, and the handler's deliberate "undefined rather than a guess" rule would
+ * then quietly leave them on whatever plan they had before.
+ *
+ * The interval comes back with the id because the webhook is the only place
+ * that learns which cadence a subscription actually bills at; the subscription
+ * object carries the price, and the price is what this maps.
+ */
 export async function findPlanByPriceId(
   db: D1Database,
   priceId: string
-): Promise<{ id: string } | null> {
-  return db
-    .prepare(`SELECT id FROM plans WHERE stripe_price_id = ?`)
+): Promise<{ id: string; interval: BillingInterval } | null> {
+  const row = await db
+    .prepare(
+      `SELECT id,
+              CASE WHEN stripe_yearly_price_id = ?1 THEN 'year' ELSE 'month' END AS interval
+         FROM plans
+        WHERE stripe_price_id = ?1 OR stripe_yearly_price_id = ?1`
+    )
     .bind(priceId)
-    .first<{ id: string }>();
+    .first<{ id: string; interval: string }>();
+
+  if (row === null) return null;
+  return {
+    id: row.id,
+    interval: isBillingInterval(row.interval) ? row.interval : "month",
+  };
 }

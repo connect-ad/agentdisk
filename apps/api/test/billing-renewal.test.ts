@@ -1,14 +1,22 @@
 /**
  * The renewal ladder — `jobs/billing-renewal.ts`.
  *
- * AgentDisk does not auto-renew (owner's decision, 23 September 2026), so this
- * job is the whole lifecycle of a paid account after the money arrives: warn at
- * day −7, lock writes at day 0, schedule the data for deletion at day +7.
+ * AgentDisk auto-renews (owner's decision, 25 September 2026). Stripe raises the
+ * invoice and retries a failure; this job gives notice before a charge, and when
+ * collection fails it runs the ladder that ends in deletion: locked at the
+ * failure, scheduled at day +7, purged at day +14.
+ *
+ * **The ladder is anchored on `past_due_since`, never on `current_period_end`.**
+ * Under auto-renewal a period end is a non-event — it passes, Stripe charges,
+ * and a new one is mirrored in — so an account whose period end is in the past
+ * is usually one that renewed perfectly. Expiring on that would lock out paying
+ * customers on every renewal day, which is why several tests below set a
+ * period end in the past and assert that nothing happens.
  *
  * Two properties are worth more than all the others here and are tested first:
- * **it reports before it acts**, and **renewing takes back a scheduled
- * deletion**. The first is what stops a deploy emptying an environment; the
- * second is what stops a paying customer losing their files.
+ * **it reports before it acts**, and **a successful payment takes back a
+ * scheduled deletion**. The first is what stops a deploy emptying an
+ * environment; the second is what stops a paying customer losing their files.
  */
 
 import { env } from "cloudflare:test";
@@ -70,12 +78,39 @@ function run(overrides: Partial<Parameters<typeof runRenewalLadder>[0]> = {}): P
   });
 }
 
+/**
+ * A live subscription renewing on `endsAt`.
+ *
+ * The subscription id matters: the reminder pass requires one, so a comped
+ * account with a hand-set period is never promised a charge that nothing will
+ * raise.
+ */
 async function setPeriod(endsAt: number | null, status = "active"): Promise<void> {
   await env.DB.prepare(
-    `UPDATE organizations SET current_period_end = ?, billing_status = ?, plan = 'pro'
+    `UPDATE organizations SET current_period_end = ?, billing_status = ?, plan = 'pro',
+            billing_interval = 'month', stripe_subscription_id = 'sub_live',
+            cancel_at_period_end = 0
       WHERE id = ?`
   )
     .bind(endsAt, status, ORG_ID)
+    .run();
+}
+
+/**
+ * An account whose renewal charge failed at `since`.
+ *
+ * This is what day 0 of the ladder actually looks like, and it is a different
+ * fact from the period having ended — Stripe raises the invoice, attempts it,
+ * and only then reports the failure, so the two moments can be days apart.
+ */
+async function setDunning(since: number, status = "past_due"): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE organizations SET billing_status = ?, past_due_since = ?, plan = 'pro',
+            billing_interval = 'month', stripe_subscription_id = 'sub_live',
+            current_period_end = ?, cancel_at_period_end = 0
+      WHERE id = ?`
+  )
+    .bind(status, since, since, ORG_ID)
     .run();
 }
 
@@ -101,7 +136,10 @@ beforeEach(async () => {
   await env.DB.prepare(`DELETE FROM notifications_sent`).run();
   await env.DB.prepare(
     `UPDATE organizations SET current_period_end = NULL, purge_after = NULL,
-            billing_status = 'active', owner_user_id = 'usr_TESTUSER' WHERE id = ?`
+            billing_status = 'active', owner_user_id = 'usr_TESTUSER',
+            past_due_since = NULL, billing_interval = NULL,
+            cancel_at_period_end = 0, stripe_subscription_id = NULL
+      WHERE id = ?`
   )
     .bind(ORG_ID)
     .run();
@@ -111,13 +149,21 @@ beforeEach(async () => {
   await env.DB.prepare(
     `UPDATE workspaces SET slug = 'workspace-a' WHERE id = 'ws_AAAAAAAAAAAAAAAAAAAAAAAAAA'`
   ).run();
+  // The catalogue is restored every time. One test below zeroes Pro's price to
+  // prove the notice stays silent without one, and a leaked zero would silently
+  // disable every reminder assertion after it — the failure would read as "the
+  // reminder pass is broken" rather than "the fixture leaked".
+  await env.DB.prepare(
+    `UPDATE plans SET amount_cents = 2000, amount_cents_yearly = NULL,
+            stripe_yearly_price_id = NULL WHERE id = 'pro'`
+  ).run();
   sent = [];
   failNextSend = false;
 });
 
 describe("it reports before it acts", () => {
   it("defaults to a dry run, so a deploy cannot expire anything on its first tick", async () => {
-    await setPeriod(NOW - DAY);
+    await setDunning(NOW - RENEWAL_GRACE_MS - DAY);
 
     // No `dryRun` at all — the default is what ships.
     const result = await runRenewalLadder({
@@ -130,34 +176,66 @@ describe("it reports before it acts", () => {
     expect(result.dryRun).toBe(true);
     expect(result.candidates.expiry).toHaveLength(1);
     expect(result.expired).toBe(0);
-    expect((await org()).billing_status).toBe("active");
+    // Unchanged: still mid-dunning, not moved on to `expired`.
+    expect((await org()).billing_status).toBe("past_due");
     expect(sent).toHaveLength(0);
   });
 
   it("names every candidate in a dry run, not just a count", async () => {
     // This is the artifact somebody reads before setting BILLING_EXPIRY_ENABLED.
-    await setPeriod(NOW - DAY);
+    await setDunning(NOW - RENEWAL_GRACE_MS - DAY);
     const result = await run({ dryRun: true });
 
     expect(result.candidates.expiry[0]).toMatchObject({
       orgId: ORG_ID,
       plan: "pro",
-      periodEnd: NOW - DAY,
+      pastDueSince: NOW - RENEWAL_GRACE_MS - DAY,
     });
   });
 });
 
-describe("day -7 · the reminder", () => {
-  it("warns an account whose period ends inside the window", async () => {
+describe("day -7 · notice of the renewal charge", () => {
+  it("names the date and the amount, because that is the whole content", async () => {
+    // Advance notice of a charge, not a request to act. A notice that says only
+    // "your plan renews soon" leaves the customer unable to check it against
+    // their statement, which is the one thing the message is for — and in
+    // several jurisdictions the thing that makes it a compliant notice.
     await setPeriod(NOW + 3 * DAY);
     const result = await run();
 
     expect(result.reminded).toBe(1);
     expect(sent).toHaveLength(1);
-    expect(sent[0]!.subject).toMatch(/ends on/i);
-    // The fact the whole message exists to convey.
-    expect(sent[0]!.body).toMatch(/will not renew automatically/i);
+    expect(sent[0]!.subject).toMatch(/renews on/i);
+    expect(sent[0]!.subject).toMatch(/\$/);
+    expect(sent[0]!.body).toMatch(/renews automatically/i);
+    expect(sent[0]!.body).toMatch(/\$\d/);
     expect(sent[0]!.body).toContain(`${DASHBOARD}/w/`);
+  });
+
+  it("says nothing to an account that has already cancelled", async () => {
+    // The single most alarming message this product could send. Somebody who
+    // cancelled last week, told their plan renews on the date it is actually
+    // ending, reads it as the cancellation having failed.
+    await setPeriod(NOW + 3 * DAY);
+    await env.DB.prepare(`UPDATE organizations SET cancel_at_period_end = 1 WHERE id = ?`)
+      .bind(ORG_ID)
+      .run();
+
+    const result = await run();
+    expect(result.reminded).toBe(0);
+    expect(sent).toHaveLength(0);
+  });
+
+  it("says nothing when it cannot quote a price", async () => {
+    // Deliberately silent rather than sending an amount-less renewal warning:
+    // the amount IS the message, and a notice without it fails the disclosure
+    // it exists to satisfy.
+    await setPeriod(NOW + 3 * DAY);
+    await env.DB.prepare(`UPDATE plans SET amount_cents = 0 WHERE id = 'pro'`).run();
+
+    const result = await run();
+    expect(result.reminded).toBe(0);
+    expect(sent).toHaveLength(0);
   });
 
   it("falls back to the dashboard root when the org has no live workspace", async () => {
@@ -204,9 +282,29 @@ describe("day -7 · the reminder", () => {
   });
 });
 
-describe("day 0 · expiry", () => {
+describe("day +7 · dunning runs out", () => {
+  it("does nothing to an account whose period merely ended", async () => {
+    // The trap this design has to avoid. Under auto-renewal a period end is a
+    // non-event — Stripe charges and mirrors in a new one — so an account
+    // sitting past its period end is almost always one that renewed perfectly.
+    // Expiring on that alone would lock out paying customers on renewal day.
+    await setPeriod(NOW - 3 * DAY);
+
+    const result = await run();
+    expect(result.expired).toBe(0);
+    expect((await org()).billing_status).toBe("active");
+  });
+
+  it("leaves an account inside the grace window alone", async () => {
+    await setDunning(NOW - 2 * DAY);
+    const result = await run();
+
+    expect(result.expired).toBe(0);
+    expect((await org()).billing_status).toBe("past_due");
+  });
+
   it("locks writes and keeps the paid plan", async () => {
-    await setPeriod(NOW - DAY);
+    await setDunning(NOW - RENEWAL_GRACE_MS - DAY);
     const result = await run();
 
     expect(result.expired).toBe(1);
@@ -215,24 +313,28 @@ describe("day 0 · expiry", () => {
     // Deliberately NOT dropped to free. A 40 GB Pro account moved to Free's
     // 1 GB is instantly over quota through no act of its own, and every usage
     // screen would report a breach the customer cannot fix except by deleting
-    // files during the exact window we are asking them to renew in.
+    // files during the exact window we are asking them to fix their card in.
     expect(row.plan).toBe("pro");
   });
 
-  it("tells them, and says plainly that nothing has been deleted", async () => {
-    await setPeriod(NOW - DAY);
+  it("tells them the card failed, and that nothing has been deleted", async () => {
+    // Sent while dunning is still running, which is the point: it turns "my
+    // uploads stopped working" into "my card expired", and the earlier it lands
+    // the more likely they fix it before the ladder reaches deletion.
+    await setDunning(NOW - 2 * DAY);
     await run();
 
-    const notice = sent.find(message => /has ended/i.test(message.subject));
+    const notice = sent.find(message => /payment failed/i.test(message.subject));
     expect(notice).toBeDefined();
     expect(notice!.body).toMatch(/nothing has been deleted/i);
     expect(notice!.body).toMatch(/readable and downloadable/i);
+    expect(notice!.body).toMatch(/expired or replaced card/i);
   });
 
   it("expires even when the message cannot be sent", async () => {
     // A billing failure that quietly grants free service is the direction never
     // to fail in. An expired provider key must not stop accounts expiring.
-    await setPeriod(NOW - DAY);
+    await setDunning(NOW - RENEWAL_GRACE_MS - DAY);
     const result = await run({ email: null });
 
     expect(result.expired).toBe(1);
@@ -243,7 +345,7 @@ describe("day 0 · expiry", () => {
   it("expires an account whose owner row has no address", async () => {
     // An inner join on `users` here would mean an organization with no
     // reachable owner never expires — service granted forever by an absence.
-    await setPeriod(NOW - DAY);
+    await setDunning(NOW - RENEWAL_GRACE_MS - DAY);
     await env.DB.prepare(`UPDATE organizations SET owner_user_id = 'usr_GONE' WHERE id = ?`)
       .bind(ORG_ID)
       .run();
@@ -255,46 +357,49 @@ describe("day 0 · expiry", () => {
   });
 
   it("is idempotent across ticks", async () => {
-    await setPeriod(NOW - DAY);
+    await setDunning(NOW - RENEWAL_GRACE_MS - DAY);
     await run();
     const second = await run();
 
     expect(second.expired).toBe(0);
-    expect(sent.filter(m => /has ended/i.test(m.subject))).toHaveLength(1);
+    expect(sent.filter(m => /payment failed/i.test(m.subject))).toHaveLength(1);
   });
 });
 
 describe("day +7 · deletion scheduling", () => {
-  it("leaves an account inside the grace window alone", async () => {
-    await setPeriod(NOW - 2 * DAY, "expired");
-    const result = await run();
-
-    expect(result.deletionsScheduled).toBe(0);
-    expect((await org()).purge_after).toBeNull();
-  });
-
-  it("stamps an account whose grace has run out", async () => {
-    await setPeriod(NOW - RENEWAL_GRACE_MS - DAY, "expired");
+  it("stamps an account Stripe has given up on", async () => {
+    // `expired` is reached either by the webhook — when Stripe deletes the
+    // subscription after exhausting its retries — or by the pass above from our
+    // own clock. Both arrive here.
+    await setDunning(NOW - RENEWAL_GRACE_MS - DAY, "expired");
     const result = await run();
 
     expect(result.deletionsScheduled).toBe(1);
     expect((await org()).purge_after).not.toBeNull();
   });
 
-  it("tells them, and says renewing still undoes it", async () => {
-    // Scheduling the deletion of a paying customer's files without saying so at
-    // the moment it happens is indefensible.
-    await setPeriod(NOW - RENEWAL_GRACE_MS - DAY, "expired");
+  it("leaves a still-dunning account alone", async () => {
+    await setDunning(NOW - 2 * DAY);
+    const result = await run();
+
+    expect(result.deletionsScheduled).toBe(0);
+    expect((await org()).purge_after).toBeNull();
+  });
+
+  it("tells them, and says starting a plan again still undoes it", async () => {
+    // Scheduling the deletion of a customer's files without saying so at the
+    // moment it happens is indefensible.
+    await setDunning(NOW - RENEWAL_GRACE_MS - DAY, "expired");
     await run();
 
     const notice = sent.find(message => /scheduled for deletion/i.test(message.subject));
     expect(notice).toBeDefined();
     expect(notice!.body).toMatch(/nothing has been removed yet/i);
-    expect(notice!.body).toMatch(/renewing the plan cancels the deletion/i);
+    expect(notice!.body).toMatch(/cancels the deletion/i);
   });
 
   it("never stamps an account twice", async () => {
-    await setPeriod(NOW - RENEWAL_GRACE_MS - DAY, "expired");
+    await setDunning(NOW - RENEWAL_GRACE_MS - DAY, "expired");
     await run();
     const stamped = (await org()).purge_after;
 
@@ -303,17 +408,19 @@ describe("day +7 · deletion scheduling", () => {
     expect((await org()).purge_after).toBe(stamped);
   });
 
-  it("does not touch an account that renewed during the grace window", async () => {
-    // The worst failure this feature can have. `checkout.session.completed`
-    // clears the stamp and restores `active`; this pass must not re-apply it.
-    await setPeriod(NOW - RENEWAL_GRACE_MS - DAY, "expired");
+  it("does not touch an account whose card cleared during the grace window", async () => {
+    // **The worst failure this feature can have.** Under auto-renewal the
+    // recovery is Stripe's own retry rather than a customer pressing a button,
+    // which makes it easier to miss and no less important: the webhook clears
+    // the stamp and restores `active`, and this pass must not re-apply it.
+    await setDunning(NOW - RENEWAL_GRACE_MS - DAY, "expired");
     await run();
     expect((await org()).purge_after).not.toBeNull();
 
-    // What a renewal does, exactly as the webhook writes it.
+    // Exactly what `invoice.payment_succeeded` writes.
     await env.DB.prepare(
       `UPDATE organizations SET billing_status = 'active', purge_after = NULL,
-              current_period_end = ? WHERE id = ?`
+              past_due_since = NULL, current_period_end = ? WHERE id = ?`
     )
       .bind(NOW + 30 * DAY, ORG_ID)
       .run();
@@ -328,15 +435,15 @@ describe("day +7 · deletion scheduling", () => {
 describe("crossing two boundaries in one tick", () => {
   it("expires before it schedules, so the warning is never skipped", async () => {
     // Possible after an outage, or on the first enabled run. An account that is
-    // both expired and past grace must still pass through the expired state and
-    // its message rather than jumping straight to deletion unannounced.
-    await setPeriod(NOW - RENEWAL_GRACE_MS - DAY, "active");
+    // both past its grace and unswept must still pass through the expired state
+    // and its message rather than jumping straight to deletion unannounced.
+    await setDunning(NOW - RENEWAL_GRACE_MS - DAY);
 
     const result = await run();
 
     expect(result.expired).toBe(1);
     expect(result.deletionsScheduled).toBe(1);
-    expect(sent.some(m => /has ended/i.test(m.subject))).toBe(true);
+    expect(sent.some(m => /payment failed/i.test(m.subject))).toBe(true);
     expect(sent.some(m => /scheduled for deletion/i.test(m.subject))).toBe(true);
   });
 });
@@ -345,7 +452,9 @@ describe("what it leaves alone", () => {
   it("ignores an account that never bought anything", async () => {
     // NULL is "never had a period", which is every free account. Reading it as
     // expired would sweep the entire free tier.
-    await env.DB.prepare(`UPDATE organizations SET current_period_end = NULL WHERE id = ?`)
+    await env.DB.prepare(
+      `UPDATE organizations SET current_period_end = NULL, past_due_since = NULL WHERE id = ?`
+    )
       .bind(ORG_ID)
       .run();
 
@@ -356,12 +465,12 @@ describe("what it leaves alone", () => {
   });
 
   it("does not remind an account that has already expired", async () => {
-    await setPeriod(NOW - DAY, "expired");
+    await setDunning(NOW - DAY, "expired");
     const result = await run();
     expect(result.reminded).toBe(0);
   });
 
-  it("reminds again for the next period after a renewal", async () => {
+  it("gives notice again for the next period after a renewal", async () => {
     // The guard is keyed on the period, not the account: the same three
     // messages are owed every month.
     await setPeriod(NOW + 3 * DAY);
@@ -394,10 +503,10 @@ describe("day +14 · the purge", () => {
   async function scheduled(purgeAfter: number): Promise<void> {
     await env.DB.prepare(
       `UPDATE organizations SET billing_status = 'expired', plan = 'pro',
-              current_period_end = ?, purge_after = ?, purged_at = NULL
+              current_period_end = ?, past_due_since = ?, purge_after = ?, purged_at = NULL
         WHERE id = ?`
     )
-      .bind(NOW - 14 * DAY, purgeAfter, ORG_ID)
+      .bind(NOW - 14 * DAY, NOW - 14 * DAY, purgeAfter, ORG_ID)
       .run();
   }
 
@@ -532,13 +641,20 @@ describe("day +14 · the purge", () => {
  * missing entirely.
  */
 describe("the complete story", () => {
-  it("walks an account from paid to purged, and can be stopped at any point by paying", async () => {
-    const bought = NOW;
-    const periodEnd = bought + 30 * DAY;
+  it("walks an account from renewing to purged, one stage per tick", async () => {
+    // The whole story in one test, because each stage was written separately
+    // and the thing that breaks is the joins between them — a stamp nothing
+    // reads, a message keyed on a state the previous pass already left.
+    //
+    // It does NOT assert the recovery; that has its own test above, where it
+    // can be checked at the stage it actually matters.
+    const periodEnd = NOW + 30 * DAY;
 
     await env.DB.prepare(
       `UPDATE organizations SET plan = 'pro', billing_status = 'active',
-              current_period_end = ?, purge_after = NULL, purged_at = NULL
+              billing_interval = 'month', stripe_subscription_id = 'sub_live',
+              cancel_at_period_end = 0, current_period_end = ?,
+              past_due_since = NULL, purge_after = NULL, purged_at = NULL
         WHERE id = ?`
     )
       .bind(periodEnd, ORG_ID)
@@ -546,33 +662,52 @@ describe("the complete story", () => {
 
     const tick = (at: number) => run({ files: env.FILES, now: at });
 
-    // Day -7: reminded, still active, still writable.
+    // Day -7: given notice of the charge. Still active, still writable.
     await tick(periodEnd - 7 * DAY);
     expect((await org()).billing_status).toBe("active");
-    expect(sent.some(m => /ends on/i.test(m.subject))).toBe(true);
+    expect(sent.some(m => /renews on/i.test(m.subject))).toBe(true);
 
-    // Day 0: locked, plan deliberately retained.
-    await tick(periodEnd + 1000);
+    // Day 0: the charge fails. Stripe's `invoice.payment_failed` opens the
+    // dunning run — written here directly, because the webhook owns that write
+    // and this job only reads it.
+    const failedAt = periodEnd + 1000;
+    await env.DB.prepare(
+      `UPDATE organizations SET billing_status = 'past_due', past_due_since = ? WHERE id = ?`
+    )
+      .bind(failedAt, ORG_ID)
+      .run();
+
+    await tick(failedAt + 60_000);
+    expect((await org()).billing_status).toBe("past_due");
+    expect(sent.some(m => /payment failed/i.test(m.subject))).toBe(true);
+
+    // Day +7: dunning runs out. Locked, plan deliberately retained, deletion
+    // scheduled — and the bytes are still there.
+    await tick(failedAt + RENEWAL_GRACE_MS + 1000);
     expect((await org()).billing_status).toBe("expired");
     expect((await org()).plan).toBe("pro");
-
-    // Day +7: scheduled, nothing deleted yet.
-    await tick(periodEnd + RENEWAL_GRACE_MS + 1000);
     expect((await org()).purge_after).not.toBeNull();
+
     const stillThere = await env.DB.prepare(
       `SELECT COUNT(*) AS n FROM workspaces WHERE org_id = ?`
-    ).bind(ORG_ID).first<{ n: number }>();
+    )
+      .bind(ORG_ID)
+      .first<{ n: number }>();
     expect(stillThere!.n).toBeGreaterThan(0);
 
     // Day +14: gone.
-    await tick(periodEnd + RENEWAL_GRACE_MS + RENEWAL_NOTICE_MS + 2000);
+    await tick(failedAt + RENEWAL_GRACE_MS + RENEWAL_NOTICE_MS + 2000);
     const gone = await env.DB.prepare(
       `SELECT COUNT(*) AS n FROM workspaces WHERE org_id = ?`
-    ).bind(ORG_ID).first<{ n: number }>();
+    )
+      .bind(ORG_ID)
+      .first<{ n: number }>();
     expect(gone!.n).toBe(0);
     expect((await org()).purged_at).not.toBeNull();
 
-    // Three emails, one per stage, and no more.
+    // Three messages, one per stage, and no more. The guard is the unique
+    // index: the cron is hourly, so a stage that sent per tick would send 168
+    // copies a week.
     expect(sent).toHaveLength(3);
   });
 });

@@ -93,17 +93,22 @@ function assertBillingAllowsWrite(billingStatus: string, demand: QuotaDemand): v
  */
 function refusal(billingStatus: string): string {
   switch (billingStatus) {
-    case "expired":
-      // The one a live account actually reaches under manual renewal.
-      return (
-        "This plan has ended and does not renew automatically. New uploads are paused; " +
-        "everything you have stored is still readable and downloadable. Renew within 7 days " +
-        "of the end date to keep it — after that the account's data is scheduled for deletion."
-      );
     case "past_due":
+      // Day 0 of the ladder, and the state most accounts that reach this point
+      // are actually in. Names the likely cause, because "an unpaid invoice"
+      // sounds like a dispute and it is almost always an expired card.
       return (
-        "This account has an unpaid invoice. New uploads are paused until it is settled; " +
-        "your files remain readable."
+        "We could not take payment for this account — usually an expired or replaced card. " +
+        "New uploads are paused; everything you have stored is still readable and " +
+        "downloadable. Update the payment method on the billing page and it resumes " +
+        "immediately."
+      );
+    case "expired":
+      // Day +7. The card never cleared and the deletion clock has started.
+      return (
+        "Payment for this account could not be collected and the 7-day grace period has " +
+        "passed. New uploads are paused and the account's data is scheduled for deletion; " +
+        "nothing has been removed yet, and starting a plan again cancels it."
       );
     default:
       return "This account's subscription has ended. New uploads are paused; your files remain readable.";

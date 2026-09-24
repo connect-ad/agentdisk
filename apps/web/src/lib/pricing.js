@@ -71,6 +71,8 @@ export const PLANS = [
     kicker: 'BASIC',
     price: '$9',
     unit: '/ month',
+    yearlyPrice: '$91',
+    yearlyUnit: '/ year',
     featured: false,
     cta: 'Start on Basic',
     ctaTo: '/signup',
@@ -89,6 +91,8 @@ export const PLANS = [
     kicker: 'PRO',
     price: '$20',
     unit: '/ month',
+    yearlyPrice: '$204',
+    yearlyUnit: '/ year',
     featured: true,
     cta: 'Start on Pro',
     ctaTo: '/signup',
@@ -107,6 +111,8 @@ export const PLANS = [
     kicker: 'TEAM',
     price: '$80',
     unit: '/ month',
+    yearlyPrice: '$816',
+    yearlyUnit: '/ year',
     featured: false,
     cta: 'Start on Team',
     ctaTo: '/signup',
@@ -139,6 +145,31 @@ export const FREE_SUMMARY = '1 GB of storage and one agent identity';
  */
 export const COUNTING_NOTE =
   'Agents, keys, members and workspaces are counted across your whole account, not per workspace.';
+
+/**
+ * The yearly discount, stated once.
+ *
+ * `yearlyPrice` on each plan is the authority for what is actually charged —
+ * these are real Stripe prices, rounded DOWN to the dollar so the advertised
+ * saving is never an over-claim. Basic's exact 15% is $91.80, which becomes
+ * $91 and a real saving of 15.7%; rounding the other way would print a 15%
+ * badge over a 14.8% discount.
+ */
+export const YEARLY_NOTE = 'Save 15% when you pay yearly.';
+
+/**
+ * Stated on the pricing page because an auto-renewing charge has to be
+ * disclosed before it is taken, not explained afterwards.
+ *
+ * Several jurisdictions require exactly this: the terms up front, notice
+ * before each renewal, and a cancellation route no harder than the signup was.
+ * All three exist — this is the first, the day-7 email is the second, and the
+ * in-app Cancel button is the third.
+ */
+export const RENEWAL_NOTE =
+  'Plans renew automatically until you cancel. We email you a week before each renewal, ' +
+  'and you can cancel in one click from your billing page — you keep the plan until the ' +
+  'period you have paid for ends.';
 
 /**
  * Metered overage rows. Permanently empty — see the header. Kept as an export

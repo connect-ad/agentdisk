@@ -109,37 +109,49 @@ export function planIdOf(product: Stripe.Product): string | null {
 }
 
 /**
- * The price this product can currently be sold at.
+ * The prices this product can currently be sold at, one per cadence.
  *
- * **One-time, not recurring, and the inversion is load-bearing.** This function
- * used to do the exact opposite — it filtered to `price.recurring !== null` and
- * discarded one-off prices as "a mistake". That was right while AgentDisk sold
- * subscriptions. When checkout moved to `mode: "payment"` the catalogue went on
- * handing it recurring price ids, and **Stripe refuses a recurring price in
- * payment mode**, so every purchase failed. Nothing caught it: every checkout
- * test is a refusal that returns before the outbound Stripe call.
+ * **Recurring, and the interval is what separates them.** A subscription
+ * checkout requires a recurring price — Stripe refuses a one-time price in
+ * `mode: "subscription"` exactly as it refuses a recurring one in
+ * `mode: "payment"` — so a price with `recurring === null` is ignored here. Such
+ * a price is not harmful to have sitting on the product; it simply cannot be
+ * subscribed to, and selecting it would fail every checkout.
  *
- * So a recurring price is now the thing to ignore. One is not harmful to have
- * sitting on the product — the four created in September still exist — it
- * simply cannot be sold through a one-off checkout, and selecting it would
- * reintroduce the failure.
+ * This file has now held both rules. For two days in September it filtered to
+ * one-off prices, because checkout was briefly `mode: "payment"` under the
+ * manual-renewal design. The lesson that outlived the decision: **the catalogue
+ * and the checkout mode are one contract**, and changing either without the
+ * other produces a catalogue that syncs cleanly, tests green, and cannot sell
+ * anything. Nothing caught it then, because every checkout test is a refusal
+ * that returns before the outbound Stripe call.
  *
- * Returning null rather than falling back to a recurring price is deliberate.
- * `purchasablePlanIds` drops a plan with no price and the dashboard renders it
- * as unavailable, which is a visible, correct state; a price that cannot be
- * charged is an invisible, broken one.
+ * A missing cadence returns null rather than falling back to the other one.
+ * Checkout refuses an interval with no price and the dashboard renders it
+ * unavailable, which is a visible, correct state; silently selling somebody a
+ * yearly subscription because the monthly price was missing is an invisible,
+ * expensive one.
  */
-async function activeMonthlyPrice(
+async function activePrices(
   stripe: Stripe,
   productId: string
-): Promise<Stripe.Price | null> {
+): Promise<{ monthly: Stripe.Price | null; yearly: Stripe.Price | null }> {
   const prices = await stripe.prices.list({ product: productId, active: true, limit: 100 });
-  return prices.data.find((price) => price.recurring === null) ?? null;
+  const at = (interval: "month" | "year"): Stripe.Price | null =>
+    prices.data.find(
+      // `interval_count` guards the cadences Stripe allows but we do not sell.
+      // A price of "every 3 months" is a real monthly-interval price, and
+      // reading it as our monthly plan would bill a quarter as a month.
+      (price) => price.recurring?.interval === interval && price.recurring.interval_count === 1
+    ) ?? null;
+
+  return { monthly: at("month"), yearly: at("year") };
 }
 
 export interface PlanUpsert {
   planId: string;
   priceId: string | null;
+  yearlyPriceId: string | null;
 }
 
 /**
@@ -159,7 +171,10 @@ export async function syncProductToPlan(
   if (planId === null) return null;
 
   const metadata = product.metadata ?? {};
-  const price = product.active ? await activeMonthlyPrice(stripe, product.id) : null;
+  const prices = product.active
+    ? await activePrices(stripe, product.id)
+    : { monthly: null, yearly: null };
+  const price = prices.monthly;
 
   await db
     .prepare(
@@ -167,11 +182,12 @@ export async function syncProductToPlan(
          id, package_id, name, description,
          amount_cents, currency, interval,
          stripe_product_id, stripe_price_id,
+         stripe_yearly_price_id, amount_cents_yearly,
          storage_bytes, file_count, egress_bytes_period, requests_period,
          max_file_bytes, agents, members, workspaces, api_keys, share_links,
          priority_support, is_public, is_default, sort_order,
          created_at, updated_at, last_synced_at, last_synced_direction
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'inbound')
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'inbound')
        ON CONFLICT(id) DO UPDATE SET
          package_id = excluded.package_id,
          name = excluded.name,
@@ -181,6 +197,8 @@ export async function syncProductToPlan(
          interval = excluded.interval,
          stripe_product_id = excluded.stripe_product_id,
          stripe_price_id = excluded.stripe_price_id,
+         stripe_yearly_price_id = excluded.stripe_yearly_price_id,
+         amount_cents_yearly = excluded.amount_cents_yearly,
          storage_bytes = excluded.storage_bytes,
          file_count = excluded.file_count,
          egress_bytes_period = excluded.egress_bytes_period,
@@ -216,13 +234,17 @@ export async function syncProductToPlan(
       product.name,
       product.description ?? null,
       price?.unit_amount ?? 0,
-      price?.currency ?? "usd",
-      // A one-time price carries no interval; the period is this product's own
-      // (`BILLING_PERIOD_MONTHS`). The column stays as the word a screen prints,
-      // not as a fact read back from Stripe.
-      price?.recurring?.interval ?? "month",
+      price?.currency ?? prices.yearly?.currency ?? "usd",
+      // The default cadence, and the one `amount_cents` is quoted in. Always
+      // 'month' for a plan we sell: yearly is the alternative offered beside it,
+      // never the headline. A plan sold ONLY yearly would still read 'month'
+      // here, which is why the screen chooses its interval from which price
+      // columns are populated rather than from this word.
+      "month",
       product.id,
       price?.id ?? null,
+      prices.yearly?.id ?? null,
+      prices.yearly?.unit_amount ?? null,
       entitlement(metadata, "storage_bytes"),
       entitlement(metadata, "file_count"),
       entitlement(metadata, "egress_bytes_period"),
@@ -247,7 +269,11 @@ export async function syncProductToPlan(
     .run();
 
   invalidateCatalogue();
-  return { planId, priceId: price?.id ?? null };
+  return {
+    planId,
+    priceId: price?.id ?? null,
+    yearlyPriceId: prices.yearly?.id ?? null,
+  };
 }
 
 /**
@@ -274,7 +300,9 @@ export async function retirePlanForProduct(
   await db
     .prepare(
       `UPDATE plans
-          SET is_public = 0, is_default = 0, stripe_price_id = NULL, updated_at = ?
+          SET is_public = 0, is_default = 0,
+              stripe_price_id = NULL, stripe_yearly_price_id = NULL,
+              updated_at = ?
         WHERE id = ?`
     )
     .bind(now, planId)

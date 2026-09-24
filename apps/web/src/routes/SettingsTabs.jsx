@@ -2,13 +2,18 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Panel, DataTable, Select, Input, Button, Icon, Badge, Alert, EmptyState,
-  Modal, Toast, Checkbox
+  Modal, ConfirmModal, Toast, Checkbox
 } from '../components/index.js';
 import { useResource } from '../lib/useResource.js';
 import { useWorkspace } from '../lib/workspace.jsx';
-// The one public copy of the pricing numbers. The server sends only
-// `purchasable` — a list of plan ids — and deliberately restates no prices, so
-// this module is where every figure on the picker comes from.
+// The public copy of everything on a plan card EXCEPT the price.
+//
+// The two amounts now come from the server, because they are what Stripe will
+// actually charge and a card quoting a figure the catalogue has since changed
+// is how somebody is surprised by their own invoice. Entitlements — storage,
+// agents, file counts — stay here: the server has no business restating them,
+// and `PLANS[].price` survives only as the label for Free, which has no Stripe
+// price at all.
 import { COUNTING_NOTE, PLANS } from '../lib/pricing.js';
 
 /**
@@ -428,109 +433,182 @@ export function PrivacyTab() {
 const loadBilling = (api, workspaceId) => api.getBilling(workspaceId);
 
 const STATUS_TONE = {
-  active: 'ok', past_due: 'warn', canceled: 'danger', expired: 'warn'
+  active: 'ok', past_due: 'warn', canceled: 'danger', expired: 'danger'
 };
 const STATUS_LABEL = {
   active: 'Active',
-  past_due: 'Payment overdue',
+  // Named for what happened rather than for what it costs. "Payment failed" is
+  // a fact somebody can act on; "Blocked" is a verdict about them.
+  past_due: 'Payment failed',
   canceled: 'Canceled',
-  // The state manual renewal actually produces. Named for what happened rather
-  // than for what it costs — "Expired" is a fact, "Blocked" would be a verdict.
-  expired: 'Expired'
+  expired: 'Ended'
 };
 
 /** "14 October 2026", matching the wording the renewal emails use. */
 function planDate(at) {
   if (typeof at !== 'number' || !Number.isFinite(at)) return null;
   return new Date(at).toLocaleDateString('en-GB', {
-    day: 'numeric', month: 'long', year: 'numeric'
+    day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC'
   });
 }
 
 /**
- * What a plan card offers, given who is looking and where the period stands.
+ * Minor units as a price is printed: 20400 -> "$204.00".
  *
- * All of it in one function, because the interesting cases are the
- * combinations — an expired owner looking at a plan that is not theirs, a
- * reader looking at anything — and spreading those across JSX conditionals is
- * how one of them ends up unreachable.
- *
- * Returns `{ label, action }`, where a null action means render no button.
- * `action` is 'checkout' or 'portal'; nothing else exists.
+ * The server sends the two amounts because they are what Stripe will actually
+ * charge. Everything else on these cards — storage, agents, file counts — stays
+ * hardcoded in `lib/pricing.js`, so this is the one place a figure comes over
+ * the wire and it is deliberately the only one.
  */
-function cardAction(plan, billing, purchasable, isOwner) {
-  if (!isOwner) return { label: null, action: null };
-
-  const isCurrent = plan.id === billing?.plan;
-  const hasSubscription = billing?.subscribed === true;
-
-  // A real Stripe subscription, from before manual renewal or made by hand.
-  // Checkout refuses these outright, so the only honest offer is the portal.
-  if (hasSubscription) {
-    return isCurrent
-      ? { label: 'Manage subscription', action: 'portal' }
-      : { label: 'Change plan', action: 'portal' };
-  }
-
-  // Free is the absence of a purchase. There is nothing to buy, and leaving a
-  // paid plan means letting it lapse rather than pressing a button here.
-  if (plan.id === 'free') return { label: null, action: null };
-
-  // The catalogue has the plan but this environment has no Stripe price for
-  // it, which means the sync has not run. Saying so beats a button whose only
-  // possible outcome is a 500.
-  if (!purchasable.includes(plan.id)) {
-    return { label: 'Not available yet', action: null, disabled: true };
-  }
-
-  if (isCurrent) {
-    // Only inside the last seven days, or once it has lapsed. The server
-    // decides this — `renewalOpen` — so a clock-skewed browser cannot offer a
-    // button that is about to be refused.
-    return billing?.renewalOpen
-      ? { label: 'Renew', action: 'checkout' }
-      : { label: null, action: null };
-  }
-
-  // Switching plans mid-period is refused server-side, because proration is
-  // out of scope. Said in words on the card rather than discovered on a 409.
-  if (billing?.renewalOpen === false) return { label: null, action: null };
-
-  return { label: 'Subscribe', action: 'checkout' };
+function money(cents) {
+  if (typeof cents !== 'number' || !Number.isFinite(cents)) return null;
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
 }
 
 /**
- * When this plan runs out, and what happens then.
+ * What a plan card offers, given who is looking and what they already have.
  *
- * Under manual renewal this is the fact a customer most needs and the one the
- * product was least able to tell them — there was no column for it until
- * migration 0027. Free accounts get nothing here rather than a reassuring
- * "never expires", because they have no period at all and inventing one would
- * be the same kind of lie in the other direction.
+ * All of it in one function, because the interesting cases are the combinations
+ * — an owner mid-dunning looking at a plan that is not theirs, a reader looking
+ * at anything — and spreading those across JSX conditionals is how one of them
+ * ends up unreachable.
+ *
+ * Returns `{ label, action, disabled, tone }`. A null action means render no
+ * button. `action` is 'checkout', 'change', 'cancel' or 'resume'.
+ */
+function cardAction(plan, billing, offer, isOwner, interval) {
+  if (!isOwner) return { label: null, action: null };
+
+  const isCurrent = plan.id === billing?.plan;
+  const sameCadence = isCurrent && billing?.interval === interval;
+  const hasSubscription = billing?.subscribed === true;
+
+  // Free is the absence of a purchase. There is nothing to buy, and leaving a
+  // paid plan means cancelling it rather than pressing a button here.
+  if (plan.id === 'free') return { label: null, action: null };
+
+  // The catalogue has the plan but this environment has no Stripe price for it
+  // at this cadence — either the sync has not run, or it is genuinely not sold
+  // by the year. Saying so beats a button whose only outcome is a 500.
+  if (offer === undefined || priceFor(offer, interval) === null) {
+    return { label: 'Not available', action: null, disabled: true };
+  }
+
+  if (!hasSubscription) {
+    return { label: 'Subscribe', action: 'checkout' };
+  }
+
+  // The plan and cadence they already have. The only thing left to offer is
+  // stopping — or, if they have already stopped, taking it back.
+  if (sameCadence) {
+    return billing?.cancelAtPeriodEnd
+      ? { label: 'Resume subscription', action: 'resume' }
+      : { label: 'Cancel subscription', action: 'cancel', tone: 'secondary' };
+  }
+
+  // Everything else is a change to a live subscription. The server decides
+  // whether it takes effect now or at the period end by comparing effective
+  // monthly cost; the card says which, so it is not a surprise.
+  return { label: 'Switch to this', action: 'change' };
+}
+
+/** The amount for one cadence, or null when the plan is not sold that way. */
+function priceFor(offer, interval) {
+  if (offer === undefined || offer === null) return null;
+  return interval === 'year' ? (offer.yearlyCents ?? null) : (offer.monthlyCents ?? null);
+}
+
+/**
+ * When this plan next charges, or when it ends.
+ *
+ * Under auto-renewal the date and the amount together are the fact a customer
+ * most needs, and getting the *verb* wrong is the failure that matters:
+ * "Renews 24 October" on a cancelled subscription reads as the cancellation
+ * having failed. `cancelAtPeriodEnd` is the only thing that distinguishes them
+ * and it cannot be derived from anything else on the response.
+ *
+ * Free accounts get nothing here rather than a reassuring "never expires",
+ * because they have no period at all and inventing one would be the same kind
+ * of lie in the other direction.
  */
 function RenewalLine({ billing }) {
   const ends = planDate(billing?.periodEndsAt);
-  if (ends === null) return null;
-
   const graceEnds = planDate(billing?.graceEndsAt);
 
   if (billing?.status === 'expired') {
     return (
       <p className="plan__note">
-        <strong>Ended {ends}.</strong> Uploads are paused and everything you have stored
-        stays readable.{' '}
-        {graceEnds === null
-          ? null
-          : `Renew before ${graceEnds} to keep it — after that this account's data is scheduled for deletion.`}
+        <strong>Payment could not be collected.</strong> Uploads are paused and this
+        account&rsquo;s data is scheduled for deletion. Nothing has been removed yet —
+        starting a plan again cancels it.
       </p>
     );
   }
 
+  if (billing?.status === 'past_due') {
+    return (
+      <p className="plan__note">
+        <strong>We could not take payment.</strong> This is usually an expired or replaced
+        card. Uploads are paused; everything you have stored stays readable.{' '}
+        {graceEnds === null
+          ? null
+          : `We will keep retrying until ${graceEnds}, after which this account's data is scheduled for deletion.`}
+      </p>
+    );
+  }
+
+  if (ends === null) return null;
+
+  if (billing?.cancelAtPeriodEnd) {
+    return (
+      <p className="plan__note">
+        <strong>Ends {ends}.</strong> This subscription will not renew. You keep everything
+        until that date, and you can resume any time before it.
+      </p>
+    );
+  }
+
+  const amount = money(billing?.renewalAmountCents);
+  const cadence = billing?.interval === 'year' ? 'year' : 'month';
+
   return (
     <p className="plan__note">
-      <strong>Ends {ends}.</strong> This plan does not renew automatically — we never
-      charge a card without you asking. We will email you a week before.
+      <strong>Renews {ends}{amount === null ? '' : ` for ${amount}`}.</strong> This plan
+      renews automatically every {cadence}. We will email you a week beforehand, and you
+      can cancel at any time.
     </p>
+  );
+}
+
+/**
+ * Monthly or yearly, as a pair of buttons rather than a switch.
+ *
+ * A switch would need a label saying which way is which, and the saving has to
+ * be visible on the control itself — it is the reason to press it.
+ */
+function IntervalToggle({ value, onChange, savePercent }) {
+  return (
+    <div className="plan__toggle" role="group" aria-label="Billing interval">
+      <Button
+        size="sm"
+        variant={value === 'month' ? 'primary' : 'secondary'}
+        aria-pressed={value === 'month'}
+        onClick={() => onChange('month')}
+      >
+        Monthly
+      </Button>
+      <Button
+        size="sm"
+        variant={value === 'year' ? 'primary' : 'secondary'}
+        aria-pressed={value === 'year'}
+        onClick={() => onChange('year')}
+      >
+        {/* The number comes from the catalogue, not from a constant here: it is
+            computed from the two real amounts, so a price edit cannot leave the
+            badge advertising a discount nobody is giving. */}
+        Yearly{savePercent === null ? '' : ` · save ${savePercent}%`}
+      </Button>
+    </div>
   );
 }
 
@@ -540,28 +618,82 @@ export function BillingTab() {
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState(null);
   /**
-   * Which card is mid-checkout, by plan id.
+   * Which card is mid-action, by plan id.
    *
    * A single boolean would spin every button on the grid at once, which reads
    * as "the whole page is thinking" rather than "the thing you pressed is".
    */
-  const [buying, setBuying] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [confirming, setConfirming] = useState(null);
+  const [notice, setNotice] = useState(null);
 
   const billing = data?.billing;
   const isOwner = role === 'owner';
   const purchasable = data?.purchasable ?? [];
 
-  const startCheckout = async planId => {
-    setBuying(planId); setOpenError(null);
+  /**
+   * Which cadence the picker is showing.
+   *
+   * Starts on whatever the account already bills at, so somebody on a yearly
+   * plan does not open this screen to a grid of monthly prices that disagree
+   * with their own invoice.
+   */
+  const [interval, setInterval] = useState(billing?.interval === 'year' ? 'year' : 'month');
+
+  const offerFor = id => purchasable.find(row => row.id === id);
+  /** The best saving on offer, for the toggle. */
+  const savePercent = purchasable.reduce(
+    (best, row) => (typeof row.savePercent === 'number' && row.savePercent > best ? row.savePercent : best),
+    0
+  ) || null;
+
+  const act = async (planId, run) => {
+    setBusy(planId); setOpenError(null); setNotice(null);
     try {
-      const { url } = await api.createCheckoutSession(workspaceId, planId);
-      // Same tab, matching openPortal: this is a checkout-shaped flow and a
-      // blocked popup here reads as a broken button.
-      window.location.assign(url);
+      return await run();
     } catch (err) {
       setOpenError(`${err.message}${err.requestId ? ` (request ${err.requestId})` : ''}`);
-      setBuying(null);
+      setBusy(null);
+      return null;
     }
+  };
+
+  const startCheckout = async planId => {
+    const result = await act(planId, () => api.createCheckoutSession(workspaceId, planId, interval));
+    // Same tab, matching openPortal: this is a checkout-shaped flow and a
+    // blocked popup here reads as a broken button.
+    if (result !== null) window.location.assign(result.url);
+  };
+
+  const applyChange = async planId => {
+    const result = await act(planId, () => api.changePlan(workspaceId, planId, interval));
+    if (result === null) return;
+    setNotice(
+      result.effective === 'now'
+        ? 'Plan changed. The difference has been charged to the card on file.'
+        : `Plan change scheduled. You keep your current plan until ${planDate(result.at) ?? 'the end of this period'}, then it switches.`
+    );
+    setBusy(null);
+    reload();
+  };
+
+  const applyCancel = async () => {
+    setConfirming(null);
+    const result = await act(billing?.plan, () => api.cancelSubscription(workspaceId));
+    if (result === null) return;
+    setNotice(
+      `Subscription cancelled. You keep this plan until ${planDate(result.periodEndsAt) ?? 'the end of the paid period'}, and you can resume before then.`
+    );
+    setBusy(null);
+    reload();
+  };
+
+  const applyResume = async () => {
+    const result = await act(billing?.plan, () => api.resumeSubscription(workspaceId));
+    if (result === null) return;
+    setNotice('Subscription resumed. It will renew as normal.');
+    setBusy(null);
+    reload();
   };
 
   const openPortal = async () => {
@@ -575,6 +707,14 @@ export function BillingTab() {
       setOpenError(`${err.message}${err.requestId ? ` (request ${err.requestId})` : ''}`);
       setOpening(false);
     }
+  };
+
+  const runAction = (plan, offer) => {
+    if (offer.action === 'checkout') return () => startCheckout(plan.id);
+    if (offer.action === 'change') return () => applyChange(plan.id);
+    if (offer.action === 'cancel') return () => setConfirming(plan.id);
+    if (offer.action === 'resume') return applyResume;
+    return undefined;
   };
 
   if (status === 'loading') {
@@ -596,10 +736,10 @@ export function BillingTab() {
           tone={billing.status === 'past_due' ? 'warn' : 'danger'}
           title={
             billing.status === 'past_due'
-              ? 'There is an unpaid invoice on this account'
+              ? 'We could not take payment for this account'
               : 'This subscription has ended'
           }
-          actions={isOwner ? <Button size="sm" onClick={openPortal} loading={opening}>Manage billing</Button> : null}
+          actions={isOwner ? <Button size="sm" onClick={openPortal} loading={opening}>Update payment method</Button> : null}
         >
           {/* Said plainly, because the alternative is somebody discovering it
               on a failed upload and assuming their data is gone. */}
@@ -609,6 +749,7 @@ export function BillingTab() {
       ) : null}
 
       {openError ? <div role="alert"><Alert tone="danger" title={openError} /></div> : null}
+      {notice ? <div role="status"><Alert tone="ok" title={notice} /></div> : null}
 
       {/* The reference's two-card hero, carrying only what the API actually
           returns — see the `.plan` block in app.css for what was left out and
@@ -622,8 +763,8 @@ export function BillingTab() {
               {STATUS_LABEL[billing?.status] ?? billing?.status ?? '—'}
             </Badge>
           </div>
-          {/* The single most important fact on this screen under manual
-              renewal: when it runs out, and that nothing will renew it. */}
+          {/* The single most important fact on this screen: when the card is
+              charged next, for how much, and whether it will be at all. */}
           <RenewalLine billing={billing} />
 
           {/* The reference prints the plan's allowance here. It is real data,
@@ -638,7 +779,7 @@ export function BillingTab() {
           <div className="plan__foot">
             {isOwner ? (
               <Button onClick={openPortal} loading={opening}>
-                {billing?.configured ? 'Manage billing' : 'Set up billing'}
+                {billing?.configured ? 'Payment method & invoices' : 'Set up billing'}
               </Button>
             ) : (
               <p className="ad-meta">
@@ -657,6 +798,16 @@ export function BillingTab() {
               <dd>{billing?.ownerEmail ?? '—'}</dd>
             </div>
             <div>
+              <dt>Billing period</dt>
+              <dd>
+                {billing?.interval === 'year'
+                  ? 'Yearly'
+                  : billing?.interval === 'month'
+                    ? 'Monthly'
+                    : <span className="ad-meta">No active subscription</span>}
+              </dd>
+            </div>
+            <div>
               <dt>Payment method</dt>
               {/* We genuinely do not know — the card lives on Stripe and this
                   product never sees it. Claiming otherwise would be a guess. */}
@@ -670,12 +821,15 @@ export function BillingTab() {
 
       <Panel
         title="All plans"
-        subtitle="Pick a plan to subscribe. Each purchase covers one month and does not renew on its own."
+        subtitle="Subscriptions renew automatically. Cancel any time and you keep the plan until the period you have paid for ends."
+        actions={<IntervalToggle value={interval} onChange={setInterval} savePercent={savePercent} />}
       >
         <div className="plan plan--picker">
           {PLANS.map(plan => {
-            const offer = cardAction(plan, billing, purchasable, isOwner);
+            const offer = offerFor(plan.id);
+            const action = cardAction(plan, billing, offer, isOwner, interval);
             const isCurrent = plan.id === billing?.plan;
+            const amount = money(priceFor(offer, interval));
             return (
               <section
                 key={plan.id}
@@ -683,8 +837,13 @@ export function BillingTab() {
               >
                 <h4 className="plan__eyebrow">{plan.kicker}</h4>
                 <div className="plan__head">
-                  <span className="plan__name">{plan.price}</span>
-                  <span className="plan__unit">{plan.unit}</span>
+                  {/* The live figure when the server sent one, so the card and
+                      the invoice cannot disagree; the hardcoded marketing price
+                      only for Free, which has no Stripe price at all. */}
+                  <span className="plan__name">{amount ?? plan.price}</span>
+                  <span className="plan__unit">
+                    {plan.id === 'free' ? plan.unit : interval === 'year' ? '/ year' : '/ month'}
+                  </span>
                 </div>
 
                 {/* A word, never a tint alone. "Your plan" rather than
@@ -703,20 +862,14 @@ export function BillingTab() {
                 </ul>
 
                 <div className="plan__foot">
-                  {offer.label === null ? null : (
+                  {action.label === null ? null : (
                     <Button
-                      variant={isCurrent ? 'primary' : 'secondary'}
-                      disabled={offer.disabled === true}
-                      loading={buying === plan.id}
-                      onClick={
-                        offer.action === 'checkout'
-                          ? () => startCheckout(plan.id)
-                          : offer.action === 'portal'
-                            ? openPortal
-                            : undefined
-                      }
+                      variant={action.tone ?? (isCurrent ? 'primary' : 'secondary')}
+                      disabled={action.disabled === true}
+                      loading={busy === plan.id}
+                      onClick={runAction(plan, action)}
                     >
-                      {offer.label}
+                      {action.label}
                     </Button>
                   )}
                 </div>
@@ -736,6 +889,30 @@ export function BillingTab() {
         <p className="ad-meta">{COUNTING_NOTE}</p>
       </Panel>
 
+      {/* Not destructive in the red-dialog sense: nothing is deleted and the
+          decision is reversible until the date arrives. Dressing it in the
+          danger treatment is how people learn to click through the red dialogs
+          that matter. */}
+      <ConfirmModal
+        open={confirming !== null}
+        destructive={false}
+        title="Cancel this subscription?"
+        // Not "Cancel subscription": inside a dialog the word Cancel already
+        // means dismiss, so a confirm button carrying it asks somebody to
+        // press Cancel to cancel and Keep it to not. Two buttons with the same
+        // words on one screen is also how a screen reader user loses track of
+        // which is which.
+        confirmLabel="Yes, cancel it"
+        cancelLabel="Keep it"
+        onConfirm={applyCancel}
+        onClose={() => setConfirming(null)}
+      >
+        You keep {billing?.plan ?? 'this plan'} until{' '}
+        {planDate(billing?.periodEndsAt) ?? 'the end of the period you have paid for'}, and
+        nothing is deleted. You can resume before that date. After it, the account returns to
+        the free plan and uploads over the free allowance stop.
+      </ConfirmModal>
+
       <Panel title="Invoices">
         <EmptyState
           compact
@@ -747,6 +924,7 @@ export function BillingTab() {
           here and risk the two disagreeing, this sends you to the source.
         </EmptyState>
       </Panel>
+
     </>
   );
 }

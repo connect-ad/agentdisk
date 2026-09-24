@@ -28,28 +28,44 @@
  * the failure is silent in the worst direction: an event we handle but no
  * longer receive looks exactly like an event that never fired.
  *
- *   checkout.session.completed      ** a month was paid for — see below
- *   product.created                  *   product.updated                  | the catalogue, mirrored into D1
- *   product.deleted                 /
- *   charge.refunded                 recorded, entitlements deliberately untouched
- *   customer.subscription.created    *   customer.subscription.updated    | dormant — see below
- *   customer.subscription.deleted   /
- *   invoice.payment_failed          dormant
- *   invoice.payment_succeeded       dormant
+ *   customer.subscription.created    \
+ *   customer.subscription.updated    | the subscription's whole life — plan,
+ *   customer.subscription.deleted    /  period, cadence, cancellation, ending
+ *   invoice.payment_failed           dunning opens
+ *   invoice.payment_succeeded        dunning closes; the period was paid for
+ *   checkout.session.completed       binds the new subscription to the account
+ *   product.created                  \
+ *   product.updated                  | the catalogue, mirrored into D1
+ *   product.deleted                  /
+ *   charge.refunded                  recorded, entitlements deliberately untouched
  *
- * ── Which of them actually fire ─────────────────────────────────────────────
- * Since AgentDisk stopped auto-renewing (23 September 2026) checkout creates a
- * one-off **payment**, not a subscription. So `checkout.session.completed` is
- * the only event that grants service, and it now settles everything a purchase
- * means: the plan, the paid-through date, and the cancellation of any deletion
- * already scheduled. It used to be the thin half of a pair.
+ * ── Where service is actually granted ───────────────────────────────────────
+ * `customer.subscription.created` / `.updated`. Since auto-renewal returned
+ * (25 September 2026) the subscription object is the record of what the account
+ * is entitled to and until when, and those two events mirror it: the plan from
+ * the price, the period from Stripe's own `current_period_end`, the cadence,
+ * and whether it is set to stop.
  *
- * The six marked dormant cannot be reached by anything this product creates —
- * there is no subscription to have a lifecycle and no invoice to fail. They are
- * kept, subscribed and working because a subscription made by hand in the
- * Stripe dashboard still arrives here, and because deleting them would turn
- * "return to auto-renewal" from a decision into a rewrite. Do not mistake their
- * silence for dead code.
+ * `checkout.session.completed` is deliberately the thin half of that pair. It
+ * binds the new subscription id to the organization and nothing else — the
+ * subscription events carry the price and arrive for every later change too, so
+ * duplicating the entitlement write here would mean two code paths that have to
+ * agree forever.
+ *
+ * ── The two ways a subscription ends, and why they differ ───────────────────
+ * `customer.subscription.deleted` fires for both, and answering them the same
+ * way would be wrong in one direction or the other:
+ *
+ *   the customer cancelled   → `canceled`, plan drops to free. They chose this
+ *                              and their period is over; nothing is scheduled
+ *                              for deletion because they may well come back.
+ *   Stripe could not collect → `expired`, plan deliberately LEFT on the paid
+ *                              tier, and the deletion ladder keeps running.
+ *
+ * Leaving the plan alone on a payment failure is the rule migration 0027 set
+ * and it survives the return to auto-renewal: dropping a 500 GB account to
+ * Free's 1 GB puts it instantly over quota through no act of its own, during
+ * the exact window we are asking it to fix its card.
  *
  * charge.refunded owns nothing — see its case for why a refund must not move
  * entitlements.
@@ -62,9 +78,10 @@ import {
   findOrgByCustomerId,
   findPlanByPriceId,
   type BillingStatus,
+  type OrgRef,
 } from "../billing/organizations";
 import { retirePlanForProduct, syncProductToPlan } from "../billing/plan-sync";
-import { nextPeriodEnd } from "../lib/renewal";
+import type { BillingInterval } from "../lib/renewal";
 
 export interface WebhookDeps {
   db: D1Database;
@@ -80,19 +97,51 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-/** Which of our plans a subscription is on, from the price it carries. */
+/**
+ * Which of our plans a subscription is on, and at which cadence, from the price
+ * it carries.
+ *
+ * Undefined rather than a guess. Leaving the plan alone is safer than resolving
+ * an unknown price to something arbitrary — one direction keeps billing and
+ * entitlement in step, the other silently upgrades or downgrades somebody
+ * because a price was renamed in Stripe.
+ */
 async function planFromSubscription(
   db: D1Database,
   subscription: Stripe.Subscription
-): Promise<string | undefined> {
+): Promise<{ id: string; interval: BillingInterval } | undefined> {
   const priceId = subscription.items.data[0]?.price?.id;
   if (priceId === undefined) return undefined;
-  const plan = await findPlanByPriceId(db, priceId);
-  // Undefined rather than a guess. Leaving the plan alone is safer than
-  // resolving an unknown price to something arbitrary - one direction keeps
-  // billing and entitlement in step, the other silently upgrades or downgrades
-  // somebody because a price was renamed in Stripe.
-  return plan?.id;
+  return (await findPlanByPriceId(db, priceId)) ?? undefined;
+}
+
+/**
+ * Stripe's period end for a subscription, in milliseconds.
+ *
+ * On the item rather than the subscription: the top-level `current_period_end`
+ * was removed in recent API versions, and a subscription's period genuinely
+ * belongs to its items once more than one price can sit on it. We sell exactly
+ * one item per subscription, so the first is the answer.
+ */
+function periodEndMs(subscription: Stripe.Subscription): number | null {
+  const seconds = subscription.items.data[0]?.current_period_end;
+  return seconds === undefined ? null : seconds * 1000;
+}
+
+/**
+ * Did this subscription end because we could not collect, rather than because
+ * the customer asked?
+ *
+ * Stripe's own reason is preferred, because it is the direct answer. Our
+ * `past_due` state is the fallback for an API version or a path that does not
+ * populate it — an account mid-dunning whose subscription vanishes did not
+ * cancel, whatever the event says.
+ */
+function endedForNonPayment(subscription: Stripe.Subscription, org: OrgRef): boolean {
+  const reason = subscription.cancellation_details?.reason;
+  if (reason === "payment_failed") return true;
+  if (reason === "cancellation_requested") return false;
+  return org.billingStatus === "past_due" || org.pastDueSince !== null;
 }
 
 /**
@@ -131,13 +180,6 @@ async function orgFromCustomer(
   return findOrgByCustomerId(db, customerId);
 }
 
-/** What every handler here needs about an organization, and no more. */
-interface OrgRef {
-  id: string;
-  plan: string;
-  currentPeriodEnd: number | null;
-}
-
 /**
  * An organization by its own id, for `client_reference_id`.
  *
@@ -148,39 +190,12 @@ interface OrgRef {
 async function findOrgById(db: D1Database, orgId: string): Promise<OrgRef | null> {
   return db
     .prepare(
-      `SELECT id, plan, current_period_end AS currentPeriodEnd
+      `SELECT id, plan, current_period_end AS currentPeriodEnd,
+              past_due_since AS pastDueSince, billing_status AS billingStatus
          FROM organizations WHERE id = ?`
     )
     .bind(orgId)
     .first<OrgRef>();
-}
-
-/**
- * The plan a completed one-off purchase was for.
- *
- * Read from the session metadata this product wrote at checkout, then checked
- * against `plans` rather than trusted. The value arrives inside a signed event
- * so it is not forgeable, but it is still a string we put into Stripe — a plan
- * can have been retired since, and writing an id no row describes would leave
- * the account's entitlements resolving to the Free floor with no way to tell
- * why.
- *
- * Undefined rather than a guess, on the same reasoning as
- * `planFromSubscription`: leaving the plan alone beats resolving an unknown to
- * something arbitrary.
- */
-async function planFromSession(
-  db: D1Database,
-  session: Stripe.Checkout.Session
-): Promise<string | undefined> {
-  const claimed = session.metadata?.["agentdisk_plan"];
-  if (claimed === undefined || claimed === "") return undefined;
-
-  const row = await db
-    .prepare(`SELECT id FROM plans WHERE id = ?`)
-    .bind(claimed)
-    .first<{ id: string }>();
-  return row?.id;
 }
 
 export async function handleStripeWebhook(
@@ -225,6 +240,10 @@ async function apply(event: Stripe.Event, deps: WebhookDeps): Promise<boolean> {
   switch (event.type) {
     case "customer.subscription.created":
     case "customer.subscription.updated": {
+      // Where entitlement actually comes from. Everything the account is
+      // allowed and until when is settled here, from the subscription object
+      // Stripe maintains — so a change made in the Stripe dashboard lands in
+      // this product exactly as one made through `changePlan` does.
       const subscription = event.data.object as Stripe.Subscription;
       const customerId = customerIdOf(subscription.customer);
       if (customerId === null) return false;
@@ -232,13 +251,32 @@ async function apply(event: Stripe.Event, deps: WebhookDeps): Promise<boolean> {
       const org = await findOrgByCustomerId(deps.db, customerId);
       if (org === null) return false;
 
+      const plan = await planFromSubscription(deps.db, subscription);
+      const status = statusFrom(subscription);
+
+      // A subscription that is active again has come back from dunning, and
+      // both stamps have to be lifted together: `past_due_since` because the
+      // run is over, and `purge_after` because a sweep may already have
+      // scheduled this account's data for deletion during it.
+      //
+      // **This is the single most important write in the feature.** Somebody
+      // whose card clears on day ten must not be deleted by a job that stamped
+      // them on day seven. It was true under manual renewal and it is more
+      // easily missed here, because the recovery is Stripe's retry rather than
+      // a customer pressing a button.
+      const recovered = status === "active";
+
       await applySubscriptionState(
         deps.db,
         org.id,
         {
-          plan: await planFromSubscription(deps.db, subscription),
-          billingStatus: statusFrom(subscription),
+          plan: plan?.id,
+          billingInterval: plan?.interval,
+          billingStatus: status,
           subscriptionId: subscription.id,
+          currentPeriodEnd: periodEndMs(subscription),
+          cancelAtPeriodEnd: subscription.cancel_at_period_end,
+          ...(recovered ? { pastDueSince: null, purgeAfter: null } : {}),
         },
         deps.now
       );
@@ -253,14 +291,41 @@ async function apply(event: Stripe.Event, deps: WebhookDeps): Promise<boolean> {
       const org = await findOrgByCustomerId(deps.db, customerId);
       if (org === null) return false;
 
-      // The plan drops to free rather than staying on the paid one it was.
-      // Leaving it would keep enforcing a paid quota for somebody who has
-      // stopped paying, which is the wrong direction to be generous in.
+      if (endedForNonPayment(subscription, org)) {
+        // Stripe exhausted its retries. This is day +7 of the ladder, and the
+        // account moves to `expired` rather than `canceled` — a different word
+        // for a different thing, and the one the deletion sweep looks for.
+        //
+        // The plan is deliberately LEFT on the paid tier. Dropping a 500 GB
+        // account to Free's 1 GB would put it instantly over quota through no
+        // act of its own, and every usage screen would report a breach the
+        // customer cannot fix except by deleting data we are simultaneously
+        // telling them we may delete.
+        //
+        // `past_due_since` is deliberately kept too: it is what
+        // `deletionScheduledAt` counts from, so clearing it here would leave
+        // the scheduling pass with nothing to anchor on.
+        await applySubscriptionState(
+          deps.db,
+          org.id,
+          {
+            billingStatus: "expired",
+            subscriptionId: null,
+            cancelAtPeriodEnd: false,
+          },
+          deps.now
+        );
+        return true;
+      }
+
+      // The customer cancelled and the period they paid for has now run out.
       //
-      // `currentPeriodEnd` is cleared with it. The period was that
-      // subscription's; leaving it behind would have the renewal job counting
-      // down to an expiry for service that has already stopped, and would make
-      // the dashboard promise a date nothing will honour.
+      // The plan drops to free and the period is cleared with it: the period
+      // was that subscription's, and leaving it behind would have the dashboard
+      // promising a date nothing will honour. Nothing is scheduled for
+      // deletion — they chose to stop paying, which is not the same as failing
+      // to, and their data stays under the free allowance like any other free
+      // account's.
       await applySubscriptionState(
         deps.db,
         org.id,
@@ -269,6 +334,9 @@ async function apply(event: Stripe.Event, deps: WebhookDeps): Promise<boolean> {
           billingStatus: "canceled",
           subscriptionId: null,
           currentPeriodEnd: null,
+          billingInterval: null,
+          cancelAtPeriodEnd: false,
+          pastDueSince: null,
         },
         deps.now
       );
@@ -276,11 +344,15 @@ async function apply(event: Stripe.Event, deps: WebhookDeps): Promise<boolean> {
     }
 
     case "checkout.session.completed": {
-      // The moment a month is actually paid for, and under manual renewal this
-      // is now the ONLY event that grants service. There is no subscription
-      // behind it to carry the plan in a later event, so everything the
-      // purchase means is settled here: which plan, paid through when, and the
-      // cancellation of any deletion already scheduled.
+      // Deliberately thin: this binds the new subscription to the organization
+      // and stops there.
+      //
+      // Everything the purchase MEANS — the plan, the cadence, the period —
+      // arrives moments later on `customer.subscription.created`, which carries
+      // the price and fires again for every subsequent change. Settling
+      // entitlements in both places would be two code paths that have to agree
+      // forever, and the one that fires more often would eventually win an
+      // argument nobody knew they were having.
       const session = event.data.object as Stripe.Checkout.Session;
 
       // client_reference_id first: it is ours, we set it at checkout, and it
@@ -293,56 +365,23 @@ async function apply(event: Stripe.Event, deps: WebhookDeps): Promise<boolean> {
         (await orgFromCustomer(deps.db, session.customer));
       if (org === null) return false;
 
-      if (session.mode === "subscription") {
-        // A subscription checkout, which this product no longer creates. Kept
-        // because a subscription made by hand in the Stripe dashboard still
-        // arrives here, and recording which subscription belongs to which
-        // organization is the right response. The plan is left to the
-        // customer.subscription.* events, which carry the price.
-        const subscriptionId =
-          typeof session.subscription === "string"
-            ? session.subscription
-            : (session.subscription?.id ?? null);
-        if (subscriptionId === null) return false;
-
-        await applySubscriptionState(
-          deps.db,
-          org.id,
-          { billingStatus: "active", subscriptionId },
-          deps.now
-        );
-        return true;
+      if (session.mode !== "subscription") {
+        // A one-off payment session. This product stopped creating them on
+        // 25 September 2026, but one raised by hand in the Stripe dashboard
+        // still arrives here and is not something to fail on.
+        return false;
       }
 
-      if (session.mode !== "payment") return false;
-
-      // A completed session is not a paid one. Some payment methods settle
-      // asynchronously, and Stripe fires this event with `payment_status`
-      // still `unpaid` while it waits — granting a month there would hand out
-      // service for a charge that may yet fail.
-      if (session.payment_status !== "paid") return false;
-
-      const plan = await planFromSession(deps.db, session);
-      if (plan === undefined) return false;
-
-      // Extends from the existing period end when one is still live, so
-      // renewing early on the strength of the day-seven reminder adds a month
-      // rather than discarding the days already paid for.
-      const periodEnd = nextPeriodEnd(deps.now, org.currentPeriodEnd);
+      const subscriptionId =
+        typeof session.subscription === "string"
+          ? session.subscription
+          : (session.subscription?.id ?? null);
+      if (subscriptionId === null) return false;
 
       await applySubscriptionState(
         deps.db,
         org.id,
-        {
-          plan,
-          billingStatus: "active",
-          currentPeriodEnd: periodEnd,
-          // The single most important write in this feature. A sweep may
-          // already have stamped this account for deletion during the grace
-          // window; paying has to take it back, or somebody who renewed on day
-          // ten is deleted anyway by a job that ran on day seven.
-          purgeAfter: null,
-        },
+        { subscriptionId, cancelAtPeriodEnd: false },
         deps.now
       );
       return true;
@@ -404,6 +443,9 @@ async function apply(event: Stripe.Event, deps: WebhookDeps): Promise<boolean> {
     }
 
     case "invoice.payment_failed": {
+      // Day 0 of the ladder. Writes stop; reads keep working, because somebody
+      // whose card expired must still be able to get their data out — and must
+      // still be able to reach the page where they would fix it.
       const invoice = event.data.object as Stripe.Invoice;
       const customerId = customerIdOf(invoice.customer);
       if (customerId === null) return false;
@@ -411,9 +453,23 @@ async function apply(event: Stripe.Event, deps: WebhookDeps): Promise<boolean> {
       const org = await findOrgByCustomerId(deps.db, customerId);
       if (org === null) return false;
 
-      // Writes stop; reads keep working. Somebody whose card expired must still
-      // be able to get their data out.
-      await applySubscriptionState(deps.db, org.id, { billingStatus: "past_due" }, deps.now);
+      await applySubscriptionState(
+        deps.db,
+        org.id,
+        {
+          billingStatus: "past_due",
+          // **Only if a run is not already open.** Stripe retries a failing
+          // card several times over the grace window and each attempt sends
+          // this event; overwriting the stamp on every one would push the
+          // deletion date back with each retry, and an account could stay in
+          // grace indefinitely precisely because its card kept failing.
+          //
+          // A redelivered event is the same hazard and is covered by the same
+          // guard, which is why it is a condition and not a blind write.
+          ...(org.pastDueSince === null ? { pastDueSince: deps.now } : {}),
+        },
+        deps.now
+      );
       return true;
     }
 
@@ -426,17 +482,38 @@ async function apply(event: Stripe.Event, deps: WebhookDeps): Promise<boolean> {
       if (org === null) return false;
 
       // Only lifts `past_due`. A payment succeeding on a canceled subscription
-      // does not un-cancel it - that is what a new subscription event is for,
+      // does not un-cancel it — that is what a new subscription event is for,
       // and quietly reactivating here would restore access somebody deliberately
       // gave up.
-      if (org.plan !== undefined) {
-        await deps.db
-          .prepare(
-            `UPDATE organizations SET billing_status = 'active', updated_at = ?
-              WHERE id = ? AND billing_status = 'past_due'`
-          )
-          .bind(deps.now, org.id)
-          .run();
+      //
+      // The `expired` state is deliberately NOT lifted here either. By then
+      // Stripe has deleted the subscription, so a payment arriving against it
+      // is a late settlement of an old invoice rather than a renewal; treating
+      // it as one would unlock an account with nothing left to bill it.
+      // Returning from expiry is a new checkout.
+      const updated = await deps.db
+        .prepare(
+          `UPDATE organizations
+              SET billing_status = 'active',
+                  past_due_since = NULL,
+                  purge_after = NULL,
+                  updated_at = ?
+            WHERE id = ? AND billing_status = 'past_due'`
+        )
+        .bind(deps.now, org.id)
+        .run();
+
+      // Logged when it actually recovered somebody, because this is the write
+      // that saves an account from deletion and its absence is invisible.
+      if ((updated.meta?.changes ?? 0) > 0) {
+        console.log(
+          JSON.stringify({
+            level: "info",
+            message: "dunning cleared by successful payment",
+            orgId: org.id,
+            invoiceId: invoice.id,
+          })
+        );
       }
       return true;
     }

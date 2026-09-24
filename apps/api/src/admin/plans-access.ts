@@ -64,6 +64,15 @@ export interface PlanPatch {
   name?: string;
   description?: string | null;
   amount_cents?: number;
+  /**
+   * The yearly price in minor units, or null to stop selling this plan yearly.
+   *
+   * Nullable on purpose, and the three states are distinct: absent means "leave
+   * it alone", null means "withdraw the cadence", and a number means "sell it
+   * at this". Collapsing null into absent would make a yearly price
+   * unremovable once minted.
+   */
+  amount_cents_yearly?: number | null;
   storage_bytes?: number | null;
   max_file_bytes?: number | null;
   agents?: number | null;
@@ -107,6 +116,7 @@ const SYNCABLE = new Set<string>([
   "name",
   "description",
   "amount_cents",
+  "amount_cents_yearly",
   "priority_support",
   "sort_order",
 ]);
@@ -118,6 +128,7 @@ export class AdminPlanAccess extends AuditedAdminAccess {
       .prepare(
         `SELECT id, package_id, name, description, amount_cents, currency, interval,
                 stripe_product_id, stripe_price_id,
+                stripe_yearly_price_id, amount_cents_yearly,
                 storage_bytes, file_count, egress_bytes_period, requests_period,
                 max_file_bytes, agents, members, workspaces, api_keys, share_links,
                 priority_support, is_public, is_default, sort_order,
@@ -135,6 +146,56 @@ export class AdminPlanAccess extends AuditedAdminAccess {
       .first<AdminPlanRow>();
     if (row === null) throw new ApiError("NOT_FOUND", "No such plan.");
     return row;
+  }
+
+  /**
+   * Create a price, and archive the one it replaces.
+   *
+   * ── Recurring, because a subscription needs a schedule ─────────────────────
+   * Stripe refuses a one-time price in `mode: "subscription"`. This file held
+   * the opposite rule for two days in September, while checkout was briefly
+   * `mode: "payment"` under the manual-renewal design; both rules were correct
+   * for their moment, which is exactly why they are easy to get wrong. **The
+   * price type and the checkout mode are one contract.**
+   *
+   * ── `tax_behavior` is not optional ─────────────────────────────────────────
+   * Once automatic tax is on, a price that declares neither inclusive nor
+   * exclusive cannot be calculated on, and the Checkout Session fails outright
+   * rather than quietly under-taxing. Exclusive: the customer is a business as
+   * often as not, and the amounts on the pricing page are pre-tax.
+   *
+   * ── The order is create, then archive ──────────────────────────────────────
+   * The other way round leaves a window in which the plan has no sellable
+   * price, and a checkout started inside it fails for a reason the customer
+   * cannot act on. Prices are immutable in Stripe, so both objects live
+   * forever and everybody already subscribed keeps billing the archived one
+   * until their next renewal — grandfathering for free.
+   */
+  private async mintPrice(
+    stripe: Stripe,
+    spec: {
+      productId: string;
+      currency: string;
+      amount: number;
+      interval: "month" | "year";
+      planId: string;
+      archive: string | null;
+    }
+  ): Promise<string> {
+    const created = await stripe.prices.create({
+      product: spec.productId,
+      currency: spec.currency,
+      unit_amount: spec.amount,
+      recurring: { interval: spec.interval },
+      tax_behavior: "exclusive",
+      metadata: { plan_id: spec.planId, interval: spec.interval },
+    });
+
+    if (spec.archive !== null) {
+      await stripe.prices.update(spec.archive, { active: false });
+    }
+
+    return created.id;
   }
 
   /**
@@ -188,30 +249,49 @@ export class AdminPlanAccess extends AuditedAdminAccess {
       metadata: metadataForPlan(merged),
     });
 
+    // Two prices now, minted and archived independently: an operator changing
+    // the yearly figure must not have their monthly price silently re-created,
+    // because every re-mint moves existing subscribers onto a new price object
+    // at their next renewal and there is no reason to do that twice.
     let newPriceId: string | null = null;
+    let newYearlyPriceId: string | null = null;
+
     const repriced =
       patch.amount_cents !== undefined && patch.amount_cents !== current.amount_cents;
+    const repricedYearly =
+      patch.amount_cents_yearly !== undefined &&
+      patch.amount_cents_yearly !== current.amount_cents_yearly;
 
     if (repriced) {
-      // One-time, not recurring. AgentDisk sells a month and stops; checkout
-      // runs in `mode: "payment"`, and Stripe refuses a recurring price there.
-      // `tax_behavior` is required once automatic tax is on — a price that does
-      // not declare inclusive or exclusive cannot be calculated on, and the
-      // session fails rather than under-taxing.
-      const created = await stripe.prices.create({
-        product: current.stripe_product_id,
+      newPriceId = await this.mintPrice(stripe, {
+        productId: current.stripe_product_id,
         currency: merged.currency,
-        unit_amount: merged.amount_cents,
-        tax_behavior: "exclusive",
-        metadata: { plan_id: planId },
+        amount: merged.amount_cents,
+        interval: "month",
+        planId,
+        archive: current.stripe_price_id,
       });
-      newPriceId = created.id;
+    }
 
-      // Archive the old one AFTER the new one exists. The other order leaves a
-      // window in which the plan has no sellable price, and a checkout started
-      // in that window fails for a reason the customer cannot act on.
-      if (current.stripe_price_id !== null) {
-        await stripe.prices.update(current.stripe_price_id, { active: false });
+    if (repricedYearly) {
+      const yearly = merged.amount_cents_yearly;
+      newYearlyPriceId =
+        yearly === null || yearly <= 0
+          ? null
+          : await this.mintPrice(stripe, {
+              productId: current.stripe_product_id,
+              currency: merged.currency,
+              amount: yearly,
+              interval: "year",
+              planId,
+              archive: current.stripe_yearly_price_id,
+            });
+
+      // Setting the yearly amount to nothing withdraws the cadence: the price
+      // is archived and the column cleared, so checkout refuses `year` rather
+      // than quietly selling the monthly price at a yearly cadence.
+      if (newYearlyPriceId === null && current.stripe_yearly_price_id !== null) {
+        await stripe.prices.update(current.stripe_yearly_price_id, { active: false });
       }
     }
 
@@ -228,6 +308,11 @@ export class AdminPlanAccess extends AuditedAdminAccess {
              share_links = ?,
              priority_support = ?, is_public = ?, is_default = ?, sort_order = ?,
              stripe_price_id = COALESCE(?, stripe_price_id),
+             amount_cents_yearly = ?,
+             -- COALESCE would make withdrawing the yearly cadence impossible:
+             -- the new id is NULL both when nothing changed and when the price
+             -- was deliberately removed. The leading flag distinguishes them.
+             stripe_yearly_price_id = CASE WHEN ? = 1 THEN ? ELSE stripe_yearly_price_id END,
              last_synced_at = ?, last_synced_direction = 'outbound', updated_at = ?
            WHERE id = ?`
         )
@@ -250,6 +335,9 @@ export class AdminPlanAccess extends AuditedAdminAccess {
           merged.is_default,
           merged.sort_order,
           newPriceId,
+          merged.amount_cents_yearly,
+          repricedYearly ? 1 : 0,
+          newYearlyPriceId,
           this.now,
           this.now,
           planId
@@ -330,16 +418,31 @@ export class AdminPlanAccess extends AuditedAdminAccess {
     // go past_due - which is the whole reason the catalogue gives the free plan
     // a product and no price.
     let priceId: string | null = null;
+    let yearlyPriceId: string | null = null;
     if (amount > 0) {
-      // One-time and tax-declaring, for the reasons on the repricing path above.
-      const price = await stripe.prices.create({
-        product: product.id,
+      priceId = await this.mintPrice(stripe, {
+        productId: product.id,
         currency,
-        unit_amount: amount,
-        tax_behavior: "exclusive",
-        metadata: { plan_id: input.id },
+        amount,
+        interval: "month",
+        planId: input.id,
+        archive: null,
       });
-      priceId = price.id;
+
+      // Yearly is optional at creation. A plan sold only monthly is a real
+      // choice, and defaulting one into existence would put a price in Stripe
+      // that nobody decided on — and that the pricing page would then advertise.
+      const yearly = input.amount_cents_yearly ?? null;
+      if (yearly !== null && yearly > 0) {
+        yearlyPriceId = await this.mintPrice(stripe, {
+          productId: product.id,
+          currency,
+          amount: yearly,
+          interval: "year",
+          planId: input.id,
+          archive: null,
+        });
+      }
     }
 
     const statements: D1PreparedStatement[] = [];
@@ -350,11 +453,12 @@ export class AdminPlanAccess extends AuditedAdminAccess {
           `INSERT INTO plans (
              id, package_id, name, description, amount_cents, currency, interval,
              stripe_product_id, stripe_price_id,
+             stripe_yearly_price_id, amount_cents_yearly,
              storage_bytes, file_count, egress_bytes_period, requests_period,
              max_file_bytes, agents, members, workspaces, api_keys, share_links,
              priority_support, is_public, is_default, sort_order,
              last_synced_at, last_synced_direction, created_at, updated_at
-           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'outbound',?,?)`
+           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'outbound',?,?)`
         )
         .bind(
           input.id,
@@ -366,6 +470,8 @@ export class AdminPlanAccess extends AuditedAdminAccess {
           interval,
           product.id,
           priceId,
+          yearlyPriceId,
+          yearlyPriceId === null ? null : (input.amount_cents_yearly ?? null),
           draft.storage_bytes,
           draft.file_count,
           draft.egress_bytes_period,
@@ -472,8 +578,16 @@ export class AdminPlanAccess extends AuditedAdminAccess {
       const fields: PlanFieldDiff[] = [];
 
       const prices = await stripe.prices.list({ product: product.id, active: true, limit: 100 });
-      const recurring = prices.data.filter(price => price.recurring !== null);
-      const price = recurring.find(p => p.recurring?.interval === "month") ?? recurring[0] ?? null;
+      // Each cadence found by its own interval, and `interval_count === 1`
+      // excludes the shapes Stripe allows but this product does not sell — a
+      // "every 3 months" price is a real monthly-interval price, and reading it
+      // as the monthly plan would compare a quarter against a month.
+      const at = (want: "month" | "year") =>
+        prices.data.find(
+          p => p.recurring?.interval === want && p.recurring.interval_count === 1
+        ) ?? null;
+      const price = at("month");
+      const yearlyPrice = at("year");
 
       const compare = (field: string, localValue: string | number | null, remote: string | number | null) => {
         if (localValue !== remote) fields.push({ field, local: localValue, remote });
@@ -497,6 +611,20 @@ export class AdminPlanAccess extends AuditedAdminAccess {
         compare("amount_cents", row?.amount_cents ?? null, price.unit_amount ?? null);
       } else if ((row?.amount_cents ?? 0) > 0) {
         fields.push({ field: "amount_cents", local: row?.amount_cents ?? null, remote: null });
+      }
+
+      // Yearly is compared on the same rule, with one difference: "no yearly
+      // price on either side" is the ordinary state of a plan sold only
+      // monthly, so it is silence rather than a diff. Only a disagreement is
+      // reported — which includes a yearly price appearing in Stripe that this
+      // catalogue has never heard of, the case that would otherwise let
+      // somebody be sold a cadence the dashboard does not know exists.
+      if (yearlyPrice !== null || row?.amount_cents_yearly != null) {
+        compare(
+          "amount_cents_yearly",
+          row?.amount_cents_yearly ?? null,
+          yearlyPrice?.unit_amount ?? null
+        );
       }
       for (const column of ENTITLEMENT_COLUMNS) {
         compare(column, row?.[column as EntitlementColumn] ?? null, entitlementFromMetadata(metadata, column));
@@ -550,8 +678,16 @@ export class AdminPlanAccess extends AuditedAdminAccess {
       const product = await stripe.products.retrieve(row.stripe_product_id);
       const metadata = product.metadata ?? {};
       const prices = await stripe.prices.list({ product: product.id, active: true, limit: 100 });
-      const recurring = prices.data.filter(price => price.recurring !== null);
-      const price = recurring.find(p => p.recurring?.interval === "month") ?? recurring[0] ?? null;
+      // Each cadence found by its own interval, and `interval_count === 1`
+      // excludes the shapes Stripe allows but this product does not sell — a
+      // "every 3 months" price is a real monthly-interval price, and reading it
+      // as the monthly plan would compare a quarter against a month.
+      const at = (want: "month" | "year") =>
+        prices.data.find(
+          p => p.recurring?.interval === want && p.recurring.interval_count === 1
+        ) ?? null;
+      const price = at("month");
+      const yearlyPrice = at("year");
 
       const sets: string[] = [];
       const values: (string | number | null)[] = [];
@@ -571,6 +707,12 @@ export class AdminPlanAccess extends AuditedAdminAccess {
           if (price === null) continue;
           value = price.unit_amount ?? 0;
         }
+        else if (field === "amount_cents_yearly") {
+          // Null IS a legitimate value here, unlike the monthly case: it means
+          // the plan stopped being sold yearly, and refusing to write it would
+          // leave the dashboard offering a cadence Stripe has archived.
+          value = yearlyPrice?.unit_amount ?? null;
+        }
         else if (field === "priority_support") value = metadata["priority_support"] === "1" ? 1 : 0;
         else if (field === "sort_order") value = entitlementFromMetadata(metadata, "sort_order") ?? 0;
         else value = entitlementFromMetadata(metadata, field);
@@ -580,9 +722,17 @@ export class AdminPlanAccess extends AuditedAdminAccess {
         took.push(field);
       }
 
+      // The price id travels with the amount, always. Taking one without the
+      // other leaves the catalogue quoting Stripe's new figure while checkout
+      // still names the archived price — a pricing table that is right on
+      // screen and wrong at the till.
       if (took.includes("amount_cents") && price !== null) {
         sets.push("stripe_price_id = ?");
         values.push(price.id);
+      }
+      if (took.includes("amount_cents_yearly")) {
+        sets.push("stripe_yearly_price_id = ?");
+        values.push(yearlyPrice?.id ?? null);
       }
 
       if (sets.length === 0) continue;

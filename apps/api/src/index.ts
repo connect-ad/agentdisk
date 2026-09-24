@@ -37,7 +37,14 @@ import {
 } from "./routes/webhooks";
 import { createShare, deleteShare, listShares } from "./routes/shares";
 import { downloadShared, previewShare } from "./routes/shares-public";
-import { createCheckoutSession, createPortalSession, getBilling } from "./routes/billing";
+import {
+  cancelSubscription,
+  changePlan,
+  createCheckoutSession,
+  createPortalSession,
+  getBilling,
+  resumeSubscription,
+} from "./routes/billing";
 import { handleStripeWebhook } from "./routes/stripe-webhook";
 import {
   changeMemberRole,
@@ -638,6 +645,25 @@ export default {
         if (segments[2] === "checkout-session" && request.method === "POST") {
           return await authed({ op: null }, (authCtx, req) =>
             createCheckoutSession(authCtx, req, billingDeps)
+          );
+        }
+        // Cancellation lives here rather than behind Stripe's hosted portal.
+        // Making somebody leave the product to stop paying is the friction
+        // consumer-protection rules exist to remove, and the resume path only
+        // works if the cancel path is ours to begin with.
+        if (segments[2] === "cancel" && request.method === "POST") {
+          return await authed({ op: null }, (authCtx) =>
+            cancelSubscription(authCtx, billingDeps)
+          );
+        }
+        if (segments[2] === "resume" && request.method === "POST") {
+          return await authed({ op: null }, (authCtx) =>
+            resumeSubscription(authCtx, billingDeps)
+          );
+        }
+        if (segments[2] === "change-plan" && request.method === "POST") {
+          return await authed({ op: null }, (authCtx, req) =>
+            changePlan(authCtx, req, billingDeps)
           );
         }
         throw new ApiError("NOT_FOUND", "No such route.");

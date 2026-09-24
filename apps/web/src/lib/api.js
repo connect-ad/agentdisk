@@ -287,8 +287,37 @@ export function createApiClient(getToken) {
      * price. The card is entered on Stripe's own page and never touches this
      * origin, which is what keeps AgentDisk in PCI SAQ-A.
      */
-    createCheckoutSession: (workspaceId, plan) =>
-      request('/v1/billing/checkout-session', { method: 'POST', body: { plan }, workspaceId }),
+    createCheckoutSession: (workspaceId, plan, interval = 'month') =>
+      request('/v1/billing/checkout-session', {
+        method: 'POST', body: { plan, interval }, workspaceId
+      }),
+
+    /**
+     * Stop renewing at the end of the paid period.
+     *
+     * Ours rather than a link into Stripe's hosted portal, deliberately: making
+     * somebody leave the product to stop paying is the friction consumer
+     * protection rules exist to remove, and `resumeSubscription` is only
+     * possible because this is.
+     */
+    cancelSubscription: workspaceId =>
+      request('/v1/billing/cancel', { method: 'POST', workspaceId }),
+
+    /** Take back a cancellation, while the period it applies to is still live. */
+    resumeSubscription: workspaceId =>
+      request('/v1/billing/resume', { method: 'POST', workspaceId }),
+
+    /**
+     * Move a live subscription to another plan or cadence.
+     *
+     * Resolves to `{ effective }` — 'now' for an upgrade, which is prorated and
+     * charged immediately, or 'period_end' for a downgrade, which waits for the
+     * period the customer already paid for to run out.
+     */
+    changePlan: (workspaceId, plan, interval = 'month') =>
+      request('/v1/billing/change-plan', {
+        method: 'POST', body: { plan, interval }, workspaceId
+      }),
 
     listFolders: workspaceId => request('/v1/folders', { workspaceId }),
     createFolder: (workspaceId, path) =>

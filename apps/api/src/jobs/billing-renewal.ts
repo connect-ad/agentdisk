@@ -1,19 +1,39 @@
 /**
- * The renewal ladder — owner's decision, 23 September 2026.
+ * The renewal ladder — owner's decision, 25 September 2026.
  *
- * AgentDisk does not auto-renew. A purchase buys one month; nothing charges the
- * customer again. This job is what makes that humane rather than merely
- * hands-off: it warns before the period ends, locks writes when it does, and
- * schedules the data for deletion a week later if nobody comes back.
+ * AgentDisk auto-renews. Stripe raises the invoice, charges the card and retries
+ * a failure; this job is what happens around that. It gives notice before a
+ * charge, and when collection fails it runs the ladder that ends in deletion.
  *
  * ```
  * day -7        day 0          day +7            day +14
  *   |             |              |                  |
  *   o------------>o=============>o=================>X
  *   |   live      |   grace      |   notice         |
- * reminder    write lock    deletion            DATA GONE
- * email       + email       scheduled + email
+ * "renews on   charge failed  deletion           DATA GONE
+ *  X for $Y"   + write lock   scheduled + email
  * ```
+ *
+ * ── What this job does NOT own any more ────────────────────────────────────
+ * The period. Under manual renewal (23–25 September) this file decided when a
+ * plan ran out, because a one-off payment carries no renewal date. Stripe owns
+ * it again: `organizations.current_period_end` is a mirror written by
+ * `stripe-webhook.ts`, and the passes below read it without ever computing it.
+ *
+ * What survives unchanged is everything after a payment fails, because Stripe
+ * has no opinion about deleting a customer's files.
+ *
+ * ── The grace window and Stripe's dunning are the same seven days ──────────
+ * Deliberately, and it is the one configuration this job depends on that lives
+ * outside the repository. Stripe retries a failed card for 7 days and then
+ * cancels; `RENEWAL_GRACE_MS` is 7 days. If somebody widens Stripe's window
+ * without widening the constant, this job schedules deletion for accounts
+ * Stripe is still collecting from. `lib/renewal.ts` carries the note.
+ *
+ * Both halves of the ladder are belt and braces on purpose: the webhook moves an
+ * account to `expired` when Stripe gives up, and pass 1 below moves it anyway
+ * once the grace elapses. Either alone would be a single point of failure for a
+ * state that decides whether somebody's data is deleted.
  *
  * Four passes, not three. `purge_after` was written by the scheduling pass and
  * read by nothing that acted on it, so the third email promised a deletion this
@@ -62,11 +82,12 @@ import {
   RENEWAL_NOTICE_MS,
   RENEWAL_REMINDER_MS,
   deletionScheduledAt,
+  formatAmount,
   formatPeriodDate,
 } from "../lib/renewal";
 import {
   sendDeletionScheduledEmail,
-  sendPlanExpiredEmail,
+  sendPaymentFailedEmail,
   sendRenewalReminderEmail,
   type EmailConfig,
 } from "../lib/email";
@@ -80,9 +101,11 @@ const BATCH = 100;
 /**
  * The three messages. Kept here rather than as a CHECK constraint on the table,
  * so adding a fourth is a template and a line, not a migration SQLite cannot
- * perform in place.
+ * perform in place — and so renaming one, as `expired` became `payment_failed`
+ * when auto-renewal returned, costs nothing. The rows already written under the
+ * old name are left alone: they are a record of a message that really was sent.
  */
-export type NotificationKind = "renewal_reminder" | "expired" | "deletion_scheduled";
+export type NotificationKind = "renewal_reminder" | "payment_failed" | "deletion_scheduled";
 
 /** One account the ladder touched, as the logs and the tests read it. */
 export interface RenewalCandidate {
@@ -91,7 +114,13 @@ export interface RenewalCandidate {
   planName: string;
   ownerEmail: string | null;
   periodEnd: number;
-  /** The workspace a renew link points at, or null when the org has none live. */
+  /** When the current run of failed charges began. Null outside dunning. */
+  pastDueSince: number | null;
+  /** What the next charge is, formatted, or null when it cannot be determined. */
+  renewalAmount: string | null;
+  /** The cadence being billed. Defaults to monthly when the row does not say. */
+  interval: "month" | "year";
+  /** The workspace a billing link points at, or null when the org has none live. */
   workspaceSlug: string | null;
 }
 
@@ -155,6 +184,11 @@ interface CandidateRow {
   planName: string | null;
   ownerEmail: string | null;
   periodEnd: number;
+  pastDueSince: number | null;
+  interval: string | null;
+  amountCents: number | null;
+  amountCentsYearly: number | null;
+  currency: string | null;
   workspaceSlug: string | null;
 }
 
@@ -177,6 +211,11 @@ const SELECT_CANDIDATE = `
          p.name AS planName,
          u.email AS ownerEmail,
          o.current_period_end AS periodEnd,
+         o.past_due_since AS pastDueSince,
+         o.billing_interval AS interval,
+         p.amount_cents AS amountCents,
+         p.amount_cents_yearly AS amountCentsYearly,
+         p.currency AS currency,
          (SELECT w.slug FROM workspaces w
            WHERE w.org_id = o.id AND w.status != 'deleted'
            ORDER BY w.created_at ASC LIMIT 1) AS workspaceSlug
@@ -186,6 +225,9 @@ const SELECT_CANDIDATE = `
 `;
 
 function asCandidate(row: CandidateRow): RenewalCandidate {
+  const interval = row.interval === "year" ? "year" : "month";
+  const cents = interval === "year" ? row.amountCentsYearly : row.amountCents;
+
   return {
     orgId: row.orgId,
     plan: row.plan,
@@ -194,11 +236,21 @@ function asCandidate(row: CandidateRow): RenewalCandidate {
     planName: row.planName ?? row.plan,
     ownerEmail: row.ownerEmail,
     periodEnd: row.periodEnd,
+    pastDueSince: row.pastDueSince,
+    interval,
+    // Null rather than zero when the plan row is gone or the column is empty.
+    // A renewal notice quoting "$0.00" is worse than one that cannot be sent:
+    // the customer would check it against a real charge and conclude we billed
+    // them for something they never agreed to.
+    renewalAmount:
+      cents === null || cents === undefined || cents <= 0
+        ? null
+        : formatAmount(cents, row.currency ?? "usd"),
     workspaceSlug: row.workspaceSlug,
   };
 }
 
-/** Where "Renew" sends somebody. The workspace's own billing page when we know one. */
+/** Where a billing link sends somebody. The workspace's own page when we know one. */
 function renewUrl(dashboardUrl: string, candidate: RenewalCandidate): string {
   return candidate.workspaceSlug === null
     ? `${dashboardUrl}/app`
@@ -236,18 +288,33 @@ export async function runRenewalLadder(deps: RenewalDeps): Promise<RenewalResult
 
   /* ---------------------------- state passes ---------------------------- */
 
-  // Expiry. Selects on `active` alone, so it is idempotent: a row it has
-  // already moved cannot match again.
+  // Expiry: dunning that has run its full course.
+  //
+  // **This is the belt to the webhook's braces.** When Stripe exhausts its
+  // retries it deletes the subscription and `customer.subscription.deleted`
+  // moves the account to `expired`. This pass reaches the same state from our
+  // own clock, so an account whose cancellation event was never delivered —
+  // or whose Stripe retry window was configured longer than our grace — still
+  // arrives at the end of the ladder on the day the customer was promised.
+  //
+  // Anchored on `past_due_since`, never on `current_period_end`. Under
+  // auto-renewal a period end is a non-event: it passes, Stripe charges, and a
+  // new one is mirrored in. An account whose period end is in the past is
+  // usually one that renewed perfectly, so expiring on that would lock out
+  // paying customers on every renewal day.
+  //
+  // Selects on `past_due` alone for its idempotence: a row it has already moved
+  // to `expired` cannot match again.
   const expiring = await db
     .prepare(
       `${SELECT_CANDIDATE}
-        WHERE o.billing_status = 'active'
-          AND o.current_period_end IS NOT NULL
-          AND o.current_period_end <= ?
-        ORDER BY o.current_period_end ASC
+        WHERE o.billing_status = 'past_due'
+          AND o.past_due_since IS NOT NULL
+          AND o.past_due_since <= ?
+        ORDER BY o.past_due_since ASC
         LIMIT ?`
     )
-    .bind(now, limit)
+    .bind(now - RENEWAL_GRACE_MS, limit)
     .all<CandidateRow>();
 
   result.candidates.expiry = (expiring.results ?? []).map(asCandidate);
@@ -258,12 +325,13 @@ export async function runRenewalLadder(deps: RenewalDeps): Promise<RenewalResult
       // holding 40 GB on Pro, moved to Free's 1 GB, is instantly over quota
       // through no act of its own, and every usage screen would report a breach
       // the customer cannot fix except by deleting files during the exact
-      // window we are asking them to renew in. The write lock already stops new
-      // data; the plan is only what the existing data is measured against.
+      // window we are asking them to fix their card in. The write lock already
+      // stops new data; the plan is only what the existing data is measured
+      // against.
       await db
         .prepare(
           `UPDATE organizations SET billing_status = 'expired', updated_at = ?
-            WHERE id = ? AND billing_status = 'active'`
+            WHERE id = ? AND billing_status = 'past_due'`
         )
         .bind(now, candidate.orgId)
         .run();
@@ -272,19 +340,17 @@ export async function runRenewalLadder(deps: RenewalDeps): Promise<RenewalResult
   }
 
   // Deletion scheduling. `purge_after IS NULL` is the idempotence guard, and it
-  // is also what makes a renewal stick: paying clears the stamp, and this
-  // query will not rewrite it because a renewed account is no longer expired.
+  // is also what makes a recovery stick: a successful payment clears the stamp
+  // and moves the row back to `active`, so this query cannot rewrite it.
   const pastGrace = await db
     .prepare(
       `${SELECT_CANDIDATE}
         WHERE o.billing_status = 'expired'
           AND o.purge_after IS NULL
-          AND o.current_period_end IS NOT NULL
-          AND o.current_period_end <= ?
-        ORDER BY o.current_period_end ASC
+        ORDER BY COALESCE(o.past_due_since, o.current_period_end) ASC
         LIMIT ?`
     )
-    .bind(now - RENEWAL_GRACE_MS, limit)
+    .bind(limit)
     .all<CandidateRow>();
 
   result.candidates.deletion = (pastGrace.results ?? []).map(asCandidate);
@@ -445,12 +511,22 @@ export async function runRenewalLadder(deps: RenewalDeps): Promise<RenewalResult
 
   /* ------------------------- notification passes ------------------------- */
 
-  // Reminder. The only pass with no state change of its own, so the
-  // `notifications_sent` row is the entire record that it happened.
-  const expiringSoon = await db
+  // Advance notice of the renewal charge. The only pass with no state change of
+  // its own, so the `notifications_sent` row is the entire record it happened.
+  //
+  // `cancel_at_period_end = 0` matters: somebody who has already cancelled must
+  // not be told their plan renews on the date it is actually ending. That is
+  // the single most alarming message this product could send — it reads as the
+  // cancellation having failed.
+  //
+  // A subscription id is required too, so a comped account with a hand-set
+  // period is never promised a charge that nothing will raise.
+  const renewingSoon = await db
     .prepare(
       `${SELECT_CANDIDATE}
         WHERE o.billing_status = 'active'
+          AND o.cancel_at_period_end = 0
+          AND o.stripe_subscription_id IS NOT NULL
           AND o.current_period_end IS NOT NULL
           AND o.current_period_end > ?
           AND o.current_period_end <= ?
@@ -465,31 +541,65 @@ export async function runRenewalLadder(deps: RenewalDeps): Promise<RenewalResult
     .bind(now, now + RENEWAL_REMINDER_MS, limit)
     .all<CandidateRow>();
 
-  result.candidates.reminder = (expiringSoon.results ?? []).map(asCandidate);
+  result.candidates.reminder = (renewingSoon.results ?? []).map(asCandidate);
 
   for (const candidate of result.candidates.reminder) {
+    if (candidate.renewalAmount === null) {
+      // No price to quote, so no notice. Deliberately silent rather than
+      // sending an amount-less renewal warning: the amount is the content of
+      // this message, and a notice without it fails the disclosure it exists
+      // to satisfy. Logged so the catalogue gap is visible.
+      result.unreachable += 1;
+      console.log(
+        JSON.stringify({
+          level: "warn",
+          message: "renewal notice skipped — no price for the account's plan",
+          orgId: candidate.orgId,
+          plan: candidate.plan,
+          interval: candidate.interval,
+        })
+      );
+      continue;
+    }
+
     const sent = await notifyOnce(deps, result, candidate, "renewal_reminder", (config, to) =>
       sendRenewalReminderEmail(config, {
         to,
         planName: candidate.planName,
         periodEndDate: formatPeriodDate(candidate.periodEnd),
         renewUrl: renewUrl(deps.dashboardUrl, candidate),
+        amount: candidate.renewalAmount!,
+        interval: candidate.interval,
       })
     );
     if (sent) result.reminded += 1;
   }
 
-  // Expiry notice. Selected on the expired state rather than on having just
-  // changed it, so a send that failed an hour ago is retried now.
-  const needExpiryNotice = await db
+  // The payment-failed notice. Selected on the `past_due` state rather than on
+  // having just entered it, so a send that failed an hour ago is retried now.
+  //
+  // Sent while dunning is still running, which is the point: it is the message
+  // that turns "my uploads stopped working" into "my card expired", and the
+  // earlier it lands the more likely the customer fixes it before the ladder
+  // reaches deletion.
+  //
+  // Selected on the dunning stamp rather than on `past_due` alone, because the
+  // state pass above runs first and may already have moved the account to
+  // `expired` in this same tick. That happens after an outage, or on the first
+  // enabled run against a backlog — and an account crossing both boundaries at
+  // once is precisely the one that most needs to be told its card failed. A
+  // narrower selection would skip the explanation and send only the deletion
+  // notice, which reads as arriving out of nowhere.
+  const needPaymentNotice = await db
     .prepare(
       `${SELECT_CANDIDATE}
-        WHERE o.billing_status = 'expired'
+        WHERE o.past_due_since IS NOT NULL
+          AND o.billing_status IN ('past_due', 'expired')
           AND o.current_period_end IS NOT NULL
           AND NOT EXISTS (
                 SELECT 1 FROM notifications_sent n
                  WHERE n.org_id = o.id
-                   AND n.kind = 'expired'
+                   AND n.kind = 'payment_failed'
                    AND n.period_end = o.current_period_end)
         ORDER BY o.current_period_end ASC
         LIMIT ?`
@@ -497,14 +607,18 @@ export async function runRenewalLadder(deps: RenewalDeps): Promise<RenewalResult
     .bind(limit)
     .all<CandidateRow>();
 
-  for (const row of needExpiryNotice.results ?? []) {
+  for (const row of needPaymentNotice.results ?? []) {
     const candidate = asCandidate(row);
-    await notifyOnce(deps, result, candidate, "expired", (config, to) =>
-      sendPlanExpiredEmail(config, {
+    await notifyOnce(deps, result, candidate, "payment_failed", (config, to) =>
+      sendPaymentFailedEmail(config, {
         to,
         planName: candidate.planName,
-        periodEndDate: formatPeriodDate(candidate.periodEnd),
-        graceEndDate: formatPeriodDate(deletionScheduledAt(candidate.periodEnd)),
+        periodEndDate: formatPeriodDate(candidate.pastDueSince ?? candidate.periodEnd),
+        // Counted from when the failure began, so the deadline in the message
+        // is the same one the scheduling pass will actually act on.
+        graceEndDate: formatPeriodDate(
+          deletionScheduledAt(candidate.pastDueSince ?? candidate.periodEnd)
+        ),
         renewUrl: renewUrl(deps.dashboardUrl, candidate),
       })
     );
@@ -535,7 +649,10 @@ export async function runRenewalLadder(deps: RenewalDeps): Promise<RenewalResult
       sendDeletionScheduledEmail(config, {
         to,
         planName: candidate.planName,
-        periodEndDate: formatPeriodDate(candidate.periodEnd),
+        // The date the grace began, which is when the charge failed — the same
+        // date the payment-failed message named, so the two messages tell one
+        // consistent story rather than two.
+        periodEndDate: formatPeriodDate(candidate.pastDueSince ?? candidate.periodEnd),
         renewUrl: renewUrl(deps.dashboardUrl, candidate),
         dashboardUrl: `${deps.dashboardUrl}/app`,
       })

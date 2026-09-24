@@ -28,12 +28,12 @@ const NOW = 1_780_000_000_000;
 /** A price as `prices.list` returns it. */
 function price(overrides: Record<string, unknown> = {}): unknown {
   return {
-    id: "price_once",
+    id: "price_monthly",
     object: "price",
     active: true,
     currency: "usd",
     unit_amount: 2000,
-    recurring: null,
+    recurring: { interval: "month", interval_count: 1 },
     ...overrides,
   };
 }
@@ -123,7 +123,11 @@ describe("syncProductToPlan", () => {
       product(fullMetadata),
       NOW
     );
-    expect(result).toEqual({ planId: "pro", priceId: "price_once" });
+    expect(result).toEqual({
+      planId: "pro",
+      priceId: "price_monthly",
+      yearlyPriceId: null,
+    });
 
     const row = await planRow("pro");
     expect(row?.storage_bytes).toBe(53687091200);
@@ -131,7 +135,7 @@ describe("syncProductToPlan", () => {
     expect(row?.workspaces).toBe(10);
     expect(row?.amount_cents).toBe(2000);
     expect(row?.stripe_product_id).toBe("prod_test");
-    expect(row?.stripe_price_id).toBe("price_once");
+    expect(row?.stripe_price_id).toBe("price_monthly");
     expect(row?.priority_support).toBe(1);
   });
 
@@ -183,42 +187,93 @@ describe("syncProductToPlan", () => {
     expect(await planRow("pro")).toEqual(first);
   });
 
-  it("picks the one-time price, and ignores the recurring ones beside it", async () => {
-    // The inversion that matters. This used to assert the opposite, and that
-    // assertion is why every checkout failed: the catalogue handed a recurring
-    // price id to a `mode: "payment"` session, which Stripe refuses. The four
-    // subscription prices created in September still sit on these products, so
-    // "ignores them" is a live condition rather than a hypothetical.
+  it("takes one price per cadence, and ignores a one-off beside them", async () => {
+    // **The price type and the checkout mode are one contract**, and this file
+    // has now asserted both directions. It briefly required a one-time price,
+    // while checkout was `mode: "payment"` under the two-day manual-renewal
+    // design; a subscription needs a recurring price, and Stripe refuses a
+    // one-time one in `mode: "subscription"` exactly as it refused the reverse.
+    //
+    // Both rules were right for their moment, which is why the pairing is worth
+    // an explicit test rather than a comment.
     await syncProductToPlan(
       env.DB,
       stripeStub([
-        price({ id: "price_yearly", recurring: { interval: "year" }, unit_amount: 20000 }),
-        price({ id: "price_monthly", recurring: { interval: "month" }, unit_amount: 2000 }),
         price({ id: "price_once", recurring: null, unit_amount: 2000 }),
+        price({
+          id: "price_yearly",
+          recurring: { interval: "year", interval_count: 1 },
+          unit_amount: 20400,
+        }),
+        price({
+          id: "price_monthly",
+          recurring: { interval: "month", interval_count: 1 },
+          unit_amount: 2000,
+        }),
       ]),
       product({ package_id: "agentdisk-pro" }),
       NOW
     );
 
-    expect((await planRow("pro"))?.stripe_price_id).toBe("price_once");
+    const row = await planRow("pro");
+    expect(row?.stripe_price_id).toBe("price_monthly");
+    expect(row?.amount_cents).toBe(2000);
+    expect(row?.stripe_yearly_price_id).toBe("price_yearly");
+    expect(row?.amount_cents_yearly).toBe(20400);
   });
 
-  it("records no price at all rather than one that cannot be charged", async () => {
-    // A product carrying only its old subscription prices — which is exactly
-    // the state of the live catalogue until the prices are re-minted.
-    //
-    // Null is the right answer: `purchasablePlanIds` drops a plan without a
-    // price and the dashboard renders it unavailable, which is visible and
-    // correct. Falling back to the recurring price would be invisible and
-    // broken — a button whose only outcome is a Stripe error.
+  it("ignores a cadence we do not sell, rather than reading it as one we do", async () => {
+    // "Every three months" is a real monthly-interval price. Taking it as THE
+    // monthly price would bill a quarter as a month — the customer pays once
+    // and gets a quarter, or is charged quarterly for a plan sold as monthly,
+    // depending on which way the mistake lands. `interval_count === 1` is the
+    // guard, and it is the sort of thing only a test keeps.
     await syncProductToPlan(
       env.DB,
-      stripeStub([price({ id: "price_monthly", recurring: { interval: "month" } })]),
+      stripeStub([
+        price({
+          id: "price_quarterly",
+          recurring: { interval: "month", interval_count: 3 },
+          unit_amount: 5400,
+        }),
+      ]),
       product({ package_id: "agentdisk-pro" }),
       NOW
     );
 
     expect((await planRow("pro"))?.stripe_price_id).toBeNull();
+  });
+
+  it("records no price at all rather than one that cannot be charged", async () => {
+    // A product carrying only a one-off price, which cannot be subscribed to.
+    //
+    // Null is the right answer: `purchasablePlans` drops a plan without a price
+    // and the dashboard renders it unavailable, which is visible and correct.
+    // Falling back to the unusable price would be invisible and broken — a
+    // button whose only outcome is a Stripe error.
+    await syncProductToPlan(
+      env.DB,
+      stripeStub([price({ id: "price_once", recurring: null })]),
+      product({ package_id: "agentdisk-pro" }),
+      NOW
+    );
+
+    expect((await planRow("pro"))?.stripe_price_id).toBeNull();
+  });
+
+  it("sells a plan monthly only, when that is all Stripe carries", async () => {
+    // Yearly is optional per plan, not a second half that must always exist.
+    await syncProductToPlan(
+      env.DB,
+      stripeStub([price({ id: "price_monthly" })]),
+      product({ package_id: "agentdisk-pro" }),
+      NOW
+    );
+
+    const row = await planRow("pro");
+    expect(row?.stripe_price_id).toBe("price_monthly");
+    expect(row?.stripe_yearly_price_id).toBeNull();
+    expect(row?.amount_cents_yearly).toBeNull();
   });
 
   it("records a product that has no price yet", async () => {
@@ -227,7 +282,7 @@ describe("syncProductToPlan", () => {
     // exists. The row lands, the price follows on the next sync, and checkout
     // refuses the plan in the meantime rather than assuming one.
     const result = await syncProductToPlan(env.DB, stripeStub([]), product(fullMetadata), NOW);
-    expect(result).toEqual({ planId: "pro", priceId: null });
+    expect(result).toEqual({ planId: "pro", priceId: null, yearlyPriceId: null });
     expect((await planRow("pro"))?.stripe_price_id).toBeNull();
   });
 

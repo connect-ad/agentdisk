@@ -299,6 +299,60 @@ were not touched. See `backlog/002`.
   request path. The dashboard's eye button and the MCP page's key dropdown
   both go through this route; the sandbox key an agent provisions is sealed
   the same way, so it becomes viewable to whoever claims the workspace.
+- **Nothing auto-renews, and checkout creates a `payment` rather than a
+  `subscription`.** Owner's decision, 23 September 2026, against the industry
+  norm and against the amardrive reference — whose own notes say an earlier
+  no-auto-renewal design "was replaced in June 2026 and should not be
+  reproposed". It was raised, reaffirmed, and is settled. A purchase buys one
+  month; `lib/renewal.ts` owns the clock and `jobs/billing-renewal.ts` walks it:
+  remind at day −7, `expired` and write-locked at day 0, `purge_after` stamped at
+  day +7. **The reason it is `mode: "payment"` and not a subscription with
+  `cancel_at_period_end` is the failure mode**, not taste: one unapplied flag and
+  the customer is charged again without consent, which is the single outcome
+  being ruled out. A one-off payment cannot do that — Stripe holds no mandate.
+  It also removes the early-renewal trap, since a live subscription would make
+  the day −7 email point at a button that 409s. The cost is that
+  `customer.subscription.*` and both `invoice.*` handlers are now dormant: they
+  are kept, subscribed and working, because a subscription made by hand in the
+  Stripe dashboard still arrives, and because deleting them makes returning to
+  auto-renewal a rewrite instead of a decision. **`past_due` is therefore no
+  longer reachable through checkout** — a one-off payment has no invoice to fail.
+- **A renewal clears `purge_after`, and that write is the feature.** Somebody who
+  pays on day ten must not be deleted by a sweep that stamped them on day seven.
+  It is the one assertion in `billing.test.ts` worth protecting above the others.
+  The ladder also **defaults to reporting** (`BILLING_EXPIRY_ENABLED`), like the
+  sandbox sweep and the admin purge, and **expiry deliberately leaves
+  `organizations.plan` on the paid tier** — dropping a 40 GB account to Free's
+  1 GB puts it instantly over quota through no act of its own, during the exact
+  window we are asking it to renew in.
+- **All mail is Cloudflare Email Service, and it goes through `lib/email.ts`.**
+  The Worker uses the `EMAIL` `send_email` binding — no secret, nothing for CI
+  to push — and Firebase uses the same service over SMTP, so the two share one
+  quota. Any sender on `@agentdisk.io` is deliverable and nothing else is. In
+  tests, spy on `env.EMAIL` or pass a fake binding; never stub `fetch`. Mailjet
+  is gone everywhere. See [Skill/2 Email](Skill/2%20Email.md).
+- **State changes and lifecycle emails are separate passes.** Doing both in one
+  loop means a failed send leaves the state already changed, so the row stops
+  matching and the message is never retried — the customer is locked out with no
+  explanation. Inverting it is worse: an email outage would stop accounts
+  expiring at all, which is a billing failure that quietly grants free service.
+  So a state pass selects on state and always succeeds, and a notification pass
+  selects on state *and* the absence of a `notifications_sent` row. **The UNIQUE
+  index is the send-once guard**, not application logic — the cron is hourly, and
+  a guard written as an `if` is one refactor away from 168 copies of "your data is
+  scheduled for deletion". The row is claimed *after* a successful send.
+- **Discounts live in Stripe; there is no promo table.** Stripe counts
+  redemptions atomically at the moment a payment clears, so two people racing for
+  the last use of a code cannot both win — a local mirror would have to reproduce
+  that from a database that is not on the payment path. The console
+  (`admin/promos-access.ts`) creates a Coupon then a Promotion Code, and
+  deactivates rather than deletes, because discounts already taken stay on real
+  invoices. **One-time versus unlimited is `max_redemptions`**: absent means no
+  limit, `1` means single use, and the form says which in words — an empty box
+  standing for "unlimited" is the `NULL`-versus-`-1` ambiguity again, and here the
+  wrong reading gives away unlimited discounts. Customers redeem on Stripe's own
+  page via `allow_promotion_codes`; **validating a code on our side would mean
+  passing `discounts` instead, which Stripe refuses to accept alongside it.**
 - **Storage and file quota belong to the billing account, not the workspace.**
   The subscription is sold to an organization: one card, one plan, many
   workspaces. Until migration 0017 `assertWithinQuota` compared a single
@@ -510,6 +564,7 @@ provenance), `ApiKeyDisplay` (masked by default), `PermissionSelector` (least pr
 | # | Document | Covers |
 |---|---|---|
 | 1 | [Build](Skill/1%20Build.md) | Toolchain, run/build/test commands for both apps, the expected build baseline, barrel regeneration, adherence checks and their calibration, mutation testing, and how to read a failed pipeline run |
+| 2 | [Email](Skill/2%20Email.md) | Cloudflare Email Service for both the Worker (`EMAIL` binding) and Firebase (SMTP): the shared quota, the `@agentdisk.io` sender rule, calling `sendEmail`, error codes and limits, the console's test send and compose, how to stub the binding in tests, and what to check when mail stops |
 
 ### Backlog — [backlog/](backlog/)
 
@@ -518,10 +573,9 @@ independent of both.
 
 | # | Item | Status |
 |---|---|---|
-| 001 | [Billing module](backlog/001-billing-module.md) | **TOP** — 8 of 12 tasks shipped; Stripe catalogue, checkout, the ten webhook events and the plan editor are in. Enforcement and the pricing page are not, and **nothing has touched real Stripe yet** |
+| 001 | [Billing module](backlog/001-billing-module.md) | **TOP** — 11 of 12 tasks shipped; the catalogue, checkout, the webhook, the plan editor, the pricing page, the Manage Subscription picker, the manual-renewal ladder and console promo codes are in. **Task 10, the agent/key/member/workspace count gates, is the one left — and nothing has touched real Stripe yet** |
 | 002 | [Admin panel](backlog/002-admin-panel.md) | **HIGH** — built end to end, not yet proven against live dev. Start with the bootstrap pipeline; the plan editor is untestable until 001's catalogue is applied |
 | 003 | [Google consent support email](backlog/003-google-consent-support-email.md) | **MEDIUM** — `firebase.json` shows the sibling product's address on the Google sign-in consent screen. One line, plus the `firebase deploy --only auth` trap |
-
 **Items 001–031 were deleted on 18 September 2026**, deliberately, so that the
 billing module is the whole backlog. They are recoverable in full from git at
 the tag `pre-billing-module` — for example
@@ -550,9 +604,9 @@ live deployment rather than inferred from the code — see
 person can follow.
 
 ```
-apps/api    735 tests across 38 files · typecheck clean
-apps/web    268 tests across 21 files · build clean
-apps/admin   33 tests · build clean · 70 KiB gzipped
+apps/api    869 tests across 47 files · typecheck clean
+apps/web    324 tests across 24 files · build clean
+apps/admin   47 tests across 4 files · build clean · 108 KiB gzipped
 Worker      226 KiB gzipped, against Cloudflare's 1 MB limit
 ```
 
@@ -605,8 +659,17 @@ reconciles the usage counters against the rows.
 
 ### What is not built
 
-- **Editable plans and pricing** (doc 14 PART 29.6). The admin console lists
-  plans; it cannot change one or push a price to Stripe.
+- **Yearly billing.** Monthly only; `plans` holds one `stripe_price_id` and one
+  `interval` per plan, so adding it is a migration plus a catalogue-sync change,
+  not a toggle.
+- **Mid-period plan changes**, and any proration with them. Checkout refuses
+  while a period is comfortably live and opens in the last seven days; switching
+  plans takes effect from the next period.
+- **Customer-side promo validation.** Codes are typed on Stripe's page. See the
+  `allow_promotion_codes` rule above for why the two cannot both exist.
+- **Stripe Tax.** No `automatic_tax`, no `tax_behavior`, no billing-address
+  collection. Cheapest to turn on before the first non-US sale, which has not
+  happened.
 - **Multipart upload** and **signed permanent links**.
 - **Full-text search inside files.** Search covers names, paths, captions and
   tags, and the response names the fields it looked at.
@@ -615,10 +678,15 @@ reconciles the usage counters against the rows.
 
 A second category, found by the 8 Sept 2026 audit ([summary.md](summary.md)):
 things that *appear* built and are not connected. Several declared limits are
-never enforced — the `past_due` write block above all — and a set of dashboard
-controls report success for work that never happened. The isolation and
-authentication core is sound; the wiring around it is not finished. See
-`backlog/017`–`backlog/025`.
+never enforced and a set of dashboard controls report success for work that
+never happened. The isolation and authentication core is sound; the wiring
+around it is not finished. See `backlog/017`–`backlog/025`.
+
+**The billing write block is no longer one of them.** `assertBillingAllowsWrite`
+is on every write path, and `expired` — not `past_due` — is the state this
+product now actually reaches. **The count gates still are**: `PLAN_LIMITS.agents`,
+`.apiKeys`, `.members` and `.workspaces` are read by nothing on a write path, so
+only `shareLinks` is enforced (`routes/shares.ts`). That is `backlog/001` task 10.
 
 ### Faults found only by running it
 

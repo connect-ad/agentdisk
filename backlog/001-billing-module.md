@@ -1,6 +1,6 @@
 # 001 · Billing module
 
-**Status:** In progress — 8 of 12 tasks shipped
+**Status:** In progress — 11 of 12 tasks shipped
 **Priority: TOP.** This is the only item in the backlog.
 **Design:** [docs/superpowers/specs/2026-09-17-billing-module-design.md](../docs/superpowers/specs/2026-09-17-billing-module-design.md)
 **Branch:** `dev` · rollback tag `pre-billing-module` (c0bbc1c)
@@ -64,10 +64,38 @@ workspaces are all account-wide totals.
 | 6 | `POST /v1/billing/checkout-session`; `purchasable` on `GET /v1/billing` | `apps/api/src/routes/billing.ts` |
 | 7 | Ten Stripe events, and the shared product→plan upsert | `apps/api/src/billing/plan-sync.ts` |
 | 8 | `GET /v1/staff/plans`, `POST /v1/staff/plans/sync`, and the full editor | `apps/api/src/staff/plans-access.ts` |
+| 9 | The real billing status threaded onto the write path | `apps/api/src/lib/quota.ts` |
+| 11 | Pricing page, four columns, numbers hardcoded client-side | `apps/web/src/lib/pricing.js` |
+| 12 | Manage Subscription: plan picker, checkout wiring, renewal dates | `apps/web/src/routes/SettingsTabs.jsx` |
 
-673 API tests pass. Tasks 4, 5 and 7 were mutation-checked: the transposed
-plan-table digit, the amardrive fail-wide fallback, and a refund that revokes
-access each turn the suite red.
+869 API tests, 324 dashboard, 47 console. Tasks 4, 5 and 7 were mutation-checked:
+the transposed plan-table digit, the amardrive fail-wide fallback, and a refund
+that revokes access each turn the suite red.
+
+## The renewal model changed — 23 September 2026
+
+**AgentDisk no longer auto-renews**, on the owner's decision. This reverses the
+industry norm and the amardrive reference, whose §5 says an earlier
+no-auto-renewal design "was replaced in June 2026 and should not be reproposed".
+It was raised, reaffirmed, and is settled. It was safe to change freely because
+nothing has ever subscribed on real Stripe, so there were zero live
+subscriptions to migrate.
+
+What shipped with it:
+
+| Piece | Where |
+|---|---|
+| `mode: "payment"` checkout; the renewal window replacing the blanket 409 | `apps/api/src/routes/billing.ts` |
+| `current_period_end`, `purge_after`, `notifications_sent` | `migrations/0027_manual_renewal.sql` |
+| The clock: −7 remind, 0 expire, +7 schedule deletion | `apps/api/src/lib/renewal.ts` |
+| The hourly ladder, dry-run by default | `apps/api/src/jobs/billing-renewal.ts` |
+| Three lifecycle emails | `apps/api/src/lib/email.ts` |
+| The `expired` write lock | `apps/api/src/lib/quota.ts` |
+| Console promo codes — Coupon + Promotion Code, no local table | `apps/api/src/admin/promos-access.ts` |
+
+**Before enabling it on dev:** `BILLING_EXPIRY_ENABLED` must stay unset until a
+window of `renewal ladder candidates` log lines has been read, the same
+discipline as `SANDBOX_EXPIRY_ENABLED`.
 
 ## Remaining
 
@@ -87,7 +115,7 @@ expensive order to discover it in.
 3. Run the sync, then drive one checkout with a Stripe test card and confirm
    `organizations.plan` actually moves to `pro`.
 
-### Task 9 — thread the real billing status
+### Task 9 — thread the real billing status · **DONE**
 
 Closes gap 3 above. `findWorkspaceById` already joins `organizations` and fails
 closed, so this is adding `o.billing_status` to that existing query — no extra
@@ -101,7 +129,7 @@ organization vanishes from that query while still sitting in the table marked
 nothing consults `billingStatus` on a write path. **Task 9 is the change that
 makes it load-bearing**, so the fix belongs inside it.
 
-### Task 10 — four count gates · *needs a report first*
+### Task 10 — four count gates · *the one task left; needs a report first*
 
 `createAgent`, `createKey`, `inviteMember` and the authenticated
 `createWorkspace` path all insert with no count check of any kind. Each needs a
@@ -113,13 +141,13 @@ instead of count them.
 ships, report which existing dev workspaces are over the new limits — an
 organization with four agents on Free starts getting refused.
 
-### Task 11 — pricing page
+### Task 11 — pricing page · **DONE**
 
 Four columns, the feature matrix, an egress row, and CTAs that reach checkout.
 Numbers stay **hardcoded** in `apps/web/src/lib/pricing.js` by decision; the
 server sends no pricing table, only `purchasable` plan ids.
 
-### Task 12 — dashboard upgrade path, docs, close-out
+### Task 12 — dashboard upgrade path, docs, close-out · **DONE**
 
 Upgrade buttons wired to checkout, `CLAUDE.md` updated, and the pricing numbers
 reconciled across the repo.

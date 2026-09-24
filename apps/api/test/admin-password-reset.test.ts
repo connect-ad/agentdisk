@@ -56,12 +56,16 @@ function post(path: string, body?: unknown, token?: string): Promise<Response> {
 interface StubOptions {
   /** What Identity Toolkit answers. `missing` is its EMAIL_NOT_FOUND shape. */
   identity?: "link" | "missing" | "error";
-  /**
-   * How Mailjet answers. `rejected` is a non-2xx; `error-in-200` is its OTHER
-   * failure shape - a 200 carrying a per-message status of "error", which is
-   * the one a naive `response.ok` check would read as a delivery.
-   */
-  mail?: "accepted" | "rejected" | "error-in-200";
+  /** How the EMAIL binding answers. `rejected` is a thrown error with a code. */
+  mail?: "accepted" | "rejected";
+}
+
+/** A message as the Worker handed it to the EMAIL binding. */
+interface SentEmail {
+  from: { email: string; name: string };
+  to: string;
+  html: string;
+  text: string;
 }
 
 /**
@@ -70,16 +74,16 @@ interface StubOptions {
  * what the code appears to send.
  */
 function stubOutbound(options: StubOptions = {}): {
-  mailjetBodies: unknown[];
+  emails: SentEmail[];
   identityBodies: unknown[];
   tokenCalls: number;
 } {
   const { identity = "link", mail = "accepted" } = options;
-  const mailjetBodies: unknown[] = [];
+  const emails: SentEmail[] = [];
   const identityBodies: unknown[] = [];
   let tokenCalls = 0;
 
-  const recorded = { mailjetBodies, identityBodies, get tokenCalls() { return tokenCalls; } };
+  const recorded = { emails, identityBodies, get tokenCalls() { return tokenCalls; } };
 
   vi.stubGlobal(
     "fetch",
@@ -109,34 +113,19 @@ function stubOutbound(options: StubOptions = {}): {
         });
       }
 
-      if (url.startsWith("https://api.mailjet.com/")) {
-        mailjetBodies.push(JSON.parse(String(body)));
-        if (mail === "rejected") {
-          return new Response(JSON.stringify({ ErrorMessage: "Unprocessable" }), { status: 422 });
-        }
-        if (mail === "error-in-200") {
-          return new Response(
-            JSON.stringify({
-              Messages: [
-                { Status: "error", Errors: [{ ErrorMessage: "sender is not verified" }] },
-              ],
-            }),
-            { status: 200, headers: { "content-type": "application/json" } }
-          );
-        }
-        return new Response(
-          JSON.stringify({
-            Messages: [{ Status: "success", To: [{ MessageUUID: "msg_test_1" }] }],
-          }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        );
-      }
-
       throw new Error(`unexpected outbound fetch to ${url}`);
     })
   );
 
-  return recorded as { mailjetBodies: unknown[]; identityBodies: unknown[]; tokenCalls: number };
+  vi.spyOn(env.EMAIL!, "send").mockImplementation(async (message: unknown) => {
+    emails.push(message as SentEmail);
+    if (mail === "rejected") {
+      throw Object.assign(new Error("sender is not verified"), { code: "E_SENDER_NOT_VERIFIED" });
+    }
+    return { messageId: "msg_test_1" };
+  });
+
+  return recorded as { emails: SentEmail[]; identityBodies: unknown[]; tokenCalls: number };
 }
 
 /** Narrowing helper: the suite runs under noUncheckedIndexedAccess. */
@@ -188,6 +177,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("admin password reset", () => {
@@ -212,20 +202,12 @@ describe("admin password reset", () => {
     expect(raw).not.toContain(RESET_LINK);
 
     // It went to the account holder, from the verified sender.
-    expect(outbound.mailjetBodies).toHaveLength(1);
-    const sent = at(outbound.mailjetBodies, 0) as {
-      Messages: {
-        From: { Email: string };
-        To: { Email: string }[];
-        HTMLPart: string;
-        TextPart: string;
-      }[];
-    };
-    const message = at(sent.Messages, 0);
-    expect(message.From.Email).toBe("connect@agentdisk.io");
-    expect(at(message.To, 0).Email).toBe(USER_EMAIL);
-    expect(message.HTMLPart).toContain(RESET_LINK);
-    expect(message.TextPart).toContain(RESET_LINK);
+    expect(outbound.emails).toHaveLength(1);
+    const message = at(outbound.emails, 0);
+    expect(message.from.email).toBe("connect@agentdisk.io");
+    expect(message.to).toBe(USER_EMAIL);
+    expect(message.html).toContain(RESET_LINK);
+    expect(message.text).toContain(RESET_LINK);
   });
 
   it("asks Identity Toolkit for the link rather than letting Firebase send it", async () => {
@@ -302,28 +284,6 @@ describe("admin password reset", () => {
     expect(at(rows, 0).result).toBe("denied");
   });
 
-  it("treats a 200 whose message status is error as a failure", async () => {
-    // Mailjet's other failure shape, and the one that is invisible without
-    // this test. It answers 200 with a PER-MESSAGE status, so `response.ok` is
-    // not the whole check it was for the provider this replaced: an unverified
-    // sender or a blocked recipient arrives INSIDE a 200. Accepting it would
-    // report a delivery that never happened to a support engineer who has
-    // already told the customer the mail is coming - backlog/023 again.
-    stubOutbound({ mail: "error-in-200" });
-    const token = supportToken;
-
-    const res = await post(
-      `/v1/admin/users/${USER_ID}/password-reset`,
-      { reason: "Ticket 4471." },
-      token
-    );
-    expect(res.status).toBe(500);
-
-    const rows = await fleetRows();
-    expect(rows).toHaveLength(1);
-    expect(at(rows, 0).result).toBe("denied");
-  });
-
   it("accepts an address Firebase has no identity for, and says so only in the log", async () => {
     const outbound = stubOutbound({ identity: "missing" });
     const token = supportToken;
@@ -332,7 +292,7 @@ describe("admin password reset", () => {
     expect(res.status).toBe(200);
 
     // Nothing was sent, because there was nothing to send.
-    expect(outbound.mailjetBodies).toHaveLength(0);
+    expect(outbound.emails).toHaveLength(0);
 
     const rows = await fleetRows();
     expect(at(rows, 0).result).toBe("success");
@@ -354,7 +314,7 @@ describe("admin password reset", () => {
 
     const res = await post("/v1/admin/users/usr_NOSUCHUSER/password-reset", { reason: "Ticket." }, token);
     expect(res.status).toBe(404);
-    expect(outbound.mailjetBodies).toHaveLength(0);
+    expect(outbound.emails).toHaveLength(0);
     expect(await fleetRows()).toHaveLength(0);
   });
 
@@ -386,6 +346,6 @@ describe("admin password reset", () => {
     // One RSA signature and one round trip to Google, not two. The token is
     // good for an hour and minting it is the expensive half of this path.
     expect(outbound.tokenCalls).toBe(1);
-    expect(outbound.mailjetBodies).toHaveLength(2);
+    expect(outbound.emails).toHaveLength(2);
   });
 });

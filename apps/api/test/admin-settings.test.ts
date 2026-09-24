@@ -38,36 +38,29 @@ function call(method: string, path: string, token: string, payload?: unknown): P
   });
 }
 
-/** Stub Mailjet, and hand back what was actually sent. */
-function stubMailjet(outcome: "accepted" | "rejected" = "accepted"): { bodies: unknown[] } {
-  const bodies: unknown[] = [];
+/** A message as the Worker handed it to the EMAIL binding. */
+interface Sent {
+  from: { email: string; name: string };
+  to: string | string[];
+  subject: string;
+  text?: string;
+  html?: string;
+  attachments?: { filename: string; type: string; disposition: string; content: Uint8Array }[];
+}
 
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+/** Stub the EMAIL binding, and hand back what was actually sent. */
+function stubEmail(outcome: "accepted" | "rejected" = "accepted"): { sent: Sent[] } {
+  const sent: Sent[] = [];
 
-      if (url.startsWith("https://api.mailjet.com/")) {
-        bodies.push(JSON.parse(String(init?.body)));
-        if (outcome === "rejected") {
-          return new Response(
-            JSON.stringify({
-              Messages: [{ Status: "error", Errors: [{ ErrorMessage: "sender is not verified" }] }],
-            }),
-            { status: 200, headers: { "content-type": "application/json" } }
-          );
-        }
-        return new Response(
-          JSON.stringify({ Messages: [{ Status: "success", To: [{ MessageUUID: "uuid-test" }] }] }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        );
-      }
+  vi.spyOn(env.EMAIL!, "send").mockImplementation(async (message: unknown) => {
+    sent.push(message as Sent);
+    if (outcome === "rejected") {
+      throw Object.assign(new Error("sender is not verified"), { code: "E_SENDER_NOT_VERIFIED" });
+    }
+    return { messageId: "msg-test" };
+  });
 
-      throw new Error(`unexpected outbound fetch to ${url}`);
-    })
-  );
-
-  return { bodies };
+  return { sent };
 }
 
 async function fleetRows(): Promise<{ action: string; result: string; metadata: string }[]> {
@@ -90,7 +83,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("GET /v1/admin/settings/email", () => {
@@ -101,7 +94,9 @@ describe("GET /v1/admin/settings/email", () => {
     expect(await response.json()).toEqual({
       configured: true,
       sender: "connect@agentdisk.io",
-      provider: "Mailjet",
+      provider: "Cloudflare Email Service",
+      composeDefaultSender: "noreply@agentdisk.io",
+      sendingDomain: "agentdisk.io",
     });
   });
 
@@ -115,9 +110,7 @@ describe("GET /v1/admin/settings/email", () => {
     // The provider's NAME is deliberately in the body - an operator reading a
     // bounce needs to know whose dashboard to open. What must never appear is
     // credential material, so the assertion names that rather than the word.
-    expect(text).not.toMatch(/apiKey|secretKey|authorization|Basic /i);
-    expect(text).not.toContain("test-mailjet-api-key");
-    expect(text).not.toContain("test-mailjet-secret-key");
+    expect(text).not.toMatch(/apiKey|secretKey|token|authorization|Basic /i);
   });
 
   it("refuses an unauthenticated caller", async () => {
@@ -131,7 +124,7 @@ describe("POST /v1/admin/settings/email/test", () => {
     // This pinned a 403 for support against a super_admin-only route. The
     // console has one role now, so the send is open to every operator - and
     // the refusal it used to record cannot be produced.
-    stubMailjet();
+    stubEmail();
 
     const response = await call("POST", `${PATH}/test`, support, {});
     expect(response.status).toBe(200);
@@ -141,23 +134,20 @@ describe("POST /v1/admin/settings/email/test", () => {
   });
 
   it("sends to the signed-in admin member's own address", async () => {
-    const mailjet = stubMailjet();
+    const email = stubEmail();
 
     const response = await call("POST", `${PATH}/test`, superAdmin, {});
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ sentTo: SUPER_EMAIL });
 
-    expect(mailjet.bodies).toHaveLength(1);
-    const sent = mailjet.bodies[0] as {
-      Messages: { From: { Email: string }; To: { Email: string }[] }[];
-    };
-    expect(sent.Messages[0]?.To[0]?.Email).toBe(SUPER_EMAIL);
-    expect(sent.Messages[0]?.From.Email).toBe("connect@agentdisk.io");
+    expect(email.sent).toHaveLength(1);
+    expect(email.sent[0]?.to).toBe(SUPER_EMAIL);
+    expect(email.sent[0]?.from.email).toBe("connect@agentdisk.io");
   });
 
   it("ignores an address supplied in the body", async () => {
     // The case that turns this endpoint into an open relay if it is missed.
-    const mailjet = stubMailjet();
+    const email = stubEmail();
 
     const response = await call("POST", `${PATH}/test`, superAdmin, {
       to: "attacker@example.com",
@@ -165,13 +155,12 @@ describe("POST /v1/admin/settings/email/test", () => {
     });
 
     expect(response.status).toBe(200);
-    const sent = mailjet.bodies[0] as { Messages: { To: { Email: string }[] }[] };
-    expect(sent.Messages[0]?.To[0]?.Email).toBe(SUPER_EMAIL);
-    expect(JSON.stringify(mailjet.bodies)).not.toContain("attacker@example.com");
+    expect(email.sent[0]?.to).toBe(SUPER_EMAIL);
+    expect(JSON.stringify(email.sent)).not.toContain("attacker@example.com");
   });
 
   it("records the send in the fleet log", async () => {
-    stubMailjet();
+    stubEmail();
 
     await call("POST", `${PATH}/test`, superAdmin, {});
 
@@ -182,10 +171,10 @@ describe("POST /v1/admin/settings/email/test", () => {
   });
 
   it("refuses when the provider rejects, and records that too", async () => {
-    // A 200 carrying Status: "error" - Mailjet's quiet failure. If this
-    // endpoint reported success here it would be actively harmful: somebody
-    // would read the green toast as proof that email works.
-    stubMailjet("rejected");
+    // The binding throws. If this endpoint reported success here it would be
+    // actively harmful: somebody would read the green toast as proof that
+    // email works.
+    stubEmail("rejected");
 
     const response = await call("POST", `${PATH}/test`, superAdmin, {});
     expect(response.status).toBe(500);
@@ -196,10 +185,136 @@ describe("POST /v1/admin/settings/email/test", () => {
   });
 
   it("never returns the provider's own words", async () => {
-    stubMailjet("rejected");
+    stubEmail("rejected");
 
     const response = await call("POST", `${PATH}/test`, superAdmin, {});
 
     expect(await response.text()).not.toContain("sender is not verified");
+  });
+});
+
+describe("POST /v1/admin/settings/email/compose", () => {
+  const COMPOSE = `${PATH}/compose`;
+  const base = {
+    from: "noreply@agentdisk.io",
+    to: "customer@example.com",
+    subject: "About your account",
+    message: "Hello <b>there</b>\nSecond line.",
+  };
+
+  it("sends what the operator wrote, from the sender they chose", async () => {
+    const email = stubEmail();
+
+    const response = await call("POST", COMPOSE, support, { ...base, from: "Billing@AgentDisk.io" });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      sent: true,
+      from: "billing@agentdisk.io",
+      to: ["customer@example.com"],
+    });
+
+    expect(email.sent).toHaveLength(1);
+    const sent = email.sent[0]!;
+    expect(sent.from.email).toBe("billing@agentdisk.io");
+    expect(sent.to).toEqual(["customer@example.com"]);
+    expect(sent.subject).toBe("About your account");
+    expect(sent.text).toBe(base.message);
+    // Typed text never becomes markup in somebody's inbox.
+    expect(sent.html).toContain("Hello &lt;b&gt;there&lt;/b&gt;");
+    expect(sent.html).not.toContain("<b>");
+  });
+
+  it("splits a typed recipient list and drops duplicates", async () => {
+    const email = stubEmail();
+
+    const response = await call("POST", COMPOSE, support, {
+      ...base,
+      to: "a@example.com, b@example.com; a@example.com",
+    });
+    expect(response.status).toBe(200);
+    expect(email.sent[0]?.to).toEqual(["a@example.com", "b@example.com"]);
+  });
+
+  it("carries attachments as bytes", async () => {
+    const email = stubEmail();
+
+    const response = await call("POST", COMPOSE, support, {
+      ...base,
+      attachments: [{ filename: "notes.txt", type: "text/plain", content: btoa("hello") }],
+    });
+    expect(response.status).toBe(200);
+
+    const file = email.sent[0]?.attachments?.[0];
+    expect(file?.filename).toBe("notes.txt");
+    expect(file?.disposition).toBe("attachment");
+    expect(new TextDecoder().decode(file?.content)).toBe("hello");
+  });
+
+  it("refuses a sender off the onboarded domain, before anything is sent", async () => {
+    const email = stubEmail();
+
+    const response = await call("POST", COMPOSE, support, { ...base, from: "ceo@example.com" });
+    expect(response.status).toBe(400);
+    expect(email.sent).toHaveLength(0);
+  });
+
+  it("refuses more than 50 recipients", async () => {
+    const email = stubEmail();
+    const to = Array.from({ length: 51 }, (_, i) => `r${i}@example.com`);
+
+    const response = await call("POST", COMPOSE, support, { ...base, to });
+    expect(response.status).toBe(400);
+    expect(email.sent).toHaveLength(0);
+  });
+
+  it("refuses an executable attachment", async () => {
+    const email = stubEmail();
+
+    const response = await call("POST", COMPOSE, support, {
+      ...base,
+      attachments: [{ filename: "setup.exe", type: "application/octet-stream", content: btoa("MZ") }],
+    });
+    expect(response.status).toBe(400);
+    expect(email.sent).toHaveLength(0);
+  });
+
+  it("records the envelope in the fleet log, never the body", async () => {
+    stubEmail();
+
+    await call("POST", COMPOSE, support, {
+      ...base,
+      attachments: [{ filename: "notes.txt", type: "text/plain", content: btoa("hello") }],
+    });
+
+    const rows = (await fleetRows()).filter((row) => row.action === "settings.email.composed");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.result).toBe("success");
+    expect(JSON.parse(rows[0]?.metadata ?? "{}")).toMatchObject({
+      from: "noreply@agentdisk.io",
+      to: "customer@example.com",
+      subject: "About your account",
+      attachments: "notes.txt",
+    });
+    expect(rows[0]?.metadata).not.toContain("Second line");
+  });
+
+  it("refuses when the provider rejects, and records that too", async () => {
+    stubEmail("rejected");
+
+    const response = await call("POST", COMPOSE, support, base);
+    expect(response.status).toBe(500);
+    expect(await response.text()).not.toContain("sender is not verified");
+
+    const rows = (await fleetRows()).filter((row) => row.action === "settings.email.composed");
+    expect(rows[0]?.result).toBe("denied");
+  });
+
+  it("refuses an unauthenticated caller", async () => {
+    const response = await SELF.fetch(`${URL_BASE}${COMPOSE}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(base),
+    });
+    expect(response.status).toBe(401);
   });
 });

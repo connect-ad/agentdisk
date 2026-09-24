@@ -271,10 +271,9 @@ export function MembersTab() {
  * changed here has to be changed in Legal.jsx too, and Legal.jsx wins.
  */
 const SUBPROCESSORS = [
-  { name: 'Cloudflare', purpose: 'Object storage (R2), database (D1), compute (Workers), CDN', region: 'Global edge' },
+  { name: 'Cloudflare', purpose: 'Object storage (R2), database (D1), compute (Workers), CDN, transactional email', region: 'Global edge' },
   { name: 'Google (Firebase Authentication)', purpose: 'Sign-in, password storage, and session tokens', region: 'US / Global' },
-  { name: 'Stripe', purpose: 'Payment processing and invoicing', region: 'US / EU' },
-  { name: 'Mailjet', purpose: 'Transactional email (account and support notifications)', region: 'EU' }
+  { name: 'Stripe', purpose: 'Payment processing and invoicing', region: 'US / EU' }
 ];
 
 /**

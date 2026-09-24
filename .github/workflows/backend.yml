@@ -267,13 +267,6 @@ jobs:
           R2_FILES_SECRET_ACCESS_KEY: ${{ secrets.R2_FILES_SECRET_ACCESS_KEY }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-          # Email. The Mailjet pair are repository-level secrets, shared by
-          # both environments, the way the infrastructure credentials above are
-          # - one Mailjet account owns the verified sender for the domain, so
-          # there is nothing per-environment to vary. `secrets: inherit` in the
-          # caller makes repository and environment secrets both readable here.
-          MAILJET_API_KEY: ${{ secrets.MAILJET_API_KEY }}
-          MAILJET_SECRET_KEY: ${{ secrets.MAILJET_SECRET_KEY }}
           # The service-account key that mints password-reset links. This one IS
           # per-environment: dev and prod are two Firebase projects, and a key
           # for one must never be able to act on the other.
@@ -361,54 +354,16 @@ jobs:
             exit 1
           fi
 
-          # The Mailjet pair is both-or-neither, and a half-set pair is an
-          # error rather than a degraded mode to ship: the Send API uses the two
-          # as HTTP Basic user and password, so one without the other
-          # authenticates nothing. readEmailConfig would then report email as
-          # unconfigured while `wrangler secret list` showed a Mailjet key
-          # sitting right there, which is the most misleading pair of facts this
-          # step could produce.
-          if [ -n "${MAILJET_API_KEY:-}" ] && [ -n "${MAILJET_SECRET_KEY:-}" ]; then
-            HAVE_EMAIL=1
-          elif [ -n "${MAILJET_API_KEY:-}" ] || [ -n "${MAILJET_SECRET_KEY:-}" ]; then
-            echo "::error::Only one half of the Mailjet key pair is set for $ENVIRONMENT_NAME. Set both or neither."
-            exit 1
-          else
-            HAVE_EMAIL=0
-          fi
-
-          # Each credential is pushed on its own merit. These two were paired
-          # once - both or neither, the way Stripe's are - back when admin
-          # password reset was the only thing that sent mail and genuinely
-          # needed both halves. That coupling is wrong now and it cost a
-          # deployment to learn: the console's test-send button needs the
-          # channel and NOTHING else, so pairing them withheld the Mailjet
-          # credential from the one feature built to check the Mailjet
-          # credential. A missing Firebase key must not be able to disable
-          # email; it can only disable what actually depends on it.
-          if [ "$HAVE_EMAIL" = "1" ]; then
-            push_env MAILJET_API_KEY    MAILJET_API_KEY
-            push_env MAILJET_SECRET_KEY MAILJET_SECRET_KEY
-          fi
-
+          # Email needs no secret: it is the `send_email` binding in
+          # wrangler.toml, so it is present on every deploy. Only the Firebase
+          # service-account key is pushed here - admin password reset needs it
+          # to mint the link it then mails.
           if [ -n "${FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]; then
             push_env FIREBASE_SERVICE_ACCOUNT_JSON FIREBASE_SERVICE_ACCOUNT_JSON
-          fi
-
-          # The warning still earns its place, because the DEPENDENCY is real
-          # even though the coupling was not: admin password reset needs a
-          # channel to send through and a credential to mint the link with.
-          # With only the channel it fails after a support engineer has told a
-          # customer the mail is coming; with only the Firebase key a live reset
-          # credential is minted for nobody, which is worse.
-          if [ "$HAVE_EMAIL" = "1" ] && [ -n "${FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]; then
-            :
-          elif [ "$HAVE_EMAIL" = "1" ] || [ -n "${FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]; then
-            echo "::warning::Only one of the Mailjet keys / FIREBASE_SERVICE_ACCOUNT_JSON is available for $ENVIRONMENT_NAME. Admin password reset refuses; whatever was present was still pushed, and everything else deploys."
           elif [ "$WORKSPACE" = "dev" ]; then
-            echo "::warning::No email credentials for dev. Admin password reset refuses; everything else deploys."
+            echo "::warning::No FIREBASE_SERVICE_ACCOUNT_JSON for dev. Admin password reset refuses; everything else deploys."
           else
-            echo "::error::No email credentials available for prod. Admin password reset would refuse on a live deployment."
+            echo "::error::No FIREBASE_SERVICE_ACCOUNT_JSON available for prod. Admin password reset would refuse on a live deployment."
             exit 1
           fi
 

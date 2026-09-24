@@ -167,17 +167,12 @@ export interface Env {
   DATABASE_ENCRYPTION_KEY?: string;
 
   /**
-   * Mailjet, pushed by CI via `wrangler secret put`. Absent means the routes
-   * that send refuse rather than reporting a delivery that never happened - the
-   * same fail-closed shape as a missing Stripe key.
-   *
-   * Both halves or neither. The Send API uses the pair as HTTP Basic user and
-   * password, so one without the other authenticates nothing - which is why
-   * readEmailConfig treats a half-set pair as no configuration at all rather
-   * than as something to try.
+   * Cloudflare Email Service, the `send_email` binding in wrangler.toml. No
+   * secret: the binding is the authorization. Absent means the routes that send
+   * refuse rather than reporting a delivery that never happened - the same
+   * fail-closed shape as a missing Stripe key.
    */
-  MAILJET_API_KEY?: string;
-  MAILJET_SECRET_KEY?: string;
+  EMAIL?: SendEmail;
 
   /**
    * A Google service-account key, as the raw JSON, for the privileged Identity

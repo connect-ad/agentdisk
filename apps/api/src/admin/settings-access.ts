@@ -1,7 +1,7 @@
 /**
  * Deployment settings, from the console.
  *
- * One action today: sending a test message. It extends `AuditedAdminAccess`
+ * Two actions: a test send and a composed message. It extends `AuditedAdminAccess`
  * like every other area, so the recording is inherited rather than remembered —
  * a test send is an outbound message from the product's verified sender, and an
  * unrecorded one is a message nobody can later attribute.
@@ -52,5 +52,43 @@ export class AdminSettingsAccess extends AuditedAdminAccess {
 
     await this.recordFleet({ ...record, result: "success" });
     return to;
+  }
+
+  /**
+   * Send an operator-written message, recording either outcome.
+   *
+   * Unlike `sendTest`, the recipient IS a parameter: composing mail to a
+   * customer is the point. What keeps it from being a relay is who can reach
+   * it - only a signed-in console operator - and that every send, including a
+   * refused one, lands in the fleet log under their name. The log keeps the
+   * envelope (sender, recipients, subject, attachment names), never the body.
+   */
+  async sendComposed(
+    envelope: { from: string; to: string[]; subject: string; attachments: string[] },
+    send: () => Promise<void>
+  ): Promise<void> {
+    await this.requireRole("admin", "compose an email");
+
+    const record = {
+      action: "settings.email.composed",
+      targetType: "settings",
+      targetId: "email",
+      // Flattened: fleet metadata holds scalars only.
+      metadata: {
+        from: envelope.from,
+        to: envelope.to.join(", "),
+        subject: envelope.subject,
+        attachments: envelope.attachments.join(", "),
+      },
+    } as const;
+
+    try {
+      await send();
+    } catch (cause) {
+      await this.recordFleet({ ...record, result: "denied" });
+      throw cause;
+    }
+
+    await this.recordFleet({ ...record, result: "success" });
   }
 }

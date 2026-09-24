@@ -7,8 +7,7 @@
 # drifts from it. Never paste real IDs here by hand.
 #
 # Secrets (DATABASE_ENCRYPTION_KEY, SESSION_SIGNING_KEY, STRIPE_*,
-# MAILJET_API_KEY, MAILJET_SECRET_KEY, FIREBASE_SERVICE_ACCOUNT_JSON) are
-# deliberately absent:
+# FIREBASE_SERVICE_ACCOUNT_JSON) are deliberately absent:
 # they are pushed with `wrangler secret put` in CI from GitHub secrets. See
 # docs/design/12-deployment-roadmap-agentdisk-io.md step 18.
 #
@@ -73,6 +72,15 @@ bucket_name = "agentdisk-dev-files"
 binding = "CACHE"
 id = "TF_OUTPUT_kv_namespace_id"
 
+# Cloudflare Email Sending. No credential: the binding is the authorization,
+# and agentdisk.io is onboarded on this account. Not pinned to one sender,
+# because the console's compose screen lets an operator choose the local part;
+# Cloudflare refuses any domain not onboarded, and the compose route refuses
+# anything off agentdisk.io before it gets that far (lib/email.ts
+# SENDING_DOMAIN).
+[[env.dev.send_email]]
+name = "EMAIL"
+
 [[env.dev.queues.producers]]
 binding = "JOBS"
 queue = "agentdisk-dev-jobs"
@@ -111,6 +119,10 @@ bucket_name = "agentdisk-prod-files"
 [[env.prod.kv_namespaces]]
 binding = "CACHE"
 id = "TF_OUTPUT_kv_namespace_id"
+
+# See the note under [[env.dev.send_email]].
+[[env.prod.send_email]]
+name = "EMAIL"
 
 [[env.prod.queues.producers]]
 binding = "JOBS"

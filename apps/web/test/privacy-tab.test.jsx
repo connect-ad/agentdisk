@@ -112,9 +112,11 @@ describe('Privacy → statements of fact', () => {
   it('names the transactional email provider that is actually configured', async () => {
     mount(REALISTIC);
 
-    await screen.findByText('Mailjet');
-    // Resend was simply the wrong vendor -- naming it was the false statement.
+    // Cloudflare Email Service sends it. Resend and then Mailjet were the
+    // earlier vendors -- naming either now would be the false statement.
+    await screen.findByText(/transactional email/i);
     expect(screen.queryByText('Resend')).toBeNull();
+    expect(screen.queryByText('Mailjet')).toBeNull();
   });
 
   it('claims no data residency, because the system has no region concept', async () => {

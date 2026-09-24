@@ -62,7 +62,7 @@ import {
   adminUpdatePlan,
   adminWorkspaceBlastRadius,
 } from "./admin-console";
-import { adminGetEmailSettings, adminTestEmail } from "./admin-settings";
+import { adminComposeEmail, adminGetEmailSettings, adminTestEmail } from "./admin-settings";
 // Type-only, so it is erased at compile time and the index <-> router cycle
 // never exists at runtime.
 import type { Env } from "../index";
@@ -290,6 +290,9 @@ export async function handleAdminRoute(
     }
     if (action === "test" && request.method === "POST") {
       return await adminTestEmail(request, adminDeps);
+    }
+    if (action === "compose" && request.method === "POST") {
+      return await adminComposeEmail(request, adminDeps);
     }
   }
 

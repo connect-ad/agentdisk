@@ -175,6 +175,8 @@ export const adminApi = {
   /* --------------------------------- email ------------------------------- */
   emailSettings: () => request('/v1/admin/settings/email'),
   testEmail: () => request('/v1/admin/settings/email/test', { method: 'POST' }),
+  composeEmail: message =>
+    request('/v1/admin/settings/email/compose', { method: 'POST', body: message }),
 
   /* --------------------------------- plans ------------------------------- */
   listPlans: () => request('/v1/admin/plans'),

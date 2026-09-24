@@ -285,12 +285,12 @@ export async function adminForcePasswordReset(
     throw validationError("A reason is required.");
   }
 
-  // Both halves, checked before anything is written. Either one missing means
-  // the feature is off in this deployment, and saying so plainly beats the
+  // Both dependencies, checked before anything is written. Either one missing
+  // means the feature is off in this deployment, and saying so plainly beats the
   // alternative shape - reporting success for a message nobody will receive.
   if (deps.email === null) {
     throw new ApiError("INTERNAL_ERROR", "Email delivery is not configured.", {
-      internalReason: "MAILJET_API_KEY / MAILJET_SECRET_KEY are not both set",
+      internalReason: "the EMAIL send_email binding is not configured",
     });
   }
   if (deps.firebaseAdmin === null) {

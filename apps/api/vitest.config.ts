@@ -51,13 +51,11 @@ export default defineConfig(async () => {
             // upload and download routes would go untested.
             R2_ACCESS_KEY_ID: "test-access-key-id",
             R2_SECRET_ACCESS_KEY: "test-secret-access-key",
-            // Staff password reset refuses without these, so every test of
-            // it would assert the refusal and none would reach the send. The
-            // outbound calls are stubbed per-test; these only have to be
-            // present and well-formed. Both Mailjet halves, because
-            // readEmailConfig treats a half-set pair as not configured.
-            MAILJET_API_KEY: "test-mailjet-api-key",
-            MAILJET_SECRET_KEY: "test-mailjet-secret-key",
+            // Staff password reset refuses without this, so every test of it
+            // would assert the refusal and none would reach the send. The
+            // outbound call is stubbed per-test; it only has to be present and
+            // well-formed. Email needs no entry here: the EMAIL send_email
+            // binding comes from wrangler.toml, and Miniflare simulates it.
             FIREBASE_SERVICE_ACCOUNT_JSON: serviceAccountJson,
           },
         },

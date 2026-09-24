@@ -317,6 +317,36 @@ export async function createCheckoutSession(
     metadata: { agentdisk_org_id: org.id, agentdisk_plan: plan.id },
     invoice_creation: { enabled: true },
     allow_promotion_codes: true,
+
+    /* ------------------------------- tax -------------------------------- */
+    //
+    // Stripe Tax is enabled on the account, but that is a capability rather
+    // than an instruction: the dashboard's "calculate automatically" default
+    // covers Payment Links and invoices raised in the dashboard, and an
+    // API-created Checkout Session has to ask. Without this line the session is
+    // created with tax calculation off however the account is configured, and
+    // the failure is silent — a correct-looking charge for the list price with
+    // no tax row on it.
+    //
+    // AgentDisk is a Delaware corporation selling digital services worldwide,
+    // so the supplier of record is the company: Stripe computes and reports,
+    // it does not register or file. This line is the computation, not the
+    // obligation.
+    automatic_tax: { enabled: true },
+
+    // Required, and not only because `automatic_tax` needs somewhere to send
+    // the question. EU rules for digital services want two non-contradictory
+    // pieces of evidence of where the customer is, and the card's country is
+    // one. **This is the part that cannot be recovered later** — a charge taken
+    // without an address is a charge whose jurisdiction has to be reconstructed
+    // from Stripe a year afterwards, if it can be established at all.
+    billing_address_collection: "required",
+
+    // So a business customer can enter a VAT or GST number. With one, the
+    // reverse charge applies and they can reclaim; without the field they
+    // simply absorb the tax, which is the quiet reason a B2B customer does not
+    // come back.
+    tax_id_collection: { enabled: true },
   });
 
   if (session.url === null) {

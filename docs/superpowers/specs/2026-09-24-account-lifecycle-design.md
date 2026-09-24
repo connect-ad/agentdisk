@@ -4,6 +4,27 @@
 **Start:** a stranger signs up. **End:** their data is gone and nothing about
 them blocks anything.
 
+> ## Superseded in one respect, 25 September 2026
+>
+> **Auto-renewal came back**, and yearly billing arrived with it. Subscriptions
+> bill themselves; Stripe owns dunning and retries. Everything below about the
+> *shape* of the lifecycle still holds — the ten stages, the two rules, the
+> named exits — and one thing does not: **the trigger for `lapse` is no longer
+> "the period ran out with nobody buying another", it is "the renewal charge
+> failed".**
+>
+> Concretely, wherever this document says a stage is anchored on
+> `current_period_end`, the anchor is now `past_due_since`. Under auto-renewal a
+> period end is a non-event: Stripe charges and mirrors in a new one, so an
+> account sitting past its period end is almost always one that renewed
+> perfectly. Read `lib/renewal.ts` and migration `0029_auto_renewal_yearly.sql`
+> for what replaced it.
+>
+> The document is kept rather than rewritten because the reasoning that produced
+> it — the ten stages, and the finding that three of them did not exist — is
+> what made the ending get built at all, and that ending survived the reversal
+> untouched.
+
 ## Why this document exists
 
 The manual-renewal work shipped on 23 September built a complete *beginning* and

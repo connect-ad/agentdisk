@@ -515,35 +515,19 @@ were not touched. See `backlog/002`.
   instant and reversible, so it is the right first move in every scenario ending
   in deletion, and it gives the customer a chance to notice. A user row is
   scrubbed, never removed — it is what an `audit_events` actor id resolves to.
-- **The catalogue reconciles itself hourly, and that is not a convenience.**
-  `jobs/catalogue-sync.ts` replays `syncProductToPlan` — the same upsert the
-  `product.*` webhook runs — over every active Stripe product on each cron tick.
-  Before it existed the catalogue had two writers and both were *events*: a
-  webhook, and an operator pressing Reconcile. Neither fires in a freshly
-  migrated environment, because migration 0012 seeds NULL price ids and the
-  products were created in Stripe months earlier — so **every paid plan rendered
-  as "Not available" until somebody remembered a button**, which is a bootstrap
-  step wearing an operational disguise. It also heals a webhook Stripe retried
-  into a 500 and a dashboard edit made mid-deploy, both of which are invisible:
-  the pricing table renders, it is simply wrong. **No enable flag**, unlike the
-  sweeps beside it, because it destroys nothing — the worst it writes is the
-  prices Stripe currently holds. It takes a `Stripe | null` rather than a key so
-  it can be handed a stub, the same shape as `admin/billing-access.ts`.
-- **Yearly prices are minted by the deploy, and the idempotency is the point.**
-  `apps/api/scripts/ensure-yearly-prices.mjs` runs on every backend deploy and
-  creates a yearly price for any plan sold monthly that has none. It is the
-  surviving half of `infra/stripe-catalogue/`, rebuilt so it cannot repeat that
-  root's failure: **it keeps no state at all.** The Terraform module was deleted
-  because Terraform held no state for the products it had created, so the next
-  apply would have made a second set; this asks Stripe the question that matters
-  — *does this product already have an active yearly price?* — and acts only on
-  no. Run it a hundred times and the hundredth is a no-op.
-  **It checks for a yearly price, never for a `lookup_key`**, because Stripe
-  frees a lookup key when a price is archived: after an operator raises the
-  yearly price in the console, a key-based check would re-create the superseded
-  price at the old amount. It adds only — never edits, never archives, never
-  touches a product — because changing a price decides what new customers pay
-  and that belongs to a person in the console.
+- **The plan catalogue is changed by a person in the admin console, and by
+  nothing else — no cron, no deploy step.** Owner's decision, 25 September 2026,
+  after both were built and removed the same evening. The rule that kills them
+  is already here: *pulling from Stripe is always a diff the operator confirms
+  field by field, because a one-click pull can bill real customers the wrong
+  amount.* An hourly reconcile is a **zero**-click pull. It also rewrites every
+  entitlement column from `Product.metadata` and writes no `admin_actions` row,
+  so a silent change to what customers are entitled to would leave nothing
+  saying who or what did it — which is the opposite of what `AuditedAdminAccess`
+  exists to guarantee. The `product.*` webhook stays, because it records a
+  change somebody deliberately made in Stripe; what is refused is *unattended*
+  reconciliation on a timer. A stale catalogue is found and fixed by pressing
+  Sync, which is a person choosing to.
 - **The plan catalogue has exactly one *human* writer: the admin console.** The four
   products were created once in Stripe (18 Sept 2026) and
   `infra/stripe-catalogue/` was deleted the same day. That was not tidying:
@@ -684,7 +668,7 @@ live deployment rather than inferred from the code — see
 person can follow.
 
 ```
-apps/api    923 tests across 48 files · typecheck clean
+apps/api    916 tests across 47 files · typecheck clean
 apps/web    333 tests across 24 files · build clean
 apps/admin   52 tests across 4 files · build clean · 110 KiB gzipped
 Worker      226 KiB gzipped, against Cloudflare's 1 MB limit

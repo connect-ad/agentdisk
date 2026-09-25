@@ -80,6 +80,8 @@ import { preflightResponse, withCorsHeaders } from "./lib/cors";
 import { expireUnclaimedWorkspaces } from "./jobs/sandbox-expiry";
 import { purgeAdminDeleted } from "./jobs/admin-purge";
 import { runRenewalLadder } from "./jobs/billing-renewal";
+import { syncCatalogueFromStripe } from "./jobs/catalogue-sync";
+import { stripeClient } from "./billing/stripe";
 import { readEmailConfig } from "./lib/email";
 
 export interface Env {
@@ -948,6 +950,42 @@ export default {
             JSON.stringify({
               level: "error",
               message: "share purge run failed",
+              reason: err instanceof Error ? err.message : String(err),
+            })
+          );
+        }
+
+        // The catalogue, reconciled from Stripe.
+        //
+        // First in intent if not in order: without it a freshly migrated
+        // environment renders every paid plan as "Not available" until somebody
+        // presses Reconcile in the console, because migration 0012 seeds NULL
+        // price ids and the products were created in Stripe months earlier —
+        // so no webhook is coming. That is a bootstrap step, not an operational
+        // one, and it has no business being a human's job.
+        //
+        // **No enable flag**, unlike the three sweeps above: this destroys
+        // nothing. The worst it can write is the prices Stripe currently holds.
+        try {
+          const catalogue = await syncCatalogueFromStripe(
+            env.DB,
+            env.STRIPE_SECRET_KEY === undefined || env.STRIPE_SECRET_KEY === ""
+              ? null
+              : stripeClient(env.STRIPE_SECRET_KEY),
+            now
+          );
+          console.log(
+            JSON.stringify({
+              level: catalogue.withoutPrice.length > 0 ? "warn" : "info",
+              message: "catalogue sync run",
+              ...catalogue,
+            })
+          );
+        } catch (err) {
+          console.log(
+            JSON.stringify({
+              level: "error",
+              message: "catalogue sync run failed",
               reason: err instanceof Error ? err.message : String(err),
             })
           );

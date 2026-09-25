@@ -515,7 +515,21 @@ were not touched. See `backlog/002`.
   instant and reversible, so it is the right first move in every scenario ending
   in deletion, and it gives the customer a chance to notice. A user row is
   scrubbed, never removed — it is what an `audit_events` actor id resolves to.
-- **The plan catalogue has exactly one writer: the admin console.** The four
+- **The catalogue reconciles itself hourly, and that is not a convenience.**
+  `jobs/catalogue-sync.ts` replays `syncProductToPlan` — the same upsert the
+  `product.*` webhook runs — over every active Stripe product on each cron tick.
+  Before it existed the catalogue had two writers and both were *events*: a
+  webhook, and an operator pressing Reconcile. Neither fires in a freshly
+  migrated environment, because migration 0012 seeds NULL price ids and the
+  products were created in Stripe months earlier — so **every paid plan rendered
+  as "Not available" until somebody remembered a button**, which is a bootstrap
+  step wearing an operational disguise. It also heals a webhook Stripe retried
+  into a 500 and a dashboard edit made mid-deploy, both of which are invisible:
+  the pricing table renders, it is simply wrong. **No enable flag**, unlike the
+  sweeps beside it, because it destroys nothing — the worst it writes is the
+  prices Stripe currently holds. It takes a `Stripe | null` rather than a key so
+  it can be handed a stub, the same shape as `admin/billing-access.ts`.
+- **The plan catalogue has exactly one *human* writer: the admin console.** The four
   products were created once in Stripe (18 Sept 2026) and
   `infra/stripe-catalogue/` was deleted the same day. That was not tidying:
   Terraform held no state for those products, so an apply would have created a
@@ -655,7 +669,7 @@ live deployment rather than inferred from the code — see
 person can follow.
 
 ```
-apps/api    914 tests across 47 files · typecheck clean
+apps/api    923 tests across 48 files · typecheck clean
 apps/web    333 tests across 24 files · build clean
 apps/admin   52 tests across 4 files · build clean · 110 KiB gzipped
 Worker      226 KiB gzipped, against Cloudflare's 1 MB limit

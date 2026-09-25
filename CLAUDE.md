@@ -529,6 +529,21 @@ were not touched. See `backlog/002`.
   sweeps beside it, because it destroys nothing — the worst it writes is the
   prices Stripe currently holds. It takes a `Stripe | null` rather than a key so
   it can be handed a stub, the same shape as `admin/billing-access.ts`.
+- **Yearly prices are minted by the deploy, and the idempotency is the point.**
+  `apps/api/scripts/ensure-yearly-prices.mjs` runs on every backend deploy and
+  creates a yearly price for any plan sold monthly that has none. It is the
+  surviving half of `infra/stripe-catalogue/`, rebuilt so it cannot repeat that
+  root's failure: **it keeps no state at all.** The Terraform module was deleted
+  because Terraform held no state for the products it had created, so the next
+  apply would have made a second set; this asks Stripe the question that matters
+  — *does this product already have an active yearly price?* — and acts only on
+  no. Run it a hundred times and the hundredth is a no-op.
+  **It checks for a yearly price, never for a `lookup_key`**, because Stripe
+  frees a lookup key when a price is archived: after an operator raises the
+  yearly price in the console, a key-based check would re-create the superseded
+  price at the old amount. It adds only — never edits, never archives, never
+  touches a product — because changing a price decides what new customers pay
+  and that belongs to a person in the console.
 - **The plan catalogue has exactly one *human* writer: the admin console.** The four
   products were created once in Stripe (18 Sept 2026) and
   `infra/stripe-catalogue/` was deleted the same day. That was not tidying:

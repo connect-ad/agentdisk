@@ -384,6 +384,27 @@ jobs:
         working-directory: apps/api
         run: npx wrangler deploy --env "$WORKSPACE"
 
+      # The catalogue's missing half.
+      #
+      # `infra/stripe-catalogue/` created the products and their monthly prices
+      # and was deleted on 18 Sept 2026, because Terraform held no state for
+      # them and the next apply would have created a second set carrying the
+      # same package_ids. This replaces the part still needed without
+      # reintroducing that failure: it keeps no state, asks Stripe whether each
+      # product already has an active yearly price, and creates one only when
+      # the answer is no. It never edits or archives anything.
+      #
+      # Idempotent by construction, so running it on every deploy is a no-op
+      # after the first. `continue-on-error` because a Stripe outage must not
+      # fail a deploy that has already succeeded — the Worker is live by this
+      # point, and the next push retries this.
+      - name: Ensure yearly prices exist in Stripe
+        working-directory: apps/api
+        continue-on-error: true
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        run: node scripts/ensure-yearly-prices.mjs
+
       - name: Smoke test
         working-directory: apps/api
         run: node scripts/smoke-test.mjs "$API_URL" "$WORKSPACE"

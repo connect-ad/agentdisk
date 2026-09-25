@@ -60,8 +60,12 @@ import {
  * Giving the actions their own track fixes both: SYNC now labels only the
  * status, and the buttons have room to sit without pushing anything.
  */
+// Price is 92px rather than the 68 it was. Two figures stack there now —
+// monthly over yearly — and at 68 "$204 /yr" wrapped onto three lines with
+// "yr" alone on the last, which read as a broken table rather than a narrow
+// column. The row's minWidth below carries the same 24px.
 const COLS =
-  'minmax(120px,1.1fr) 68px 84px 58px 70px 86px minmax(90px,1fr) 160px 76px';
+  'minmax(120px,1.1fr) 92px 84px 58px 70px 86px minmax(90px,1fr) 160px 76px';
 
 /**
  * See the `height` prop on the editor's Modal.
@@ -216,7 +220,7 @@ export function Plans({ role, onToast }) {
       ) : (
         <div style={card}>
           <div style={{ overflowX: 'auto' }}>
-            <div style={{ minWidth: '820px' }}>
+            <div style={{ minWidth: '844px' }}>
               <div style={headRow(COLS, true)}>
                 <span style={{ ...cell(true), ...th }}>Plan</span>
                 <span style={{ ...cell(), ...th, justifyContent: 'flex-end' }}>Price</span>
@@ -248,15 +252,37 @@ export function Plans({ role, onToast }) {
                     </span>
 
                     <span style={{ ...cell(), ...mono, fontSize: '11.5px', color: 'var(--tx)', justifyContent: 'flex-end' }}>
-                      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                        <span>{money(plan.amount_cents, plan.currency)}</span>
+                      <span
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'flex-end',
+                          lineHeight: 1.35
+                        }}
+                      >
+                        {/* The cadence is only spelled out when there are two
+                            figures to tell apart. On Free, and on a plan sold
+                            monthly only, "$0 /mo" would be answering a question
+                            nobody asked. */}
+                        <span style={{ whiteSpace: 'nowrap' }}>
+                          {money(plan.amount_cents, plan.currency)}
+                          {plan.amount_cents_yearly ? (
+                            <span style={{ color: 'var(--tx3)' }}>/mo</span>
+                          ) : null}
+                        </span>
                         {/* The yearly price beneath, in muted ink. Its absence
                             is a real state — a plan sold monthly only — so an
                             empty line here means something rather than being a
                             gap in the data. */}
                         {plan.amount_cents_yearly ? (
-                          <span style={{ color: 'var(--tx3)', fontSize: '10.5px' }}>
-                            {money(plan.amount_cents_yearly, plan.currency)} / yr
+                          <span
+                            style={{
+                              color: 'var(--tx3)',
+                              fontSize: '10.5px',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {money(plan.amount_cents_yearly, plan.currency)}/yr
                           </span>
                         ) : null}
                       </span>

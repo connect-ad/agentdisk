@@ -386,6 +386,46 @@ describe("day +7 · deletion scheduling", () => {
     expect((await org()).purge_after).toBeNull();
   });
 
+  it("waits out the full grace even when Stripe gives up early", async () => {
+    // **The grace belongs to us, not to Stripe's retry schedule.** That
+    // schedule lives in the Stripe dashboard where nothing here can read it,
+    // and a short one — say two attempts at +1 and +3 days — cancels the
+    // subscription on day four. The webhook then writes `expired` on day four.
+    //
+    // Selecting on `expired` alone would stamp the account immediately and
+    // send "your data is scheduled for deletion" to somebody who was told
+    // three days earlier that we would keep trying until day seven. The
+    // customer gets the window the emails promised, whatever Stripe is
+    // configured to do.
+    await setDunning(NOW - 4 * DAY, "expired");
+
+    const early = await run();
+    expect(early.deletionsScheduled).toBe(0);
+    expect((await org()).purge_after).toBeNull();
+    expect(sent.some(m => /scheduled for deletion/i.test(m.subject))).toBe(false);
+
+    // Day seven, counted from the failure. Now it is owed.
+    const late = await run({ now: NOW + 3 * DAY });
+    expect(late.deletionsScheduled).toBe(1);
+    expect((await org()).purge_after).not.toBeNull();
+  });
+
+  it("stamps an account that reached expiry with no dunning run at all", async () => {
+    // A NULL stamp means it got here by some route that never opened one —
+    // a hand-set state, or a subscription deleted outside the dunning path.
+    // There is no window to wait out, so it is due now rather than never.
+    await env.DB.prepare(
+      `UPDATE organizations SET billing_status = 'expired', plan = 'pro',
+              past_due_since = NULL, current_period_end = ?, purge_after = NULL
+        WHERE id = ?`
+    )
+      .bind(NOW - 30 * DAY, ORG_ID)
+      .run();
+
+    const result = await run();
+    expect(result.deletionsScheduled).toBe(1);
+  });
+
   it("tells them, and says starting a plan again still undoes it", async () => {
     // Scheduling the deletion of a customer's files without saying so at the
     // moment it happens is indefensible.

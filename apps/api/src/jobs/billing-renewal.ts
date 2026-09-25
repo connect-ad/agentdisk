@@ -342,15 +342,33 @@ export async function runRenewalLadder(deps: RenewalDeps): Promise<RenewalResult
   // Deletion scheduling. `purge_after IS NULL` is the idempotence guard, and it
   // is also what makes a recovery stick: a successful payment clears the stamp
   // and moves the row back to `active`, so this query cannot rewrite it.
+  //
+  // ── The grace is counted here, not inherited from Stripe ─────────────────
+  // `expired` alone is not enough, and the reason is the whole seven days.
+  // Stripe reaches `expired` by cancelling the subscription when its retry
+  // schedule runs out, and **that schedule is configured in the Stripe
+  // dashboard where nothing here can read it.** A three-attempt schedule of
+  // 1 + 3 days gives up on day four; selecting on `expired` alone would then
+  // stamp the account on day four and send "your data is scheduled for
+  // deletion" to somebody who was told three days earlier that we would keep
+  // trying until day seven.
+  //
+  // So the grace is measured from `past_due_since` on our side. Whatever
+  // Stripe is set to do, the customer gets the window the emails promised —
+  // and a shorter retry schedule now costs nothing but a quieter few days.
+  //
+  // A NULL stamp means the account reached `expired` by some route that never
+  // opened a dunning run, which has no window to wait out.
   const pastGrace = await db
     .prepare(
       `${SELECT_CANDIDATE}
         WHERE o.billing_status = 'expired'
           AND o.purge_after IS NULL
+          AND (o.past_due_since IS NULL OR o.past_due_since <= ?)
         ORDER BY COALESCE(o.past_due_since, o.current_period_end) ASC
         LIMIT ?`
     )
-    .bind(limit)
+    .bind(now - RENEWAL_GRACE_MS, limit)
     .all<CandidateRow>();
 
   result.candidates.deletion = (pastGrace.results ?? []).map(asCandidate);

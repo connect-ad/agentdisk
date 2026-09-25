@@ -324,16 +324,19 @@ were not touched. See `backlog/002`.
   deliberately the thin half of the pair and binds the subscription id alone,
   so there is one code path settling entitlements rather than two that must
   agree forever.
-- **The grace window and Stripe's dunning are the same seven days, by
-  configuration.** Stripe is configured to retry a failed card for 7 days and
-  then cancel, matching `RENEWAL_GRACE_MS`. Its default Smart Retries schedule
-  is roughly three weeks, which would purge an account eleven days before Stripe
-  stopped trying to collect from it. **Nothing in this repository can assert
-  that setting** — it lives in the Stripe dashboard, same category as the
-  webhook endpoint's subscribed event list. The ladder is anchored on
-  `organizations.past_due_since`, never on the period end: under auto-renewal a
-  period end is a non-event, so expiring on it would lock out paying customers
-  on every renewal day.
+- **The grace is ours and is counted from `organizations.past_due_since`, never
+  inherited from Stripe's retry schedule.** That schedule lives in the Stripe
+  dashboard where nothing here can read it, and getting either direction wrong
+  is a real defect: a window longer than the grace (the ~3-week Smart Retries
+  default) would warn somebody their data is scheduled for deletion while
+  Stripe was still collecting from them, and a shorter one (two attempts at +1
+  and +3 days gives up on day four) would collapse the seven days the emails
+  promised into four. **So the scheduling pass requires the full
+  `RENEWAL_GRACE_MS` to have elapsed on our side**, whatever Stripe does, and a
+  short retry schedule now costs nothing but a quieter few days. The ladder is
+  anchored on `past_due_since` rather than the period end for a separate
+  reason: under auto-renewal a period end is a non-event, so expiring on one
+  would lock out paying customers on every renewal day.
 - **Both halves of the ladder are belt and braces, deliberately.** The webhook
   moves an account to `expired` when Stripe gives up, and the job's first pass
   reaches the same state from our own clock once the grace elapses. Either alone

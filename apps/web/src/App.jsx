@@ -282,8 +282,8 @@ function WorkspaceLayout() {
    */
   const ACCOUNT_AREA = [
     { label: 'Account', to: `${wsRoot}/profile`, where: 'Account' },
-    // "Manage Subscription", not "Billing". Under manual renewal this is where
-    // somebody comes to buy or renew a month, not merely to read an invoice,
+    // "Manage Subscription", not "Billing". This is where somebody comes to
+    // choose a plan, switch cadence or cancel — not merely to read an invoice —
     // and the label has to name the action. The path stays `/billing`: renaming
     // a URL breaks every existing bookmark and support link for nothing.
     { label: 'Manage Subscription', to: `${wsRoot}/billing`, where: 'Manage Subscription' },

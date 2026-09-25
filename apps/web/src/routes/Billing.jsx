@@ -32,7 +32,7 @@ export default function Billing() {
       <h2 className="ds__h2">Manage Subscription</h2>
       <p className="ds__sub acct__sub">
         Plan and payment for the organization that owns this workspace. One bill covers
-        every workspace on the account, and nothing renews automatically.
+        every workspace on the account.
       </p>
       <BillingTab />
     </div>

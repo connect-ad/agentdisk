@@ -890,7 +890,13 @@
    table is a form nobody can scan. */
 .acct{display:flex;flex-direction:column;gap:var(--s-6)}
 .acct--account{max-width:42.5rem}
-.acct--billing{max-width:47.5rem}
+/* Billing outgrew the reference's 760px. That measure was drawn for two hero
+   cards and nothing else; the plan picker beneath them holds four, and four
+   columns need 4x13rem plus three 1rem gaps — 55rem — so at 47.5rem the fourth
+   plan wrapped to its own row with the rest of the width left empty. The prose
+   above is unaffected: `.ds__sub` caps itself at 70ch, so widening the
+   container does not stretch a paragraph past a readable line. */
+.acct--billing{max-width:60rem}
 .acct--support{max-width:40rem}
 .acct__sub{margin-top:calc(var(--s-3) * -1)}
 

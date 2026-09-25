@@ -245,56 +245,15 @@ export async function createCheckoutSession(
   // redirect — through Stripe's return, which is a worse place to bounce.
   const workspacePath = `${deps.dashboardUrl}/w/${ctx.workspace.slug ?? ctx.workspaceId}/billing`;
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    customer: customerId,
-    line_items: [{ price: priceIdFor(plan, interval)!, quantity: 1 }],
-    success_url: `${workspacePath}?checkout=success`,
-    cancel_url: `${workspacePath}?checkout=cancelled`,
-    // Both so that a Stripe-side investigation can reach the account from
-    // either the session or the subscription it produces, without matching on
-    // an email that may be shared.
-    client_reference_id: org.id,
-    // On the subscription, not only the session. The subscription outlives the
-    // session by definition, and every later `customer.subscription.*` event
-    // carries this metadata with it — which is what lets a support engineer
-    // reading a Stripe event resolve it to an account without a lookup.
-    subscription_data: {
-      metadata: { agentdisk_org_id: org.id, agentdisk_plan: plan.id },
-    },
-    metadata: { agentdisk_org_id: org.id, agentdisk_plan: plan.id },
-    allow_promotion_codes: true,
-
-    /* ------------------------------- tax -------------------------------- */
-    //
-    // Stripe Tax is enabled on the account, but that is a capability rather
-    // than an instruction: the dashboard's "calculate automatically" default
-    // covers Payment Links and invoices raised in the dashboard, and an
-    // API-created Checkout Session has to ask. Without this line the session is
-    // created with tax calculation off however the account is configured, and
-    // the failure is silent — a correct-looking charge for the list price with
-    // no tax row on it.
-    //
-    // AgentDisk is a Delaware corporation selling digital services worldwide,
-    // so the supplier of record is the company: Stripe computes and reports,
-    // it does not register or file. This line is the computation, not the
-    // obligation.
-    automatic_tax: { enabled: true },
-
-    // Required, and not only because `automatic_tax` needs somewhere to send
-    // the question. EU rules for digital services want two non-contradictory
-    // pieces of evidence of where the customer is, and the card's country is
-    // one. **This is the part that cannot be recovered later** — a charge taken
-    // without an address is a charge whose jurisdiction has to be reconstructed
-    // from Stripe a year afterwards, if it can be established at all.
-    billing_address_collection: "required",
-
-    // So a business customer can enter a VAT or GST number. With one, the
-    // reverse charge applies and they can reclaim; without the field they
-    // simply absorb the tax, which is the quiet reason a B2B customer does not
-    // come back.
-    tax_id_collection: { enabled: true },
-  });
+  const session = await stripe.checkout.sessions.create(
+    checkoutSessionParams({
+      priceId: priceIdFor(plan, interval)!,
+      customerId,
+      orgId: org.id,
+      planId: plan.id,
+      workspacePath,
+    })
+  );
 
   if (session.url === null) {
     throw new ApiError("INTERNAL_ERROR", "Could not start checkout.", {
@@ -700,4 +659,116 @@ async function ensureCustomer(
 
   await attachStripeCustomer(db, org.id, customer.id, now);
   return customer.id;
+}
+
+/* --------------------------- the session itself --------------------------- */
+
+/**
+ * Every parameter of the Checkout Session, as a value.
+ *
+ * ── Why this is a function and not an object literal at the call site ──────
+ * Because the call site is unreachable from the tests. Every checkout test is
+ * a refusal that returns *before* the outbound Stripe call, and that is not
+ * laziness — a suite that really created sessions would be talking to Stripe on
+ * every run. The consequence is a blind spot exactly the shape of this object,
+ * and it has now shipped two defects that made **every purchase fail** with the
+ * suite green:
+ *
+ *   the price type     a recurring price in `mode: "payment"`, which Stripe
+ *                      refuses outright
+ *   `customer_update`  absent beside `automatic_tax` and an existing customer,
+ *                      which Stripe also refuses outright
+ *
+ * Both were found from a screenshot rather than from a test. Pulling the object
+ * out makes it an ordinary value with ordinary assertions on it, so the third
+ * one is found by `npm test`.
+ *
+ * What this still cannot check is whether Stripe *accepts* the combination.
+ * Only a live session does that, which is why `backlog/001` keeps a live pass
+ * on its verification list — neither defect above was a test that was wrong,
+ * they were tests that did not exist.
+ */
+export interface CheckoutParams {
+  priceId: string;
+  customerId: string;
+  orgId: string;
+  planId: string;
+  /** The billing page to return to, without the query string. */
+  workspacePath: string;
+}
+
+export function checkoutSessionParams(
+  input: CheckoutParams
+): Stripe.Checkout.SessionCreateParams {
+  return {
+    mode: "subscription",
+    customer: input.customerId,
+    line_items: [{ price: input.priceId, quantity: 1 }],
+    success_url: `${input.workspacePath}?checkout=success`,
+    cancel_url: `${input.workspacePath}?checkout=cancelled`,
+    // Both so that a Stripe-side investigation can reach the account from
+    // either the session or the subscription it produces, without matching on
+    // an email that may be shared.
+    client_reference_id: input.orgId,
+    // On the subscription, not only the session. The subscription outlives the
+    // session by definition, and every later `customer.subscription.*` event
+    // carries this metadata with it — which is what lets a support engineer
+    // reading a Stripe event resolve it to an account without a lookup.
+    subscription_data: {
+      metadata: { agentdisk_org_id: input.orgId, agentdisk_plan: input.planId },
+    },
+    metadata: { agentdisk_org_id: input.orgId, agentdisk_plan: input.planId },
+    allow_promotion_codes: true,
+
+    /* ------------------------------- tax -------------------------------- */
+    //
+    // Stripe Tax is enabled on the account, but that is a capability rather
+    // than an instruction: the dashboard's "calculate automatically" default
+    // covers Payment Links and invoices raised in the dashboard, and an
+    // API-created Checkout Session has to ask. Without this line the session is
+    // created with tax calculation off however the account is configured, and
+    // the failure is silent — a correct-looking charge for the list price with
+    // no tax row on it.
+    //
+    // AgentDisk is a Delaware corporation selling digital services worldwide,
+    // so the supplier of record is the company: Stripe computes and reports,
+    // it does not register or file. This line is the computation, not the
+    // obligation.
+    automatic_tax: { enabled: true },
+
+    // Required, and not only because `automatic_tax` needs somewhere to send
+    // the question. EU rules for digital services want two non-contradictory
+    // pieces of evidence of where the customer is, and the card's country is
+    // one. **This is the part that cannot be recovered later** — a charge taken
+    // without an address is a charge whose jurisdiction has to be reconstructed
+    // from Stripe a year afterwards, if it can be established at all.
+    billing_address_collection: "required",
+
+    // So a business customer can enter a VAT or GST number. With one, the
+    // reverse charge applies and they can reclaim; without the field they
+    // simply absorb the tax, which is the quiet reason a B2B customer does not
+    // come back.
+    tax_id_collection: { enabled: true },
+
+    // **Required, and its absence made every checkout fail.**
+    //
+    // Stripe refuses a session that enables `automatic_tax` against an
+    // *existing* customer unless it is also told it may write the collected
+    // address back: it has to compute tax from an address, the customer object
+    // is where that address lives, and it will not silently ignore a stale one.
+    // Every account here reaches checkout with a customer already created —
+    // `ensureCustomer` makes one before the session — so this was not an edge
+    // case. It was the only path, and it returned 500 on the first real press
+    // of Subscribe.
+    //
+    // Nothing caught it because the outbound Stripe call is the one thing the
+    // checkout suite cannot reach: every test there is a refusal that returns
+    // before it. That is the same blind spot the price-type inversion lived in,
+    // which is twice now — and both times the discovery was a screenshot.
+    //
+    // `name` travels with it for the same reason: a billing address without the
+    // name it belongs to is a worse invoice, and Checkout has just collected
+    // both.
+    customer_update: { address: "auto", name: "auto" },
+  };
 }

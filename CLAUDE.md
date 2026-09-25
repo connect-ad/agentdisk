@@ -308,6 +308,24 @@ were not touched. See `backlog/002`.
   **`plans` holds two prices per row** (`stripe_price_id` is the monthly one and
   keeps its 0007 name; `stripe_yearly_price_id` is the other), and the client
   names our plan id plus an interval, never a Stripe price.
+- **The Checkout Session's parameters are a value, and that is the fix for a
+  blind spot that shipped two outages.** `checkoutSessionParams` in
+  `routes/billing.ts` builds the object; `test/checkout-params.test.ts` asserts
+  it. Every test in `checkout.test.ts` is a refusal that returns *before* the
+  outbound Stripe call — correctly, because a suite that really created sessions
+  would talk to Stripe on every run — so nothing could see the object itself.
+  Two defects went out through that gap and **each made every purchase in the
+  product fail with the suite green**: a recurring price in `mode: "payment"`
+  (23 Sept), and `automatic_tax` against an existing `customer` with no
+  `customer_update` (25 Sept). Both were found from screenshots. A third will be
+  found by `npm test`. **Stripe still has to accept the combination**, which
+  only a live session proves — neither defect was a test that was wrong, they
+  were tests that did not exist.
+- **`automatic_tax` with an existing customer requires
+  `customer_update: { address: "auto" }`.** Stripe has to compute tax from an
+  address, the customer object is where one lives, and it refuses to either use
+  a stale one or ignore the field. `ensureCustomer` creates a customer before
+  every session, so there is no path where this is optional.
 - **The price type and the checkout mode are one contract.** Stripe refuses a
   one-time price in `mode: "subscription"` and a recurring price in
   `mode: "payment"`, and for two days in September this repository had the pair
@@ -668,7 +686,7 @@ live deployment rather than inferred from the code — see
 person can follow.
 
 ```
-apps/api    916 tests across 47 files · typecheck clean
+apps/api    925 tests across 48 files · typecheck clean
 apps/web    333 tests across 24 files · build clean
 apps/admin   52 tests across 4 files · build clean · 110 KiB gzipped
 Worker      226 KiB gzipped, against Cloudflare's 1 MB limit

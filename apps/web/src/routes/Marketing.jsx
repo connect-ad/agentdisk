@@ -300,7 +300,15 @@ export function Landing() {
                 iconRight={<Icon name="chevronRight" size={16} />}>
                 Start free
               </Button>
-              <Button size="lg" variant="secondary" as={Link} to="/docs">Read the docs</Button>
+              {/* Straight to the docs' guided quick start, which writes a
+                  path for the goal and the tool you pick. "Read the docs"
+                  stays as the quiet third way in, for the person who would
+                  rather read the whole thing. */}
+              <Button size="lg" variant="secondary" as={Link} to="/docs/quickstart"
+                iconRight={<Icon name="chevronRight" size={16} />}>
+                Quick start
+              </Button>
+              <Link to="/docs" className="mk__ctalink">Read the docs</Link>
             </div>
             <div className="mk__tags">
               {HERO_TAGS.map(t => <span key={t} className="mk__tag">{t}</span>)}

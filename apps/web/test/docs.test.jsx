@@ -117,7 +117,7 @@ describe('docs page', () => {
     expect(screen.getByText('Now pick the tool you use.')).toBeTruthy();
     await user.click(screen.getByLabelText('Cursor'));
     expect(guideOut().getByText('Add AgentDisk to Cursor')).toBeTruthy();
-    expect(guideOut().getByRole('link', { name: 'Open the sandbox →' }).getAttribute('href')).toBe('/sandbox');
+    expect(guideOut().getByRole('link', { name: /Open the sandbox/ }).getAttribute('href')).toBe('/sandbox');
     expect(guideOut().getByText('KEEP WHAT YOU BUILT')).toBeTruthy();
     // A script needs no client and gets the REST path instead.
     await user.click(screen.getByLabelText(/Script against the REST API/));

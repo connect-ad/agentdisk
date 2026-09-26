@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
+import { Icon } from '../components/index.js';
 import { Nav, Footer } from './Marketing.jsx';
 
 /**
@@ -615,6 +616,20 @@ function guideSteps(goal, chosen) {
   };
 }
 
+/**
+ * The box has to look like a thing you operate, not a callout you read past:
+ * it was a tinted panel of four plain cards, and people scrolled by it.
+ * Three things now say "interactive" without a word of instruction — a
+ * question in the display face with a three-stop trail beside it that lights
+ * up as you answer, a radio mark on every card that fills when chosen, and a
+ * Start over control once a path exists. The stops are a real sequence (goal,
+ * tool, path), which is what earns them their numbers.
+ *
+ * Every link in the written path opens in a new tab. The path is the thing a
+ * person is following; sending them to the sandbox or the sign-in page in
+ * this tab would replace it with the destination and lose their two answers.
+ * The external glyph and the hidden note say so before the click.
+ */
 function GuideMe() {
   const [goal, setGoal] = useState(null);
   const [client, setClient] = useState(null);
@@ -622,15 +637,47 @@ function GuideMe() {
   const chosen = needsClient ? CLIENTS.find(c => c.id === client) ?? null : null;
   const ready = goal === 'script' || chosen !== null;
   const guide = ready ? guideSteps(goal, chosen) : null;
+  const reset = () => { setGoal(null); setClient(null); };
+
+  const stops = [
+    { label: 'Your goal', state: goal === null ? 'now' : 'done' },
+    goal === 'script'
+      ? { label: 'No tool needed', state: 'done' }
+      : { label: 'Your tool', state: goal === null ? 'later' : chosen ? 'done' : 'now' },
+    { label: 'Your path', state: guide ? 'now' : 'later' },
+  ];
 
   return (
-    <div className="doc__guide">
+    <div className="doc__guide" role="group" aria-labelledby="guide-q">
+      <div className="doc__guidebar">
+        <div className="doc__guideintro">
+          <h4 className="doc__guideq" id="guide-q">Get a path written for you</h4>
+          <p className="doc__guidesub">
+            Answer two questions. Links in the path open in a new tab, so you keep your place.
+          </p>
+        </div>
+        <ol className="doc__guidetrail" aria-label="Progress">
+          {stops.map((s, i) => (
+            <li key={s.label} className={`doc__guidestop doc__guidestop--${s.state}`}>
+              <span className="doc__guidestopnum" aria-hidden="true">
+                {s.state === 'done' ? <Icon name="check" size={11} /> : i + 1}
+              </span>
+              {s.label}
+              <span className="sr-only">
+                {s.state === 'done' ? ', done' : s.state === 'now' ? ', current' : ''}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </div>
+
       <fieldset className="doc__pickgroup">
         <legend className="doc__picklegend">What do you want to do?</legend>
         <div className="doc__picks">
           {GOALS.map(g => (
             <label key={g.id} className={goal === g.id ? 'doc__pick is-on' : 'doc__pick'}>
               <input type="radio" name="guide-goal" value={g.id} checked={goal === g.id} onChange={() => setGoal(g.id)} />
+              <span className="doc__pickmark" aria-hidden="true" />
               <span className="doc__picklabel">{g.label}</span>
               <span className="doc__pickhint">{g.hint}</span>
             </label>
@@ -645,6 +692,7 @@ function GuideMe() {
             {CLIENTS.map(c => (
               <label key={c.id} className={client === c.id ? 'doc__pick is-on' : 'doc__pick'}>
                 <input type="radio" name="guide-client" value={c.id} checked={client === c.id} onChange={() => setClient(c.id)} />
+                <span className="doc__pickmark" aria-hidden="true" />
                 <span className="doc__picklabel">{CLIENT_LABELS[c.id]}</span>
               </label>
             ))}
@@ -654,13 +702,22 @@ function GuideMe() {
 
       {guide ? (
         <div className="doc__guideout" aria-live="polite">
-          <div className="doc__guidehead">Your path</div>
+          <div className="doc__guideouthead">
+            <div className="doc__guidehead">Your path</div>
+            <button type="button" className="doc__guidereset" onClick={reset}>Start over</button>
+          </div>
           <ol className="doc__guidesteps">
             {guide.steps.filter(Boolean).map((s, i) => (
               <li key={i} className="doc__guidestep">
                 <div className="doc__guidetitle">{s.title}</div>
                 <p className="doc__p">{s.body}</p>
-                {s.link ? <Link to={s.link.to} className="doc__guidelink">{s.link.label} →</Link> : null}
+                {s.link ? (
+                  <a href={s.link.to} target="_blank" rel="noreferrer" className="doc__guidelink">
+                    {s.link.label}
+                    <Icon name="external" size={13} aria-hidden="true" />
+                    <span className="sr-only"> (opens in a new tab)</span>
+                  </a>
+                ) : null}
                 {s.blocks ? s.blocks.map(b => <Code key={b.caption} caption={b.caption}>{b.code}</Code>) : null}
               </li>
             ))}
@@ -669,6 +726,7 @@ function GuideMe() {
         </div>
       ) : (
         <p className="doc__guideempty" aria-live="polite">
+          <Icon name="info" size={14} aria-hidden="true" />
           {goal === null ? 'Pick a goal to get a path written for it.' : 'Now pick the tool you use.'}
         </p>
       )}

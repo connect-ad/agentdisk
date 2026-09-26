@@ -229,27 +229,69 @@ export function Nav() {
   );
 }
 
+/**
+ * The footer's columns. Every destination is a route or a docs section that
+ * exists; the support address is the one the Support form delivers to.
+ * There is no region badge, for the reason the old footer recorded: the
+ * reference drew "EU-CENTRAL-1" and nothing in this system has a region.
+ */
+const FOOT_COLUMNS = [
+  { head: 'Product', links: [
+    { to: '/docs/quickstart', label: 'Quick start' },
+    { to: '/pricing', label: 'Pricing' },
+    { to: '/docs', label: 'Docs' },
+    { to: '/sandbox', label: 'Try the sandbox' },
+  ] },
+  { head: 'Trust', links: [
+    { to: '/docs#data-security', label: 'Data security' },
+    { to: '/docs#safety', label: 'Safety' },
+    { to: '/docs#privacy', label: 'Privacy' },
+    { to: '/docs#terms', label: 'Terms' },
+  ] },
+  { head: 'Account', links: [
+    { to: '/signup', label: 'Start free' },
+    { to: '/login', label: 'Sign in' },
+    { href: 'mailto:connect@agentdisk.io', label: 'connect@agentdisk.io' },
+  ] },
+];
+
 export function Footer() {
   return (
     <footer className="mk__foot">
-      <div className="mk__wrap mk__footrow">
-        <span className="mk__footbrand">
-          <Logo size={22} alt="" />
-          <span className="mk__footmark">AgentDisk</span>
-          {/* The reference design put a region badge here and it read
-              "EU-CENTRAL-1". There is no region concept anywhere in this
-              system: no column, no setting, no API field, and R2 buckets are
-              not created per-region by this stack. It was a data-residency
-              claim with nothing behind it, which is a claim people choose a
-              vendor on -- so it is gone rather than replaced with a different
-              string. */}
-        </span>
-        <span className="mk__footlinks">
-          <Link to="/docs">Docs</Link>
-          <Link to="/pricing">Pricing</Link>
-          <Link to="/docs#terms">Terms</Link>
-          <Link to="/docs#privacy">Privacy</Link>
-        </span>
+      <div className="mk__wrap">
+        <div className="mk__footgrid">
+          <div className="mk__footabout">
+            <span className="mk__footbrand">
+              <Logo size={22} alt="" />
+              <span className="mk__footmark">AgentDisk</span>
+            </span>
+            <p className="mk__footblurb">
+              A scoped, persistent workspace for every AI agent: files, folders and
+              metadata over REST and MCP, with the audit log kept for you.
+            </p>
+            <div className="mk__footfacts" aria-label="In short">
+              {HERO_TAGS.map(t => <span key={t} className="mk__footfact">{t}</span>)}
+            </div>
+          </div>
+          {FOOT_COLUMNS.map(col => (
+            <div key={col.head} className="mk__footcol">
+              <h3 className="mk__foothead">{col.head}</h3>
+              <ul className="mk__footlist">
+                {col.links.map(l => (
+                  <li key={l.label}>
+                    {l.href
+                      ? <a href={l.href}>{l.label}</a>
+                      : <Link to={l.to}>{l.label}</Link>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <div className="mk__footbase">
+          <span>© {new Date().getFullYear()} AgentDisk</span>
+          <span>Files your agents can reason about.</span>
+        </div>
       </div>
     </footer>
   );
@@ -305,6 +347,8 @@ export function Landing() {
                   stays as the quiet third way in, for the person who would
                   rather read the whole thing. */}
               <Button size="lg" variant="secondary" as={Link} to="/docs/quickstart"
+                className="mk__quick"
+                icon={<Icon name="bolt" size={15} />}
                 iconRight={<Icon name="chevronRight" size={16} />}>
                 Quick start
               </Button>

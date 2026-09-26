@@ -954,6 +954,8 @@
 .doc__codebody{margin:0;padding:var(--s-6);overflow-x:auto;
   font-family:var(--font-mono);font-size:var(--t-12);line-height:1.7;
   color:var(--dark-ink)}
+/* A prompt to paste is a sentence, so it wraps; code keeps its columns. */
+.doc__codebody--wrap{white-space:pre-wrap;overflow-wrap:anywhere}
 
 .doc__tools{border:1px solid var(--line);border-radius:var(--r-3);
   overflow:hidden;margin-bottom:var(--s-8)}

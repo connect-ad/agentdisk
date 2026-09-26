@@ -422,13 +422,14 @@ const ok = fresh && timingSafeEqual(expected, v1);`;
 
 /* ── small building blocks ─────────────────────────────────────────────── */
 
-function Code({ caption, children }) {
+/** `wrap` for prose to paste — a prompt — rather than code to keep aligned. */
+function Code({ caption, wrap = false, children }) {
   return (
     <div className="doc__code">
       <div className="doc__codebar">
         <span className="doc__codecap">{caption}</span>
       </div>
-      <pre className="doc__codebody">{children}</pre>
+      <pre className={wrap ? 'doc__codebody doc__codebody--wrap' : 'doc__codebody'}>{children}</pre>
     </div>
   );
 }
@@ -575,9 +576,24 @@ function guideSteps(goal, chosen) {
   const connect = chosen
     ? { title: `Add AgentDisk to ${clientName}`, body: chosen.intro, blocks: chosen.blocks }
     : null;
+  /*
+   * Two prompts to paste, rather than "ask it to list the files": the first
+   * makes the agent write, the second makes it read back what it wrote, and
+   * together they show what a prompt an agent can act on looks like — it
+   * names AgentDisk and it names a path. The path sits inside the prefix the
+   * earlier step told the person to set, because a key scoped to
+   * /agents/<name> refuses /hello, and a refusal on the very first prompt
+   * reads as a broken setup rather than the scope working.
+   */
+  const base = goal === 'agent' ? '/agents/<name>' : goal === 'editor' ? '/projects/<name>' : '/hello';
   const verify = {
     title: 'Verify',
-    body: `Ask ${clientName} to list the files at /. An empty listing is a success: the handshake worked and the key is scoped. The dashboard's MCP connection page reports the last call it saw from that key, and lists exactly the tools its scopes allow.`,
+    body: `Paste these two prompts into ${clientName}, one after the other. Both name AgentDisk and a path, which is what lets the tool pick the right call without guessing.${base === '/hello' ? '' : ' Replace <name> with the prefix you set on the key.'}`,
+    blocks: [
+      { caption: 'PROMPT 1 · WRITE A TEST FILE', wrap: true, code: `Using AgentDisk, create a file at ${base}/first-note.md with the text "Hello from ${clientName}" and tell me its size.` },
+      { caption: 'PROMPT 2 · READ IT BACK', wrap: true, code: `Using AgentDisk, list the files under ${base}, then show me the contents of ${base}/first-note.md.` },
+    ],
+    after: `Behind those two prompts the agent calls create_file, then list_files and get_file. The dashboard's MCP connection page shows each call under the key's name and lists exactly the tools its scopes allow, and Activity records them as the agent's — that is the handshake proved. If the second prompt returns an empty listing, the file went outside the key's prefix.`,
   };
 
   if (goal === 'try') {
@@ -718,7 +734,8 @@ function GuideMe() {
                     <span className="sr-only"> (opens in a new tab)</span>
                   </a>
                 ) : null}
-                {s.blocks ? s.blocks.map(b => <Code key={b.caption} caption={b.caption}>{b.code}</Code>) : null}
+                {s.blocks ? s.blocks.map(b => <Code key={b.caption} caption={b.caption} wrap={b.wrap}>{b.code}</Code>) : null}
+                {s.after ? <p className="doc__p">{s.after}</p> : null}
               </li>
             ))}
           </ol>

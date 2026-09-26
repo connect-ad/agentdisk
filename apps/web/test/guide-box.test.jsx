@@ -72,6 +72,29 @@ describe('the guide box', () => {
     expect(links.some(a => a.getAttribute('href') === '/sandbox')).toBe(true);
   });
 
+  it('ends every MCP path with two prompts to paste: write a file, then read it back', async () => {
+    const user = userEvent.setup();
+    const box = mount();
+    await user.click(within(box).getByLabelText(/Give my agent a disk/));
+    await user.click(within(box).getByLabelText('Codex CLI'));
+
+    expect(within(box).getByText('PROMPT 1 · WRITE A TEST FILE')).toBeTruthy();
+    expect(within(box).getByText('PROMPT 2 · READ IT BACK')).toBeTruthy();
+    // The prompts name the tool and stay inside the prefix step 3 asked for.
+    expect(within(box).getByText(/create a file at \/agents\/<name>\/first-note\.md/)).toBeTruthy();
+    expect(within(box).getByText(/Hello from Codex CLI/)).toBeTruthy();
+    expect(within(box).getByText(/list the files under \/agents\/<name>/)).toBeTruthy();
+  });
+
+  it('uses an unscoped path for the sandbox, whose key has no prefix', async () => {
+    const user = userEvent.setup();
+    const box = mount();
+    await user.click(within(box).getByLabelText(/Try it with no account/));
+    await user.click(within(box).getByLabelText('Zed'));
+    expect(within(box).getByText(/create a file at \/hello\/first-note\.md/)).toBeTruthy();
+    expect(within(box).queryByText(/Replace <name>/)).toBeNull();
+  });
+
   it('Start over returns to the first question', async () => {
     const user = userEvent.setup();
     const box = mount();

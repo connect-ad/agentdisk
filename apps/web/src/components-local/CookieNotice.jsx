@@ -17,7 +17,7 @@ import { readConsent, saveConsent } from '../lib/consent.js';
  *     in `apps/api`; sign-in is Firebase in browser storage and the API is
  *     bearer tokens. So "essential" here is browser storage, and the notice
  *     says storage where it means storage.
- *   - Nothing collects analytics or attribution today. `routes/Legal.jsx` §9
+ *   - Nothing collects analytics or attribution today. the Cookies clause of the docs' Privacy section (`routes/Docs.jsx`)
  *     is the authoritative text and states that plainly, so the notice cannot
  *     imply otherwise by offering to switch off something that is not running.
  *

@@ -9,7 +9,7 @@
  * session and the last workspace you had open (`lib/workspace.jsx`), plus the
  * theme and accent preferences (`lib/theme.jsx`).
  *
- * The two optional categories collect nothing today. `routes/Legal.jsx` §9 is
+ * The two optional categories collect nothing today. the Cookies clause of the docs' Privacy section (`routes/Docs.jsx`) is
  * the authoritative text and says exactly that. This module exists so that
  * when one of them starts, the choice a person already made is waiting for it
  * rather than being asked for afterwards — which is the wrong order, and the

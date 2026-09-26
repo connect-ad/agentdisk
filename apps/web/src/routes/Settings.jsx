@@ -17,7 +17,7 @@ import { MembersTab } from './SettingsTabs.jsx';
  * workspaces and is billed once — so it lives at `/w/{ws}/billing`, reached
  * from the profile menu, and `routes/Billing.jsx` is the only way in. A tab
  * showing the same organization's plan under each workspace's settings invited
- * exactly the wrong reading. Privacy restated `routes/Legal.jsx`, which is the
+ * exactly the wrong reading. Privacy restated the docs' Privacy section (`routes/Docs.jsx`), which is the
  * authoritative text, and a second copy is a second thing to keep true.
  *
  * URL: /w/{ws}/settings

@@ -39,7 +39,7 @@ const DEST = {
   reset: '/forgot-password',
   app: '/app',
   privacy: '/docs#privacy',
-  terms: '/terms',
+  terms: '/docs#terms',
 };
 
 const ERRORS = {

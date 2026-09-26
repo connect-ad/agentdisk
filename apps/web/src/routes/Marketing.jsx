@@ -217,7 +217,7 @@ export function Footer() {
         <span className="mk__footlinks">
           <Link to="/docs">Docs</Link>
           <Link to="/pricing">Pricing</Link>
-          <Link to="/terms">Terms</Link>
+          <Link to="/docs#terms">Terms</Link>
           <Link to="/docs#privacy">Privacy</Link>
         </span>
       </div>

@@ -33,7 +33,7 @@ function renderAt(path) {
 
 const SECTION_IDS = [
   'overview', 'quickstart', 'features', 'data-security',
-  'deleting-data', 'deleting-account', 'privacy', 'safety', 'reference',
+  'deleting-data', 'deleting-account', 'privacy', 'terms', 'safety', 'reference',
 ];
 
 /** `apps/api/src/mcp/tools.ts`, in registration order. */

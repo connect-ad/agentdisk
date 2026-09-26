@@ -21,7 +21,6 @@ import { Signup, VerifyEmail, ForgotPassword, ResetPassword, Login } from './rou
 import { Landing, Pricing } from './routes/Marketing.jsx';
 import Claim from './routes/Claim.jsx';
 import SharePage from './routes/SharePage.jsx';
-import { Terms } from './routes/Legal.jsx';
 import Docs from './routes/Docs.jsx';
 import McpConnection from './routes/McpConnection.jsx';
 import Billing from './routes/Billing.jsx';
@@ -366,10 +365,10 @@ export default function App() {
       {/* `/docs/<section>` deep-links into the one page; the component reads
           the splat and scrolls. Without this a shared link to a section 404s. */}
       <Route path="/docs/*" element={<Docs />} />
-      <Route path="/terms" element={<Terms />} />
-      {/* The privacy text lives in the docs now. The old address keeps
+      {/* The legal texts live in the docs now. The old addresses keep
           working for the cookie notice, the sign-up form and any link in the
           wild. */}
+      <Route path="/terms" element={<Navigate to="/docs#terms" replace />} />
       <Route path="/privacy" element={<Navigate to="/docs#privacy" replace />} />
       {/* Public on purpose: the preview half of this page works with no
           account, because the claim token in the URL is the only thing that can

@@ -273,11 +273,11 @@ export function MembersTab() {
  * It described a first-party auth system that no longer exists — "hashed
  * password" under account data, and password-reset mail sent by Resend — months
  * after Firebase took over sign-in. The policy itself at `/privacy` was already
- * correct (Legal.jsx §3, §7, §10); only this copy of it was stale, which is the
+ * correct (the docs' Privacy section); only this copy of it was stale, which is the
  * failure mode of restating a document instead of pointing at it.
  *
  * So it now says out loud that it is a summary and links to the source. Anything
- * changed here has to be changed in Legal.jsx too, and Legal.jsx wins.
+ * changed here has to be changed in the docs' Privacy section too, and the docs win.
  */
 const SUBPROCESSORS = [
   { name: 'Cloudflare', purpose: 'Object storage (R2), database (D1), compute (Workers), CDN, transactional email', region: 'Global edge' },

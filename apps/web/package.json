@@ -1,21 +1,32 @@
 {
-  "name": "@agentdrive/web",
+  "name": "@agentdisk/web",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "AgentDrive dashboard SPA (Cloudflare Pages). Screens per docs/design/03 PART 8.",
+  "description": "AgentDisk dashboard SPA (Workers static assets). Screens per docs/design/03 PART 8.",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "node scripts/check-jsx-identifiers.mjs && vite build",
+    "preview": "vite preview",
+    "deploy:dev": "wrangler deploy --env dev",
+    "deploy:prod": "wrangler deploy --env prod",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check:jsx": "node scripts/check-jsx-identifiers.mjs"
   },
   "dependencies": {
+    "firebase": "^12.18.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "react-router-dom": "^6.26.2"
+    "react-router-dom": "^7.18.3"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^6.0.7"
+    "jsdom": "^29.1.1",
+    "vite": "^6.0.7",
+    "vitest": "^3.2.7",
+    "wrangler": "^4.129.0"
   }
 }

@@ -1,0 +1,42 @@
+# AgentDisk staff console.
+#
+# Same shape as apps/web: an assets-only Workers static-assets Worker, no
+# `main`, no bindings, no secrets. See the WEB section of
+# infra/terraform/modules/agentdisk-stack/main.tf for why this is a Worker
+# rather than a Pages project.
+#
+# Its own hostname is the security-relevant part rather than a layout choice.
+# 14 PART 27.2 scopes the staff session cookie to this origin alone, so a staff
+# credential and a customer credential cannot reach each other in a browser even
+# if some future handler were careless. Same-origin would make that a matter of
+# naming discipline; a separate origin makes it the browser's own rule.
+
+name = "agentdisk-admin"
+compatibility_date = "2026-08-01"
+
+workers_dev = false
+preview_urls = false
+
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+
+# ---------------------------------------------------------------- dev ---
+[env.dev]
+name = "agentdisk-dev-admin"
+workers_dev = false
+preview_urls = false
+
+[env.dev.assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+
+# --------------------------------------------------------------- prod ---
+[env.prod]
+name = "agentdisk-prod-admin"
+workers_dev = false
+preview_urls = false
+
+[env.prod.assets]
+directory = "./dist"
+not_found_handling = "single-page-application"

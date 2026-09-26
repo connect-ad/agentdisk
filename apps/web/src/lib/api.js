@@ -1,0 +1,404 @@
+/**
+ * The one place the dashboard talks to the API.
+ *
+ * Three things it centralises, each of which would otherwise be got subtly
+ * wrong in a dozen call sites:
+ *
+ * 1. **The bearer token comes from the SDK at call time, never from a variable.**
+ *    Firebase ID tokens last an hour and the SDK renews them silently. Caching
+ *    one in a closure works perfectly for fifty-nine minutes and then starts
+ *    returning 401s that look like a backend fault.
+ * 2. **`workspaceId` is a query parameter on every workspace-scoped call.** A
+ *    person's credential names no workspace - unlike an API key, which carries
+ *    its own - so the API asks the caller which one they mean.
+ * 3. **The error envelope is unwrapped into a real Error.** Doc 05 PART 13
+ *    gives every failure a `code` and a `requestId`; both survive to the caller,
+ *    because "something went wrong" without the request ID is unsupportable.
+ */
+
+import { beginRequest, endRequest } from './pending.js';
+import { clearCache } from './resourceCache.js';
+
+/**
+ * Exported so a screen that *names* the API — the auth pages print the REST
+ * and MCP endpoints — reads the same value the client calls, rather than
+ * repeating a hostname that would then be wrong in every environment but the
+ * one it was typed in.
+ */
+export const BASE_URL = import.meta.env.VITE_API_BASE ?? 'https://api-dev.agentdisk.io';
+
+export class ApiError extends Error {
+  constructor(status, code, message, requestId, details) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.requestId = requestId ?? null;
+    this.details = details ?? null;
+  }
+}
+
+/** True when re-authenticating could plausibly fix it. */
+export function isAuthError(error) {
+  return error instanceof ApiError && (error.status === 401 || error.status === 403);
+}
+
+async function toError(response) {
+  let code = 'UNKNOWN';
+  let message = `Request failed with ${response.status}.`;
+  let requestId = null;
+  let details = null;
+  try {
+    const body = await response.json();
+    if (body?.error) {
+      code = body.error.code ?? code;
+      message = body.error.message ?? message;
+      requestId = body.error.requestId ?? null;
+      details = body.error.details ?? null;
+    }
+  } catch {
+    // A non-JSON error body (a proxy, an outage). The status is all we have.
+  }
+  return new ApiError(response.status, code, message, requestId, details);
+}
+
+/**
+ * What a claim link is worth, before anybody signs in.
+ *
+ * Outside `createApiClient` because every method there sends a bearer token and
+ * throws without one - and this call deliberately has no credential. The token
+ * in the URL is the only thing that can name the workspace, which is the same
+ * trust model as a signed download link.
+ *
+ * A person following a claim link has usually never seen this product. Asking
+ * them to create an account before telling them what they would be claiming
+ * inverts the order of trust.
+ */
+export async function previewClaim(claimToken, signal) {
+  const response = await fetch(
+    new URL(`/v1/workspaces/claim/${encodeURIComponent(claimToken)}`, BASE_URL),
+    { signal }
+  );
+  if (!response.ok) throw await toError(response);
+  return response.json();
+}
+
+/**
+ * The public half of a share link. No credential, by design — the token in the
+ * URL is the only thing that can name these files.
+ *
+ * Every refusal from this endpoint is one identical 404, so the caller learns
+ * that the link is not available and never which of expiry, revocation or a
+ * bad guess produced that. Do not try to distinguish them here.
+ *
+ * The one refusal that differs is a password: a protected link answers 401
+ * with `details.passwordRequired`, and `isPasswordRequired` tells the page to
+ * ask. The password goes in a POST body, never the URL.
+ */
+export async function previewShare(shareToken, signal, password) {
+  const response = await fetch(
+    new URL(`/v1/shares/open/${encodeURIComponent(shareToken)}`, BASE_URL),
+    password === undefined ? { signal } : postPassword(password, signal)
+  );
+  if (!response.ok) throw await toError(response);
+  return response.json();
+}
+
+function postPassword(password, signal) {
+  return {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ password }),
+    signal,
+  };
+}
+
+/** True when a share refusal is asking for a password rather than saying no. */
+export function isPasswordRequired(error) {
+  return error instanceof ApiError && error.details?.passwordRequired === true;
+}
+
+/**
+ * A presigned download URL for one file in a password-protected share. The
+ * plain-link route below cannot carry a password without putting it in a URL,
+ * so this asks for the address and the page navigates to it.
+ */
+export async function sharedDownloadWithPassword(shareToken, fileId, password) {
+  const response = await fetch(
+    new URL(
+      `/v1/shares/open/${encodeURIComponent(shareToken)}/download/${encodeURIComponent(fileId)}`,
+      BASE_URL
+    ),
+    postPassword(password)
+  );
+  if (!response.ok) throw await toError(response);
+  return (await response.json()).url;
+}
+
+/**
+ * The download address for one file inside a share.
+ *
+ * A plain href rather than a fetch: the route 302s to a short-lived presigned
+ * R2 URL, and letting the browser follow that redirect is what makes the
+ * download stream from R2 instead of through this app.
+ */
+export function sharedDownloadUrl(shareToken, fileId) {
+  return new URL(
+    `/v1/shares/open/${encodeURIComponent(shareToken)}/download/${encodeURIComponent(fileId)}`,
+    BASE_URL
+  ).toString();
+}
+
+export function createApiClient(getToken) {
+  /**
+   * Counted in and out of `pending.js` so the top progress bar can show that
+   * the app is talking to the API. The count is taken here rather than around
+   * `fetch` because the token refresh above is part of the wait — a silent
+   * Firebase renewal is the slowest thing that can happen on a call — and it
+   * is released in `finally`, so a throw on any path still ends it. A request
+   * that leaked would leave the bar running for the rest of the session.
+   */
+  async function request(path, { method = 'GET', body, workspaceId, signal } = {}) {
+    beginRequest();
+    try {
+      const token = await getToken();
+      if (!token) {
+        throw new ApiError(401, 'UNAUTHORIZED', 'You are not signed in.', null);
+      }
+
+      const url = new URL(path, BASE_URL);
+      if (workspaceId) url.searchParams.set('workspaceId', workspaceId);
+
+      const headers = { authorization: `Bearer ${token}` };
+      if (body !== undefined) headers['content-type'] = 'application/json';
+
+      const response = await fetch(url, {
+        method,
+        headers,
+        signal,
+        ...(body === undefined ? {} : { body: JSON.stringify(body) })
+      });
+
+      if (!response.ok) throw await toError(response);
+
+      // Any write invalidates every cached read, here rather than at the call
+      // site. A per-mutation invalidation list is a list somebody eventually
+      // forgets to extend, and the symptom is the worst one a cache has: the
+      // product showing somebody their own change not having happened. This
+      // cannot be forgotten, because there is no way to write through this
+      // client without going past it.
+      if (method !== 'GET') clearCache();
+
+      if (response.status === 204) return null;
+      return response.json();
+    } finally {
+      endRequest();
+    }
+  }
+
+  return {
+    request,
+
+    whoami: workspaceId => request('/v1/whoami', { workspaceId }),
+
+    listWorkspaces: () => request('/v1/workspaces'),
+    createWorkspace: name => request('/v1/workspaces', { method: 'POST', body: { name } }),
+    /**
+     * The name is the confirmation, and the API checks it rather than trusting
+     * this client to have asked — so a second frontend, a script or a curl
+     * cannot skip the step that makes the deletion deliberate. No `workspaceId`
+     * option: the workspace is the subject of the URL, not a scope for it.
+     */
+    deleteWorkspace: (workspaceId, name) =>
+      request(`/v1/workspaces/${workspaceId}`, { method: 'DELETE', body: { name } }),
+
+    /**
+     * Rename a workspace. Name only -- the slug is derived once at creation and
+     * deliberately does not follow it, so no URL anyone holds can break.
+     *
+     * `workspaceId` is passed as well as named in the path: the path is the
+     * subject, and the query parameter is what the auth chain resolves the
+     * caller's membership against. The API refuses a request where they
+     * disagree rather than picking one.
+     */
+    renameWorkspace: (workspaceId, name) =>
+      request(`/v1/workspaces/${workspaceId}`, { method: 'PATCH', body: { name }, workspaceId }),
+
+    /**
+     * Take ownership of an unclaimed sandbox. `body` is {mode:'new'} or
+     * {mode:'attach', targetWorkspaceId}. No `workspaceId` option: which
+     * workspace this concerns is what the claim token decides, and the target
+     * for an attach is named in the body so the API can authorize it against
+     * the caller's own membership rather than a query parameter.
+     */
+    claimWorkspace: (claimToken, body) =>
+      request(`/v1/workspaces/claim/${encodeURIComponent(claimToken)}`, {
+        method: 'POST',
+        body,
+      }),
+
+    listFiles: (workspaceId, params = {}) => {
+      const query = new URLSearchParams(params).toString();
+      return request(`/v1/files${query ? `?${query}` : ''}`, { workspaceId });
+    },
+    getFile: (workspaceId, fileId) => request(`/v1/files/${fileId}`, { workspaceId }),
+    deleteFile: (workspaceId, fileId) =>
+      request(`/v1/files/${fileId}`, { method: 'DELETE', workspaceId }),
+    /**
+     * Resolves to { url, method, expiresAt, sizeBytes } - a short-lived
+     * presigned GET, not the bytes.
+     *
+     * **Call it once per download.** The API accounts egress when it *issues*
+     * the URL, because R2 does not call back on a GET, so a second call for the
+     * same click bills the file twice. Fetching the returned URL costs nothing
+     * further.
+     */
+    downloadFile: (workspaceId, fileId) =>
+      request(`/v1/files/${fileId}/download`, { workspaceId }),
+
+    listAgents: workspaceId => request('/v1/agents', { workspaceId }),
+    getAgent: (workspaceId, agentId) => request(`/v1/agents/${agentId}`, { workspaceId }),
+    createAgent: (workspaceId, body) =>
+      request('/v1/agents', { method: 'POST', body, workspaceId }),
+    updateAgent: (workspaceId, agentId, body) =>
+      request(`/v1/agents/${agentId}`, { method: 'PATCH', body, workspaceId }),
+    deleteAgent: (workspaceId, agentId) =>
+      request(`/v1/agents/${agentId}`, { method: 'DELETE', workspaceId }),
+
+    listKeys: workspaceId => request('/v1/keys', { workspaceId }),
+    /** Resolves to { key, secret } — the secret exists in this response only. */
+    createKey: (workspaceId, body) =>
+      request('/v1/keys', { method: 'POST', body, workspaceId }),
+    /**
+     * Switch a key off, or back on. Enabling rotates: the response carries a
+     * new `secret` and the old one stops working, so a caller must show it.
+     */
+    setKeyStatus: (workspaceId, keyId, status) =>
+      request(`/v1/keys/${keyId}`, { method: 'PATCH', body: { status }, workspaceId }),
+    deleteKey: (workspaceId, keyId) =>
+      request(`/v1/keys/${keyId}`, { method: 'DELETE', workspaceId }),
+    /**
+     * The key itself, for the workspace owner. Refused for readers and for
+     * API keys, audited every time, and 404 for a key minted before keys were
+     * kept - see the route's header for why each of those is so.
+     */
+    revealKey: (workspaceId, keyId) =>
+      request(`/v1/keys/${keyId}/secret`, { workspaceId }),
+
+    listWebhooks: workspaceId => request('/v1/webhooks', { workspaceId }),
+    /** Resolves to { webhook, secret } — the secret exists in this response only. */
+    createWebhook: (workspaceId, body) =>
+      request('/v1/webhooks', { method: 'POST', body, workspaceId }),
+    updateWebhook: (workspaceId, id, body) =>
+      request(`/v1/webhooks/${id}`, { method: 'PATCH', body, workspaceId }),
+    deleteWebhook: (workspaceId, id) =>
+      request(`/v1/webhooks/${id}`, { method: 'DELETE', workspaceId }),
+
+    listActivity: (workspaceId, limit = 50) =>
+      request(`/v1/activity?limit=${limit}`, { workspaceId }),
+
+    listMembers: workspaceId => request('/v1/members', { workspaceId }),
+    inviteMember: (workspaceId, body) =>
+      request('/v1/members', { method: 'POST', body, workspaceId }),
+    updateMemberRole: (workspaceId, membershipId, role) =>
+      request(`/v1/members/${membershipId}`, { method: 'PATCH', body: { role }, workspaceId }),
+    /**
+     * `revokeKeys` is explicit rather than defaulted, matching the API: neither
+     * revoking nor not-revoking is safe to assume on somebody's behalf.
+     */
+    removeMember: (workspaceId, membershipId, revokeKeys) =>
+      request(`/v1/members/${membershipId}${revokeKeys ? '?revokeKeys=true' : ''}`, {
+        method: 'DELETE',
+        workspaceId
+      }),
+
+    getBilling: workspaceId => request('/v1/billing', { workspaceId }),
+    /** Resolves to { url } — a one-time link into Stripe's hosted portal. */
+    createPortalSession: workspaceId =>
+      request('/v1/billing/portal-session', { method: 'POST', workspaceId }),
+    /**
+     * Resolves to { url } — a one-time Stripe Checkout link for one month of
+     * `plan`.
+     *
+     * The plan is named by OUR id, never a Stripe price: the mapping stays on
+     * the server, where a caller cannot reach past it and buy an archived
+     * price. The card is entered on Stripe's own page and never touches this
+     * origin, which is what keeps AgentDisk in PCI SAQ-A.
+     */
+    createCheckoutSession: (workspaceId, plan, interval = 'month') =>
+      request('/v1/billing/checkout-session', {
+        method: 'POST', body: { plan, interval }, workspaceId
+      }),
+
+    /**
+     * Stop renewing at the end of the paid period.
+     *
+     * Ours rather than a link into Stripe's hosted portal, deliberately: making
+     * somebody leave the product to stop paying is the friction consumer
+     * protection rules exist to remove, and `resumeSubscription` is only
+     * possible because this is.
+     */
+    cancelSubscription: workspaceId =>
+      request('/v1/billing/cancel', { method: 'POST', workspaceId }),
+
+    /** Take back a cancellation, while the period it applies to is still live. */
+    resumeSubscription: workspaceId =>
+      request('/v1/billing/resume', { method: 'POST', workspaceId }),
+
+    /**
+     * Move a live subscription to another plan or cadence.
+     *
+     * Resolves to `{ effective }` — 'now' for an upgrade, which is prorated and
+     * charged immediately, or 'period_end' for a downgrade, which waits for the
+     * period the customer already paid for to run out.
+     */
+    changePlan: (workspaceId, plan, interval = 'month') =>
+      request('/v1/billing/change-plan', {
+        method: 'POST', body: { plan, interval }, workspaceId
+      }),
+
+    listFolders: workspaceId => request('/v1/folders', { workspaceId }),
+    createFolder: (workspaceId, path) =>
+      request('/v1/folders', { method: 'POST', body: { path }, workspaceId }),
+
+    /** Live share links only — a revoked or expired one is simply gone. */
+    listShares: workspaceId => request('/v1/shares', { workspaceId }),
+    /**
+     * `body` is `{fileId, expiresAt?}` or `{path, expiresAt?}` — exactly one of
+     * `fileId`/`path`, matching the API's own refusal of anything else.
+     * Resolves to `{ share, url }`.
+     */
+    createShare: (workspaceId, body) =>
+      request('/v1/shares', { method: 'POST', body, workspaceId }),
+    revokeShare: (workspaceId, shareId) =>
+      request(`/v1/shares/${shareId}`, { method: 'DELETE', workspaceId }),
+
+    logoutEverywhere: workspaceId =>
+      request('/v1/me/logout-all', { method: 'POST', workspaceId }),
+
+    /**
+     * Close the signed-in person's own account.
+     *
+     * The typed address travels in the body, so the confirmation belongs to the
+     * operation rather than to this client. Resolves to
+     * `{ workspacesDeleted, filesQueued, billing, purgeAfter }`; `purgeAfter` is
+     * the day the bytes, the sign-in and the address go. Refused for an API
+     * key, for a mismatched address, and with 409 when the subscription could
+     * not be ended — in which case nothing was deleted.
+     */
+    deleteAccount: (workspaceId, confirmEmail) =>
+      request('/v1/me', { method: 'DELETE', body: { confirmEmail }, workspaceId }),
+
+    /**
+     * Send the Support form: one email to the support inbox.
+     *
+     * `topic` is one of the ids the screen offers; the server words it. The
+     * person's address is not sent — the server takes it from the credential,
+     * so what the inbox replies to is the account that asked. Resolves to
+     * `{ sent: true }`; refused for an API key, and 500 when this deployment
+     * cannot send mail, which is a failure rather than a quiet no-op.
+     */
+    sendSupportRequest: (workspaceId, { topic, subject, message }) =>
+      request('/v1/support', { method: 'POST', body: { topic, subject, message }, workspaceId })
+  };
+}

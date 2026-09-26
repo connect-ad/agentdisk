@@ -39,6 +39,10 @@ function requireOutput(name) {
 const replacements = {
   TF_OUTPUT_d1_database_id: requireOutput("d1_database_id"),
   TF_OUTPUT_kv_namespace_id: requireOutput("kv_namespace_id"),
+  // The R2 S3 endpoint presigned URLs are signed against. Identifiers, not
+  // credentials - the access key pair that signs them is a Worker secret.
+  TF_OUTPUT_account_id: requireOutput("account_id"),
+  TF_OUTPUT_r2_bucket_name: requireOutput("r2_bucket_name"),
 };
 
 const configPath = new URL("../wrangler.toml", import.meta.url);

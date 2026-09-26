@@ -1,0 +1,20 @@
+-- The one message a closed account is still owed, and the proof it was sent.
+--
+-- Migration 0019 held the email address for seven days after closure so that
+-- "the confirmation that its bytes are gone" could reach it. Nothing sent that
+-- confirmation. The sweep now does, on the day it releases the identity and the
+-- address - and it has to send BEFORE it releases, because afterwards there is
+-- nowhere to send to.
+--
+-- This column is the send-once guard. The sweep is hourly and the console can
+-- run it on demand, so a guard written as an `if` in application code is one
+-- refactor away from a person receiving "your account has been deleted" every
+-- hour for two days. The claim is an atomic
+--   UPDATE users SET erasure_notified_at = ? WHERE id = ? AND erasure_notified_at IS NULL
+-- and only the caller whose UPDATE changed a row sends. NULL means "not yet
+-- told", which is every row that exists today and every live account.
+--
+-- It is NOT keyed on `notifications_sent`, which is about a billing period on
+-- an organization; this message is about a person, and the person may own no
+-- organization at all by the time it is due.
+ALTER TABLE users ADD COLUMN erasure_notified_at INTEGER;

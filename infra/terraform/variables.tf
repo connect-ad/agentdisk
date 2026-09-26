@@ -2,7 +2,7 @@
 # secrets, so no account-identifying value is committed to this public repo.
 
 variable "account_id" {
-  description = "Cloudflare account ID that owns all AgentDrive resources."
+  description = "Cloudflare account ID that owns all AgentDisk resources."
   type        = string
 
   validation {
@@ -25,4 +25,10 @@ variable "root_domain" {
   description = "Registrable domain the API and MCP hostnames hang off."
   type        = string
   default     = "agentdisk.io"
+}
+
+variable "manage_r2_signing_token" {
+  description = "Whether Terraform creates the R2 signing token. See the module variable of the same name - enabling it grants the deploy token the ability to mint API tokens."
+  type        = bool
+  default     = false
 }

@@ -2,30 +2,158 @@
    Everything here exists because the design system has no equivalent yet;
    the Drawer in particular is a known gap (docs/design/03 §7.2). */
 
+/* --- Overlay ladder (docs/ui-layering.md) ---
+   One ordered scale for everything that floats. Use the token, never a bare
+   number; if no rung fits, add one to the document first.
+
+   .scrim is defined in the vendored styles.css at 60, below the drawer's old
+   80 — which is why a confirmation opened from the file drawer rendered
+   underneath it with its confirm button unclickable. main.jsx imports
+   styles.css before app.css, so the override below is enough and the vendored
+   sheet is left alone. Drawer and scrim simply swap: nothing sits at 61-79, so
+   the exchange cannot disturb a third layer.
+
+   A modal covers a drawer because a drawer is a place you browse and a dialog
+   is a question you must answer first. */
+:root{
+  --z-base:1;       /* sticky table header */
+  --z-nav:30;       /* shell tabs, marketing nav, cookie notice */
+  --z-topbar:40;    /* shell top bar */
+  --z-progress:50;  /* route progress bar */
+  --z-drawer:60;    /* drawer */
+  --z-modal:80;     /* scrim + modal */
+  --z-toast:90;     /* toasts */
+}
+.scrim{z-index:var(--z-modal)}
+
+/* --- Modal scroll contract, points 1-3 (docs/ui-layering.md §2) ---
+   Point 1 looked met and was not. .modal declares max-height:100% inside a
+   grid scrim, and a percentage resolves against the grid area -- the row
+   track. That track is `auto`, and an auto track is sized by its content:
+   when the dialog is taller than the window the track grows to the dialog's
+   own height, so 100% resolves to the dialog's own height and the cap caps
+   nothing. It bit only when it was not needed. A minmax(0,1fr) track is
+   sized by the container instead, so 100% is the window minus the scrim's
+   padding, which is what the doc always said it was. The admin console met
+   the same bug and answered it with a flex scrim (Overlay.jsx); this is the
+   grid-native equivalent and keeps place-items.
+
+   Point 2 is the one that looked solved and was not, for a different reason.
+   .modal__body already has overflow-y:auto, but in a flex column a child's
+   default min-height:auto refuses to shrink below its content, so the body
+   never gets smaller than its contents, overflow-y never engages, and the
+   column grows past its own cap -- pushing the footer off screen.
+   min-height:0 is the fix, not overflow-y. It was in place before point 1
+   was, which is why the footer still fell off: a body that may shrink, under
+   a cap that never asked it to.
+
+   Point 3: without flex:none the browser resolves the overflow by compressing
+   exactly the head and footer, the two regions that must never move.
+
+   Local rather than vendored, for the same reason as the ladder above:
+   main.jsx imports styles.css first, so these win at equal specificity.
+   Point 4, Enter-to-submit, needs markup and lives in Modal.jsx -- see
+   backlog/031. */
+.scrim{grid-template-rows:minmax(0,1fr)}
+.modal__body{min-height:0}
+.modal__head,.modal__foot{flex:none}
+
 /* --- Drawer (design-system gap; see components-local/Drawer.jsx) --- */
-.dw{position:fixed;inset:0;z-index:80;display:flex;justify-content:flex-end}
-.dw__scrim{position:absolute;inset:0;background:oklch(0.19 0.012 262/0.34);
+.dw{position:fixed;inset:0;z-index:var(--z-drawer);display:flex;justify-content:flex-end}
+.dw__scrim{position:absolute;inset:0;background:var(--scrim);
   animation:ad-fade var(--d-2) var(--ease)}
-.dw__panel{position:relative;width:min(420px,100%);background:var(--surface);
+.dw__panel{position:relative;width:min(26.25rem,100%);background:var(--surface);
   border-left:1px solid var(--line);box-shadow:var(--sh-4);display:flex;
   flex-direction:column;animation:dw-in var(--d-3) var(--ease-out)}
 @keyframes dw-in{from{transform:translateX(var(--s-8));opacity:0}to{transform:none;opacity:1}}
 .dw__head{display:flex;align-items:flex-start;gap:var(--s-5);padding:var(--s-6);
   border-bottom:1px solid var(--line);flex:none}
-.dw__title{font-size:var(--t-16);font-weight:var(--w-semi);color:var(--ink);
+.dw__title{font-family:var(--font-display);font-size:var(--t-16);font-weight:var(--w-semi);color:var(--ink);
   letter-spacing:var(--tr-snug);min-width:0;overflow-wrap:anywhere}
 .dw__body{flex:1;overflow-y:auto;padding:var(--s-6);display:flex;
   flex-direction:column;gap:var(--s-6)}
 .dw__foot{flex:none;padding:var(--s-5) var(--s-6);border-top:1px solid var(--line);
   background:var(--surface-2);display:flex;gap:var(--s-4);flex-wrap:wrap}
-@media (max-width:768px){
+@media (max-width:960px){
   .dw__panel{width:100%;border-left:0;animation:dw-up var(--d-3) var(--ease-out)}
   @keyframes dw-up{from{transform:translateY(var(--s-9));opacity:0}to{transform:none;opacity:1}}
 }
 
+/* --- Workspace switcher (design-system gap; see components-local/WorkspaceSwitcher.jsx) ---
+   The trigger borrows the shell's own .shell__wsbtn styling, so only the panel
+   below it needs describing. It sits inside .shell__nav, which is overflow:hidden
+   — hence the max-height, so a long list scrolls itself instead of being cut. */
+/* --wsx-mark matches .shell__wsmark, which the design system sizes at 22px. The
+   4px space scale has no token for it, so it is pinned once here rather than
+   repeated: it is what keeps the "New workspace" row's label aligned with the
+   workspace rows' labels. */
+.wsx{position:relative;--wsx-mark:1.375rem}
+
+/* The top bar's mark carries two letters — "MW", "KL" — in a 20px square the
+   design system sizes for one, so on a wide pair the glyphs sit against their
+   own border. 3px each side, and the square grows into a rounded rectangle
+   rather than squeezing the letters; 20px stays the floor, so a single-letter
+   mark is unchanged. Bar only: the menu's rows align their marks with
+   --wsx-mark, and widening those without moving that column would step the
+   "New workspace" label out of line with the workspace names above it. */
+.shell__wsbtn--bar .shell__wsmark{width:auto;min-width:1.25rem;padding:0 0.1875rem}
+
+.wsx__menu{position:absolute;top:calc(100% + var(--s-2));left:0;right:0;z-index:30;
+  background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r-3);
+  box-shadow:var(--sh-3);padding:var(--s-2);
+  width:min(22.5rem,90vw);min-width:18rem;animation:ad-fade var(--d-1) var(--ease)}
+.wsx__menu--scroll{max-height:60vh;overflow-y:auto}
+/* 9px padding, 8px radius, 13.5px label — the reference draws both menus in
+   this footer and top bar at those values, the switcher's rows and the account
+   menu's items alike, which is what keeps the two indistinguishable. */
+.wsx__item{display:flex;align-items:center;gap:var(--s-4);width:100%;
+  padding:0.5625rem;border:0;border-radius:0.5rem;background:transparent;
+  font-size:var(--t-13-5);font-weight:var(--w-med);color:var(--ink);
+  cursor:pointer;text-align:left;
+  transition:background var(--d-1) var(--ease),color var(--d-1) var(--ease)}
+/* The account menu's rows are the page's own text colour, not the muted tone
+   the switcher uses for workspaces it is offering you. */
+.wsx__head + .wsx__item,.wsx__head ~ .wsx__item{color:var(--ink)}
+.wsx__item--danger{color:var(--danger-ink)}
+.wsx__item--danger:hover{background:var(--danger-soft);color:var(--danger-ink)}
+
+/* Signed-in identity, above the rule. */
+.wsx__head{padding:0.5625rem 0.5625rem 0.6875rem;border-bottom:1px solid var(--line);
+  margin-bottom:0.3125rem}
+.wsx__headname{font-size:var(--t-13-5);font-weight:var(--w-semi);color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wsx__heademail{font-family:var(--font-mono);font-size:var(--t-11);color:var(--ink-3);
+  margin-top:var(--s-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wsx__item:hover{background:var(--surface-2);color:var(--ink)}
+.wsx__item[aria-checked="true"]{color:var(--ink);font-weight:var(--w-med)}
+.wsx__label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wsx__details{display:flex;flex:1;min-width:0;flex-direction:column;gap:var(--s-1)}
+.wsx__meta{font-family:var(--font-mono);font-size:var(--t-10-5);font-weight:var(--w-reg);color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wsx__tags{display:flex;align-items:flex-end;flex-direction:column;gap:var(--s-1);margin-left:auto}
+/* The reference sets the row's tag in mono at 9.5px with no extra tracking, a
+   step below the ID beside it, and in the mid ink rather than the faintest: it
+   is a fact about the workspace, not a section heading. */
+.wsx__role{font-family:var(--font-mono);font-size:var(--t-9-5);font-weight:var(--w-reg);text-transform:uppercase}
+.wsx__role{color:var(--ink-2)}
+/* "New workspace" is the one row the reference draws in the accent, label and
+   glyph alike, because it is an action in a list of facts. */
+.wsx__item--create{color:var(--accent-ink)}
+.wsx__item--create .wsx__plus{color:var(--accent-ink)}
+.wsx__check{flex:none;display:flex;color:var(--accent-ink)}
+.wsx__plus{width:var(--wsx-mark);flex:none;display:grid;place-items:center;
+  color:var(--ink-3)}
+/* Same icon slot, named for what it is rather than for one of its uses — the
+   account menu's rows lead with a glyph too, and none of them is a plus. */
+.wsx__lead{width:var(--wsx-mark);flex:none;display:grid;place-items:center;
+  color:var(--ink-3)}
+/* The account menu sits in the sidebar footer, so the shared menu's downward
+   drop would land it off the bottom of the viewport. */
+.wsx__menu--up{top:auto;bottom:calc(100% + var(--s-2))}
+.wsx__sep{height:1px;background:var(--line);margin:var(--s-2) 0}
+
 /* --- file-browser bits with no design-system equivalent --- */
 .dz-overlay{position:absolute;inset:0;z-index:5;display:grid;place-items:center;
-  border:2px dashed var(--accent);border-radius:var(--r-3);
+  border:0.125rem dashed var(--accent);border-radius:var(--r-3);
   background:var(--accent-soft);pointer-events:none}
 .bulkbar{display:flex;align-items:center;gap:var(--s-5);padding:var(--s-4) var(--s-6);
   background:var(--accent-soft);border:1px solid var(--accent-line);
@@ -34,100 +162,1985 @@
 .toolbar{display:flex;align-items:center;gap:var(--s-4);flex-wrap:wrap}
 .toolbar__spacer{flex:1;min-width:var(--s-8)}
 
-/* --- auth: centred card shell (8.3-8.7) --- */
-.auth{min-height:100vh;display:grid;place-items:center;padding:var(--s-8);
-  background:var(--paper)}
-.auth__inner{width:100%;max-width:400px;display:flex;flex-direction:column;
-  gap:var(--s-6)}
-.auth__brand{display:flex;align-items:center;gap:var(--s-4);justify-content:center}
-.auth__logo{width:26px;height:26px;border-radius:var(--r-1);background:var(--accent);
-  display:grid;place-items:center;color:var(--on-accent);font-family:var(--font-mono);
-  font-size:var(--t-13);font-weight:var(--w-semi)}
-.auth__wordmark{font-size:var(--t-16);font-weight:var(--w-semi);
-  letter-spacing:var(--tr-snug);color:var(--ink)}
-.auth__card{background:var(--surface);border:1px solid var(--line);
-  border-radius:var(--r-3);padding:var(--s-8);display:flex;flex-direction:column;
-  gap:var(--s-6)}
-.auth__h1{font-size:var(--t-21);font-weight:var(--w-semi);
-  letter-spacing:var(--tr-snug);color:var(--ink)}
-.auth__sub{font-size:var(--t-13);color:var(--ink-2);line-height:var(--lh-loose);
-  text-wrap:pretty}
-.auth__foot{font-size:var(--t-13);color:var(--ink-2);text-align:center}
-.auth__legal{font-size:var(--t-12);color:var(--ink-3);text-align:center;
-  line-height:var(--lh-normal);text-wrap:pretty}
-.auth__divider{display:flex;align-items:center;gap:var(--s-4);
-  font-size:var(--t-12);color:var(--ink-4)}
-.auth__divider::before,.auth__divider::after{content:"";flex:1;height:1px;
-  background:var(--line)}
+/* ==========================================================================
+   auth: the centred sheet (8.3-8.7)
 
-/* --- marketing (8.1 landing, 8.2 pricing) --- */
-.mk{background:var(--paper);min-height:100vh}
-.mk__nav{position:sticky;top:0;z-index:30;display:flex;align-items:center;
-  gap:var(--s-6);height:var(--topbar-h);padding:0 var(--s-8);
-  border-bottom:1px solid var(--line);background:oklch(1 0 0/0.82);
-  backdrop-filter:blur(8px)}
+   Replaces the split sheet built to AgentDisk Auth.dc.html, on 21 Sept 2026
+   -- docs/superpowers/specs/2026-09-21-auth-centred-sheet-design.md. The
+   brand panel is gone; the form is the whole page, one card centred on it.
+
+   The sheet scales as one piece with the viewport's height. .auth takes its
+   font-size from dvh, clamped between 85% and 100% of the root, and every
+   length inside is an em of that -- so this block is written in em rather
+   than in the rem tokens the rest of the file uses. A token is a fixed
+   length, and a fixed length is exactly what cannot fit a 1366x768 laptop
+   and a 1440p monitor with the same rule. Each em names the px it is at full
+   scale, where 1em is 25px; colour, weight, tracking, motion and
+   the focus ring are still tokens, only lengths scale. Box sizes are set on
+   boxes and text sizes on text, never both on one element, so a 42px control
+   stays 2.1em of the sheet whatever its label's size is.
+
+   The unit is 2.65dvh, clamped between 0.85rem and 1.25rem: full size, a
+   quarter over the 20px root, from about 945px of viewport height; the
+   floor from 640 down. Sign up with the strength chips open is ~35.5 units
+   of page, so at every height between the two the sheet takes ~94% of the
+   viewport and never more, and it fits from about 600px up. Below that the
+   page scrolls -- a 768p screen under several toolbars, or a browser zoomed
+   in -- and no readable sign-up form fits in less. The size and the fit are
+   one number: to make the sheet larger, raise the ceiling, and it will be
+   larger on every screen with the height to spare and unchanged on the ones
+   without. dvh rather than vh because a mobile URL bar otherwise counts
+   height the page never gets.
+   ========================================================================== */
+.auth{font-size:clamp(0.85rem,2.65dvh,1.25rem);min-height:100dvh;display:grid;
+  place-items:center;padding:1em 1.2em;background:var(--paper);
+  position:relative}
+
+/* --- the platter ---
+   The page's one decoration, and it is the product: five rings of a disk,
+   hairline in --line so they read as texture in either theme, and one
+   sector of one ring in the accent. Fixed and clipped in a layer of its own
+   so it can run off every edge without making the page wider or taller. The
+   centre sits up and to the right of the card, so the rings cross its corner
+   rather than framing it. */
+.auth__bg{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.auth__bg svg{position:absolute;width:88vmax;height:88vmax;left:50%;top:50%;
+  margin:-44vmax 0 0 -44vmax;transform:translate(19vmax,-9vmax)}
+.auth__ring{fill:none;stroke:var(--line);stroke-width:1px}
+.auth__arc{fill:none;stroke:var(--acc);stroke-width:2px;stroke-linecap:round;
+  opacity:.55}
+
+/* --- the sheet --- */
+.auth__sheet{position:relative;z-index:1;width:100%;max-width:30em; /* 600 */
+  display:flex;flex-direction:column;gap:0.85em}
+.auth__sheet > .auth__brand{align-self:flex-start;padding-left:0.15em}
+.auth__brand{display:flex;align-items:center;gap:0.5em;text-decoration:none}
+.auth__brand:hover{text-decoration:none}
+.auth__wordmark{font-family:var(--font-display);font-size:0.85em; /* 17 */
+  font-weight:var(--w-semi);letter-spacing:-0.02em;color:var(--tx)}
+.auth__card{background:var(--surface);border:1px solid var(--line);
+  border-radius:0.7em; /* 14 */ padding:1.4em 1.8em 1.3em; /* 28 36 26 */
+  box-shadow:var(--sh-3);animation:ad-valuein var(--d-3) var(--ease) both}
+
+/* --- Sign up / Log in ---
+   Links, not buttons: /signup and /login are routes. The current one is a
+   weight, a colour and a rule that sits on the card's own divider. */
+.auth__tabs{display:flex;gap:1.4em;border-bottom:1px solid var(--line);
+  margin:0 0 1.1em}
+.auth__tab{position:relative;padding:0.1em 0 0.65em;font-size:0.675em; /* 13.5 */
+  font-weight:var(--w-med);color:var(--tx2);text-decoration:none;
+  transition:color var(--d-1) var(--ease)}
+.auth__tab:hover{color:var(--tx);text-decoration:none}
+.auth__tab.is-on{color:var(--tx);font-weight:var(--w-semi)}
+.auth__tab.is-on::after{content:"";position:absolute;left:0;right:0;
+  bottom:-1px;height:2px;background:var(--acc)}
+.auth__tab:focus-visible{outline:2px solid var(--acc);outline-offset:3px;
+  border-radius:2px}
+
+.auth__head{margin:0 0 1.05em}
+.auth__h1{margin:0;font-family:var(--font-display);font-size:1.25em; /* 25 */
+  font-weight:var(--w-semi);letter-spacing:var(--tr-snug);line-height:1.2;
+  color:var(--tx)}
+.auth__sub{margin:0.4em 0 0;font-size:0.675em;line-height:1.5;
+  color:var(--tx2);text-wrap:pretty}
+
+/* --- the providers, side by side --- */
+.auth__ssos{display:grid;grid-template-columns:1fr 1fr;gap:0.5em;
+  margin-bottom:0.8em}
+.auth__sso{height:2.1em; /* 42 */ border:1px solid var(--bd2);
+  border-radius:0.45em; /* 9 */ background:var(--surf2);display:flex;
+  align-items:center;justify-content:center;gap:0.5em;padding:0 0.6em;
+  cursor:pointer;color:var(--tx);
+  transition:border-color var(--d-1) var(--ease),background var(--d-1) var(--ease)}
+.auth__sso > span{font-family:var(--font-sans);font-size:0.675em;
+  font-weight:var(--w-med)}
+.auth__sso:hover:not(:disabled){border-color:var(--line-3);background:var(--surf3)}
+.auth__sso:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.auth__sso:disabled{opacity:.55;cursor:not-allowed}
+.auth__sso svg{flex:0 0 auto;width:0.85em;height:0.85em} /* 21 */
+.auth__divider{display:flex;align-items:center;gap:0.55em;margin-bottom:1em}
+.auth__divider::before,.auth__divider::after{content:"";flex:1;height:1px;
+  background:var(--bd)}
+.auth__dividertx{font-family:var(--font-mono);font-size:0.475em; /* 9.5 */
+  letter-spacing:0.1em;color:var(--tx3)}
+
+/* --- the fields ---
+   The label sits in the field's top edge, on a slip of the card's own
+   background, so it costs no row; "Forgot password?" sits in the same edge
+   at the other end. The field is the card's colour, not --surf2, because a
+   label straddling two colours has to pick one. Focus turns the edge and the
+   label the accent together; an error turns both the danger colour. */
+.auth__group{position:relative;margin:0 0 0.9em}
+.auth__group--pw{margin-bottom:0.55em}
+.auth__label{position:absolute;top:0;left:1.25em;transform:translateY(-50%);
+  z-index:1;padding:0 0.45em;background:var(--surface);
+  font-family:var(--font-mono);font-size:0.475em; /* 9.5 */
+  letter-spacing:var(--tr-caps);line-height:1;color:var(--tx3);
+  transition:color var(--d-1) var(--ease)}
+.auth__labelextra{position:absolute;top:0;right:1em;transform:translateY(-50%);
+  z-index:1;padding:0 0.4em;background:var(--surface);font-size:0.6em; /* 12 */
+  line-height:1}
+.auth__forgot{font-family:var(--font-sans);font-weight:var(--w-med);
+  color:var(--acc);text-decoration:none;background:transparent;border:none;
+  padding:0;cursor:pointer}
+.auth__forgot:hover{text-decoration:underline}
+.auth__field{height:2.1em; /* 42 */ border:1px solid var(--bd2);
+  border-radius:0.45em;background:var(--surface);display:flex;
+  align-items:center;gap:0.2em;padding:0 0.7em;
+  transition:border-color var(--d-1) var(--ease),box-shadow var(--d-1) var(--ease)}
+.auth__field:focus-within{border-color:var(--acc);box-shadow:var(--ring)}
+.auth__group:focus-within .auth__label{color:var(--acc)}
+.auth__field.is-bad{border-color:var(--dngrBd)}
+.auth__field.is-bad:focus-within{box-shadow:var(--ring-danger)}
+.auth__group:has(.is-bad) .auth__label{color:var(--dngrTx)}
+/* The input carries no chrome of its own -- the row above is the control. */
+.auth__input{flex:1;min-width:0;border:none;background:transparent;padding:0;
+  color:var(--tx);font-family:var(--font-sans);font-size:0.675em;line-height:1}
+.auth__input:focus{outline:none}
+.auth__input::placeholder{color:var(--tx3)}
+.auth__input--pw{font-size:0.7em;letter-spacing:0.2em}
+.auth__input--pw::placeholder{letter-spacing:var(--tr-none)}
+.auth__fieldok{margin-left:auto;flex:0 0 auto;color:var(--okTx);display:flex}
+.auth__fieldok svg{width:0.75em;height:0.75em} /* 19 */
+.auth__reveal{flex:0 0 auto;display:flex;align-items:center;border:none;
+  background:transparent;padding:0;cursor:pointer;color:var(--tx3)}
+.auth__reveal svg{width:0.8em;height:0.8em} /* 20 */
+.auth__reveal:hover{color:var(--tx2)}
+.auth__reveal:focus-visible{outline:2px solid var(--acc);outline-offset:2px;
+  border-radius:2px}
+.auth__err{display:flex;align-items:center;gap:0.45em;margin-top:0.55em;
+  font-size:0.6em;color:var(--dngrTx)}
+.auth__err svg{flex:0 0 auto;width:1.1em;height:1.1em}
+
+/* --- password strength ---
+   One bar per rule met, the verdict in a word, and the rules as one row of
+   chips rather than a three-row list: 45px under the field instead of 139,
+   which is what lets Sign up fit. A chip is a tick and a colour when met, a
+   dot and grey when not, and the word for a screen reader is in the item. */
+.auth__strength{margin:0 0 0.9em}
+.auth__bars{display:flex;align-items:center;gap:0.2em}
+.auth__bar{flex:1;height:0.2em; /* 4 */ border-radius:var(--r-full);
+  display:block;background:var(--surf3);
+  transition:background var(--d-2) var(--ease)}
+.auth__bar.is-on{background:var(--ok)}
+.auth__strengthtag{margin-left:1.1em;font-family:var(--font-mono);
+  font-size:0.45em; /* 9 */ font-weight:var(--w-semi);letter-spacing:0.07em;
+  padding:0.3em 0.7em;border-radius:0.45em;flex:0 0 auto;color:var(--okTx);
+  background:var(--okSoft);border:1px solid var(--okBd)}
+.auth__strengthtag--warn{color:var(--warnTx);background:var(--warnSoft);
+  border-color:var(--warnBd)}
+.auth__strengthtag--bad{color:var(--dngrTx);background:var(--dngrSoft);
+  border-color:var(--dngrBd)}
+.auth__reqs{display:flex;flex-wrap:wrap;gap:0.3em 0.35em;margin:0.55em 0 0;
+  padding:0;list-style:none}
+.auth__req{display:inline-flex;align-items:center;gap:0.4em;
+  font-size:0.575em; /* 11.5 */ line-height:1;padding:0.45em 0.75em 0.45em 0.6em;
+  border:1px solid var(--bd);border-radius:var(--r-full);color:var(--tx3);
+  transition:color var(--d-2) var(--ease),border-color var(--d-2) var(--ease),
+    background var(--d-2) var(--ease)}
+.auth__req.is-met{color:var(--okTx);border-color:var(--okBd);
+  background:var(--okSoft)}
+.auth__reqmark{display:inline-flex;align-items:center;justify-content:center;
+  width:0.9em;height:0.9em;flex:0 0 auto}
+.auth__reqmark svg{width:100%;height:100%}
+.auth__reqdot{width:0.35em;height:0.35em;border-radius:var(--r-full);
+  background:currentColor;opacity:.6;display:block}
+
+/* --- the consent row --- */
+.auth__consent{position:relative;display:flex;align-items:flex-start;
+  gap:0.5em;margin:0 0 0.85em;cursor:pointer}
+/* The native box is taken out of the flow, not hidden: `display:none` would
+   drop it from the tab order and from the label's own click target. */
+.auth__consent input{position:absolute;opacity:0;width:0;height:0}
+.auth__check{width:0.85em;height:0.85em;flex:0 0 0.85em; /* 17 */
+  border-radius:0.25em;border:0.09em solid var(--bd2);background:transparent;
+  display:flex;align-items:center;justify-content:center;margin-top:0.08em;
+  color:transparent;
+  transition:background var(--d-1) var(--ease),border-color var(--d-1) var(--ease)}
+.auth__check svg{width:0.6em;height:0.6em}
+.auth__consent input:checked + .auth__check{background:var(--acc);
+  border-color:var(--acc);color:var(--accInk)}
+.auth__consent input:focus-visible + .auth__check{outline:2px solid var(--acc);
+  outline-offset:2px}
+.auth__consenttx{font-size:0.625em; /* 12.5 */ line-height:1.5;color:var(--tx2)}
+
+/* --- submit and the tail --- */
+.auth__submit{width:100%;height:2.3em; /* 46 */ border:none;
+  border-radius:0.5em; /* 10 */ background:var(--acc);color:var(--accInk);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  gap:0.5em;text-decoration:none;transition:background var(--d-1) var(--ease)}
+.auth__submittx{font-family:var(--font-sans);font-size:0.725em; /* 14.5 */
+  font-weight:var(--w-semi)}
+.auth__submit:hover:not(:disabled){background:var(--accent-hover);
+  text-decoration:none}
+.auth__submit:focus-visible{outline:2px solid var(--acc);outline-offset:3px}
+.auth__submit:disabled{opacity:.6;cursor:not-allowed}
+.auth__submit[aria-busy="true"]{cursor:wait;opacity:1}
+.auth__spin{width:0.65em;height:0.65em;flex:0 0 0.65em;
+  border-radius:var(--r-full);border:0.125em solid currentColor;
+  border-top-color:transparent;display:block;
+  animation:ad-spin .7s linear infinite}
+.auth__ghost{display:block;width:100%;margin-top:0.9em;background:transparent;
+  border:none;padding:0;font-family:var(--font-sans);font-size:0.625em;
+  font-weight:var(--w-med);color:var(--acc);cursor:pointer;text-align:center;
+  text-decoration:none}
+.auth__ghost:disabled{opacity:.55;cursor:not-allowed}
+.auth__foot{margin:1.3em 0 0;font-size:0.6em; /* 12 */ line-height:1.5;
+  color:var(--tx3);text-align:center;text-wrap:pretty}
+.auth__alt{margin:0.6em 0 0;display:flex;align-items:center;
+  justify-content:center;gap:0.35em;flex-wrap:wrap;font-size:0.625em}
+.auth__altprompt{color:var(--tx2)}
+.auth__altlink{font-weight:var(--w-semi);color:var(--acc);text-decoration:none}
+.auth__altlink:hover{text-decoration:underline}
+
+/* Phones. The card keeps its edge -- there is nothing else on the page to
+   stand it off from -- and the providers stack, because "Continue with
+   GitHub" does not fit half of a 360px column. Real px, as every media
+   query in this file: a query resolves rem against the initial 16, not this
+   document's 125% root. */
+@media (max-width:560px){
+  .auth{padding:0.8em}
+  .auth__card{padding:1.2em 1.1em 1.1em}
+  .auth__ssos{grid-template-columns:minmax(0,1fr)}
+}
+
+/* --- the centred card the sandbox still uses ---
+   8.9's anonymous Turnstile sandbox has no artboard in AgentDisk Auth.dc.html
+   — it is a different screen, reached without a credential — so it keeps the
+   25rem card this block held before the split sheet landed, and
+   keeps now that the sheet is a card of its own. Scoped under
+   .auth--card, which Sandbox.jsx sets alongside .auth, so the two shells
+   cannot drift into each other: every element the sandbox shares with the new
+   sheet is restated here at its old value. */
+.auth--card{padding:var(--s-9)}
+.auth--card .auth__inner{width:100%;max-width:25rem;display:flex;
+  flex-direction:column;gap:var(--s-6)}
+.auth--card .auth__brand{justify-content:center}
+.auth--card .auth__wordmark{font-size:var(--t-16);
+  letter-spacing:var(--tr-snug)}
+.auth--card .auth__card{background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-4);padding:var(--s-8);display:flex;
+  flex-direction:column;gap:var(--s-6);box-shadow:none;animation:none}
+.auth--card .auth__h1{margin:0;font-size:var(--t-21)}
+.auth--card .auth__sub{margin:0;font-size:var(--t-13);
+  line-height:var(--lh-normal)}
+.auth--card .auth__legal{font-size:var(--t-12);color:var(--ink-3);
+  text-align:center;line-height:var(--lh-normal);text-wrap:pretty}
+
+
+/* --- marketing (8.1 landing, 8.2 pricing) ---
+   Rebuilt to AgentDisk Site.dc.html. Tokens only; the design's literal px and
+   hex live in styles.css as token values, not here. */
+/* The sheet. Same shape as the dashboard's .shell (styles.css) and gated at
+   the same 1351px: below that there is no ground either side to stand off, so
+   the sheet fills the frame and the edge switches off entirely.
+
+   The two are deliberately separate copies for now — .shell carries sticky
+   children and a corner cut this one solves differently. .auth__sheet is NOT
+   the same thing despite looking like it: it is a card that keeps its edge at
+   every width, so folding it in here would strip its border below 1351px.
+
+   No overflow:hidden. The reference clips the corners that way, but it makes
+   the sheet a scroll container and .mk__nav, .doc__toc and .doc__rail all
+   stick to the viewport rather than the sheet. The corner is cut twice
+   instead, exactly as .shell does it: the two children that paint their own
+   background — the nav and the footer — carry the curve themselves. */
+.mk{background:var(--paper);min-height:100vh;display:flex;flex-direction:column;
+  width:100%;max-width:var(--shell-w);margin:0 auto}
+
+@media (min-width:1351px){
+  /* min-height gives the gap back, so a short page does not gain a scrollbar
+     purely from the two margins. */
+  .mk{margin-block:var(--sheet-gap);
+    min-height:calc(100vh - (2 * var(--sheet-gap)));
+    border:1px solid var(--line);border-radius:var(--r-4);box-shadow:var(--sh-4)}
+  .mk__nav{border-radius:var(--r-4) var(--r-4) 0 0}
+  .mk__foot{border-radius:0 0 var(--r-4) var(--r-4)}
+}
+.mk__nav{position:sticky;top:0;z-index:var(--z-nav);display:flex;align-items:center;
+  gap:var(--s-6);height:var(--topbar-h);padding:0 var(--gutter);
+  border-bottom:1px solid var(--line);
+  background:color-mix(in srgb,var(--surface) 82%,transparent);
+  backdrop-filter:blur(0.5rem)}
+.mk__brand{display:flex;align-items:center;gap:var(--s-4);flex:none;
+  text-decoration:none}
+.mk__brand:hover{text-decoration:none}
+.mk__wordmark{font-family:var(--font-display);font-size:var(--t-16);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink)}
 .mk__navlinks{display:flex;align-items:center;gap:var(--s-7);margin-left:auto}
-.mk__wrap{max-width:1120px;margin:0 auto;padding:0 var(--s-8)}
-.mk__hero{padding:var(--s-13) 0 var(--s-12);display:grid;
-  grid-template-columns:1fr 1fr;gap:var(--s-10);align-items:center}
-.mk__h1{font-size:var(--t-52);line-height:var(--lh-tight);
-  letter-spacing:var(--tr-tight);font-weight:var(--w-semi);color:var(--ink);
-  text-wrap:balance}
+/* The three page links sit in their own group at the design's tight 2px gap,
+   because each one is a pill with its own padding -- the 20px above would put
+   32px of air between two adjacent pills and stop them reading as one set.
+   The group keeps its distance from Sign in / Start free, which are actions
+   rather than pages and must not look like a fourth tab. */
+.mk__pages{display:flex;align-items:center;gap:var(--s-1)}
+
+/* Page links. From the design's navLink(): muted at rest, accent when it is
+   the page you are on. The vendored sheet underlines every <a> on hover; a
+   nav is a set of tabs, not prose, so that is switched off here.
+
+   The current page is a filled pill with a border. An underline was the first
+   attempt and it was too quiet -- at 2px under 13px text it read as a hover
+   artefact rather than as state, which is the whole thing this has to say.
+   A bordered pill is the selected-tab affordance people already know, and it
+   is a shape, so colour is not carrying the meaning alone; NavLink also sets
+   aria-current="page" for anything not reading pixels.
+
+   Every link carries a transparent 1px border at rest so gaining the real one
+   cannot shift the row by 2px. Pointer stays default on the current page --
+   it goes nowhere, and that is the point. */
+.mk__navlink{position:relative;display:inline-flex;align-items:center;
+  height:var(--s-9);padding:0 var(--s-5);border-radius:var(--r-2);
+  border:1px solid transparent;
+  font-size:var(--t-13);font-weight:var(--w-med);color:var(--ink-2);
+  text-decoration:none;white-space:nowrap;
+  transition:color var(--d-2) var(--ease),background-color var(--d-2) var(--ease),
+    border-color var(--d-2) var(--ease)}
+.mk__navlink:hover{color:var(--ink);text-decoration:none}
+/* The Support item is a <button> wearing the link's clothes. styles.css resets
+   `font` and `color` on every button but not the chrome, so the UA background
+   and the pointer are the two things left to say. No hover pill and no --on
+   state: it is never the current page, because it is not a page. */
+.mk__navlink--action{background:none;cursor:pointer}
+/* The current label is also bold and a step larger. The pill alone was still
+   being missed on a dark bar, and weight plus size are the two signals that
+   survive at a glance and in peripheral vision, where a 38%-opacity border
+   does not. One step, 13 to 14: the AgentDisk wordmark beside it is 16, and a
+   nav link at that size stops the brand being the biggest thing in the bar.
+
+   It makes the current label a few pixels wider than its neighbours. The
+   group is right-aligned, so the three sit fractionally further left on one
+   page than another -- but never while you hover or click, only across a
+   navigation that repaints the whole page anyway, so there is nothing to see
+   move. Pinning the width would cost an invisible copy of every label. */
+.mk__navlink--on,.mk__navlink--on:hover{color:var(--accent);
+  font-size:var(--t-14);font-weight:var(--w-bold);cursor:default;
+  background-color:var(--accent-soft);
+  border-color:color-mix(in srgb,var(--accent) 38%,transparent)}
+/* The pill arrives rather than appearing: it scales up from 90%, overshoots a
+   little and settles. Nav is remounted per route, so this plays on each page
+   change and pulls the eye to where you have landed. The global
+   prefers-reduced-motion rule in styles.css collapses it to nothing. */
+.mk__navlink--on{animation:mk-navon var(--d-3) var(--ease-out)}
+@keyframes mk-navon{
+  from{background-color:transparent;border-color:transparent;transform:scale(.9)}
+  60%{transform:scale(1.03)}
+  to{transform:none}
+}
+.mk__wrap{margin:0 auto;padding:0 var(--gutter);width:100%}
+
+/* hero */
+.mk__hero{padding:var(--s-11) 0 var(--s-9);display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,28.75rem);gap:var(--s-10);
+  align-items:center}
+.mk__hero--single{display:block}
+.mk__badge{display:inline-flex;align-items:center;gap:var(--s-4);
+  border:1px solid var(--line-2);border-radius:var(--r-full);
+  padding:var(--s-2) var(--s-5) var(--s-2) var(--s-4);margin-bottom:var(--s-7)}
+.mk__badgedot{width:0.375rem;height:0.375rem;border-radius:var(--r-full);
+  background:var(--ok);display:block;flex:none}
+.mk__badgetext{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--ink-2)}
+.mk__h1{font-family:var(--font-display);font-size:var(--t-52);
+  line-height:var(--lh-tight);letter-spacing:var(--tr-tight);
+  font-weight:var(--w-semi);color:var(--ink);text-wrap:balance;
+  margin-bottom:var(--s-6)}
 .mk__lead{font-size:var(--t-16);line-height:var(--lh-loose);color:var(--ink-2);
-  max-width:52ch;text-wrap:pretty;margin-top:var(--s-6)}
-.mk__ctas{display:flex;gap:var(--s-4);margin-top:var(--s-8);flex-wrap:wrap}
-.mk__section{padding:var(--s-12) 0;border-top:1px solid var(--line)}
-.mk__eyebrow{font-size:var(--t-12);font-weight:var(--w-semi);
-  letter-spacing:var(--tr-caps);text-transform:uppercase;color:var(--accent-ink)}
-.mk__h2{font-size:var(--t-32);line-height:var(--lh-snug);
-  letter-spacing:var(--tr-tight);font-weight:var(--w-semi);color:var(--ink);
-  margin-top:var(--s-3);text-wrap:balance}
-.mk__grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s-6);
-  margin-top:var(--s-8)}
-.mk__grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--s-6);
-  margin-top:var(--s-8)}
+  max-width:56ch;text-wrap:pretty;margin-bottom:var(--s-8)}
+.mk__ctas{display:flex;gap:var(--s-5);margin-bottom:var(--s-7);flex-wrap:wrap;
+  align-items:center}
+/* The quiet third way in beside the two buttons: a link, sized to the
+   buttons' row so it sits on their centre line. */
+.mk__ctalink{display:inline-flex;align-items:center;height:2.625rem;padding:0 var(--s-3);
+  font-size:var(--t-13-5);font-weight:var(--w-med);color:var(--ink-2)}
+.mk__ctalink:hover{color:var(--ink)}
+.mk__tags{display:flex;flex-wrap:wrap;gap:var(--s-6)}
+.mk__tag{font-family:var(--font-mono);font-size:var(--t-11);color:var(--ink-3)}
+
+/* hero terminal */
+.term{border:1px solid var(--line);border-radius:var(--r-4);overflow:hidden;
+  background:var(--dark);min-width:0}
+.term__bar{display:flex;align-items:center;gap:var(--s-3);
+  padding:var(--s-4) var(--s-5);border-bottom:1px solid var(--line);
+  background:var(--surface-2)}
+.term__dot{width:0.5rem;height:0.5rem;border-radius:var(--r-full);display:block;flex:none}
+.term__dot--r{background:var(--danger)}
+.term__dot--y{background:var(--warn)}
+.term__dot--g{background:var(--ok)}
+.term__cap{font-family:var(--font-mono);font-size:var(--t-10);
+  color:var(--ink-3);margin-left:var(--s-3)}
+.term__body{margin:0;padding:var(--s-6);overflow-x:auto;
+  font-family:var(--font-mono);font-size:var(--t-12);line-height:1.75;
+  color:var(--dark-ink)}
+.term__ln{display:block}
+.term__ln--ok{color:var(--dark-ok)}
+.term__ln--danger{color:var(--danger)}
+.term__ln--warn{color:var(--dark-warn)}
+
+/* sections */
+.mk__section{padding:var(--s-7) 0}
+.mk__h2{font-family:var(--font-display);font-size:var(--t-26);
+  line-height:var(--lh-snug);letter-spacing:var(--tr-mid);
+  font-weight:var(--w-semi);color:var(--ink);text-wrap:balance;
+  margin-bottom:var(--s-7)}
+.mk__kicker{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--accent-ink)}
+.mk__grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--s-5)}
+.mk__grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s-7)}
 .mk__card{background:var(--surface);border:1px solid var(--line);
   border-radius:var(--r-3);padding:var(--s-7);display:flex;
-  flex-direction:column;gap:var(--s-4)}
-.mk__card h3{font-size:var(--t-16);font-weight:var(--w-semi);color:var(--ink);
-  letter-spacing:var(--tr-snug)}
+  flex-direction:column;gap:var(--s-4);min-width:0}
+.mk__card h3{font-family:var(--font-display);font-size:var(--t-14);
+  font-weight:var(--w-semi);color:var(--ink);letter-spacing:var(--tr-snug)}
 .mk__card p{font-size:var(--t-13);color:var(--ink-2);line-height:var(--lh-loose);
   text-wrap:pretty}
-.mk__replaces{font-size:var(--t-12);color:var(--ink-4);opacity:0;
-  transition:opacity var(--d-2) var(--ease)}
-.mk__card:hover .mk__replaces{opacity:1}
-.mk__step{display:flex;gap:var(--s-5);align-items:flex-start}
-.mk__stepno{width:26px;height:26px;flex:none;border-radius:var(--r-full);
+.mk__panel{border:1px solid var(--line);background:var(--surface);
+  border-radius:var(--r-4);padding:var(--s-8)}
+
+/* steps */
+.mk__step{min-width:0;display:flex;flex-direction:column}
+.mk__stephead{display:flex;align-items:center;gap:var(--s-4);margin-bottom:var(--s-4)}
+.mk__stepno{width:1.5rem;height:1.5rem;flex:none;border-radius:var(--r-2);
   background:var(--accent-soft);border:1px solid var(--accent-line);
   color:var(--accent-ink);display:grid;place-items:center;
-  font-family:var(--font-mono);font-size:var(--t-12);font-weight:var(--w-semi)}
-.mk__band{border-top:1px solid var(--line);background:var(--surface-2);
-  padding:var(--s-12) 0;text-align:center}
-.mk__foot{border-top:1px solid var(--line);padding:var(--s-9) 0;
-  font-size:var(--t-13);color:var(--ink-3)}
-.mk__plan{position:relative;background:var(--surface);
-  border:1px solid var(--line);border-radius:var(--r-3);padding:var(--s-8);
-  display:flex;flex-direction:column;gap:var(--s-5)}
-.mk__plan--pop{border-color:var(--accent);box-shadow:var(--ring)}
-.mk__price{font-size:var(--t-40);font-weight:var(--w-semi);
-  letter-spacing:var(--tr-tight);color:var(--ink);
-  font-variant-numeric:tabular-nums;line-height:1}
-.mk__feats{list-style:none;display:flex;flex-direction:column;gap:var(--s-4);
-  font-size:var(--t-13);color:var(--ink-2)}
-.mk__feats li{display:flex;gap:var(--s-4);align-items:flex-start}
-.mk__faq{border-top:1px solid var(--line);padding:var(--s-6) 0}
-.mk__faq summary{cursor:pointer;font-size:var(--t-14);
-  font-weight:var(--w-med);color:var(--ink);list-style:none}
-.mk__faq summary::-webkit-details-marker{display:none}
-.mk__faq p{font-size:var(--t-13);color:var(--ink-2);margin-top:var(--s-4);
-  line-height:var(--lh-loose);max-width:70ch;text-wrap:pretty}
-@media (max-width:900px){
-  .mk__hero{grid-template-columns:1fr;padding:var(--s-10) 0}
-  .mk__h1{font-size:var(--t-40)}
-  .mk__grid3{grid-template-columns:1fr 1fr}
-  .mk__navlinks{gap:var(--s-5)}
+  font-family:var(--font-mono);font-size:var(--t-11);font-weight:var(--w-semi)}
+.mk__steptitle{font-size:var(--t-14);font-weight:var(--w-semi);color:var(--ink)}
+.mk__stepbody{font-size:var(--t-13);line-height:var(--lh-loose);
+  color:var(--ink-2);margin-bottom:var(--s-5)}
+.mk__stepcode{margin:0;border:1px solid var(--line);border-radius:var(--r-2);
+  background:var(--dark);padding:var(--s-5);overflow-x:auto;
+  font-family:var(--font-mono);font-size:var(--t-11);color:var(--dark-ink);
+  white-space:pre}
+
+/* CTA band */
+/* The sandbox-and-claim spotlight on the landing page. One accent-washed
+   panel, a soft radial glow behind it, three flow nodes and a mock claim card:
+   decoration carries the message so the copy can stay short. */
+.mk__theme{display:inline-flex;align-items:center}
+.mk__spot{position:relative;overflow:hidden;display:grid;
+  grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:var(--s-9);align-items:center;
+  padding:var(--s-9);border:1px solid var(--accent-line);border-radius:var(--r-4);
+  background:linear-gradient(135deg,var(--accent-soft) 0%,var(--surface) 70%)}
+.mk__spotglow{position:absolute;right:-8rem;top:-8rem;width:26rem;height:26rem;
+  border-radius:var(--r-full);pointer-events:none;
+  background:radial-gradient(closest-side,var(--accent-soft-2),transparent)}
+.mk__spotcol{position:relative;min-width:0}
+.mk__spoth{font-family:var(--font-display);font-size:var(--t-32);font-weight:var(--w-semi);
+  letter-spacing:var(--tr-mid);line-height:var(--lh-snug);color:var(--ink);
+  margin:var(--s-4) 0 var(--s-7);max-width:18ch;text-wrap:balance}
+.mk__spotflow{list-style:none;margin:0 0 var(--s-7);padding:0;display:flex;
+  align-items:stretch;gap:var(--s-3);flex-wrap:wrap}
+.mk__spotnode{flex:1 1 8rem;min-width:0;display:flex;flex-direction:column;gap:var(--s-1);
+  padding:var(--s-4) var(--s-5);border:1px solid var(--line);border-radius:var(--r-2);
+  background:var(--surface)}
+.mk__spotnode strong{font-size:var(--t-14);font-weight:var(--w-semi);color:var(--ink)}
+.mk__spotnode--claim{border-color:var(--accent);background:var(--accent-soft-2);
+  box-shadow:0 0 0 4px var(--accent-soft)}
+.mk__spotnum{font-family:var(--font-mono);font-size:var(--t-10);letter-spacing:var(--tr-caps);
+  color:var(--accent-ink)}
+.mk__spotsub{font-size:var(--t-12);line-height:var(--lh-snug);color:var(--ink-2)}
+.mk__spotarrow{align-self:center;font-size:var(--t-18);color:var(--ink-3);flex:none}
+.mk__spotcard{position:relative;display:flex;flex-direction:column;gap:var(--s-4);
+  padding:var(--s-6);border:1px solid var(--accent-line);border-radius:var(--r-3);
+  background:var(--dark);color:var(--dark-ink);transform:rotate(-1.5deg);
+  box-shadow:0 1.5rem 3rem var(--shadow-tint)}
+.mk__spotcardkick{font-family:var(--font-mono);font-size:var(--t-10);letter-spacing:var(--tr-caps);
+  color:var(--dark-accent)}
+.mk__spotcardurl{font-family:var(--font-mono);font-size:var(--t-13);color:var(--dark-ink);
+  padding:var(--s-3) var(--s-4);border:1px solid var(--dark-line);border-radius:var(--r-2);
+  background:var(--dark-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mk__spotopts{display:flex;gap:var(--s-3);flex-wrap:wrap}
+.mk__spotopt{font-size:var(--t-12);padding:var(--s-2) var(--s-4);border-radius:var(--r-full);
+  border:1px solid var(--dark-line);color:var(--dark-ink-2)}
+.mk__spotopt--on{border-color:var(--dark-accent);color:var(--dark-ink);
+  background:var(--dark-2)}
+.mk__spotcardfoot{font-family:var(--font-mono);font-size:var(--t-10);color:var(--dark-ink-2)}
+@media (max-width:1350px){
+  .mk__spot{grid-template-columns:minmax(0,1fr)}
+  .mk__spotcard{transform:none;max-width:26rem}
 }
-@media (max-width:640px){
-  .mk__grid3,.mk__grid2{grid-template-columns:1fr}
-  .mk__wrap{padding:0 var(--s-6)}
+@media (max-width:875px){
+  .mk__spot{padding:var(--s-7)}
+  .mk__spoth{font-size:var(--t-26)}
+  .mk__spotarrow{display:none}
+  .mk__spotnode{flex-basis:100%}
+}
+
+.mk__band{border:1px solid var(--accent-line);background:var(--accent-soft);
+  border-radius:var(--r-4);padding:var(--s-9);display:flex;flex-wrap:wrap;
+  align-items:center;gap:var(--s-8)}
+.mk__bandtext{flex:1;min-width:13.75rem}
+.mk__bandsub{font-size:var(--t-14);line-height:var(--lh-loose);color:var(--ink-2)}
+
+/* pricing */
+/* Four tiers since the Basic plan joined the catalogue. The two existing
+   breakpoints already carry it: 1350px drops to two columns, 875px to one. */
+.mk__prices{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:var(--s-6);margin-top:var(--s-9)}
+/* The per-account counting note, under the cards. */
+.mk__pricenote{margin-top:var(--s-7);font-size:var(--t-13);color:var(--ink-3);
+  text-align:center}
+.mk__plan{background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-4);padding:var(--s-6);display:flex;
+  flex-direction:column;gap:var(--s-6);min-width:0}
+.mk__plan--pop{border-color:var(--accent-line);background:var(--accent-soft)}
+.mk__planhead{display:flex;align-items:center;justify-content:space-between;
+  min-height:1.375rem;gap:var(--s-4)}
+.mk__planflag{font-family:var(--font-mono);font-size:var(--t-10);
+  font-weight:var(--w-bold);letter-spacing:var(--tr-wide);
+  background:var(--accent);color:var(--on-accent);border-radius:var(--r-1);
+  padding:var(--s-1) var(--s-3)}
+.mk__planprice{display:flex;align-items:baseline;gap:var(--s-3)}
+.mk__price{font-family:var(--font-display);font-size:var(--t-40);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-mid);color:var(--ink);
+  line-height:1;font-variant-numeric:tabular-nums}
+.mk__planunit{font-size:var(--t-13);color:var(--ink-2)}
+/* The yearly alternative, under the headline price rather than behind a
+   toggle: a toggle hides half the pricing from anybody who does not find it. */
+.mk__planyear{margin:var(--s-2) 0 0;font-size:var(--t-12-5);color:var(--ink-3)}
+.mk__feats{display:flex;flex-direction:column;gap:var(--s-4);flex:1}
+.mk__feat{display:flex;gap:var(--s-4);align-items:flex-start;
+  font-size:var(--t-13);line-height:var(--lh-normal);color:var(--ink-2)}
+.mk__feat svg{flex:none;color:var(--accent);margin-top:0.125rem}
+.mk__table{border:1px solid var(--line);background:var(--surface);
+  border-radius:var(--r-3);overflow:hidden}
+.mk__tablehead{padding:var(--s-5) var(--s-6);border-bottom:1px solid var(--line)}
+.mk__tablerow{display:flex;align-items:center;justify-content:space-between;
+  gap:var(--s-6);padding:var(--s-5) var(--s-6);
+  border-bottom:1px solid var(--line);font-size:var(--t-13);color:var(--ink)}
+.mk__tablerow:last-child{border-bottom:0}
+
+/* footer */
+.mk__foot{border-top:1px solid var(--line);background:var(--surface-2);
+  padding:var(--s-8) 0;margin-top:auto}
+.mk__footrow{display:flex;align-items:center;justify-content:space-between;
+  gap:var(--s-6);flex-wrap:wrap}
+.mk__footbrand{display:flex;align-items:center;gap:var(--s-4);min-width:0}
+.mk__footmark{font-family:var(--font-display);font-size:var(--t-14);
+  font-weight:var(--w-semi);color:var(--ink)}
+.mk__footmeta{font-family:var(--font-mono);font-size:var(--t-10);
+  color:var(--ink-3);margin-left:var(--s-3)}
+.mk__footlinks{display:flex;gap:var(--s-7);flex-wrap:wrap;font-size:var(--t-13)}
+
+@media (max-width:1350px){
+  .mk__hero{grid-template-columns:minmax(0,1fr);padding:var(--s-10) 0 var(--s-8)}
+  .mk__grid4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .mk__prices{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:875px){
+  .mk__h1{font-size:var(--t-32)}
+  .mk__grid4,.mk__grid3,.mk__prices{grid-template-columns:minmax(0,1fr)}
+  .mk__navlinks{gap:var(--s-5)}
+  .mk__panel,.mk__band{padding:var(--s-7)}
+}
+
+/* Workspace ID chip — components-local/WorkspaceIdChip.jsx. Monospace because
+   the value is an opaque token that gets transcribed into config files, and a
+   proportional font makes 1/l and 0/O indistinguishable while doing it. */
+/* min-width:0 on both the chip and its value, or neither can shrink: a flex
+   item's automatic minimum size is its min-content width, and a nowrap ws_...
+   ID has no wrap point, so the chip stays full width, ignores max-width:100%
+   and pushes the whole document wider than the viewport. The ellipsis only
+   works once shrinking is allowed. Surfaced at 390px by the 25% scale-up. */
+.wsid{display:inline-flex;align-items:center;gap:var(--s-3);max-width:100%;min-width:0;
+  background:var(--surface-2);border:1px solid var(--line);
+  border-radius:var(--r-2);padding:var(--s-1) var(--s-3);
+  font-family:var(--font-mono);font-size:var(--t-12);color:var(--ink-2)}
+.wsid__value{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  user-select:all}
+.wsid__copy{display:inline-flex;align-items:center;gap:var(--s-2);flex:none;
+  background:none;border:0;padding:0;cursor:pointer;color:var(--ink-3);
+  font-family:var(--font-mono);font-size:var(--t-12);
+  border-radius:var(--r-1);transition:color var(--d-2) var(--ease)}
+.wsid__copy:hover{color:var(--accent-ink)}
+
+/* --- top-bar placements for the two local menus ---
+   Both were written for the sidebar: the workspace switcher as a full-width
+   card, the account menu dropping upward off the bottom of the viewport. In
+   the top bar the switcher is an inline control and both panels drop down. */
+.wsx__menu--right{left:auto;right:0;width:max(14.75rem,100%)}
+.shell__user--bar{width:auto;max-width:13.75rem;height:2.125rem;padding:var(--s-2) var(--s-3) var(--s-2) var(--s-2);
+  border:1px solid var(--line);border-radius:var(--r-full);background:var(--surface-2)}
+.shell__user--bar:hover{border-color:var(--line-2);background:var(--surface-2)}
+/* The email line is the sidebar's second row; in a pill it makes the control
+   tall and pushes the top bar out of its 58px. The menu itself still shows it. */
+.shell__user--bar span span:last-child{display:none!important}
+.shell__user--bar span span:first-child{font-size:var(--t-13);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:1125px){
+  /* Name too — at this width the pill is just the avatar and the chevron. */
+  .shell__user--bar span span{display:none!important}
+}
+
+/* --- brand mark (components-local/Logo.jsx) ---
+   The image sits on a white tile because the design's logo is drawn for a
+   light ground and would disappear against the dark palette. The monogram
+   fallback uses the accent instead, as the product always did. */
+.logo{background:#FFFFFF;object-fit:contain;padding:var(--s-1);
+  box-sizing:border-box;display:block}
+.logo--mark{background:var(--accent);color:var(--on-accent);display:grid;
+  place-items:center;font-family:var(--font-mono);font-size:var(--t-13);
+  font-weight:var(--w-semi);padding:0}
+
+/* --- error pages (routes/ErrorPages.jsx) ---
+   Two columns on desktop, one below. The tone classes carry the code chip's
+   colour trio; everything else is the shared marketing chrome. */
+.err{display:grid;grid-template-columns:minmax(0,1fr) 21.25rem;gap:var(--s-10);
+  align-items:start;padding:var(--s-11) 0 var(--s-10);min-height:52vh}
+.err__main{min-width:0}
+.err__codebar{display:flex;align-items:center;gap:var(--s-5);
+  margin-bottom:var(--s-7)}
+.err__code{font-family:var(--font-display);font-size:var(--t-32);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-mid);line-height:1;
+  border-radius:var(--r-3);padding:var(--s-3) var(--s-6)}
+.err__code--info{color:var(--accent-ink);background:var(--accent-soft);
+  border:1px solid var(--accent-line)}
+.err__code--warn{color:var(--warn-ink);background:var(--warn-soft);
+  border:1px solid var(--warn-line)}
+.err__code--danger{color:var(--danger-ink);background:var(--danger-soft);
+  border:1px solid var(--danger-line)}
+.err__family{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--ink-3)}
+.err__title{font-family:var(--font-display);font-size:var(--t-32);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-mid);
+  line-height:var(--lh-snug);color:var(--ink);text-wrap:balance;
+  margin-bottom:var(--s-6)}
+.err__body{font-size:var(--t-16);line-height:var(--lh-loose);color:var(--ink-2);
+  max-width:54ch;text-wrap:pretty;margin-bottom:var(--s-8)}
+.err__facts{border:1px solid var(--line);background:var(--surface);
+  border-radius:var(--r-3);overflow:hidden;margin-bottom:var(--s-7);
+  max-width:32.5rem}
+.err__fact{display:flex;align-items:center;gap:var(--s-5);
+  padding:var(--s-5) var(--s-6);border-bottom:1px solid var(--line)}
+.err__fact:last-child{border-bottom:0}
+.err__dot{width:0.4375rem;height:0.4375rem;flex:none;border-radius:var(--r-1);display:block}
+.err__dot--info{background:var(--accent)}
+.err__dot--warn{background:var(--warn)}
+.err__dot--danger{background:var(--danger)}
+.err__factval{font-family:var(--font-mono);font-size:var(--t-12);
+  color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.err__ref{font-size:var(--t-13);color:var(--ink-2);margin-bottom:var(--s-6)}
+.err__timer{display:flex;align-items:center;gap:var(--s-5);
+  font-size:var(--t-13);color:var(--ink-2);margin-bottom:var(--s-7)}
+.err__spin{width:1rem;height:1rem;flex:none;border-radius:var(--r-full);
+  border:0.125rem solid var(--surface-3);border-top-color:var(--accent);
+  display:block;animation:ad-spin .9s linear infinite}
+.err__actions{display:flex;gap:var(--s-5);flex-wrap:wrap}
+.err__side{min-width:0}
+.err__panel{border:1px solid var(--line);background:var(--surface);
+  border-radius:var(--r-3);overflow:hidden}
+.err__panelhead{padding:var(--s-5) var(--s-6);border-bottom:1px solid var(--line);
+  background:var(--surface-2);font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--ink-3)}
+.err__link{display:flex;align-items:center;gap:var(--s-5);
+  padding:var(--s-5) var(--s-6);border-bottom:1px solid var(--line);
+  text-decoration:none;transition:background var(--d-1) var(--ease)}
+.err__link:last-child{border-bottom:0}
+.err__link:hover{background:var(--surface-2);text-decoration:none}
+.err__linkbody{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--s-1)}
+.err__linklabel{font-size:var(--t-13);font-weight:var(--w-semi);color:var(--ink)}
+.err__linknote{font-size:var(--t-12);color:var(--ink-2)}
+.err__chev{flex:none;color:var(--ink-3);font-size:var(--t-16)}
+
+@media (max-width:1350px){
+  .err{grid-template-columns:minmax(0,1fr);gap:var(--s-8);padding:var(--s-10) 0}
+}
+
+/* --- docs (routes/Docs.jsx) ---
+   Three columns from the design: TOC, article, "on this page" rail. Drops to
+   two on tablet and one on mobile, as the design's grid does. */
+.doc{display:grid;grid-template-columns:13.25rem minmax(0,1fr) 11rem;
+  gap:var(--s-9);align-items:start;padding:var(--s-9) 0}
+.doc__toc{min-width:0;position:sticky;top:calc(var(--topbar-h) + var(--s-6))}
+.doc__tocgroup{margin-bottom:var(--s-7)}
+.doc__toclabel{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--ink-3);margin-bottom:var(--s-4)}
+.doc__tocitem{display:block;padding:var(--s-3) var(--s-4);
+  border-radius:var(--r-2);font-size:var(--t-12);color:var(--ink-2)}
+.doc__tocitem.is-current{font-weight:var(--w-semi);color:var(--accent-ink);
+  background:var(--accent-soft)}
+
+.doc__body{min-width:0}
+.doc__crumb{display:flex;align-items:center;gap:var(--s-3);flex-wrap:wrap;
+  margin-bottom:var(--s-5);font-size:var(--t-12);color:var(--ink-3)}
+.doc__crumbnow{color:var(--ink);font-weight:var(--w-med)}
+.doc__h1{font-family:var(--font-display);font-size:var(--t-32);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-mid);
+  line-height:var(--lh-snug);color:var(--ink);margin-bottom:var(--s-5)}
+.doc__lead{font-size:var(--t-16);line-height:var(--lh-loose);color:var(--ink-2);
+  margin-bottom:var(--s-8)}
+.doc__h2{font-family:var(--font-display);font-size:var(--t-18);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink);
+  margin:var(--s-9) 0 var(--s-4)}
+.doc__p{font-size:var(--t-14);line-height:var(--lh-loose);color:var(--ink-2);
+  margin-bottom:var(--s-6);max-width:70ch;text-wrap:pretty}
+.doc__p code,.doc__note code{font-family:var(--font-mono);
+  font-size:var(--t-13);color:var(--ink)}
+.doc__note{display:flex;align-items:flex-start;gap:var(--s-4);
+  border:1px solid var(--accent-line);background:var(--accent-soft);
+  border-radius:var(--r-3);padding:var(--s-5) var(--s-6);margin-bottom:var(--s-8);
+  font-size:var(--t-13);line-height:var(--lh-normal);color:var(--ink-2)}
+
+.doc__code{border:1px solid var(--line);border-radius:var(--r-3);
+  overflow:hidden;background:var(--dark);margin-bottom:var(--s-8)}
+.doc__codebar{display:flex;align-items:center;justify-content:space-between;
+  padding:var(--s-4) var(--s-5);border-bottom:1px solid var(--line)}
+.doc__codecap{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-wide);color:var(--ink-3)}
+.doc__codebody{margin:0;padding:var(--s-6);overflow-x:auto;
+  font-family:var(--font-mono);font-size:var(--t-12);line-height:1.7;
+  color:var(--dark-ink)}
+
+.doc__tools{border:1px solid var(--line);border-radius:var(--r-3);
+  overflow:hidden;margin-bottom:var(--s-8)}
+.doc__tool{display:flex;align-items:center;gap:var(--s-5);
+  padding:var(--s-5) var(--s-6);border-bottom:1px solid var(--line)}
+.doc__tool:last-child{border-bottom:0}
+.doc__toolname{font-family:var(--font-mono);font-size:var(--t-12);
+  font-weight:var(--w-semi);color:var(--accent-ink);width:6.5rem;flex:0 0 6.5rem}
+.doc__toolbody{flex:1;min-width:0;font-size:var(--t-13);color:var(--ink-2)}
+.doc__toolscope{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-wide);color:var(--ink-3);flex:none}
+
+.doc__rail{min-width:0;position:sticky;top:calc(var(--topbar-h) + var(--s-6))}
+.doc__raillabel{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--ink-3);margin-bottom:var(--s-5)}
+.doc__raillist{display:flex;flex-direction:column;gap:var(--s-4);
+  border-left:1px solid var(--line);padding-left:var(--s-5)}
+.doc__railitem{font-size:var(--t-12);line-height:var(--lh-snug);color:var(--ink-2)}
+.doc__railitem.is-current{font-weight:var(--w-semi);color:var(--accent-ink)}
+
+@media (max-width:1350px){
+  .doc{grid-template-columns:12.25rem minmax(0,1fr)}
+  .doc__rail{display:none}
+}
+@media (max-width:875px){
+  .doc{grid-template-columns:minmax(0,1fr);gap:var(--s-7)}
+  .doc__toc{display:none}
+}
+
+/* The rebuilt docs (26 Sept 2026): one page, nine sections, real links.
+   Additions to the vocabulary above rather than a second one -- headings,
+   tables, lists, an architecture diagram drawn in boxes, and the client
+   sub-sections of the quick start. Tokens only; nothing here names a colour. */
+.doc__section{scroll-margin-top:calc(var(--topbar-h) + var(--s-6))}
+.doc__h2{scroll-margin-top:calc(var(--topbar-h) + var(--s-6));
+  padding-top:var(--s-6);border-top:1px solid var(--line)}
+.doc__section:first-of-type .doc__h2{border-top:0;padding-top:0}
+.doc__h3{font-family:var(--font-display);font-size:var(--t-16);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink);
+  margin:var(--s-8) 0 var(--s-3);scroll-margin-top:calc(var(--topbar-h) + var(--s-6))}
+.doc__meta{font-family:var(--font-mono);font-size:var(--t-11);color:var(--ink-3);
+  margin:0 0 var(--s-5)}
+.doc__h4{font-size:var(--t-14);font-weight:var(--w-semi);color:var(--ink);
+  margin:var(--s-7) 0 var(--s-3)}
+.doc__client{padding-left:var(--s-5);border-left:2px solid var(--line);
+  margin-bottom:var(--s-6)}
+.doc__client .doc__code{margin-bottom:var(--s-5)}
+.doc__tocitem:hover{text-decoration:none;color:var(--ink);background:var(--surface-2)}
+.doc__tocitem.is-current:hover{background:var(--accent-soft)}
+.doc__railhead{font-size:var(--t-12);font-weight:var(--w-semi);color:var(--ink);
+  margin-bottom:var(--s-4)}
+.doc__railitem:hover{text-decoration:none;color:var(--ink)}
+.doc__note--warn{border-color:var(--warn-line);background:var(--warn-soft)}
+.doc__p a,.doc__list a,.doc__note a{color:var(--accent-ink);text-decoration:underline;
+  text-underline-offset:0.15em}
+.doc__p strong,.doc__list strong{color:var(--ink);font-weight:var(--w-semi)}
+.doc__list{margin:0 0 var(--s-6);padding-left:var(--s-6);display:flex;
+  flex-direction:column;gap:var(--s-3);font-size:var(--t-14);
+  line-height:var(--lh-loose);color:var(--ink-2);max-width:72ch}
+.doc__list li{padding-left:var(--s-2)}
+.doc__list code{font-family:var(--font-mono);font-size:var(--t-13);color:var(--ink)}
+
+.doc__tablewrap{overflow-x:auto;margin-bottom:var(--s-7);border:1px solid var(--line);
+  border-radius:var(--r-3);background:var(--surface)}
+.doc__table{width:100%;border-collapse:collapse;font-size:var(--t-13);
+  line-height:var(--lh-normal);color:var(--ink-2)}
+.doc__tablecap{text-align:left;padding:var(--s-4) var(--s-5);
+  font-family:var(--font-mono);font-size:var(--t-10);letter-spacing:var(--tr-caps);
+  color:var(--ink-3);border-bottom:1px solid var(--line);caption-side:top}
+.doc__table th{text-align:left;font-size:var(--t-12);font-weight:var(--w-semi);
+  color:var(--ink);padding:var(--s-3) var(--s-5);border-bottom:1px solid var(--line);
+  background:var(--surface-2);white-space:nowrap}
+.doc__table td{padding:var(--s-3) var(--s-5);border-bottom:1px solid var(--line);
+  vertical-align:top}
+.doc__table tr:last-child td{border-bottom:0}
+.doc__table code{font-family:var(--font-mono);font-size:var(--t-12);color:var(--ink);
+  white-space:nowrap}
+.doc__method{font-family:var(--font-mono);font-size:var(--t-11);font-weight:var(--w-semi);
+  letter-spacing:var(--tr-wide);color:var(--accent-ink)}
+
+.doc__chips{display:flex;flex-wrap:wrap;gap:var(--s-3);margin-bottom:var(--s-7)}
+.doc__chip{font-family:var(--font-mono);font-size:var(--t-12);color:var(--ink);
+  border:1px solid var(--line);background:var(--surface);border-radius:var(--r-2);
+  padding:var(--s-2) var(--s-4)}
+
+/* "Let me guide": two radio groups drawn as pick cards, then the generated
+   path. Real radio inputs, visually hidden, so keyboard and screen readers get
+   a form and everybody else gets cards. */
+/* Drawn as a control rather than a callout (27 Sept 2026): the accent halo
+   and the shadow lift it off the article, the question is set in the display
+   face like a dialog title, and the trail beside it shows where you are in
+   the three stops. It read as a tinted note before and people scrolled past. */
+.doc__guide{position:relative;border:1px solid var(--accent-line);
+  background:linear-gradient(180deg,var(--accent-soft) 0%,var(--surface) 100%);
+  border-radius:var(--r-4);padding:var(--s-7);margin-bottom:var(--s-8);
+  box-shadow:0 0 0 0.25rem var(--accent-soft),var(--sh-2)}
+.doc__guidebar{display:flex;align-items:flex-start;justify-content:space-between;
+  gap:var(--s-5) var(--s-7);margin-bottom:var(--s-7);flex-wrap:wrap}
+.doc__guideintro{min-width:0;flex:1 1 18rem}
+.doc__guideq{margin:0 0 var(--s-2);font-family:var(--font-display);font-size:var(--t-18);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink)}
+.doc__guidesub{margin:0;font-size:var(--t-12-5);line-height:var(--lh-normal);color:var(--ink-2);
+  max-width:48ch;text-wrap:pretty}
+/* The three stops: a real sequence, so they carry numbers, and the number
+   becomes a tick as each is answered. */
+.doc__guidetrail{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;
+  gap:var(--s-2);flex:none;max-width:100%}
+.doc__guidestop{display:inline-flex;align-items:center;gap:var(--s-3);height:1.75rem;
+  padding:0 var(--s-4) 0 var(--s-2);border:1px solid var(--line);border-radius:var(--r-full);
+  background:var(--surface);font-size:var(--t-12);font-weight:var(--w-med);color:var(--ink-3);
+  white-space:nowrap;transition:border-color var(--d-2) var(--ease),color var(--d-2) var(--ease),
+    background var(--d-2) var(--ease),box-shadow var(--d-2) var(--ease)}
+.doc__guidestopnum{width:1.25rem;height:1.25rem;border-radius:var(--r-full);display:grid;
+  place-items:center;font-family:var(--font-mono);font-size:var(--t-10);font-weight:var(--w-semi);
+  background:var(--surface-3);color:var(--ink-3);flex:none}
+.doc__guidestop--now{border-color:var(--accent);color:var(--ink);
+  box-shadow:0 0 0 1px var(--accent)}
+.doc__guidestop--now .doc__guidestopnum{background:var(--accent);color:var(--on-accent)}
+.doc__guidestop--done{border-color:var(--accent-line);color:var(--accent-ink);
+  background:var(--accent-soft-2)}
+.doc__guidestop--done .doc__guidestopnum{background:var(--accent-soft);color:var(--accent-ink);
+  border:1px solid var(--accent-line)}
+.doc__pickgroup{border:0;padding:0;margin:0 0 var(--s-6);min-width:0}
+.doc__picklegend{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--ink-3);margin-bottom:var(--s-4);padding:0}
+.doc__picks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-4)}
+.doc__picks--dense{grid-template-columns:repeat(3,minmax(0,1fr))}
+/* A pick is a radio button wearing a card: the mark at the left is the
+   affordance, it fills when chosen, and the card lifts under the pointer. */
+.doc__pick{position:relative;display:flex;flex-direction:column;gap:var(--s-1);
+  padding:var(--s-4) var(--s-5) var(--s-4) calc(var(--s-5) + 1.5rem);
+  border:1px solid var(--line-2);border-radius:var(--r-2);
+  background:var(--surface);cursor:pointer;
+  transition:border-color var(--d-2) var(--ease-out),background var(--d-2) var(--ease-out),
+    transform var(--d-2) var(--ease-out),box-shadow var(--d-2) var(--ease-out)}
+.doc__pickmark{position:absolute;left:var(--s-5);top:calc(var(--s-4) + 0.1875rem);
+  width:1rem;height:1rem;border-radius:var(--r-full);border:1.5px solid var(--line-3);
+  background:var(--surface);transition:border var(--d-2) var(--ease-out)}
+.doc__pick:hover{border-color:var(--accent-line);transform:translateY(-1px);
+  box-shadow:var(--sh-2)}
+.doc__pick:hover .doc__pickmark{border-color:var(--accent)}
+.doc__pick:active{transform:none;box-shadow:none}
+.doc__pick.is-on{border-color:var(--accent);background:var(--accent-soft-2);
+  box-shadow:0 0 0 1px var(--accent)}
+.doc__pick.is-on .doc__pickmark{border:0.3125rem solid var(--accent)}
+.doc__pick input{position:absolute;opacity:0;width:1px;height:1px;margin:0}
+.doc__pick:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+.doc__picklabel{font-size:var(--t-13);font-weight:var(--w-semi);color:var(--ink)}
+.doc__pickhint{font-size:var(--t-12);line-height:var(--lh-snug);color:var(--ink-2)}
+.doc__guideempty{display:flex;align-items:center;gap:var(--s-3);font-size:var(--t-13);
+  color:var(--ink-2);margin:0}
+.doc__guideempty svg{flex:none;color:var(--accent-ink)}
+/* The path arrives rather than appears: the one motion in the box, and it
+   answers the click that produced it. */
+.doc__guideout{border-top:1px solid var(--accent-line);padding-top:var(--s-6);
+  animation:ad-valuein var(--d-3) var(--ease) both}
+.doc__guideouthead{display:flex;align-items:center;justify-content:space-between;
+  gap:var(--s-5);margin-bottom:var(--s-5)}
+.doc__guidehead{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--accent-ink)}
+.doc__guidereset{height:1.75rem;padding:0 var(--s-4);border:1px solid var(--line-2);
+  border-radius:var(--r-2);background:var(--surface);font-family:var(--font-sans);
+  font-size:var(--t-12);font-weight:var(--w-med);color:var(--ink-2);cursor:pointer;
+  transition:background var(--d-1) var(--ease),color var(--d-1) var(--ease)}
+.doc__guidereset:hover{background:var(--surface-2);color:var(--ink)}
+.doc__guidesteps{margin:0;padding:0;list-style:none;counter-reset:guide;
+  display:flex;flex-direction:column;gap:var(--s-5)}
+.doc__guidestep{counter-increment:guide;position:relative;padding-left:var(--s-9)}
+.doc__guidestep::before{content:counter(guide);position:absolute;left:0;top:0;
+  width:1.5rem;height:1.5rem;border-radius:var(--r-2);display:flex;align-items:center;
+  justify-content:center;font-family:var(--font-mono);font-size:var(--t-11);
+  font-weight:var(--w-semi);background:var(--accent);color:var(--on-accent)}
+.doc__guidetitle{font-size:var(--t-14);font-weight:var(--w-semi);color:var(--ink);
+  margin-bottom:var(--s-2);line-height:1.5rem}
+.doc__guidestep .doc__p{margin-bottom:var(--s-3)}
+.doc__guidestep .doc__code{margin:var(--s-3) 0 var(--s-2)}
+/* Opens in a new tab, and the glyph says so before the click. */
+.doc__guidelink{display:inline-flex;align-items:center;gap:var(--s-2);
+  font-size:var(--t-13);font-weight:var(--w-semi);
+  color:var(--accent-ink);margin-bottom:var(--s-3)}
+.doc__guidelink svg{flex:none}
+.doc__promo{margin-top:var(--s-6);padding:var(--s-5) var(--s-6);border-radius:var(--r-2);
+  background:var(--surface);border:1px solid var(--accent-line)}
+.doc__promokicker{display:block;font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--accent-ink);margin-bottom:var(--s-3)}
+.doc__promo p{margin:0;font-size:var(--t-13);line-height:var(--lh-loose);color:var(--ink-2)}
+.doc__promo strong{color:var(--ink);font-weight:var(--w-semi)}
+@media (max-width:875px){
+  .doc__picks,.doc__picks--dense{grid-template-columns:minmax(0,1fr)}
+}
+
+/* Account deletion as a timeline: a rail on the left, a dot per step, the
+   moment it happens in the margin. */
+.doc__flow{list-style:none;margin:0 0 var(--s-6);padding:0;display:flex;
+  flex-direction:column;position:relative}
+.doc__flow::before{content:"";position:absolute;left:5.75rem;top:var(--s-3);
+  bottom:var(--s-3);width:1px;background:var(--line-2)}
+.doc__flowstep{display:grid;grid-template-columns:5rem 1.5rem minmax(0,1fr);
+  gap:0 var(--s-3);align-items:start;padding:var(--s-3) 0}
+.doc__flowwhen{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--ink-3);text-align:right;padding-top:0.25rem}
+.doc__flowdot{width:0.75rem;height:0.75rem;border-radius:var(--r-full);
+  background:var(--surface);border:2px solid var(--line-3);justify-self:center;
+  margin-top:0.2rem;position:relative}
+.doc__flowstep.is-accent .doc__flowdot{border-color:var(--accent);background:var(--accent)}
+.doc__flowstep.is-accent .doc__flowwhen{color:var(--accent-ink)}
+.doc__flowstep.is-muted{opacity:.7}
+.doc__flowbody{padding:var(--s-3) var(--s-5);border:1px solid var(--line);
+  border-radius:var(--r-2);background:var(--surface)}
+.doc__flowstep.is-accent .doc__flowbody{border-color:var(--accent-line);background:var(--accent-soft)}
+.doc__flowtitle{font-size:var(--t-13);font-weight:var(--w-semi);color:var(--ink);
+  margin-bottom:var(--s-1)}
+.doc__flowbody p{margin:0;font-size:var(--t-12-5);line-height:var(--lh-loose);color:var(--ink-2)}
+@media (max-width:875px){
+  .doc__flow::before{left:0.7rem}
+  .doc__flowstep{grid-template-columns:1.5rem minmax(0,1fr)}
+  .doc__flowwhen{grid-column:2;text-align:left;padding-top:0;order:-1}
+  .doc__flowdot{grid-row:span 2}
+}
+
+/* The architecture diagram: callers, the Worker, the stores. Boxes and a text
+   arrow so it inherits the theme and reads to a screen reader. */
+.doc__diag{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1.2fr) auto minmax(0,1fr);
+  gap:var(--s-5);align-items:center;margin:0 0 var(--s-8);padding:var(--s-6);
+  border:1px solid var(--line);border-radius:var(--r-3);background:var(--surface-2)}
+.doc__diagcol{display:flex;flex-direction:column;gap:var(--s-4);min-width:0}
+.doc__diagbox{display:flex;flex-direction:column;gap:var(--s-1);padding:var(--s-4) var(--s-5);
+  border:1px solid var(--line);border-radius:var(--r-2);background:var(--surface);
+  font-size:var(--t-12);color:var(--ink-2);line-height:var(--lh-snug)}
+.doc__diagbox strong{font-size:var(--t-13);color:var(--ink);font-weight:var(--w-semi)}
+.doc__diagbox--caller{border-style:dashed}
+.doc__diagbox--core{border-color:var(--accent-line);background:var(--accent-soft)}
+.doc__diagbox--ext{border-style:dotted}
+.doc__diagkicker{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--ink-3)}
+.doc__diagsub{font-family:var(--font-mono);font-size:var(--t-11);color:var(--ink-3)}
+.doc__diagchain{margin:var(--s-3) 0 0;padding-left:var(--s-6);font-family:var(--font-mono);
+  font-size:var(--t-11);color:var(--ink);display:flex;flex-direction:column;gap:var(--s-1)}
+.doc__diagarrow{font-size:var(--t-21);color:var(--ink-3);text-align:center}
+.doc__diagcap{grid-column:1 / -1;font-size:var(--t-12);line-height:var(--lh-loose);
+  color:var(--ink-3);margin-top:var(--s-3);max-width:70ch}
+@media (max-width:875px){
+  .doc__diag{grid-template-columns:minmax(0,1fr)}
+  .doc__diagarrow{transform:rotate(90deg)}
+}
+
+/* ==========================================================================
+   Dashboard screen vocabulary (AgentDisk Dashboard.dc.html, Layer 4)
+
+   The design repeats a small set of shapes across all twelve screens: a head
+   (title + subtitle + action), quick-start cards, a two-column split, labelled
+   meters, agent cards, and numbered step panels. Defined once here so every
+   screen picks them up rather than each route re-describing the same layout.
+   ========================================================================== */
+
+.ds__head{display:flex;align-items:flex-end;justify-content:space-between;
+  gap:var(--s-6);margin-bottom:var(--s-7);flex-wrap:wrap}
+.ds__headbody{min-width:0}
+/* The reference draws this at 24px, dropping to 21px only below its 700px
+   mobile breakpoint — 875px here, since the 125% root moved every threshold a
+   quarter out. It was pinned at 21px on every width, so the section headings
+   on Overview and the screens that share them ran three pixels small on
+   desktop. Margin is the reference's 6px, not 4px. */
+.ds__h2{font-family:var(--font-display);font-size:var(--t-24);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink);
+  margin-bottom:var(--s-3)}
+@media (max-width:875px){ .ds__h2{font-size:var(--t-21)} }
+.ds__sub{font-size:var(--t-13);color:var(--ink-2);max-width:70ch;
+  text-wrap:pretty}
+
+/* --- account area (routes/Billing.jsx, Profile.jsx, Support.jsx) ---
+   The reference gives each of these three a measure of its own rather than one
+   shared page width: 680px for Account's row table, 760px for Billing's
+   two-column cards, 640px for Support's form. A form set to the width of a
+   table is a form nobody can scan. */
+.acct{display:flex;flex-direction:column;gap:var(--s-6)}
+.acct--account{max-width:42.5rem}
+/* Billing outgrew the reference's 760px. That measure was drawn for two hero
+   cards and nothing else; the plan picker beneath them holds four, and four
+   columns need 4x13rem plus three 1rem gaps — 55rem — so at 47.5rem the fourth
+   plan wrapped to its own row with the rest of the width left empty. The prose
+   above is unaffected: `.ds__sub` caps itself at 70ch, so widening the
+   container does not stretch a paragraph past a readable line. */
+.acct--billing{max-width:60rem}
+.acct--support{max-width:40rem}
+.acct__sub{margin-top:calc(var(--s-3) * -1)}
+
+/* --- account rows (routes/Profile.jsx) ---
+   The reference draws Account as plain cards, not as Panels: no head bar, no
+   rule under a title, just a padded card with an h3 where one is needed — and
+   none at all on the first card, because the h2 above it is the screen's only
+   "Account". The Panel this replaces carried a second one inside it.
+   The row is the shape worth copying: a fixed 104px mono key, a value that
+   takes the rest and ellipsises, then the optional tag and Edit pinned right.
+   A fixed key column is what makes five rows read as a table rather than five
+   sentences, and it is why the design uses one. */
+.acctcard{border:1px solid var(--line);background:var(--surface);
+  border-radius:var(--r-3);padding:var(--s-6)}
+.acctcard--danger{border-color:var(--danger-line)}
+/* 15px and -0.01em are the reference's own h3. The type scale stops at 14.5
+   and its nearest tracking step is -0.025em, so both are pinned here with the
+   value they came from, the way .wsx does for its 22px mark, rather than
+   bending two shared scales for one card. */
+.acctcard__h3{font-family:var(--font-display);font-size:0.9375rem;
+  font-weight:var(--w-semi);letter-spacing:-0.01em;color:var(--ink)}
+.acctcard--danger .acctcard__h3{color:var(--danger-ink)}
+.acctcard__body{margin-top:var(--s-5)}
+.acctcard__foot{margin-top:var(--s-6);display:flex;align-items:center;
+  gap:var(--s-5);flex-wrap:wrap}
+.acctcard__head{display:flex;align-items:center;gap:0.875rem;
+  padding-bottom:var(--s-6);border-bottom:1px solid var(--line)}
+/* Solid accent, not the soft-tinted .avatar the rest of the app uses at 24
+   and 32px: at 52px the soft version reads as an empty placeholder. */
+.acctcard__avatar{width:3.25rem;height:3.25rem;flex:0 0 3.25rem;
+  border-radius:var(--r-full);background:var(--accent);color:var(--on-accent);
+  display:grid;place-items:center;font-family:var(--font-display);
+  font-size:var(--t-18);font-weight:var(--w-semi);letter-spacing:var(--tr-none)}
+.acctcard__hint{margin-top:var(--s-3);font-size:var(--t-11-5);color:var(--ink-3)}
+.acctrow{display:flex;align-items:center;gap:0.875rem;padding:var(--s-5) 0;
+  border-bottom:1px solid var(--line)}
+.acctrow:last-child{border-bottom:0}
+.acctrow__k{width:6.5rem;flex:0 0 6.5rem;font-family:var(--font-mono);
+  font-size:var(--t-9-5);letter-spacing:var(--tr-caps);color:var(--ink-3)}
+.acctrow__v{flex:1;min-width:0;font-size:var(--t-13-5);color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acctrow__v--mono{font-family:var(--font-mono);font-size:var(--t-13)}
+.acctrow__v--quiet{color:var(--ink-3)}
+.acctrow__edit{flex:0 0 auto;background:transparent;border:0;padding:0;
+  font-family:var(--font-sans);font-size:var(--t-12-5);font-weight:var(--w-med);
+  color:var(--accent-ink);cursor:pointer}
+.acctrow__edit:hover{text-decoration:underline}
+/* An editing row stops being a row of text, so it drops the nowrap/ellipsis
+   the value carries and lets the field and its two buttons wrap on a narrow
+   screen instead of overflowing the card. */
+.acctrow--editing{align-items:flex-start}
+.acctrow__form{flex:1;min-width:0;display:flex;align-items:flex-end;
+  gap:var(--s-4);flex-wrap:wrap}
+.acctrow__field{flex:1;min-width:12rem}
+.sessrow{display:flex;align-items:center;gap:var(--s-5);padding:0.6875rem 0;
+  border-bottom:1px solid var(--line)}
+.sessrow:last-of-type{border-bottom:0}
+.sessrow__dev{display:block;font-size:var(--t-13);font-weight:var(--w-med);
+  color:var(--ink)}
+.sessrow__where{display:block;margin-top:var(--s-1);font-family:var(--font-mono);
+  font-size:var(--t-10-5);color:var(--ink-3)}
+.sessrow__when{flex:0 0 auto;font-size:var(--t-11-5);color:var(--ink-2)}
+
+/* --- billing hero (routes/SettingsTabs.jsx, BillingTab) ---
+   The reference opens Billing on two cards side by side: an accent CURRENT
+   PLAN card and a neutral one beside it. The chrome is what is borrowed, not
+   the contents. The reference fills those cards with a monthly price, a
+   next-invoice estimate and a card's last four digits, and `GET /v1/billing`
+   returns none of the three — Stripe holds them and this product deliberately
+   never reads them back (14 PART 29.1). So the accent card carries the two
+   fields that are real, the plan and the subscription status, and the neutral
+   card carries the other two, the billing email and whether a subscription
+   exists at all. Inventing the rest would put numbers on screen that no
+   invoice would ever match.
+   auto-fit rather than a breakpoint: this renders both at the account area's
+   760px measure and inside the narrower Settings tab, so the column count
+   should follow the container it is handed, not the viewport. */
+.plan{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));
+  gap:var(--s-6)}
+.plan__card{border:1px solid var(--line);background:var(--surface);
+  border-radius:var(--r-3);padding:var(--s-6);min-width:0;
+  display:flex;flex-direction:column;gap:var(--s-5)}
+.plan__card--accent{border-color:var(--accent-line);background:var(--accent-soft)}
+.plan__eyebrow{margin:0;font-family:var(--font-mono);font-size:var(--t-9-5);
+  font-weight:var(--w-reg);letter-spacing:var(--tr-caps);text-transform:uppercase;
+  color:var(--ink-3)}
+.plan__card--accent .plan__eyebrow{color:var(--accent-ink)}
+.plan__head{display:flex;align-items:baseline;gap:var(--s-4);flex-wrap:wrap}
+/* capitalize, because the plan name arrives from the API as the lowercase
+   identifier it is stored as ('free', 'team') and this is the one place it is
+   read as a name rather than as a value. */
+.plan__name{font-family:var(--font-display);font-size:var(--t-32);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-mid);line-height:1;
+  color:var(--ink);text-transform:capitalize}
+.plan__note{margin:0;font-size:var(--t-12-5);line-height:var(--lh-normal);
+  color:var(--ink-2)}
+/* Everywhere else the plan stands on its own as a label rather than as a name
+   in a sentence, and it is drawn in caps — the Layer 1 strip pill already was
+   (`.shell__stripplan`), so the Usage badge and the stat tiles arriving in the
+   raw lowercase identifier read as a different field. Done here rather than
+   with `toUpperCase()` so the accessible name stays the value the API returned;
+   the surfaces this lands on already carry caps tracking. */
+.planname{text-transform:uppercase}
+.plan__rows{margin:0;display:flex;flex-direction:column;gap:var(--s-5)}
+.plan__rows dt{font-size:var(--t-12);color:var(--ink-3)}
+.plan__rows dd{margin:var(--s-2) 0 0;font-size:var(--t-13);color:var(--ink);
+  overflow-wrap:anywhere}
+/* Pinned to the bottom so the two cards' actions line up however much text
+   sits above them. */
+.plan__foot{margin-top:auto;display:flex;align-items:center;gap:var(--s-4);
+  flex-wrap:wrap}
+
+/* --- the plan picker (Manage Subscription) ------------------------------- */
+/* Narrower columns than the two-card hero above it: four plans on one row at
+   full width, and it still folds to one column inside the Settings tab. */
+.plan--picker{grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))}
+/* The price is the headline here, so the name sits above it as the eyebrow and
+   `.plan__name` carries the figure. No capitalize — "$9" has no case, and the
+   rule on `.plan__name` exists for the lowercase plan identifiers the hero
+   renders. */
+.plan--picker .plan__name{font-size:var(--t-28);text-transform:none}
+.plan__unit{font-size:var(--t-12-5);color:var(--ink-3)}
+.plan__lines{margin:0;padding:0;list-style:none;display:flex;
+  flex-direction:column;gap:var(--s-3)}
+.plan__lines li{display:flex;align-items:flex-start;gap:var(--s-3);
+  font-size:var(--t-12-5);line-height:var(--lh-normal);color:var(--ink-2)}
+/* The tick is decoration; the sentence beside it carries the meaning, so it
+   takes the muted ink rather than a status colour. */
+.plan__lines svg{flex:none;margin-top:0.1em;color:var(--ink-3)}
+.plan__promo{margin-top:var(--s-5)}
+
+/* Monthly / yearly, as two buttons rather than a switch: a switch needs a
+   label saying which way is which, and the saving has to sit on the control
+   itself because it is the reason to press it. They wrap to their own line on
+   a phone, where the panel header has no room beside the title. */
+.plan__toggle{display:flex;gap:var(--s-2);flex-wrap:wrap}
+
+/* The band that replaces the workspace strip while you are in the account
+   area. Accent-tinted, because the point of it is that this is not one of your
+   workspaces and nothing you do here belongs to one. */
+.acctband{background:var(--accent-soft);border-bottom:1px solid var(--accent-line);
+  flex:none}
+.acctband__inner{display:flex;align-items:center;gap:var(--s-5);
+  padding:var(--s-4) var(--gutter);min-width:0}
+.acctband__back{display:flex;align-items:center;gap:var(--s-3);background:transparent;
+  border:0;padding:0;cursor:pointer;font-size:var(--t-12-5);font-weight:var(--w-semi);
+  color:var(--accent-ink);font-family:var(--font-sans)}
+.acctband__back:hover{text-decoration:underline}
+.acctband__where{font-family:var(--font-mono);font-size:var(--t-9-5);
+  letter-spacing:var(--tr-caps);color:var(--ink-3);min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+
+/* quick start
+   The card is a <Link>, so the global :where(a):hover underline applies to it
+   and — because text decoration propagates from the decorating box down through
+   in-flow descendants — underlines all three spans at once. The design draws
+   these as buttons: the hover is the border and the surface lifting, nothing
+   else. Cancelling the decoration on the anchor itself is what stops it, since
+   a descendant cannot remove an ancestor's underline. */
+/* quick start — four boxes left to right, the progress drawn between them.
+   Own prefix, because .ds__step is the MCP page's setup panel and sharing
+   the name once put a connector line through it. The state of each step is
+   carried three ways at once — a tick, a highlighted or plain number, and
+   the words in the box's footer — so the colours that also change are never
+   the only thing saying it. */
+.ds__qshead{display:flex;align-items:baseline;justify-content:space-between;
+  gap:var(--s-5)}
+.ds__qscount{font-family:var(--font-mono);font-size:var(--t-12);color:var(--ink-3);
+  flex:none}
+/* Four steps, four columns, explicitly: an auto-fit grid would let a fifth
+   step wrap silently, and the arrows below assume the row is the sequence. */
+.ds__qs{list-style:none;margin:0;padding:0;display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--s-6)}
+.ds__qsitem{position:relative;min-width:0;display:flex}
+/* The arrow sits in the gap to the left of every box but the first: a line
+   the width of the gap, and a chevron at its head drawn from two borders of a
+   rotated square. Accent once the box it points at has been reached. */
+.ds__qsitem+.ds__qsitem::before{content:"";position:absolute;top:50%;right:100%;
+  width:var(--s-6);height:1px;background:var(--ink-4);transform:translateY(-50%)}
+.ds__qsitem+.ds__qsitem::after{content:"";position:absolute;top:50%;right:100%;
+  width:0.5rem;height:0.5rem;margin-right:0.1875rem;
+  border-top:1px solid var(--ink-4);border-right:1px solid var(--ink-4);
+  transform:translateY(-50%) rotate(45deg)}
+.ds__qsitem--reached::before{background:var(--accent)}
+.ds__qsitem--reached::after{border-color:var(--accent)}
+.ds__qsbox{flex:1;display:flex;flex-direction:column;gap:var(--s-3);min-width:0;
+  border:1px solid var(--line);background:var(--surface);border-radius:var(--r-3);
+  padding:var(--s-5);text-decoration:none;color:inherit;
+  transition:border-color var(--d-1) var(--ease),background var(--d-1) var(--ease),
+    transform var(--d-1) var(--ease)}
+/* Only the boxes that are links lift. `a` in the selector is the point: a
+   later step renders as a div and must not look like it goes anywhere. */
+a.ds__qsbox:hover{border-color:var(--accent-line);background:var(--surface-2);
+  transform:translateY(-1px);text-decoration:none}
+.ds__qsitem--done .ds__qsbox{border-color:var(--accent-line)}
+.ds__qsitem--next .ds__qsbox{border-color:var(--accent);
+  box-shadow:0 0 0 1px var(--accent)}
+.ds__qsitem--later .ds__qsbox{background:var(--surface-2)}
+.ds__qsmark{width:1.75rem;height:1.75rem;border-radius:var(--r-full);flex:none;
+  display:grid;place-items:center;font-family:var(--font-mono);
+  font-size:var(--t-12);font-weight:var(--w-semi);
+  border:1px solid var(--line);background:var(--surface);color:var(--ink-3)}
+.ds__qsitem--done .ds__qsmark{background:var(--accent);border-color:var(--accent);
+  color:var(--on-accent)}
+.ds__qsitem--next .ds__qsmark{background:var(--accent-soft);
+  border-color:var(--accent-line);color:var(--accent-ink)}
+.ds__qstitle{font-size:var(--t-14);font-weight:var(--w-semi);color:var(--ink)}
+.ds__qsbody{flex:1;font-size:var(--t-12-5);line-height:var(--lh-normal);
+  color:var(--ink-2)}
+.ds__qsfoot{display:flex;align-items:center;gap:var(--s-2);margin-top:var(--s-2);
+  font-size:var(--t-12);font-weight:var(--w-semi);color:var(--accent-ink)}
+.ds__qsitem--later .ds__qstitle,.ds__qsitem--later .ds__qsbody,
+.ds__qsitem--later .ds__qsfoot{color:var(--ink-3)}
+/* Looks like the primary button and is not one: the whole box is the link,
+   and a button inside a link is a nested control. */
+.ds__qsbtn{display:inline-flex;align-items:center;gap:var(--s-2);
+  padding:var(--s-2) var(--s-4);border-radius:var(--r-2);
+  background:var(--accent);color:var(--on-accent);
+  transition:background var(--d-1) var(--ease)}
+a.ds__qsbox:hover .ds__qsbtn{background:var(--accent-hover)}
+
+/* two-column split */
+.ds__two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-6)}
+
+/* labelled meter */
+.ds__meter{margin-bottom:var(--s-6)}
+.ds__meterhead{display:flex;align-items:baseline;justify-content:space-between;
+  gap:var(--s-4);margin-bottom:var(--s-3)}
+.ds__meterlabel{font-size:var(--t-13);font-weight:var(--w-med);color:var(--ink)}
+.ds__metervalue{font-family:var(--font-mono);font-size:var(--t-12);color:var(--ink-2)}
+.ds__bar{height:0.375rem;border-radius:var(--r-full);background:var(--surface-3);
+  overflow:hidden}
+.ds__barfill{height:100%;border-radius:var(--r-full);background:var(--accent)}
+.ds__barfill--warn{background:var(--warn)}
+.ds__barfill--danger{background:var(--danger)}
+
+/* agent cards */
+.ds__cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-5)}
+.ds__acard{border:1px solid var(--line);background:var(--surface);
+  border-radius:var(--r-3);padding:var(--s-6);min-width:0}
+.ds__ahead{display:flex;align-items:center;gap:var(--s-4);margin-bottom:var(--s-4)}
+.ds__adot{width:0.5rem;height:0.5rem;border-radius:var(--r-full);flex:none;
+  background:var(--ink-4)}
+.ds__adot--ok{background:var(--ok)}
+.ds__adot--off{background:var(--ink-4)}
+.ds__aname{font-size:var(--t-14);font-weight:var(--w-semi);color:var(--ink);
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ds__aid{font-family:var(--font-mono);font-size:var(--t-11);color:var(--ink-3);
+  margin-bottom:var(--s-5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ds__afoot{display:flex;gap:var(--s-7);padding-top:var(--s-5);
+  border-top:1px solid var(--line)}
+.ds__afig{font-family:var(--font-display);font-size:var(--t-18);
+  font-weight:var(--w-semi);color:var(--ink);display:block}
+.ds__akey{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-wide);color:var(--ink-3);display:block;
+  margin-top:var(--s-1)}
+
+/* numbered step panel */
+.ds__step{border:1px solid var(--line);background:var(--surface);
+  border-radius:var(--r-3);padding:var(--s-6)}
+.ds__stephead{display:flex;align-items:center;gap:var(--s-5);margin-bottom:var(--s-4)}
+.ds__stepnum{width:1.5rem;height:1.5rem;border-radius:var(--r-2);flex:none;
+  background:var(--accent-soft);border:1px solid var(--accent-line);
+  display:grid;place-items:center;font-family:var(--font-mono);
+  font-size:var(--t-11);font-weight:var(--w-semi);color:var(--accent-ink)}
+
+/* recent activity rows */
+.ds__actrow{display:flex;align-items:center;gap:var(--s-5);
+  padding:var(--s-4) 0;border-bottom:1px solid var(--line)}
+.ds__actrow:last-child{border-bottom:0}
+.ds__actdot{width:0.4375rem;height:0.4375rem;flex:none;border-radius:var(--r-full);
+  background:var(--accent)}
+.ds__actdot--human{border-radius:var(--r-1);background:var(--ink-4)}
+.ds__acttext{font-size:var(--t-13);color:var(--ink);display:block;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ds__acttarget{font-family:var(--font-mono);font-size:var(--t-10);
+  color:var(--ink-3);display:block;margin-top:var(--s-1);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ds__actago{font-family:var(--font-mono);font-size:var(--t-10);
+  color:var(--ink-3);flex:none}
+
+@media (max-width:1350px){
+  /* Two by two, and the arrows go: an arrow into the first box of the second
+     row would point at the left margin. The numbers still give the order. */
+  .ds__qs{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-5)}
+  .ds__qsitem+.ds__qsitem::before,.ds__qsitem+.ds__qsitem::after{display:none}
+  .ds__two,.ds__cards{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:760px){
+  .ds__qs{grid-template-columns:minmax(0,1fr)}
+}
+
+/* --- accent picker (components-local/AccentPicker.jsx) ---
+   The trigger's dot shows the accent in force; the swatches are literal
+   because each one has to show the colour it selects, which is the one place
+   a token cannot be used — a token would show the *current* accent four
+   times. */
+.accent-dot{width:0.8125rem;height:0.8125rem;border-radius:var(--r-full);display:block;
+  background:var(--accent);border:1px solid var(--accent-line)}
+.accent-swatch{width:0.875rem;height:0.875rem;border-radius:var(--r-full);display:block;
+  place-self:center}
+.accent-swatch--violet{background:#6D28D9}
+.accent-swatch--indigo{background:#4F46E5}
+.accent-swatch--teal{background:#0D7A70}
+.accent-swatch--blue{background:#2563EB}
+.wsx__grouplabel{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--ink-3);padding:var(--s-3) var(--s-4) var(--s-2)}
+
+/* A panel that frames a destructive action. The design outlines the
+   delete-account card in the danger tone; Panel has no tone prop, so this is
+   the modifier rather than an unknown prop spread onto the section. */
+.panel--danger{border-color:var(--danger-line)}
+.panel--danger .panel__title{color:var(--danger-ink)}
+
+/* --- support (routes/Support.jsx) --- */
+.sup__topics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:var(--s-4)}
+.sup__topic{display:flex;align-items:center;gap:var(--s-5);width:100%;
+  padding:var(--s-5) var(--s-6);border-radius:var(--r-3);cursor:pointer;
+  text-align:left;background:var(--surface);border:1px solid var(--line);
+  transition:border-color var(--d-1) var(--ease),background var(--d-1) var(--ease)}
+.sup__topic:hover{border-color:var(--line-2)}
+.sup__topic.is-on{background:var(--accent-soft);border-color:var(--accent-line)}
+.sup__radio{width:0.9375rem;height:0.9375rem;flex:none;border-radius:var(--r-full);
+  border:1.5px solid var(--line-2);background:transparent}
+.sup__radio.is-on{border:0.28125rem solid var(--accent);background:var(--surface)}
+.sup__topiclabel{font-size:var(--t-13);color:var(--ink);min-width:0}
+@media (max-width:875px){ .sup__topics{grid-template-columns:minmax(0,1fr)} }
+
+/* --- top progress bar (components-local/TopProgress.jsx) ---
+   Fixed to the viewport, above the sticky top bar, and outside the document
+   flow entirely: it must never be the reason something moves, since its whole
+   purpose is to report movement elsewhere. Two pixels tall — enough to read as
+   activity at the edge of vision, not enough to be a component.
+
+   Height, track, fill and keyframes are the reference's, from AgentDisk
+   Patterns.dc.html § LOADING, "PAGE REFRESH · TOP PROGRESS BAR": 2.5px over a
+   --surf3 track, and `barGrow` easing out to 96% without arriving, because
+   nothing here knows how far along a response is and a percentage would be
+   invented. `ease-out` is the literal keyword the reference uses, not the
+   product's --ease-out token, which is a different curve.
+
+   One deliberate departure: the reference loops the animation, because its
+   card is a showcase that has to keep moving. Looping in the product would
+   restart the bar every 2.4s and read as a second page load, so it runs once
+   and holds. On completion it goes to full width and fades, so the bar always
+   ends by finishing. */
+.tprog{position:fixed;top:0;left:0;right:0;height:0.15625rem;z-index:var(--z-progress);
+  pointer-events:none;background:var(--surface-3);overflow:hidden}
+.tprog__fill{height:100%;width:8%;background:var(--accent);
+  animation:ad-bargrow 2.4s ease-out forwards}
+@keyframes ad-bargrow{0%{width:8%}45%{width:62%}80%{width:86%}100%{width:96%}}
+.tprog--done .tprog__fill{animation:none;width:100%;opacity:0;
+  transition:width var(--d-1) ease-out,opacity var(--d-2) var(--ease) var(--d-1)}
+
+/* --- Layer 2: the workspace stats band (components-local/WorkspaceStats.jsx)
+   Sits between the info strip and the tab bar, so it is on every screen. */
+.shell__stats{background:var(--surface-2);border-bottom:1px solid var(--line);flex:none}
+.shell__statsinner{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:var(--s-5);padding:var(--s-6) var(--gutter)}
+.wstat{background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-3);padding:var(--s-6);min-width:0}
+.wstat__head{display:flex;align-items:center;gap:var(--s-4);margin-bottom:var(--s-4)}
+.wstat__label{font-family:var(--font-mono);font-size:var(--t-9-5);
+  letter-spacing:var(--tr-caps);color:var(--ink-3);min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wstat__flag{font-family:var(--font-mono);font-size:var(--t-9);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-wide);padding:var(--s-1) var(--s-3);
+  border-radius:var(--r-1);flex:none}
+.wstat__flag--warn{color:var(--warn-ink);background:var(--warn-soft);
+  border:1px solid var(--warn-line)}
+.wstat__flag--danger{color:var(--danger-ink);background:var(--danger-soft);
+  border:1px solid var(--danger-line)}
+.wstat__figure{display:flex;align-items:baseline;gap:var(--s-3)}
+.wstat__value{font-family:var(--font-display);font-size:var(--t-34);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-mid);color:var(--ink);
+  line-height:1;font-variant-numeric:tabular-nums}
+/* line-height 1, like the value beside it. Left at the body's 1.5 the unit's
+   half-leading hangs below the value's baseline and makes the figure row
+   almost a pixel taller than the same row without a unit — so REQUESTS, the
+   one tile with no unit, sat a pixel short of the other three and the band
+   changed height when the figures arrived. */
+.wstat__unit{font-size:var(--t-12-5);font-weight:var(--w-med);color:var(--ink-2);
+  line-height:1}
+.wstat__meter{margin-top:var(--s-5)}
+.wstat__meterfoot{display:flex;justify-content:space-between;
+  margin-top:var(--s-3);font-family:var(--font-mono);font-size:var(--t-10-5);
+  color:var(--ink-3)}
+.wstat__meterfoot--bare{margin-top:var(--s-5)}
+/* The no-quota tile's trend line, from the design: a rising arrow in --ok
+   followed by the figure in body type, on a 22px line so a tile with a trend
+   and a tile with a meter end at the same height. */
+.wstat__delta{margin-top:var(--s-5);display:flex;align-items:center;gap:var(--s-3);height:1.375rem}
+.wstat__deltaico{flex:none;color:var(--ok)}
+.wstat__delta span{font-size:var(--t-11-5);color:var(--ink-2)}
+
+/* --- the same tile, before its figure exists ---
+   The band is 118px sitting above every screen's content, so it has to occupy
+   exactly the same space loading as loaded or the whole page jumps when the
+   answer lands. The figure row is pinned to the line box the value will make
+   — --t-34 at line-height 1, so 2.125rem — and the meter keeps its track and
+   the height of its caption line while printing neither number. */
+.wstat--pending .wstat__figure{position:relative}
+.wstat__strut{visibility:hidden}
+.wstat--pending .wstat__value--none{position:absolute;left:0;top:50%;
+  transform:translateY(-50%)}
+.wstat__value--none{color:var(--ink-3);line-height:1}
+
+/* The reference's own loading treatment, from AgentDisk Patterns.dc.html
+   § LOADING: a shimmering skeleton where the figure will be, and the
+   indeterminate meter — a 32% segment sweeping a --surf3 track — where the
+   quota will be. Its stated rule is that "skeletons mirror the layout they
+   replace so nothing jumps on arrival", which is why the figure skeleton takes
+   its height from the row rather than the 22px the catalogue card uses: the
+   card is demonstrating the pattern on a smaller tile than this one. The
+   staggered delays are the reference's, and they are what stops four tiles
+   pulsing in unison like a fault light. */
+@keyframes ad-shimmer{0%{opacity:.45}50%{opacity:.9}100%{opacity:.45}}
+@keyframes ad-sweep{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
+@keyframes ad-valuein{from{opacity:0;transform:translateY(0.1875rem)}
+  to{opacity:1;transform:none}}
+.wstat__skel{display:block;background:var(--surface-3);
+  animation:ad-shimmer 1.3s ease-in-out infinite}
+/* Height is the numeral's own 34px — the skeleton stands exactly where the
+   figure will, which is what the strut holds open. Width is per tile and set
+   inline: the reference seeds each one differently (62 / 78 / 38 / 70 %) so
+   four tiles do not read as one repeated bar. */
+.wstat__skel--figure{position:absolute;left:0;top:0;bottom:0;
+  border-radius:0.4375rem}
+.wstat__skel--limit{width:2.75rem;height:0.5625rem;border-radius:var(--r-full);
+  animation-delay:.15s}
+.wstat__sweep{position:absolute;top:0;bottom:0;width:30%;
+  border-radius:var(--r-full);background:var(--accent);
+  animation:ad-sweep 1.25s ease-in-out infinite}
+/* The stat tile's meter is 5px, a pixel finer than the 6px bar the overview
+   panels draw. Scoped to the tile rather than changed on .ds__bar, which the
+   other meters share. */
+.wstat .ds__bar{height:0.3125rem}
+.wstat--pending .ds__bar{position:relative}
+.wstat--pending .wstat__meterfoot{align-items:center}
+/* The figure does not appear, it arrives: the reference animates the loaded
+   value in over .22s, so the swap from skeleton to number is a movement rather
+   than a jump cut. */
+.wstat:not(.wstat--pending) .wstat__figure{animation:ad-valuein .22s ease both}
+
+@media (max-width:1350px){
+  /* Only the grid changes. The padding used to collapse to 12px on all four
+     sides here; the reference keeps this band at 16px top and bottom at every
+     breakpoint and lets the shared gutter handle the sides. */
+  .shell__statsinner{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:875px){
+  /* The design scrolls these horizontally rather than stacking four tall
+     cards above every screen's content. */
+  .shell__statsinner{display:flex;overflow-x:auto;scrollbar-width:none}
+  .shell__statsinner::-webkit-scrollbar{display:none}
+  .wstat{flex:0 0 12.25rem}
+}
+.shell__stripplan{font-size:var(--t-11);font-weight:var(--w-semi);
+  color:var(--accent-ink);background:var(--accent-soft);
+  border:1px solid var(--accent-line);border-radius:var(--r-1);
+  padding:var(--s-1) var(--s-4);text-transform:uppercase;
+  letter-spacing:var(--tr-wide)}
+.shell__striplink{font-size:var(--t-12);color:var(--ink-2)}
+/* The owner's name was the one string in the strip with no size of its own, so
+   it inherited the 14px body default where the reference draws it at 12.5/500
+   — the largest single type mismatch in the band. */
+.shell__stripname{font-size:var(--t-12-5);font-weight:var(--w-med);color:var(--ink)}
+
+/* --- danger zone (routes/Settings.jsx, routes/AgentDetails.jsx) ---
+   `.panel__body` is padding and nothing else, so a panel that stacks more than
+   one child leaves them touching. Every other panel in the product happens to
+   stack fields, which carry their own margins; the danger zones stack an Alert
+   directly on a Button, and the red alert box and the red-outlined button met
+   edge to edge and read as one malformed control. The class was already on both
+   panels and had never matched a rule. The gap is the body's own 16px padding,
+   so the space between the two boxes equals the space around them. */
+.danger-zone .panel__body{display:flex;flex-direction:column;gap:var(--s-6)}
+
+/* --- cookie notice (components-local/CookieNotice.jsx) ---
+   From AgentDisk Site.dc.html § COOKIE BAR: a surface-coloured strip on the
+   bottom edge, lifted off the page by a shadow that points upward because the
+   thing it has to separate itself from is above it.
+
+   Fixed rather than the reference's sticky. The reference draws one scrolling
+   sheet, where sticky and fixed look identical; the product has screens with
+   their own scroll containers, and sticky inside one of those would park the
+   notice at the bottom of *that* box instead of the window.
+
+   It rides the --z-nav rung: sticky chrome, and below both the drawer and the
+   modal scrim, so a dialog — including its own two — covers it. See
+   docs/ui-layering.md §1. */
+.ckb{position:fixed;bottom:0;left:0;right:0;z-index:var(--z-nav);
+  background:var(--surface);border-top:1px solid var(--line-2);
+  box-shadow:0 -0.625rem 1.875rem var(--shadow-tint);
+  animation:ckb-in var(--d-3) var(--ease-out)}
+@keyframes ckb-in{from{transform:translateY(100%)}to{transform:none}}
+.ckb__inner{display:flex;align-items:center;gap:var(--s-6);
+  padding:var(--s-5) var(--gutter);max-width:var(--shell-w);margin:0 auto}
+.ckb__copy{flex:1;min-width:11.875rem}
+.ckb__title{margin:0 0 var(--s-2);font-size:var(--t-13-5);
+  font-weight:var(--w-semi);color:var(--ink)}
+.ckb__body{margin:0;font-size:var(--t-12-5);line-height:var(--lh-loose);
+  color:var(--ink-2);max-width:var(--measure)}
+/* flex:none so the four buttons are never the thing that gives way; the copy
+   above reflows instead. Four actions is one more than the reference draws, so
+   they wrap rather than squeeze. */
+.ckb__actions{display:flex;gap:var(--s-4);flex-wrap:wrap;flex:none}
+@media (max-width:875px){
+  .ckb__inner{flex-direction:column;align-items:flex-start}
+  .ckb__actions{width:100%}
+}
+
+/* --- its preferences dialog --- */
+.ckb__cats{display:flex;flex-direction:column;gap:var(--s-5)}
+.ckb__cat{display:flex;align-items:flex-start;gap:var(--s-5);
+  border:1px solid var(--line);border-radius:var(--r-2);
+  padding:var(--s-5) var(--s-6)}
+.ckb__cattext{flex:1;min-width:0}
+.ckb__catline{display:flex;align-items:center;gap:var(--s-4);flex-wrap:wrap}
+.ckb__cattitle{font-size:var(--t-13-5);font-weight:var(--w-semi);color:var(--ink)}
+.ckb__cattag{font-family:var(--font-mono);font-size:var(--t-9-5);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-caps);
+  padding:var(--s-1) var(--s-3);border-radius:var(--r-1);color:var(--ink-2);
+  background:var(--surface-3);border:1px solid var(--line)}
+.ckb__catbody{margin:var(--s-2) 0 0;font-size:var(--t-12-5);
+  line-height:var(--lh-normal);color:var(--ink-2)}
+/* Essential reads as an on switch and is not one: no input, nothing to focus,
+   nothing to click. The neutral track rather than the accent says it was not
+   chosen -- the reference does the same, in --bd2 against --acc. */
+.ckb__lockedswitch{width:2.25rem;height:1.25rem;flex:none;
+  border-radius:var(--r-full);background:var(--line-2);position:relative;
+  margin-top:var(--s-1)}
+.ckb__lockedswitch::after{content:"";position:absolute;top:0.125rem;
+  right:0.125rem;width:0.875rem;height:0.875rem;border-radius:var(--r-full);
+  background:var(--surface)}
+.ckb__foot{margin:var(--s-6) 0 0;font-size:var(--t-12-5);
+  line-height:var(--lh-normal);color:var(--ink-2)}
+
+/* --- the support dialog (components-local/SupportDialog.jsx) ---
+   Its own block rather than part of the notice above: the same dialog opens
+   from the marketing nav's Support item, so naming its classes after the
+   cookie bar would have been a lie by the second call site. */
+.spd__body{margin:0 0 var(--s-5);font-size:var(--t-13-5);
+  line-height:var(--lh-loose);color:var(--ink-2)}
+.spd__body:last-child{margin-bottom:0}
+.spd__addr{font-family:var(--font-mono);font-size:var(--t-12-5);
+  color:var(--ink);background:var(--surface-3);border:1px solid var(--line);
+  border-radius:var(--r-1);padding:var(--s-1) var(--s-3);
+  white-space:nowrap}
+
+/* ---- API keys table: the compact row (22 Sept 2026) --------------------
+   Name, agent, masked key with its eye, scope on two lines, last used, and
+   one State pill that is also the row's menu. The tone is a colour on a
+   word and a mark, never a colour alone. ----------------------------- */
+.ds__ktbl th{font-family:var(--font-mono);letter-spacing:0.08em}
+.ds__ktbl .tbl__primary{font-weight:var(--w-semi);color:var(--ink);font-size:var(--t-14)}
+.ds__kkey{display:inline-flex;align-items:center;gap:var(--s-2);white-space:nowrap}
+.ds__kmask{color:var(--ink);letter-spacing:0.04em}
+.ds__kkey .icon-btn{color:var(--ink-4)}
+.ds__kkey .icon-btn:hover:not(:disabled){color:var(--ink)}
+.ds__kscope{display:flex;flex-direction:column;gap:2px;font-size:var(--t-12);
+  line-height:1.35;color:var(--ink);white-space:nowrap;padding:var(--s-3) 0}
+.ds__kscope>span:last-child{color:var(--ink-3)}
+.kst{display:inline-flex;align-items:center;gap:var(--s-3);height:1.75rem;
+  padding:0 var(--s-4) 0 var(--s-5);border-radius:var(--r-full);border:1px solid var(--line-2);
+  background:var(--surface-3);color:var(--ink-2);font-family:var(--font-sans);
+  font-size:var(--t-12);font-weight:var(--w-semi);letter-spacing:var(--tr-snug);
+  white-space:nowrap;cursor:default}
+button.kst{cursor:pointer;transition:background var(--d-1) var(--ease),border-color var(--d-1) var(--ease)}
+button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
+.kst--ok{background:var(--ok-soft);border-color:var(--ok-line);color:var(--ok-ink)}
+.kst--warn{background:var(--warn-soft);border-color:var(--warn-line);color:var(--warn-ink)}
+.kst--danger{background:var(--danger-soft);border-color:var(--danger-line);color:var(--danger-ink)}
+.kst__dot{width:0.375rem;height:0.375rem;border-radius:var(--r-full);background:currentColor;flex:none}
+.kst--ok .kst__dot{background:var(--ok)}
+.kst__label{line-height:1}
+.kst__menu{min-width:9.5rem;animation:ad-fade var(--d-1) var(--ease)}
+
+/* ---- The key dialogs (view, created, rotated) --------------------------
+   Every number here is read from the design source rather than measured off a
+   capture: `AgentDisk Dashboard.dc.html`, the `MODAL - reveal key` block. That
+   file sets no root font-size, no zoom and no transform on its sheet, so its
+   px are literal px at zoom 1 and there is nothing to normalise. The block had
+   drifted to a fairly even ~0.95 of them, with six values well outside even
+   that -- the glyph at 1.88x, the note row's gap at 0.67x, the footer caption
+   at 1.10x -- which is what eyeballing a screenshot produces.
+
+   The width is the one place this reverses the 22 Sept call to take the dialog
+   down a quarter. That quarter was measured off `modal--lg` (45rem), and 35rem
+   is what the design actually asks for: still 22% under where it started, and
+   20px over where the quarter landed.
+
+   The glyph no longer needs correcting -- see components-local/KeyMark.jsx for
+   why the vendored `key` icon did, and why it is left alone.
+
+   The `!important` rules override inline styles in the vendored
+   ApiKeyDisplay, whose field and copy button carry their dimensions as
+   style attributes; overriding here keeps that component's third
+   divergence out of its source. ---------------------------------------- */
+.ds__kview{--kv-pad:1.375rem;max-width:35rem}
+/* center, not the base flex-start: the design aligns a single-line title to
+   the middle of its 36px mark. */
+.ds__kview .modal__head{padding:var(--kv-pad) var(--kv-pad) var(--s-6);
+  gap:0.8125rem;align-items:center}
+.ds__kview .modal__mark{width:2.25rem;height:2.25rem;border-radius:var(--r-2)}
+.ds__kview .modal__title{font-size:1.1875rem;letter-spacing:-0.02em}
+/* The design's close button is drawn, not implied: a border and the raised
+   surface. Size is left to the base rule so the mobile touch target at the
+   2.125rem breakpoint is not pulled back down to 30px. */
+.ds__kview .modal__x .icon-btn{border-color:var(--line);background:var(--surface-2);
+  border-radius:0.5rem}
+.ds__kview .modal__body{padding:0 var(--kv-pad) 1.125rem;gap:var(--s-5)}
+/* ApiKeyDisplay's own column: the design puts 12px between the key and the
+   sentence under it, against the 10px the component hardcodes. */
+.ds__kfield{gap:0.75rem !important}
+.ds__kview code.ad-mono{font-size:var(--t-13);line-height:1.4;
+  padding:0.8125rem 0.875rem !important}
+.ds__kview code.ad-mono + button{gap:0.4375rem !important;font-size:var(--t-12-5) !important;
+  font-weight:var(--w-semi) !important;padding:0 0.9375rem !important}
+.ds__kview code.ad-mono + button svg{width:0.875rem;height:0.875rem}
+.ds__kview .ad-meta{font-size:var(--t-12-5);line-height:1.55;color:var(--ink-2);
+  gap:0.5625rem !important}
+.ds__kview .ad-meta svg{width:0.9375rem;height:0.9375rem;margin-top:0.0625rem}
+.ds__kview .modal__foot{justify-content:space-between;padding:0.875rem var(--kv-pad)}
+.ds__kview .modal__foot .btn{height:2.375rem;padding:0 var(--s-7);
+  font-size:var(--t-13-5);border-radius:var(--r-2)}
+.ds__kcap{font-family:var(--font-mono);font-size:var(--t-10);letter-spacing:0.07em;
+  text-transform:uppercase;color:var(--ink-3);margin-right:auto}
+
+/* ---- Table cells breathe when their content wraps (23 Sept 2026) -------
+   `.tbl td` is `padding:0 var(--s-6);height:2.75rem`, and that pair only
+   works while every cell is one line: the height is a minimum the row grows
+   past, and with no vertical padding the extra lines press straight onto the
+   borders above and below. The webhooks Events column is where it shows —
+   five `file.*` badges wrap to three rows and the first and last sit on the
+   header rule and the row rule.
+
+   8px is chosen rather than eyeballed: an icon button is 1.75rem and the
+   cell's minimum is 2.75rem, so 8px top and bottom is exactly the slack
+   already inside that minimum. Every existing single-line row — files, keys,
+   agents, members — therefore stays 44px and nothing in the product shifts;
+   only a cell that was already taller than its minimum gains anything.
+
+   Top and bottom, never the shorthand: `.tbl__check` zeroes its padding-right
+   and this rule outranks it, so a shorthand here would push the checkbox
+   column off its edge. */
+.tbl td{padding-top:var(--s-4);padding-bottom:var(--s-4)}
+
+/* --- public share page (routes/SharePage.jsx) ---
+   A ticket, not a settings panel. Whoever opens /s/{token} has no account
+   here; the page's one job is to hand over a file. So the file gets a face -
+   its extension set large on a tinted tile - and the card is cut in two by a
+   perforated rule: above it what you were sent, below it how to take it. The
+   tile is the one loud element; everything else stays quiet. Tokens only. */
+.share{background:var(--paper);min-height:100vh;display:flex;flex-direction:column;
+  align-items:center;padding:var(--s-8) var(--s-6) var(--s-9)}
+.share__brand{display:flex;align-items:center;gap:var(--s-4);text-decoration:none;
+  color:var(--ink);margin-bottom:var(--s-10)}
+.share__brand:hover{text-decoration:none}
+.share__wordmark{font-family:var(--font-display);font-size:var(--t-16);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-snug)}
+.share__brandnote{font-size:var(--t-13);color:var(--ink-3);padding-left:var(--s-4);
+  border-left:1px solid var(--line-2)}
+.share__main{flex:1;width:100%;max-width:40rem;display:flex;flex-direction:column}
+
+/* The card. `overflow:visible` so the perforation's notches can sit half
+   outside the edge and read as bites out of the card. */
+.share__card{position:relative;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-4);box-shadow:var(--sh-3)}
+.share__head{display:flex;gap:var(--s-7);align-items:flex-start;
+  padding:var(--s-9) var(--s-9) var(--s-8)}
+.share__body{padding:var(--s-8) var(--s-9) var(--s-9)}
+
+/* The tile: extension in the display face, or an icon when there is no
+   extension to show. Square, and the card's only saturated surface. */
+.share__tile{flex:none;width:5.5rem;height:5.5rem;border-radius:var(--r-3);
+  display:grid;place-items:center;font-family:var(--font-display);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-snug);line-height:1;
+  background:var(--accent-soft);color:var(--accent-ink);
+  border:1px solid var(--accent-line);overflow:hidden}
+.share__tile--3{font-size:var(--t-26)}
+.share__tile--4{font-size:var(--t-21)}
+.share__tile--5{font-size:var(--t-16)}
+.share__tile--icon svg{width:2.25rem;height:2.25rem}
+.share__tile--danger{background:var(--danger-soft);color:var(--danger-ink);
+  border-color:var(--danger-line)}
+.share__tile--sm{width:2.5rem;height:2.5rem;border-radius:var(--r-2);
+  font-size:var(--t-11);letter-spacing:var(--tr-none)}
+.share__tile--sm.share__tile--icon svg{width:1.125rem;height:1.125rem}
+
+.share__title{min-width:0;flex:1;padding-top:var(--s-2)}
+.share__name{margin:0;font-family:var(--font-display);font-size:var(--t-32);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-mid);line-height:var(--lh-tight);
+  color:var(--ink);overflow-wrap:anywhere;text-wrap:balance}
+.share__from{margin:var(--s-4) 0 0;font-size:var(--t-14);color:var(--ink-2);
+  line-height:var(--lh-normal)}
+
+/* The perforation. A dashed line with a round bite at each end, the bites
+   painted in the page ground so they cut through the border and shadow. */
+.share__tear{position:relative;height:0;border-top:1px dashed var(--line-2);margin:0 var(--s-7)}
+.share__tear::before,.share__tear::after{content:"";position:absolute;top:calc(-1 * var(--s-5));
+  width:var(--s-8);height:var(--s-8);border-radius:var(--r-full);
+  background:var(--paper);border:1px solid var(--line);
+  box-shadow:inset 0 1px 0.125rem var(--shadow-tint)}
+.share__tear::before{left:calc(-1 * (var(--s-7) + var(--s-5)));
+  clip-path:inset(0 0 0 50%)}
+.share__tear::after{right:calc(-1 * (var(--s-7) + var(--s-5)));
+  clip-path:inset(0 50% 0 0)}
+
+/* What the link says about itself: two or three rows, label then value. */
+.share__facts{display:grid;grid-template-columns:auto minmax(0,1fr);
+  column-gap:var(--s-8);row-gap:var(--s-4);margin:0 0 var(--s-8);
+  font-size:var(--t-13);line-height:var(--lh-normal)}
+.share__facts dt{color:var(--ink-3);margin:0}
+.share__facts dd{margin:0;color:var(--ink);font-family:var(--font-mono);
+  font-variant-ligatures:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.share__take{display:flex;flex-direction:column;gap:var(--s-4)}
+.share__take .btn{width:100%}
+.share__take a{display:block;text-decoration:none}
+.share__note{margin:0;font-size:var(--t-12);color:var(--ink-3);text-align:center}
+
+/* A folder's rows. The small tile does the same job the big one does. */
+.share__list{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+.share__row{display:flex;align-items:center;gap:var(--s-5);padding:var(--s-5) 0;
+  border-bottom:1px solid var(--line)}
+.share__rowbody{flex:1;min-width:0}
+.share__rowname{display:block;font-weight:var(--w-med);font-size:var(--t-14);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.share__rowmeta{display:block;font-size:var(--t-12);color:var(--ink-3);
+  font-family:var(--font-mono);font-variant-ligatures:none;margin-top:var(--s-1)}
+.share__rowact{display:inline-flex;align-items:center;gap:var(--s-3)}
+.share__rowact a{text-decoration:none}
+.share__empty{margin:0;padding:var(--s-7) 0 0;color:var(--ink-2);font-size:var(--t-14)}
+
+.share__form{display:flex;gap:var(--s-4);align-items:flex-end}
+.share__form>:first-child{flex:1;min-width:0}
+.share__foot{width:100%;max-width:40rem;display:flex;justify-content:space-between;
+  gap:var(--s-6);margin-top:var(--s-9);font-size:var(--t-12);color:var(--ink-3)}
+.share__foot a{color:var(--ink-2)}
+
+@media (max-width:37.5rem){
+  .share{padding:var(--s-6) var(--s-6) var(--s-8)}
+  .share__brand{margin-bottom:var(--s-8)}
+  .share__brandnote{display:none}
+  .share__head{padding:var(--s-8) var(--s-7) var(--s-7);gap:var(--s-6)}
+  .share__body{padding:var(--s-7) var(--s-7) var(--s-8)}
+  .share__tile{width:4rem;height:4rem}
+  .share__tile--3{font-size:var(--t-21)}
+  .share__tile--4{font-size:var(--t-16)}
+  .share__tile--5{font-size:var(--t-13)}
+  .share__name{font-size:var(--t-24)}
+  .share__facts{grid-template-columns:1fr;row-gap:var(--s-2)}
+  .share__facts dt:not(:first-child){margin-top:var(--s-4)}
+  .share__form{flex-direction:column;align-items:stretch}
+  .share__row{flex-wrap:wrap}
+  .share__rowact{width:100%;justify-content:flex-end}
+}
+
+/* ==========================================================================
+   Responsive pass (26 Sept 2026)
+
+   The desktop layout is the baseline and is not touched: every rule below
+   either sits inside a max-width query or only takes effect when a container
+   is narrower than its content. The breakpoints are the file's own — 1350,
+   1125, 875, 560 — plus 600 for the tablet grids and 400 for the one card
+   that has to leave room for a 300px widget. Real px, as every media query in
+   this file: a query resolves rem against the initial 16, not this document's
+   125% root. Found by rendering every route at 360, 375, 390, 430, 768, 820,
+   1024, 1280, 1440 and 1920 in a real Chrome (apps/web/harness).
+   ========================================================================== */
+
+/* --- rules that only bite when squeezed, and so carry no query --- */
+
+/* A <select> refuses to be narrower than its longest option: `flex:1` on the
+   element does nothing while its automatic minimum is its content, and on the
+   MCP page the key picker ran 44px past a 360px screen. min-width:0 lets it
+   give way; the box then ellipsises the option text itself. */
+.select{max-width:100%;min-width:0}
+.select__el{min-width:0;width:100%;text-overflow:ellipsis}
+
+/* Tables scroll sideways rather than crush their columns — .tbl-scroll is
+   already overflow:auto — but nothing said so, and the cut-off column looked
+   like the end of the table. Two shadows painted on the scroller itself, each
+   under a cover that is attached to the content (`local`): the cover slides
+   away as you scroll and reveals the shadow, and on a table that fits the
+   covers never move, so a table that does not scroll shows nothing. Pure CSS;
+   the vendored DataTable is untouched. */
+.tbl-scroll{
+  background:
+    linear-gradient(to right,var(--surface) 40%,transparent) left/2.5rem 100% no-repeat local,
+    linear-gradient(to left,var(--surface) 40%,transparent) right/2.5rem 100% no-repeat local,
+    linear-gradient(to right,var(--shadow-tint),transparent) left/0.875rem 100% no-repeat scroll,
+    linear-gradient(to left,var(--shadow-tint),transparent) right/0.875rem 100% no-repeat scroll}
+.doc__tablewrap{
+  background:
+    linear-gradient(to right,var(--surface) 40%,transparent) left/2.5rem 100% no-repeat local,
+    linear-gradient(to left,var(--surface) 40%,transparent) right/2.5rem 100% no-repeat local,
+    linear-gradient(to right,var(--shadow-tint),transparent) left/0.875rem 100% no-repeat scroll,
+    linear-gradient(to left,var(--shadow-tint),transparent) right/0.875rem 100% no-repeat scroll}
+
+/* A number never breaks: at 1280px the files table's Created-by column,
+   which cannot wrap, squeezed Size until "2.0 KB" sat on two lines. */
+.tbl__num{white-space:nowrap}
+
+/* The activity row (vendored, inline-styled) leads with an actor id that has
+   no break point: at phone width a 30-character agent id ran under the time
+   on the right. .actrow is the class the three call sites now pass. */
+.actrow p{overflow-wrap:anywhere}
+.actrow code.inline{overflow-wrap:anywhere;white-space:normal}
+
+/* A definition list value can be a checksum, an id or a client string. */
+.dl dd{overflow-wrap:anywhere}
+
+/* --- the marketing nav on a phone ---
+   Below 875px the row of links does not fit beside the brand — at 360px it
+   ran to 740px and dragged the whole page sideways. The same links become a
+   panel under the bar, opened by one button (routes/Marketing.jsx). The bar
+   already carries backdrop-filter, which makes it the containing block for
+   the panel, and it is sticky at --z-nav, so the panel paints over the page
+   without a number of its own. */
+.mk__burger{display:none}
+.mk__navactions{display:contents}
+@media (max-width:875px){
+  .mk__burger{display:inline-flex;align-items:center;justify-content:center;
+    margin-left:auto;width:2.125rem;height:2.125rem;flex:none;
+    border:1px solid var(--line-2);border-radius:var(--r-2);
+    background:var(--surface);color:var(--ink);cursor:pointer}
+  .mk__burger:hover{background:var(--surface-2)}
+  .mk__navlinks{display:none;position:absolute;top:100%;left:0;right:0;
+    flex-direction:column;align-items:stretch;gap:var(--s-2);margin:0;
+    padding:var(--s-4) var(--gutter) var(--s-6);
+    background:var(--surface);border-bottom:1px solid var(--line);
+    box-shadow:var(--sh-3);animation:ad-fade var(--d-2) var(--ease)}
+  .mk__nav.is-open .mk__navlinks{display:flex}
+  .mk__pages{flex-direction:column;align-items:stretch;gap:var(--s-1)}
+  .mk__navlinks .mk__navlink{height:2.625rem;justify-content:flex-start;
+    font-size:var(--t-14)}
+  .mk__navactions{display:flex;align-items:center;gap:var(--s-4);
+    margin-top:var(--s-3);padding-top:var(--s-5);border-top:1px solid var(--line)}
+  .mk__navactions .mk__navlink,.mk__navactions .btn{flex:1 1 auto;
+    justify-content:center;height:2.625rem}
+  .mk__theme{flex:none}
+}
+
+/* --- the docs table of contents on a phone (routes/Docs.jsx) ---
+   The sidebar is hidden below 875px; this is the same list under the
+   breadcrumb, folded shut in a native <details>. */
+.doc__mtoc{display:none}
+@media (max-width:875px){
+  .doc__mtoc{display:block;margin-bottom:var(--s-6);border:1px solid var(--line);
+    border-radius:var(--r-3);background:var(--surface)}
+  .doc__mtocsum{display:flex;align-items:center;gap:var(--s-4);
+    padding:var(--s-4) var(--s-5);cursor:pointer;list-style:none;
+    font-size:var(--t-13);min-height:2.625rem}
+  .doc__mtocsum::-webkit-details-marker{display:none}
+  .doc__mtocsum::after{content:"";margin-left:auto;width:0.5rem;height:0.5rem;
+    flex:none;border-right:1.5px solid var(--ink-3);border-bottom:1.5px solid var(--ink-3);
+    transform:translateY(-0.125rem) rotate(45deg);transition:transform var(--d-2) var(--ease)}
+  .doc__mtoc[open] .doc__mtocsum::after{transform:translateY(0.125rem) rotate(-135deg)}
+  .doc__mtoclabel{font-family:var(--font-mono);font-size:var(--t-10);
+    letter-spacing:var(--tr-caps);color:var(--ink-3);flex:none}
+  .doc__mtocnow{font-weight:var(--w-semi);color:var(--ink);min-width:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .doc__mtoclist{padding:var(--s-2) var(--s-4) var(--s-4);border-top:1px solid var(--line)}
+  .doc__mtoclist .doc__tocgroup{margin:var(--s-4) 0 0}
+  .doc__mtoclist .doc__tocitem{padding:var(--s-4) var(--s-4);font-size:var(--t-13)}
+}
+
+/* --- tablet and down --- */
+@media (max-width:875px){
+  /* Page head: the body took flex:1 — basis 0 — so beside two buttons it
+     shrank to a sliver and the subtitle came out one word per line. 16rem is
+     the width a subtitle needs to read; with less than that, the actions wrap
+     under the title instead. */
+  .page-head__body{flex:1 1 16rem}
+  /* The same fault in a panel head: a title and subtitle beside an actions
+     group that never wrapped ("Failing — last 5 deliveries" came out one
+     word per line beside two buttons). */
+  .panel__head{flex-wrap:wrap}
+  .panel__head>div:first-child{flex:1 1 12rem}
+  .panel__actions{flex-wrap:wrap}
+  /* API keys: every column carries a percentage, so with no floor the table
+     shrank to the screen and the name wrapped to four lines. 46rem is where
+     the six columns still read; below it the table scrolls. */
+  .ds__ktbl{min-width:46rem}
+  /* Even past that floor the browser hands the percentage columns their
+     share of the *container*, not of the table the nowrap key and scope
+     columns have pushed out, so the name was still 137px and wrapped to
+     three lines. A floor on the cell is what the name needs. */
+  .ds__ktbl .tbl__primary{min-width:11rem}
+  /* The stats band scrolls sideways by design; snapping lands each swipe on
+     a whole tile rather than between two, and the trailing padding lets the
+     last tile come fully into view. */
+  .shell__statsinner{scroll-snap-type:x proximity;scroll-padding-inline:var(--gutter)}
+  .wstat{scroll-snap-align:start}
+  /* Tablet keeps two columns of the marketing cards and the plans: one
+     column of short cards down a 768px screen was mostly gutter. Restated
+     after the earlier 875px rule, which folds them to one; 600px below takes
+     them there. */
+  .mk__grid4,.mk__prices{grid-template-columns:repeat(2,minmax(0,1fr))}
+  /* The account and agent heads carry a switch or a chip beside the title;
+     let those wrap rather than squeeze the title. */
+  .ds__head{align-items:flex-start}
+  /* The overflow drawer footer holds three buttons; on a phone they share the
+     row and wrap. */
+  .dw__foot .btn{flex:1 1 auto}
+  /* A dialog is a grid item, and a grid item's automatic minimum is its
+     content's min-content width: one unbreakable key string in the reveal
+     dialog made the whole dialog 560px on a 360px screen. min-width:0 lets
+     the dialog take the width it was given, and the key field inside it
+     scrolls, as it was already written to. */
+  .modal{min-width:0}
+}
+
+@media (max-width:600px){
+  .mk__grid4,.mk__prices{grid-template-columns:minmax(0,1fr)}
+}
+
+/* --- phone --- */
+@media (max-width:560px){
+  /* Dialogs: the scrim's 25px inset and the head's 25px padding left a
+     dialog with 240px of usable width on a 360px phone. */
+  .scrim{padding:var(--s-4)}
+  .modal__head{padding:var(--s-6) var(--s-6) var(--s-4)}
+  .modal__body{padding:0 var(--s-6) var(--s-6)}
+  .modal__foot{padding:var(--s-5) var(--s-6);flex-wrap:wrap}
+  .modal__foot .btn{flex:1 1 auto}
+  .ds__kview{--kv-pad:var(--s-6)}
+  /* A toast is 18.75rem at minimum, which is 375px: wider than the screen it
+     was pinned to the corner of. */
+  .toast{min-width:0;width:calc(100vw - 2 * var(--s-7));max-width:none}
+  /* The workspace menu drops from the switcher at up to 90vw wide, and the
+     switcher starts 80px in, so the panel ran off the right edge. On a phone
+     both menus span the bar instead, fixed under it; the top bar is sticky,
+     which does not contain a fixed descendant. */
+  .wsx__menu,.wsx__menu--right{position:fixed;top:calc(var(--topbar-h) + var(--s-2));
+    left:var(--gutter);right:var(--gutter);width:auto;min-width:0}
+  /* Definition lists stack: a 150px key beside a 150px value is neither a
+     table nor a sentence. */
+  .dl{grid-template-columns:minmax(0,1fr);gap:var(--s-1) 0}
+  .dl dt{margin-top:var(--s-4)}
+  .dl dt:first-child{margin-top:0}
+  /* Account rows: the key on its own line above the value, Edit still at the
+     right; the value may wrap rather than ellipsise a name to "Rina Kes…". */
+  .acctrow{flex-wrap:wrap;column-gap:0.875rem;row-gap:var(--s-2)}
+  .acctrow__k{flex:0 0 100%;width:auto}
+  .acctrow__v{white-space:normal;overflow-wrap:anywhere}
+  /* The device column carries an inline flex:1, so it is the minimum width
+     that puts it on a row of its own; the time and the tag share the next. */
+  .sessrow{flex-wrap:wrap;row-gap:var(--s-3)}
+  .sessrow>:first-child{min-width:100%}
+  /* The toolbar's search takes a row of its own; the spacer that pushed the
+     sort control to the far end has nothing to push against. */
+  .toolbar>.field{flex:1 1 100%}
+  .toolbar__spacer{display:none}
+  /* Stat tiles a little narrower, so the next one shows at the edge and the
+     band reads as something that scrolls. */
+  .wstat{flex-basis:11.25rem}
+  /* The share page's row of facts and the claim page's tiles already stack;
+     the error page's two actions share a row. */
+  .err__actions .btn{flex:1 1 auto}
+}
+
+/* The sandbox card has to leave 300px for the Turnstile widget, which is its
+   smallest size: 40px of page and 30px of card each side left 220px on a
+   360px phone. 10px and 15px leave 310px. */
+@media (max-width:400px){
+  .auth--card{padding:var(--s-4)}
+  .auth--card .auth__card{padding:var(--s-5)}
 }

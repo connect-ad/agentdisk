@@ -3,6 +3,14 @@ node_modules/
 
 # Build output
 apps/web/dist/
+apps/admin/dist/
+
+# Screenshots from the responsive harness (apps/web/harness), when run
+# without an output directory.
+apps/web/harness-out/
+
+# Wrangler's local dev state and bundle scratch, written by `wrangler dev`.
+.wrangler/
 
 # Logs
 *.log
@@ -36,3 +44,15 @@ crash.*.log
 # Terraform backend config (contains account ID)
 backend.hcl
 !backend.hcl.example
+
+# Generated knowledge graph (graphify) — rebuilt with `graphify update .`
+graphify-out/
+
+# Session working documents (track prompts, plans) — not product artifacts
+Claude outputs/
+
+# Machine-specific hook config: pins an absolute path to a local binary
+.claude/settings.json
+
+# Worktrees created for isolated plan execution. Scratch, never committed.
+.claude/worktrees/

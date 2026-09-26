@@ -20,8 +20,10 @@ terraform {
   # time via -backend-config (CI writes backend.hcl from Environment secrets).
   # Nothing account-specific is committed here.
   backend "s3" {
-    bucket = "agentdisk-tfstate"
-    key    = "terraform.tfstate"
+    # `bucket` is deliberately absent: it is supplied at init time from the
+    # TFSTATE_BUCKET repository variable, alongside the account-specific
+    # endpoint. Nothing account- or deployment-specific is committed here.
+    key = "terraform.tfstate"
 
     # Empty prefix so workspace state lands at <workspace>/terraform.tfstate —
     # i.e. dev/terraform.tfstate and prod/terraform.tfstate, matching the

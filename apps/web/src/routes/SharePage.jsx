@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { Alert, Badge, Button, Icon, Input, Panel, Skeleton } from '../components/index.js';
+import { Link, useParams } from 'react-router-dom';
+import { Button, Icon, Input, Skeleton } from '../components/index.js';
+import Logo from '../components-local/Logo.jsx';
 import {
   isPasswordRequired,
   previewShare,
@@ -13,8 +14,14 @@ import {
  *
  * No shell chrome, no workspace switcher, no account menu: whoever opens this
  * has no account here and probably never will, so every control that assumes
- * one is noise at best and a dead end at worst. Modelled on `Claim.jsx`, the
- * other public, token-in-URL page.
+ * one is noise at best and a dead end at worst. It does not borrow the
+ * marketing nav either — that bar sells the product, and this page hands over
+ * a file. It carries the mark, the file, and a way to take it.
+ *
+ * The look is a ticket: the file's extension set large on a tinted tile, the
+ * name beside it, then a perforated rule separating what you were sent from
+ * how you take it. Every state — loading, password, refusal, file, folder —
+ * renders in the same card so the page never changes shape under somebody.
  *
  * **A refusal explains nothing, and that is the feature.** The API answers
  * expired, revoked, never-existed, suspended and deleted with one
@@ -62,12 +69,76 @@ function formatExpiry(iso) {
   });
 }
 
-function Centered({ children }) {
+/**
+ * The extension as the tile shows it: whatever follows the last dot, upper
+ * case, at most five characters. A name with no extension, a dotfile, or a
+ * long tail like `.sqlite-journal` fall back to the icon rather than a
+ * squeezed string nobody can read at that size.
+ */
+function extensionOf(name) {
+  const dot = name.lastIndexOf('.');
+  if (dot <= 0 || dot === name.length - 1) return null;
+  const ext = name.slice(dot + 1);
+  if (ext.length > 5 || !/^[a-z0-9]+$/i.test(ext)) return null;
+  return ext.toUpperCase();
+}
+
+function Tile({ ext, icon, tone, small }) {
+  const cls = ['share__tile'];
+  if (small) cls.push('share__tile--sm');
+  if (tone) cls.push(`share__tile--${tone}`);
+  if (ext) {
+    // Three letters fit at the largest size; four and five step down so the
+    // tile never grows to fit the word.
+    cls.push(`share__tile--${Math.max(3, ext.length)}`);
+    return (
+      <span className={cls.join(' ')} aria-hidden="true">
+        {ext}
+      </span>
+    );
+  }
+  cls.push('share__tile--icon');
   return (
-    <div style={{ display: 'grid', placeItems: 'center', minHeight: '70vh', padding: 'var(--s-6)' }}>
-      <div style={{ width: '100%', maxWidth: '44rem' }}>{children}</div>
+    <span className={cls.join(' ')} aria-hidden="true">
+      <Icon name={icon} />
+    </span>
+  );
+}
+
+/** The page frame every state shares: mark above, card, one line below. */
+function Frame({ children }) {
+  return (
+    <div className="share">
+      <Link to="/" className="share__brand">
+        <Logo size={28} />
+        <span className="share__wordmark">AgentDisk</span>
+        <span className="share__brandnote">Shared with you</span>
+      </Link>
+      <main className="share__main">
+        <div className="share__card">{children}</div>
+      </main>
+      <footer className="share__foot">
+        <span>Stored on AgentDisk, file storage for AI agents.</span>
+        <Link to="/privacy">Privacy</Link>
+      </footer>
     </div>
   );
+}
+
+function Head({ tile, name, from }) {
+  return (
+    <div className="share__head">
+      {tile}
+      <div className="share__title">
+        <h1 className="share__name">{name}</h1>
+        {from ? <p className="share__from">{from}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function Tear() {
+  return <div className="share__tear" aria-hidden="true" />;
 }
 
 /**
@@ -76,15 +147,15 @@ function Centered({ children }) {
  * from R2 rather than through this app. A protected link fetches the address
  * with the password first and then navigates the same way.
  */
-function DownloadAction({ token, fileId, password, variant }) {
+function DownloadAction({ token, fileId, password, variant, size, label = 'Download' }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(null);
 
   if (password === null) {
     return (
       <a href={sharedDownloadUrl(token, fileId)} download>
-        <Button as="span" variant={variant}>
-          Download
+        <Button as="span" variant={variant} size={size}>
+          {label}
         </Button>
       </a>
     );
@@ -103,64 +174,64 @@ function DownloadAction({ token, fileId, password, variant }) {
   };
 
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--s-2)' }}>
-      {failed ? <span className="ad-meta">{failed}</span> : null}
-      <Button variant={variant} loading={busy} onClick={() => void start()}>
-        Download
+    <>
+      <Button variant={variant} size={size} loading={busy} onClick={() => void start()}>
+        {label}
       </Button>
-    </span>
+      {failed ? <span className="ad-meta">{failed}</span> : null}
+    </>
   );
 }
 
 function PasswordPrompt({ onSubmit, error, busy }) {
   const [draft, setDraft] = useState('');
   return (
-    <Panel title="This link needs a password" description="Ask whoever sent it if you don't have it.">
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (draft) onSubmit(draft);
-        }}
-        style={{ display: 'flex', gap: 'var(--s-3)', alignItems: 'flex-end' }}
-      >
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <Input
-            label="Password"
-            type="password"
-            autoComplete="off"
-            autoFocus
-            value={draft}
-            error={error ?? undefined}
-            onChange={(event) => setDraft(event.target.value)}
-          />
-        </div>
-        <Button type="submit" loading={busy} disabled={!draft}>
-          Open
-        </Button>
-      </form>
-    </Panel>
+    <>
+      <Head
+        tile={<Tile icon="lock" />}
+        name="This link needs a password"
+        from="Ask whoever sent it if you don't have it."
+      />
+      <Tear />
+      <div className="share__body">
+        <form
+          className="share__form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (draft) onSubmit(draft);
+          }}
+        >
+          <div>
+            <Input
+              label="Password"
+              type="password"
+              autoComplete="off"
+              autoFocus
+              value={draft}
+              error={error ?? undefined}
+              onChange={(event) => setDraft(event.target.value)}
+            />
+          </div>
+          <Button type="submit" loading={busy} disabled={!draft}>
+            Open
+          </Button>
+        </form>
+      </div>
+    </>
   );
 }
 
 function FileRow({ file, token, password }) {
   return (
-    <li
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--s-3)',
-        padding: 'var(--s-3) 0',
-        borderBottom: '1px solid var(--border)',
-      }}
-    >
-      <Icon name="file" aria-hidden="true" />
-      <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'block', fontWeight: 'var(--weight-medium)' }}>{file.name}</span>
-        <span className="ad-meta" style={{ display: 'block' }}>
-          {formatBytes(file.sizeBytes)}
-        </span>
+    <li className="share__row">
+      <Tile ext={extensionOf(file.name)} icon="file" small />
+      <span className="share__rowbody">
+        <span className="share__rowname">{file.name}</span>
+        <span className="share__rowmeta">{formatBytes(file.sizeBytes)}</span>
       </span>
-      <DownloadAction token={token} fileId={file.id} password={password} variant="secondary" />
+      <span className="share__rowact">
+        <DownloadAction token={token} fileId={file.id} password={password} variant="secondary" size="sm" />
+      </span>
     </li>
   );
 }
@@ -214,69 +285,102 @@ export default function SharePage() {
 
   if (error) {
     return (
-      <Centered>
-        <Alert tone="danger" title="This link isn't available.">
-          {/* Deliberately no cause. See the header. */}
-          Ask whoever sent it for a new one.
-        </Alert>
-      </Centered>
+      <Frame>
+        <Head
+          tile={<Tile icon="alert" tone="danger" />}
+          name="This link isn't available."
+          // Deliberately no cause. See the header.
+          from="Ask whoever sent it for a new one."
+        />
+        <Tear />
+        <div className="share__body">
+          <div className="share__take">
+            <Button as={Link} to="/" variant="secondary" size="lg">
+              What is AgentDisk?
+            </Button>
+          </div>
+        </div>
+      </Frame>
     );
   }
 
   if (!preview && needsPassword) {
     return (
-      <Centered>
+      <Frame>
         <PasswordPrompt onSubmit={(attempt) => void unlock(attempt)} error={passwordError} busy={unlocking} />
-      </Centered>
+      </Frame>
     );
   }
 
   if (!preview) {
     return (
-      <Centered>
-        <Panel title="Opening this link…">
+      <Frame>
+        <Head tile={<Tile icon="file" />} name="Opening this link…" />
+        <Tear />
+        <div className="share__body">
           <Skeleton />
-        </Panel>
-      </Centered>
+        </div>
+      </Frame>
     );
   }
 
   const expires = formatExpiry(preview.expiresAt);
-  const isFile = preview.kind === 'file';
+  const isFile = preview.kind === 'file' && preview.files.length === 1;
+  const only = isFile ? preview.files[0] : null;
+  // A folder share's name is its path; the leading slash is the browser's
+  // business, not the reader's.
+  const shown = isFile ? preview.name : preview.name.replace(/^\/+/, '') || 'Shared folder';
 
   return (
-    <Centered>
-      <Panel
-        title={preview.name}
-        description={`Shared from ${preview.workspaceName}`}
-        actions={
-          expires === null ? null : (
-            // Tone plus a word: colour never carries the meaning alone.
-            <Badge tone="info">Link expires {expires}</Badge>
-          )
-        }
-      >
-        {isFile && preview.files.length === 1 ? (
-          // The Panel's title is already this file's name, so the row carries
-          // the size and the action and does not repeat it.
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s-4)' }}>
-            <Icon name="file" aria-hidden="true" />
-            <span className="ad-meta" style={{ flex: 1, minWidth: 0 }}>
-              {formatBytes(preview.files[0].sizeBytes)}
-              {preview.files[0].mimeType ? ` · ${preview.files[0].mimeType}` : ''}
-            </span>
-            <DownloadAction token={token} fileId={preview.files[0].id} password={password} />
+    <Frame>
+      <Head
+        tile={isFile ? <Tile ext={extensionOf(preview.name)} icon="file" /> : <Tile icon="folder" />}
+        name={shown}
+        from={`Shared from ${preview.workspaceName}`}
+      />
+      <Tear />
+      <div className="share__body">
+        <dl className="share__facts">
+          {isFile ? (
+            <>
+              <dt>Size</dt>
+              <dd>{formatBytes(only.sizeBytes)}</dd>
+              {only.mimeType ? (
+                <>
+                  <dt>Type</dt>
+                  <dd>{only.mimeType}</dd>
+                </>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <dt>Files</dt>
+              <dd>{preview.files.length}</dd>
+            </>
+          )}
+          {expires === null ? null : (
+            <>
+              <dt>Link valid until</dt>
+              <dd>{expires}</dd>
+            </>
+          )}
+        </dl>
+
+        {isFile ? (
+          <div className="share__take">
+            <DownloadAction token={token} fileId={only.id} password={password} size="lg" />
+            <p className="share__note">The file downloads to your device. Nothing opens in this tab.</p>
           </div>
         ) : preview.files.length === 0 ? (
-          <p className="ad-meta">This folder has nothing in it right now.</p>
+          <p className="share__empty">This folder has nothing in it right now.</p>
         ) : (
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+          <ul className="share__list">
             {preview.files.map((file) => (
               <FileRow key={file.id} file={file} token={token} password={password} />
             ))}
           </ul>
         )}
-      </Panel>
-    </Centered>
+      </div>
+    </Frame>
   );
 }

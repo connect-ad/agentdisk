@@ -1545,3 +1545,113 @@ button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
    and this rule outranks it, so a shorthand here would push the checkbox
    column off its edge. */
 .tbl td{padding-top:var(--s-4);padding-bottom:var(--s-4)}
+
+/* --- public share page (routes/SharePage.jsx) ---
+   A ticket, not a settings panel. Whoever opens /s/{token} has no account
+   here; the page's one job is to hand over a file. So the file gets a face -
+   its extension set large on a tinted tile - and the card is cut in two by a
+   perforated rule: above it what you were sent, below it how to take it. The
+   tile is the one loud element; everything else stays quiet. Tokens only. */
+.share{background:var(--paper);min-height:100vh;display:flex;flex-direction:column;
+  align-items:center;padding:var(--s-8) var(--s-6) var(--s-9)}
+.share__brand{display:flex;align-items:center;gap:var(--s-4);text-decoration:none;
+  color:var(--ink);margin-bottom:var(--s-10)}
+.share__brand:hover{text-decoration:none}
+.share__wordmark{font-family:var(--font-display);font-size:var(--t-16);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-snug)}
+.share__brandnote{font-size:var(--t-13);color:var(--ink-3);padding-left:var(--s-4);
+  border-left:1px solid var(--line-2)}
+.share__main{flex:1;width:100%;max-width:40rem;display:flex;flex-direction:column}
+
+/* The card. `overflow:visible` so the perforation's notches can sit half
+   outside the edge and read as bites out of the card. */
+.share__card{position:relative;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-4);box-shadow:var(--sh-3)}
+.share__head{display:flex;gap:var(--s-7);align-items:flex-start;
+  padding:var(--s-9) var(--s-9) var(--s-8)}
+.share__body{padding:var(--s-8) var(--s-9) var(--s-9)}
+
+/* The tile: extension in the display face, or an icon when there is no
+   extension to show. Square, and the card's only saturated surface. */
+.share__tile{flex:none;width:5.5rem;height:5.5rem;border-radius:var(--r-3);
+  display:grid;place-items:center;font-family:var(--font-display);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-snug);line-height:1;
+  background:var(--accent-soft);color:var(--accent-ink);
+  border:1px solid var(--accent-line);overflow:hidden}
+.share__tile--3{font-size:var(--t-26)}
+.share__tile--4{font-size:var(--t-21)}
+.share__tile--5{font-size:var(--t-16)}
+.share__tile--icon svg{width:2.25rem;height:2.25rem}
+.share__tile--danger{background:var(--danger-soft);color:var(--danger-ink);
+  border-color:var(--danger-line)}
+.share__tile--sm{width:2.5rem;height:2.5rem;border-radius:var(--r-2);
+  font-size:var(--t-11);letter-spacing:var(--tr-none)}
+.share__tile--sm.share__tile--icon svg{width:1.125rem;height:1.125rem}
+
+.share__title{min-width:0;flex:1;padding-top:var(--s-2)}
+.share__name{margin:0;font-family:var(--font-display);font-size:var(--t-32);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-mid);line-height:var(--lh-tight);
+  color:var(--ink);overflow-wrap:anywhere;text-wrap:balance}
+.share__from{margin:var(--s-4) 0 0;font-size:var(--t-14);color:var(--ink-2);
+  line-height:var(--lh-normal)}
+
+/* The perforation. A dashed line with a round bite at each end, the bites
+   painted in the page ground so they cut through the border and shadow. */
+.share__tear{position:relative;height:0;border-top:1px dashed var(--line-2);margin:0 var(--s-7)}
+.share__tear::before,.share__tear::after{content:"";position:absolute;top:calc(-1 * var(--s-5));
+  width:var(--s-8);height:var(--s-8);border-radius:var(--r-full);
+  background:var(--paper);border:1px solid var(--line);
+  box-shadow:inset 0 1px 0.125rem var(--shadow-tint)}
+.share__tear::before{left:calc(-1 * (var(--s-7) + var(--s-5)));
+  clip-path:inset(0 0 0 50%)}
+.share__tear::after{right:calc(-1 * (var(--s-7) + var(--s-5)));
+  clip-path:inset(0 50% 0 0)}
+
+/* What the link says about itself: two or three rows, label then value. */
+.share__facts{display:grid;grid-template-columns:auto minmax(0,1fr);
+  column-gap:var(--s-8);row-gap:var(--s-4);margin:0 0 var(--s-8);
+  font-size:var(--t-13);line-height:var(--lh-normal)}
+.share__facts dt{color:var(--ink-3);margin:0}
+.share__facts dd{margin:0;color:var(--ink);font-family:var(--font-mono);
+  font-variant-ligatures:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.share__take{display:flex;flex-direction:column;gap:var(--s-4)}
+.share__take .btn{width:100%}
+.share__take a{display:block;text-decoration:none}
+.share__note{margin:0;font-size:var(--t-12);color:var(--ink-3);text-align:center}
+
+/* A folder's rows. The small tile does the same job the big one does. */
+.share__list{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+.share__row{display:flex;align-items:center;gap:var(--s-5);padding:var(--s-5) 0;
+  border-bottom:1px solid var(--line)}
+.share__rowbody{flex:1;min-width:0}
+.share__rowname{display:block;font-weight:var(--w-med);font-size:var(--t-14);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.share__rowmeta{display:block;font-size:var(--t-12);color:var(--ink-3);
+  font-family:var(--font-mono);font-variant-ligatures:none;margin-top:var(--s-1)}
+.share__rowact{display:inline-flex;align-items:center;gap:var(--s-3)}
+.share__rowact a{text-decoration:none}
+.share__empty{margin:0;padding:var(--s-7) 0 0;color:var(--ink-2);font-size:var(--t-14)}
+
+.share__form{display:flex;gap:var(--s-4);align-items:flex-end}
+.share__form>:first-child{flex:1;min-width:0}
+.share__foot{width:100%;max-width:40rem;display:flex;justify-content:space-between;
+  gap:var(--s-6);margin-top:var(--s-9);font-size:var(--t-12);color:var(--ink-3)}
+.share__foot a{color:var(--ink-2)}
+
+@media (max-width:37.5rem){
+  .share{padding:var(--s-6) var(--s-6) var(--s-8)}
+  .share__brand{margin-bottom:var(--s-8)}
+  .share__brandnote{display:none}
+  .share__head{padding:var(--s-8) var(--s-7) var(--s-7);gap:var(--s-6)}
+  .share__body{padding:var(--s-7) var(--s-7) var(--s-8)}
+  .share__tile{width:4rem;height:4rem}
+  .share__tile--3{font-size:var(--t-21)}
+  .share__tile--4{font-size:var(--t-16)}
+  .share__tile--5{font-size:var(--t-13)}
+  .share__name{font-size:var(--t-24)}
+  .share__facts{grid-template-columns:1fr;row-gap:var(--s-2)}
+  .share__facts dt:not(:first-child){margin-top:var(--s-4)}
+  .share__form{flex-direction:column;align-items:stretch}
+  .share__row{flex-wrap:wrap}
+  .share__rowact{width:100%;justify-content:flex-end}
+}

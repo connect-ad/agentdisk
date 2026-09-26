@@ -30,7 +30,11 @@
  *   this file's header warned about when the design claimed 5 GB.
  *
  *   Requests are unlimited on every plan, so a 100,000/month cap was a limit
- *   nothing imposes. Egress and file count are unlimited too.
+ *   nothing imposes. Egress and file count are NOT unlimited: migration 0021
+ *   set egress to ten times storage and gave file count a real ceiling, and
+ *   `lib/quota.ts` refuses on both with 429. The cards below say so; the
+ *   Pricing hero and /docs used to say the opposite and were corrected on
+ *   26 Sept 2026.
  *
  * Webhooks and path-scoped keys were listed as Pro features. They are ungated
  * on every plan, so naming them per-tier implied a gate that does not exist.

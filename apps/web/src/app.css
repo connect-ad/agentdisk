@@ -859,6 +859,86 @@
   .doc__toc{display:none}
 }
 
+/* The rebuilt docs (26 Sept 2026): one page, nine sections, real links.
+   Additions to the vocabulary above rather than a second one -- headings,
+   tables, lists, an architecture diagram drawn in boxes, and the client
+   sub-sections of the quick start. Tokens only; nothing here names a colour. */
+.doc__section{scroll-margin-top:calc(var(--topbar-h) + var(--s-6))}
+.doc__h2{scroll-margin-top:calc(var(--topbar-h) + var(--s-6));
+  padding-top:var(--s-6);border-top:1px solid var(--line)}
+.doc__section:first-of-type .doc__h2{border-top:0;padding-top:0}
+.doc__h3{font-family:var(--font-display);font-size:var(--t-16);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink);
+  margin:var(--s-8) 0 var(--s-3);scroll-margin-top:calc(var(--topbar-h) + var(--s-6))}
+.doc__h4{font-size:var(--t-14);font-weight:var(--w-semi);color:var(--ink);
+  margin:var(--s-7) 0 var(--s-3)}
+.doc__client{padding-left:var(--s-5);border-left:2px solid var(--line);
+  margin-bottom:var(--s-6)}
+.doc__client .doc__code{margin-bottom:var(--s-5)}
+.doc__tocitem:hover{text-decoration:none;color:var(--ink);background:var(--surface-2)}
+.doc__tocitem.is-current:hover{background:var(--accent-soft)}
+.doc__railhead{font-size:var(--t-12);font-weight:var(--w-semi);color:var(--ink);
+  margin-bottom:var(--s-4)}
+.doc__railitem:hover{text-decoration:none;color:var(--ink)}
+.doc__note--warn{border-color:var(--warn-line);background:var(--warn-soft)}
+.doc__p a,.doc__list a,.doc__note a{color:var(--accent-ink);text-decoration:underline;
+  text-underline-offset:0.15em}
+.doc__p strong,.doc__list strong{color:var(--ink);font-weight:var(--w-semi)}
+.doc__list{margin:0 0 var(--s-6);padding-left:var(--s-6);display:flex;
+  flex-direction:column;gap:var(--s-3);font-size:var(--t-14);
+  line-height:var(--lh-loose);color:var(--ink-2);max-width:72ch}
+.doc__list li{padding-left:var(--s-2)}
+.doc__list code{font-family:var(--font-mono);font-size:var(--t-13);color:var(--ink)}
+
+.doc__tablewrap{overflow-x:auto;margin-bottom:var(--s-7);border:1px solid var(--line);
+  border-radius:var(--r-3);background:var(--surface)}
+.doc__table{width:100%;border-collapse:collapse;font-size:var(--t-13);
+  line-height:var(--lh-normal);color:var(--ink-2)}
+.doc__tablecap{text-align:left;padding:var(--s-4) var(--s-5);
+  font-family:var(--font-mono);font-size:var(--t-10);letter-spacing:var(--tr-caps);
+  color:var(--ink-3);border-bottom:1px solid var(--line);caption-side:top}
+.doc__table th{text-align:left;font-size:var(--t-12);font-weight:var(--w-semi);
+  color:var(--ink);padding:var(--s-3) var(--s-5);border-bottom:1px solid var(--line);
+  background:var(--surface-2);white-space:nowrap}
+.doc__table td{padding:var(--s-3) var(--s-5);border-bottom:1px solid var(--line);
+  vertical-align:top}
+.doc__table tr:last-child td{border-bottom:0}
+.doc__table code{font-family:var(--font-mono);font-size:var(--t-12);color:var(--ink);
+  white-space:nowrap}
+.doc__method{font-family:var(--font-mono);font-size:var(--t-11);font-weight:var(--w-semi);
+  letter-spacing:var(--tr-wide);color:var(--accent-ink)}
+
+.doc__chips{display:flex;flex-wrap:wrap;gap:var(--s-3);margin-bottom:var(--s-7)}
+.doc__chip{font-family:var(--font-mono);font-size:var(--t-12);color:var(--ink);
+  border:1px solid var(--line);background:var(--surface);border-radius:var(--r-2);
+  padding:var(--s-2) var(--s-4)}
+
+/* The architecture diagram: callers, the Worker, the stores. Boxes and a text
+   arrow so it inherits the theme and reads to a screen reader. */
+.doc__diag{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1.2fr) auto minmax(0,1fr);
+  gap:var(--s-5);align-items:center;margin:0 0 var(--s-8);padding:var(--s-6);
+  border:1px solid var(--line);border-radius:var(--r-3);background:var(--surface-2)}
+.doc__diagcol{display:flex;flex-direction:column;gap:var(--s-4);min-width:0}
+.doc__diagbox{display:flex;flex-direction:column;gap:var(--s-1);padding:var(--s-4) var(--s-5);
+  border:1px solid var(--line);border-radius:var(--r-2);background:var(--surface);
+  font-size:var(--t-12);color:var(--ink-2);line-height:var(--lh-snug)}
+.doc__diagbox strong{font-size:var(--t-13);color:var(--ink);font-weight:var(--w-semi)}
+.doc__diagbox--caller{border-style:dashed}
+.doc__diagbox--core{border-color:var(--accent-line);background:var(--accent-soft)}
+.doc__diagbox--ext{border-style:dotted}
+.doc__diagkicker{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--ink-3)}
+.doc__diagsub{font-family:var(--font-mono);font-size:var(--t-11);color:var(--ink-3)}
+.doc__diagchain{margin:var(--s-3) 0 0;padding-left:var(--s-6);font-family:var(--font-mono);
+  font-size:var(--t-11);color:var(--ink);display:flex;flex-direction:column;gap:var(--s-1)}
+.doc__diagarrow{font-size:var(--t-21);color:var(--ink-3);text-align:center}
+.doc__diagcap{grid-column:1 / -1;font-size:var(--t-12);line-height:var(--lh-loose);
+  color:var(--ink-3);margin-top:var(--s-3);max-width:70ch}
+@media (max-width:875px){
+  .doc__diag{grid-template-columns:minmax(0,1fr)}
+  .doc__diagarrow{transform:rotate(90deg)}
+}
+
 /* ==========================================================================
    Dashboard screen vocabulary (AgentDisk Dashboard.dc.html, Layer 4)
 

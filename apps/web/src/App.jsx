@@ -363,6 +363,9 @@ export default function App() {
       <Route path="/" element={<Landing />} />
       <Route path="/pricing" element={<Pricing />} />
       <Route path="/docs" element={<Docs />} />
+      {/* `/docs/<section>` deep-links into the one page; the component reads
+          the splat and scrolls. Without this a shared link to a section 404s. */}
+      <Route path="/docs/*" element={<Docs />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/privacy" element={<Privacy />} />
       {/* Public on purpose: the preview half of this page works with no

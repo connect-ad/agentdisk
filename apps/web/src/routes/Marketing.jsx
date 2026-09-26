@@ -22,25 +22,38 @@ import { SupportDialog } from '../components-local/SupportDialog.jsx';
 
 /* ── landing content, from the design ─────────────────────────────────────── */
 
-const HERO_TAGS = ['NO CARD REQUIRED', 'S3-COMPATIBLE', 'EU + US REGIONS'];
+/**
+ * Corrected 26 Sept 2026. The design's tags read "S3-COMPATIBLE" and
+ * "EU + US REGIONS". Neither is true: the product exposes REST and MCP, not an
+ * S3 API (presigning uses R2's S3 endpoint internally, which is not the same
+ * claim), and there is no region concept anywhere in the stack — the footer
+ * dropped its region badge for that reason. What replaces them is what the
+ * pricing page already promises.
+ */
+const HERO_TAGS = ['NO CARD REQUIRED', 'REST + MCP', 'HARD-CAPPED PRICING'];
 
 /**
  * The hero transcript. `tone` colours a line; absent means body text.
  * Modelled as data rather than markup so the panel stays one element and the
  * tones stay tokens.
+ *
+ * The lines describe what the API does. Files carry a SHA-256 and no version
+ * number (the design's "v3" named a field that does not exist); a denied call
+ * is `403 FORBIDDEN` (`lib/errors.ts`), not `scope_denied`; and keys begin
+ * `ask_live_` (`lib/keys.ts`), not `adk_live_`.
  */
 const TRANSCRIPT = [
-  { text: '> write /projects/research/corpus.parquet' },
-  { text: '  ✓ 812 MB · sha256:9f2c41ab · v3', tone: 'ok' },
+  { text: '> create_file /projects/research/corpus.parquet' },
+  { text: '  ✓ 812 MB · sha256:9f2c41ab', tone: 'ok' },
   { text: '' },
-  { text: '> list /projects/research/*' },
+  { text: '> list_files /projects/research' },
   { text: '  corpus.parquet      812 MB   12m ago' },
   { text: '  embeddings.index    504 MB    3h ago' },
   { text: '  run-manifest.json    18 KB    3h ago' },
   { text: '' },
-  { text: '> delete /projects/*' },
-  { text: '  ✗ 403 scope_denied', tone: 'danger' },
-  { text: '  key adk_live_••••4aUgT lacks delete', tone: 'warn' },
+  { text: '> delete_file /projects/research/corpus.parquet' },
+  { text: '  ✗ 403 FORBIDDEN', tone: 'danger' },
+  { text: '  key ask_live_••••4aUgT lacks delete', tone: 'warn' },
 ];
 
 const FEATURES = [
@@ -70,20 +83,23 @@ const STEPS = [
   {
     n: '1',
     title: 'Create a key',
-    body: 'Pick scopes and a prefix. View it again whenever you need it.',
-    code: "adk keys create \\\n  --scopes read,write,list \\\n  --prefix /projects/*",
+    body: 'Pick scopes and a prefix in the dashboard, or over the API. View it again whenever you need it.',
+    // The design showed `adk keys create …`. There is no CLI; this is the
+    // real request (`routes/keys.ts`), and the dashboard's Create-key dialog
+    // sends the same fields.
+    code: "POST /v1/keys\n{ \"name\": \"research-bot\",\n  \"ops\": [\"read\",\"write\",\"list\"],\n  \"pathPrefix\": \"/projects\" }",
   },
   {
     n: '2',
     title: 'Point your client at it',
-    body: 'One entry in your MCP config, or one env var for REST.',
-    code: "export AGENTDISK_KEY=adk_live_…\nexport AGENTDISK_WORKSPACE=ws_8f3…",
+    body: 'One entry in your MCP config, or one header for REST. The workspace comes from the key.',
+    code: "export AGENTDISK_KEY=ask_live_…\n# Authorization: Bearer $AGENTDISK_KEY",
   },
   {
     n: '3',
     title: 'Let the agent work',
     body: 'Watch the audit log fill in as calls arrive.',
-    code: "> write /projects/notes.md\n  ✓ 4.2 KB · v1",
+    code: "> create_file /projects/notes.md\n  ✓ 4.2 KB · sha256:c81e0f2d",
   },
 ];
 
@@ -313,7 +329,7 @@ export function Pricing() {
           <h1 className="mk__h1">Pay for storage. Nothing else.</h1>
           <p className="mk__lead">
             Every plan includes the MCP server, webhooks, path-scoped keys and the
-            full audit log, with unlimited requests and egress.
+            full audit log, with unlimited requests.
           </p>
 
           <div className="mk__prices">

@@ -287,12 +287,16 @@ export async function sendTestEmail(
 /* ------------------------------ support ------------------------------ */
 
 /**
- * Where the dashboard's Support form delivers. One constant, deliberately: it
- * is an inbox a person reads, not a per-environment setting, and a dev
- * deployment writing to the same inbox as prod is a feature — a request from
- * `app-dev` is still a request.
+ * Where the dashboard's Support form delivers: the same address the dashboard's
+ * "Talk to a person" dialog tells people to write to (`SUPPORT_EMAIL` in
+ * `components-local/SupportDialog.jsx`), so the form and the mailto reach one
+ * inbox. One constant, deliberately: it is an inbox a person reads, not a
+ * per-environment setting, and a dev deployment writing to the same inbox as
+ * prod is a feature — a request from `app-dev` is still a request. Shipped
+ * briefly as `connect@amardisk.io`, the sibling product's domain; corrected
+ * 26 Sept 2026.
  */
-export const SUPPORT_INBOX = "connect@amardisk.io";
+export const SUPPORT_INBOX = "connect@agentdisk.io";
 
 /**
  * The address a support request is sent *from*. On `SENDING_DOMAIN`, so it is

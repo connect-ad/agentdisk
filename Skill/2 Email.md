@@ -11,7 +11,7 @@ specification.
 
 | Who sends | Through | Configured in | Mail |
 |---|---|---|---|
-| The API Worker | Cloudflare Email Service, `send_email` binding `EMAIL` | `apps/api/wrangler.toml`, per environment | Admin password reset, console test send, console compose, the renewal ladder |
+| The API Worker | Cloudflare Email Service, `send_email` binding `EMAIL` | `apps/api/wrangler.toml`, per environment | Admin password reset, console test send, console compose, the renewal ladder, the dashboard's Support form (`POST /v1/support` → `SUPPORT_INBOX`, from `websupport@`, Reply-To the signed-in person) |
 | Firebase Auth | Cloudflare Email Service over **SMTP** | Firebase console → Authentication → Templates → SMTP settings | Sign-up verification, self-service password reset, email-link sign-in |
 
 Both use the same Cloudflare account, so they share **one quota**: 3,000 emails

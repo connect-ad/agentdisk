@@ -367,6 +367,7 @@ describe("an absent credential is 401 on every authenticated route", () => {
   const AUTHENTICATED: [string, string][] = [
     ["GET", "/v1/whoami"],
     ["POST", "/v1/me/logout-all"],
+    ["POST", "/v1/support"],
     ["GET", "/v1/search?q=x"],
     ["GET", "/v1/activity"],
     ["GET", "/v1/workspaces"],

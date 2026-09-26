@@ -5,9 +5,11 @@ import {
   MAX_SHARE_TTL_MS,
   mintShareToken,
   pathIsInside,
+  attachmentDisposition,
   resolveExpiry,
   shareUrl,
 } from "../src/lib/shares";
+import { SHARE_PASSWORD_RATE_LIMIT } from "../src/routes/shares-public";
 import { WorkspaceScopedShares, findShareByToken } from "../src/db/shares";
 import {
   WORKSPACE_A,
@@ -430,6 +432,142 @@ describe("the public share routes", () => {
     const token = await seedLiveFileShare("/susp.md", "fil_SUSP");
     await setWorkspaceStatus(WORKSPACE_A, "suspended");
     expect((await publicGet(`/v1/shares/open/${token}`)).status).toBe(NOTHING);
+  });
+});
+
+describe("shared files are always downloads", () => {
+  beforeEach(async () => {
+    await seedTwoWorkspaces();
+    await resetTenantData();
+    await setWorkspaceStatus(WORKSPACE_A, "active");
+    await env.DB.prepare(`UPDATE organizations SET plan = 'pro' WHERE id = 'org_TESTORG'`).run();
+  });
+
+  it("signs an attachment disposition into the presigned URL", async () => {
+    // The defect: a text file opened in the tab. The anchor's `download`
+    // attribute is ignored cross-origin, so only R2's own header can decide.
+    const token = await seedLiveFileShare("/notes.txt", "fil_TXT");
+    const res = await SELF.fetch(`${URL_BASE}/v1/shares/open/${token}/download/fil_TXT`, {
+      redirect: "manual",
+    });
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get("location") as string);
+    const disposition = location.searchParams.get("response-content-disposition") ?? "";
+    expect(disposition).toMatch(/^attachment;/);
+    expect(disposition).toContain('filename="notes.txt"');
+    // Signed, not appended: the parameter is inside what the signature covers.
+    expect(location.searchParams.get("X-Amz-SignedHeaders")).not.toBeNull();
+    expect(location.search.indexOf("response-content-disposition")).toBeLessThan(
+      location.search.indexOf("X-Amz-Signature")
+    );
+  });
+
+  it("keeps a non-ASCII name and cannot be broken out of by a quote", () => {
+    const value = attachmentDisposition('rapport "final" é.txt');
+    expect(value).toContain('filename="rapport _final_ _.txt"');
+    expect(value).toContain("filename*=UTF-8''rapport%20%22final%22%20%C3%A9.txt");
+  });
+});
+
+describe("password-protected share links", () => {
+  const PASSWORD = "correct horse";
+
+  beforeEach(async () => {
+    await seedTwoWorkspaces();
+    await resetTenantData();
+    await setWorkspaceStatus(WORKSPACE_A, "active");
+    await env.DB.prepare(`UPDATE organizations SET plan = 'pro' WHERE id = 'org_TESTORG'`).run();
+  });
+
+  function publicPost(path: string, body: unknown): Promise<Response> {
+    return SELF.fetch(`${URL_BASE}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  async function mintProtected(fileId: string, path: string): Promise<string> {
+    await seedFile(fileId, path);
+    return mint({ fileId, password: PASSWORD });
+  }
+
+  it("stores a hash, never the password, and says only that one is set", async () => {
+    await seedFile("fil_PW", "/pw.md");
+    const { token } = await seedApiKey({ ops: ["read", "share"] });
+    const res = await call("POST", "/v1/shares", token, { fileId: "fil_PW", password: PASSWORD });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { share: Record<string, unknown> };
+    expect(body.share.passwordProtected).toBe(true);
+    expect(JSON.stringify(body)).not.toContain(PASSWORD);
+
+    const row = await env.DB.prepare(`SELECT password_hash FROM share_links WHERE id = ?`)
+      .bind(body.share.id)
+      .first<{ password_hash: string }>();
+    expect(row?.password_hash).toMatch(/^pbkdf2-sha256\$100000\$/);
+    expect(row?.password_hash).not.toContain(PASSWORD);
+  });
+
+  it("marks a link without one as unprotected", async () => {
+    await seedFile("fil_OPEN", "/open.md");
+    const { token } = await seedApiKey({ ops: ["read", "share"] });
+    const res = await call("POST", "/v1/shares", token, { fileId: "fil_OPEN" });
+    expect(((await res.json()) as { share: { passwordProtected: boolean } }).share.passwordProtected).toBe(false);
+  });
+
+  it("refuses a password too short to be worth limiting guesses on", async () => {
+    await seedFile("fil_SHORT", "/short.md");
+    const { token } = await seedApiKey({ ops: ["read", "share"] });
+    const res = await call("POST", "/v1/shares", token, { fileId: "fil_SHORT", password: "abc" });
+    expect(res.status).toBe(400);
+  });
+
+  it("asks for the password before saying anything about the files", async () => {
+    const token = await mintProtected("fil_ASK", "/ask.md");
+    const res = await publicGet(`/v1/shares/open/${token}`);
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as ErrorBody;
+    expect(body.error.details?.passwordRequired).toBe(true);
+    expect(JSON.stringify(body)).not.toContain("ask.md");
+  });
+
+  it("refuses a wrong password and opens for the right one", async () => {
+    const token = await mintProtected("fil_RIGHT", "/right.md");
+
+    const wrong = await publicPost(`/v1/shares/open/${token}`, { password: "not it at all" });
+    expect(wrong.status).toBe(401);
+    expect(((await wrong.json()) as ErrorBody).error.message).toMatch(/isn't right/);
+
+    const right = await publicPost(`/v1/shares/open/${token}`, { password: PASSWORD });
+    expect(right.status).toBe(200);
+    expect(((await right.json()) as { files: { name: string }[] }).files[0]?.name).toBe("right.md");
+  });
+
+  it("will not hand out a download without it, and answers a URL with it", async () => {
+    const token = await mintProtected("fil_DL", "/dl.txt");
+
+    const bare = await SELF.fetch(`${URL_BASE}/v1/shares/open/${token}/download/fil_DL`, {
+      redirect: "manual",
+    });
+    expect(bare.status).toBe(401);
+
+    const res = await publicPost(`/v1/shares/open/${token}/download/fil_DL`, { password: PASSWORD });
+    expect(res.status).toBe(200);
+    const { url } = (await res.json()) as { url: string };
+    expect(new URL(url).searchParams.get("response-content-disposition")).toMatch(/^attachment;/);
+  });
+
+  it("locks the link after repeated wrong passwords, even against the right one", async () => {
+    const token = await mintProtected("fil_LOCK", "/lock.md");
+    for (let i = 0; i < SHARE_PASSWORD_RATE_LIMIT.limit; i += 1) {
+      expect((await publicPost(`/v1/shares/open/${token}`, { password: `guess-${i}` })).status).toBe(401);
+    }
+    expect((await publicPost(`/v1/shares/open/${token}`, { password: PASSWORD })).status).toBe(429);
+  });
+
+  it("still answers an unknown token with the one identical 404", async () => {
+    const res = await publicPost("/v1/shares/open/neverexistedatall", { password: PASSWORD });
+    expect(res.status).toBe(404);
   });
 });
 

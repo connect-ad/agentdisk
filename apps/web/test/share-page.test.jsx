@@ -18,13 +18,24 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 const previewShare = vi.fn();
+const sharedDownloadWithPassword = vi.fn();
+
+/** What the API client throws for a protected link. */
+function passwordRefusal(message) {
+  const err = new Error(message);
+  err.details = { passwordRequired: true };
+  return err;
+}
 
 vi.mock('../src/lib/api.js', () => ({
   previewShare: (...args) => previewShare(...args),
   sharedDownloadUrl: (token, fileId) => `https://api.test/v1/shares/open/${token}/download/${fileId}`,
+  sharedDownloadWithPassword: (...args) => sharedDownloadWithPassword(...args),
+  isPasswordRequired: (err) => err?.details?.passwordRequired === true,
   ApiError: class ApiError extends Error {},
 }));
 
@@ -43,6 +54,7 @@ function renderAt(token = 'tok123') {
 afterEach(() => {
   cleanup();
   previewShare.mockReset();
+  sharedDownloadWithPassword.mockReset();
 });
 
 describe('a file share', () => {
@@ -106,5 +118,58 @@ describe('a refused token', () => {
     expect(body).not.toMatch(/expired/i);
     expect(body).not.toMatch(/revoked/i);
     expect(body).not.toMatch(/deleted/i);
+  });
+});
+
+describe('a password-protected share', () => {
+  const FILE = {
+    kind: 'file',
+    name: 'secret.txt',
+    workspaceName: 'Acme',
+    expiresAt: '2026-10-01T00:00:00.000Z',
+    files: [{ id: 'fil_S', name: 'secret.txt', path: '/secret.txt', sizeBytes: 5, mimeType: 'text/plain' }],
+  };
+
+  it('asks for the password, shows the server\'s sentence when it is wrong, and opens when right', async () => {
+    const user = userEvent.setup();
+    previewShare
+      .mockRejectedValueOnce(passwordRefusal('This link needs a password.'))
+      .mockRejectedValueOnce(passwordRefusal("That password isn't right."))
+      .mockResolvedValueOnce(FILE);
+
+    renderAt('tokpw');
+
+    const field = await screen.findByLabelText(/password/i);
+    expect(screen.queryByText('secret.txt')).toBeNull();
+
+    await user.type(field, 'nope-nope');
+    await user.click(screen.getByRole('button', { name: /open/i }));
+    expect(await screen.findByText(/isn't right/i)).toBeTruthy();
+
+    await user.clear(field);
+    await user.type(field, 'right-one');
+    await user.click(screen.getByRole('button', { name: /open/i }));
+
+    await screen.findByText('secret.txt');
+    expect(previewShare).toHaveBeenLastCalledWith('tokpw', undefined, 'right-one');
+    // No plain link: the password cannot ride on one.
+    expect(screen.queryByRole('link', { name: /download/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /download/i })).toBeTruthy();
+  });
+
+  it('downloads through the password route, not a plain link', async () => {
+    const user = userEvent.setup();
+    previewShare
+      .mockRejectedValueOnce(passwordRefusal('This link needs a password.'))
+      .mockResolvedValueOnce(FILE);
+    sharedDownloadWithPassword.mockRejectedValue(new Error('This link isn\'t available.'));
+
+    renderAt('tokpw');
+    await user.type(await screen.findByLabelText(/password/i), 'right-one');
+    await user.click(screen.getByRole('button', { name: /open/i }));
+    await user.click(await screen.findByRole('button', { name: /download/i }));
+
+    expect(sharedDownloadWithPassword).toHaveBeenCalledWith('tokpw', 'fil_S', 'right-one');
+    expect(await screen.findByText(/isn't available/i)).toBeTruthy();
   });
 });

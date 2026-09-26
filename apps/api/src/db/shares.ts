@@ -20,6 +20,8 @@ export interface ShareRow {
   folder_path: string | null;
   token: string;
   token_hash: string;
+  /** PBKDF2 of the link's password, or null for a link that needs none. */
+  password_hash: string | null;
   expires_at: number;
   created_by: string;
   created_at: number;
@@ -32,6 +34,8 @@ export interface CreateShareInput {
   folderPath: string | null;
   token: string;
   tokenHash: string;
+  /** Absent or null: the link needs no password. */
+  passwordHash?: string | null;
   expiresAt: number;
   createdBy: string;
   now: number;
@@ -48,8 +52,8 @@ export class WorkspaceScopedShares {
       .prepare(
         `INSERT INTO share_links
            (id, workspace_id, kind, file_id, folder_path, token, token_hash,
-            expires_at, created_by, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            password_hash, expires_at, created_by, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         input.id,
@@ -59,6 +63,7 @@ export class WorkspaceScopedShares {
         input.folderPath,
         input.token,
         input.tokenHash,
+        input.passwordHash ?? null,
         input.expiresAt,
         input.createdBy,
         input.now

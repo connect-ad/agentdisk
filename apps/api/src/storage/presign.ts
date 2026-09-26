@@ -116,7 +116,8 @@ async function sign(
   config: R2SigningConfig,
   key: string,
   method: "PUT" | "GET",
-  ttlSeconds: number
+  ttlSeconds: number,
+  responseParams: Record<string, string> = {}
 ): Promise<string> {
   if (ttlSeconds <= 0 || ttlSeconds > MAX_URL_TTL_SECONDS) {
     throw new PresignConfigError(
@@ -126,6 +127,11 @@ async function sign(
 
   const url = endpoint(config, key);
   url.searchParams.set("X-Amz-Expires", String(ttlSeconds));
+  // Set before signing, so they are covered by the signature: a holder of the
+  // URL cannot strip `response-content-disposition` to get an inline render.
+  for (const [name, value] of Object.entries(responseParams)) {
+    url.searchParams.set(name, value);
+  }
 
   const signed = await client(config).sign(new Request(url, { method }), {
     aws: { signQuery: true },
@@ -143,13 +149,25 @@ export function presignUpload(
   return sign(config, key, "PUT", ttlSeconds);
 }
 
-/** A URL that can GET exactly this key, and nothing else, for an hour. */
+/**
+ * A URL that can GET exactly this key, and nothing else, for an hour.
+ *
+ * `contentDisposition` overrides the header R2 answers with — S3's
+ * `response-content-disposition`, which R2 honours on a signed GET.
+ */
 export function presignDownload(
   config: R2SigningConfig,
   key: string,
-  ttlSeconds = DOWNLOAD_URL_TTL_SECONDS
+  ttlSeconds = DOWNLOAD_URL_TTL_SECONDS,
+  contentDisposition?: string
 ): Promise<string> {
-  return sign(config, key, "GET", ttlSeconds);
+  return sign(
+    config,
+    key,
+    "GET",
+    ttlSeconds,
+    contentDisposition === undefined ? {} : { "response-content-disposition": contentDisposition }
+  );
 }
 
 /**

@@ -307,3 +307,51 @@ describe('ShareModal → focus', () => {
     expect(document.activeElement).toBe(field);
   });
 });
+
+describe('ShareModal → a password', () => {
+  it('sends the password with the link and shows that the link has one', async () => {
+    const user = userEvent.setup();
+    const createShare = vi.fn(async () => ({
+      share: {
+        id: 'shr_pw', url: 'https://app.example/s/pw', passwordProtected: true,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+      }
+    }));
+    render(
+      <ShareModal
+        open
+        target={FILE_TARGET}
+        limits={{ shareLinks: 100 }}
+        api={{ createShare, listShares: vi.fn(async () => ({ shares: [] })) }}
+        workspaceId={WS}
+      />
+    );
+
+    await user.type(screen.getByLabelText(/password/i), 'hunter22');
+    await user.click(screen.getByRole('button', { name: /create link/i }));
+
+    await waitFor(() => expect(createShare).toHaveBeenCalledWith(
+      WS, expect.objectContaining({ fileId: 'fil_A', password: 'hunter22' })
+    ));
+    expect(await screen.findByText(/password protected/i)).toBeTruthy();
+  });
+
+  it('sends no password field at all when the box is left empty', async () => {
+    const user = userEvent.setup();
+    const createShare = vi.fn(async () => ({ share: { id: 'shr_x', url: 'u', expiresAt: new Date().toISOString() } }));
+    render(<ShareModal open target={FILE_TARGET} limits={{ shareLinks: 100 }} api={{ createShare }} workspaceId={WS} />);
+
+    await user.click(screen.getByRole('button', { name: /create link/i }));
+    await waitFor(() => expect(createShare).toHaveBeenCalled());
+    expect(createShare.mock.calls[0][1]).not.toHaveProperty('password');
+  });
+
+  it('will not offer a password the server would refuse', async () => {
+    const user = userEvent.setup();
+    render(<ShareModal open target={FILE_TARGET} limits={{ shareLinks: 100 }} />);
+
+    await user.type(screen.getByLabelText(/password/i), 'abc');
+    expect(screen.getByRole('button', { name: /create link/i }).disabled).toBe(true);
+    expect(screen.getByText(/at least 6 characters/i)).toBeTruthy();
+  });
+});

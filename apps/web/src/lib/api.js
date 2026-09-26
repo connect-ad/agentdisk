@@ -28,12 +28,13 @@ import { clearCache } from './resourceCache.js';
 export const BASE_URL = import.meta.env.VITE_API_BASE ?? 'https://api-dev.agentdisk.io';
 
 export class ApiError extends Error {
-  constructor(status, code, message, requestId) {
+  constructor(status, code, message, requestId, details) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
     this.requestId = requestId ?? null;
+    this.details = details ?? null;
   }
 }
 
@@ -46,17 +47,19 @@ async function toError(response) {
   let code = 'UNKNOWN';
   let message = `Request failed with ${response.status}.`;
   let requestId = null;
+  let details = null;
   try {
     const body = await response.json();
     if (body?.error) {
       code = body.error.code ?? code;
       message = body.error.message ?? message;
       requestId = body.error.requestId ?? null;
+      details = body.error.details ?? null;
     }
   } catch {
     // A non-JSON error body (a proxy, an outage). The status is all we have.
   }
-  return new ApiError(response.status, code, message, requestId);
+  return new ApiError(response.status, code, message, requestId, details);
 }
 
 /**
@@ -87,14 +90,49 @@ export async function previewClaim(claimToken, signal) {
  * Every refusal from this endpoint is one identical 404, so the caller learns
  * that the link is not available and never which of expiry, revocation or a
  * bad guess produced that. Do not try to distinguish them here.
+ *
+ * The one refusal that differs is a password: a protected link answers 401
+ * with `details.passwordRequired`, and `isPasswordRequired` tells the page to
+ * ask. The password goes in a POST body, never the URL.
  */
-export async function previewShare(shareToken, signal) {
+export async function previewShare(shareToken, signal, password) {
   const response = await fetch(
     new URL(`/v1/shares/open/${encodeURIComponent(shareToken)}`, BASE_URL),
-    { signal }
+    password === undefined ? { signal } : postPassword(password, signal)
   );
   if (!response.ok) throw await toError(response);
   return response.json();
+}
+
+function postPassword(password, signal) {
+  return {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ password }),
+    signal,
+  };
+}
+
+/** True when a share refusal is asking for a password rather than saying no. */
+export function isPasswordRequired(error) {
+  return error instanceof ApiError && error.details?.passwordRequired === true;
+}
+
+/**
+ * A presigned download URL for one file in a password-protected share. The
+ * plain-link route below cannot carry a password without putting it in a URL,
+ * so this asks for the address and the page navigates to it.
+ */
+export async function sharedDownloadWithPassword(shareToken, fileId, password) {
+  const response = await fetch(
+    new URL(
+      `/v1/shares/open/${encodeURIComponent(shareToken)}/download/${encodeURIComponent(fileId)}`,
+      BASE_URL
+    ),
+    postPassword(password)
+  );
+  if (!response.ok) throw await toError(response);
+  return (await response.json()).url;
 }
 
 /**

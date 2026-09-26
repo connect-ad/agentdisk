@@ -35,6 +35,33 @@ export interface RateLimitResult {
  */
 const MIN_KV_TTL_SECONDS = 60;
 
+function windowOf(rule: RateLimitRule, identifier: string, now: number) {
+  const windowMs = rule.windowSeconds * 1000;
+  const windowStart = Math.floor(now / windowMs) * windowMs;
+  return { key: `rl:${rule.bucket}:${identifier}:${windowStart}`, resetAt: windowStart + windowMs };
+}
+
+async function usedIn(kv: KVNamespace, key: string): Promise<number> {
+  const current = Number.parseInt((await kv.get(key)) ?? "0", 10);
+  return Number.isFinite(current) && current > 0 ? current : 0;
+}
+
+/**
+ * Whether this window's allowance is already spent, without spending any.
+ *
+ * For limits that count failures rather than attempts: the caller checks
+ * this first and calls `consume` only when the attempt fails, so a person
+ * who gets it right is never charged for it.
+ */
+export async function isExhausted(
+  kv: KVNamespace,
+  rule: RateLimitRule,
+  identifier: string,
+  now: number
+): Promise<boolean> {
+  return (await usedIn(kv, windowOf(rule, identifier, now).key)) >= rule.limit;
+}
+
 export async function consume(
   kv: KVNamespace,
   rule: RateLimitRule,
@@ -47,13 +74,8 @@ export async function consume(
     );
   }
 
-  const windowMs = rule.windowSeconds * 1000;
-  const windowStart = Math.floor(now / windowMs) * windowMs;
-  const resetAt = windowStart + windowMs;
-  const key = `rl:${rule.bucket}:${identifier}:${windowStart}`;
-
-  const current = Number.parseInt((await kv.get(key)) ?? "0", 10);
-  const used = Number.isFinite(current) && current > 0 ? current : 0;
+  const { key, resetAt } = windowOf(rule, identifier, now);
+  const used = await usedIn(kv, key);
 
   if (used >= rule.limit) {
     return { allowed: false, remaining: 0, resetAt };

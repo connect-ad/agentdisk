@@ -40,6 +40,14 @@ const PRESETS = [
   { value: '7d', label: '7 days', ms: null }
 ];
 
+/**
+ * The server's bounds, restated so the button is disabled for a password the
+ * server would refuse rather than offering it and failing. Change one, change
+ * the other: `SHARE_PASSWORD_MIN` / `_MAX` in apps/api/src/lib/shares.ts.
+ */
+const PASSWORD_MIN = 6;
+const PASSWORD_MAX = 128;
+
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes)) return '—';
   if (bytes < 1024) return `${bytes} B`;
@@ -57,6 +65,9 @@ function folderPathOf(target) {
 
 export default function ShareModal({ open, target, limits, onClose, onCreated, api, workspaceId, ws }) {
   const [expiry, setExpiry] = useState('7d');
+  // Empty means no password. Kept only until the link is created: the server
+  // stores a hash, so there is nothing to show again afterwards.
+  const [password, setPassword] = useState('');
   const [link, setLink] = useState(null);
   const [error, setError] = useState(null);
   const [creating, setCreating] = useState(false);
@@ -75,6 +86,7 @@ export default function ShareModal({ open, target, limits, onClose, onCreated, a
   useEffect(() => {
     if (!open) return;
     setExpiry('7d');
+    setPassword('');
     setError(null);
     setLink(null);
     setFolderStats(null);
@@ -136,7 +148,10 @@ export default function ShareModal({ open, target, limits, onClose, onCreated, a
   const shareLinksLimit = limits?.shareLinks ?? 0;
   const allowed = shareLinksLimit > 0;
 
-  const canSubmit = allowed && !creating;
+  const passwordProblem = password !== '' && password.length < PASSWORD_MIN
+    ? `At least ${PASSWORD_MIN} characters.`
+    : null;
+  const canSubmit = allowed && !creating && passwordProblem === null;
 
   const runCreate = async () => {
     if (!canSubmit || !api?.createShare) return;
@@ -147,12 +162,16 @@ export default function ShareModal({ open, target, limits, onClose, onCreated, a
       // A null `ms` sends no expiry at all and takes the server's seven-day
       // default. See PRESETS: asking for the ceiling explicitly is what the
       // server refuses.
-      const target_ = kind === 'file' ? { fileId: target.id } : { path: folderPath };
+      const target_ = {
+        ...(kind === 'file' ? { fileId: target.id } : { path: folderPath }),
+        ...(password === '' ? {} : { password }),
+      };
       const body = preset?.ms == null
         ? target_
         : { ...target_, expiresAt: new Date(Date.now() + preset.ms).toISOString() };
       const { share } = await api.createShare(workspaceId, body);
       setLink(share);
+      setPassword('');
       onCreated?.(share);
     } catch (err) {
       setError(err?.message ?? 'The share link could not be created.');
@@ -262,8 +281,15 @@ export default function ShareModal({ open, target, limits, onClose, onCreated, a
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s-4)' }}>
             <div className="row" style={{ gap: 'var(--s-3)' }}>
               <Badge tone="ok" dot>Active</Badge>
+              {link.passwordProtected ? <Badge tone="info">Password protected</Badge> : null}
               <span className="ad-meta">Expires {new Date(link.expiresAt).toLocaleString()}</span>
             </div>
+            {link.passwordProtected ? (
+              <p className="ad-meta" style={{ margin: 0 }}>
+                Send the password separately from the link. It is not stored in a form anyone
+                can read back — to change it, revoke this link and create a new one.
+              </p>
+            ) : null}
             <div className="row" style={{ gap: 'var(--s-3)', alignItems: 'flex-end' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <Input label="Share link" mono readOnly value={link.url ?? ''} />
@@ -278,13 +304,27 @@ export default function ShareModal({ open, target, limits, onClose, onCreated, a
             </div>
           </div>
         ) : (
-          <Select
-            label="Expires"
-            value={expiry}
-            disabled={!allowed}
-            onChange={e => setExpiry(e.target.value)}
-            options={PRESETS.map(p => ({ value: p.value, label: p.label }))}
-          />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s-4)' }}>
+            <Select
+              label="Expires"
+              value={expiry}
+              disabled={!allowed}
+              onChange={e => setExpiry(e.target.value)}
+              options={PRESETS.map(p => ({ value: p.value, label: p.label }))}
+            />
+            <Input
+              label="Password"
+              optional
+              type="password"
+              autoComplete="new-password"
+              maxLength={PASSWORD_MAX}
+              value={password}
+              disabled={!allowed}
+              error={passwordProblem ?? undefined}
+              hint="Anyone opening the link will have to enter it. Leave empty for no password."
+              onChange={e => setPassword(e.target.value)}
+            />
+          </div>
         )}
       </Modal>
 

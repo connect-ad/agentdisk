@@ -36,7 +36,7 @@ import {
   patchWebhook,
 } from "./routes/webhooks";
 import { createShare, deleteShare, listShares } from "./routes/shares";
-import { downloadShared, previewShare } from "./routes/shares-public";
+import { downloadShared, previewShare, readSharePassword } from "./routes/shares-public";
 import {
   cancelSubscription,
   changePlan,
@@ -435,15 +435,32 @@ export default {
       // Genuinely public: no credential is read, and that is the design. The
       // token is the only thing that can name this file.
       {
+        //
+        // POST is the same two routes carrying a password in the body, for a
+        // link that has one; a download then answers `{ url }` instead of 302.
         const match = /^\/v1\/shares\/open\/([^/]+)(?:\/download\/([^/]+))?$/.exec(url.pathname);
-        if (match !== null && request.method === "GET") {
+        if (match !== null && (request.method === "GET" || request.method === "POST")) {
           const shareToken = decodeURIComponent(match[1] as string);
-          const deps = { db: env.DB, signing: () => readSigningConfig(env), requestId: id };
+          const deps = {
+            db: env.DB,
+            kv: env.CACHE,
+            signing: () => readSigningConfig(env),
+            requestId: id,
+          };
           const now = Date.now();
+          const post = request.method === "POST";
+          const password = post ? await readSharePassword(request) : undefined;
 
           return match[2] === undefined
-            ? await previewShare(deps, shareToken, now)
-            : await downloadShared(deps, shareToken, decodeURIComponent(match[2]), now);
+            ? await previewShare(deps, shareToken, password, now)
+            : await downloadShared(
+                deps,
+                shareToken,
+                decodeURIComponent(match[2]),
+                password,
+                now,
+                post ? "json" : "redirect"
+              );
         }
       }
 

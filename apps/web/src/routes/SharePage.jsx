@@ -1,7 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Alert, Badge, Button, Icon, Panel, Skeleton } from '../components/index.js';
-import { previewShare, sharedDownloadUrl } from '../lib/api.js';
+import { Alert, Badge, Button, Icon, Input, Panel, Skeleton } from '../components/index.js';
+import {
+  isPasswordRequired,
+  previewShare,
+  sharedDownloadUrl,
+  sharedDownloadWithPassword,
+} from '../lib/api.js';
 
 /**
  * `/s/{token}` — what somebody sees when a link is shared with them.
@@ -21,6 +26,15 @@ import { previewShare, sharedDownloadUrl } from '../lib/api.js';
  * **A folder share is resolved live.** The list below is what the link exposes
  * at this moment, not what it exposed when it was made — which is also why a
  * file added to a shared folder tomorrow appears here tomorrow.
+ *
+ * **A password-protected link asks before it shows anything.** The API names
+ * no file until the password is right, and every download then goes through
+ * a POST that returns the address — a password in a plain link would sit in
+ * the URL, the history and every log in between.
+ *
+ * Every file downloads rather than opening in the tab; that is decided by the
+ * `Content-Disposition` R2 is told to send, since the anchor's `download`
+ * attribute is ignored for a cross-origin URL.
  */
 
 function formatBytes(bytes) {
@@ -56,7 +70,79 @@ function Centered({ children }) {
   );
 }
 
-function FileRow({ file, token }) {
+/**
+ * An anchor for an open link: the endpoint 302s to a presigned R2 URL, and a
+ * normal navigation is what lets the browser follow that and stream the bytes
+ * from R2 rather than through this app. A protected link fetches the address
+ * with the password first and then navigates the same way.
+ */
+function DownloadAction({ token, fileId, password, variant }) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(null);
+
+  if (password === null) {
+    return (
+      <a href={sharedDownloadUrl(token, fileId)} download>
+        <Button as="span" variant={variant}>
+          Download
+        </Button>
+      </a>
+    );
+  }
+
+  const start = async () => {
+    setBusy(true);
+    setFailed(null);
+    try {
+      window.location.assign(await sharedDownloadWithPassword(token, fileId, password));
+    } catch (err) {
+      setFailed(err?.message ?? 'The download could not be started.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--s-2)' }}>
+      {failed ? <span className="ad-meta">{failed}</span> : null}
+      <Button variant={variant} loading={busy} onClick={() => void start()}>
+        Download
+      </Button>
+    </span>
+  );
+}
+
+function PasswordPrompt({ onSubmit, error, busy }) {
+  const [draft, setDraft] = useState('');
+  return (
+    <Panel title="This link needs a password" description="Ask whoever sent it if you don't have it.">
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (draft) onSubmit(draft);
+        }}
+        style={{ display: 'flex', gap: 'var(--s-3)', alignItems: 'flex-end' }}
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Input
+            label="Password"
+            type="password"
+            autoComplete="off"
+            autoFocus
+            value={draft}
+            error={error ?? undefined}
+            onChange={(event) => setDraft(event.target.value)}
+          />
+        </div>
+        <Button type="submit" loading={busy} disabled={!draft}>
+          Open
+        </Button>
+      </form>
+    </Panel>
+  );
+}
+
+function FileRow({ file, token, password }) {
   return (
     <li
       style={{
@@ -74,14 +160,7 @@ function FileRow({ file, token }) {
           {formatBytes(file.sizeBytes)}
         </span>
       </span>
-      {/* An anchor, not a button: the endpoint 302s to a presigned R2 URL, and
-          a normal navigation is what lets the browser follow that and stream
-          the bytes from R2 rather than through this app. */}
-      <a href={sharedDownloadUrl(token, file.id)} download>
-        <Button as="span" variant="secondary">
-          Download
-        </Button>
-      </a>
+      <DownloadAction token={token} fileId={file.id} password={password} variant="secondary" />
     </li>
   );
 }
@@ -90,6 +169,11 @@ export default function SharePage() {
   const { token } = useParams();
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
+  // `null` until a password has been accepted; the open-link path never sets it.
+  const [password, setPassword] = useState(null);
+  const [needsPassword, setNeedsPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState(null);
+  const [unlocking, setUnlocking] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -100,7 +184,9 @@ export default function SharePage() {
         if (live) setPreview(body);
       })
       .catch((err) => {
-        if (live && err?.name !== 'AbortError') setError(err);
+        if (!live || err?.name === 'AbortError') return;
+        if (isPasswordRequired(err)) setNeedsPassword(true);
+        else setError(err);
       });
 
     return () => {
@@ -109,6 +195,23 @@ export default function SharePage() {
     };
   }, [token]);
 
+  const unlock = async (attempt) => {
+    setUnlocking(true);
+    setPasswordError(null);
+    try {
+      const body = await previewShare(token, undefined, attempt);
+      setPassword(attempt);
+      setPreview(body);
+    } catch (err) {
+      // A wrong password and a locked link both keep the prompt up, with the
+      // server's own sentence; anything else is the one refusal.
+      if (isPasswordRequired(err)) setPasswordError(err.message);
+      else setError(err);
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
   if (error) {
     return (
       <Centered>
@@ -116,6 +219,14 @@ export default function SharePage() {
           {/* Deliberately no cause. See the header. */}
           Ask whoever sent it for a new one.
         </Alert>
+      </Centered>
+    );
+  }
+
+  if (!preview && needsPassword) {
+    return (
+      <Centered>
+        <PasswordPrompt onSubmit={(attempt) => void unlock(attempt)} error={passwordError} busy={unlocking} />
       </Centered>
     );
   }
@@ -154,16 +265,14 @@ export default function SharePage() {
               {formatBytes(preview.files[0].sizeBytes)}
               {preview.files[0].mimeType ? ` · ${preview.files[0].mimeType}` : ''}
             </span>
-            <a href={sharedDownloadUrl(token, preview.files[0].id)} download>
-              <Button as="span">Download</Button>
-            </a>
+            <DownloadAction token={token} fileId={preview.files[0].id} password={password} />
           </div>
         ) : preview.files.length === 0 ? (
           <p className="ad-meta">This folder has nothing in it right now.</p>
         ) : (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
             {preview.files.map((file) => (
-              <FileRow key={file.id} file={file} token={token} />
+              <FileRow key={file.id} file={file} token={token} password={password} />
             ))}
           </ul>
         )}

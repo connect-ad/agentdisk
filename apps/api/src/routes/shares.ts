@@ -13,7 +13,14 @@ import { normalizePath } from "../lib/paths";
 import { newId } from "../lib/ids";
 import { assertScopedPath } from "../auth/scopes";
 import { auditAndNotify } from "../lib/audit";
-import { mintShareToken, resolveExpiry, shareUrl } from "../lib/shares";
+import {
+  SHARE_PASSWORD_MAX,
+  SHARE_PASSWORD_MIN,
+  hashSharePassword,
+  mintShareToken,
+  resolveExpiry,
+  shareUrl,
+} from "../lib/shares";
 import type { AuthContext } from "../middleware/auth";
 import type { ShareRow } from "../db/shares";
 
@@ -22,6 +29,12 @@ const CreateSchema = z
     fileId: z.string().min(1).optional(),
     path: z.string().min(1).optional(),
     expiresAt: z.string().datetime().optional(),
+    // Optional. Stored as a PBKDF2 hash only, so it is never shown again.
+    password: z
+      .string()
+      .min(SHARE_PASSWORD_MIN, `A share password needs at least ${SHARE_PASSWORD_MIN} characters.`)
+      .max(SHARE_PASSWORD_MAX, `A share password can be at most ${SHARE_PASSWORD_MAX} characters.`)
+      .optional(),
   })
   .strict()
   .refine((body) => (body.fileId === undefined) !== (body.path === undefined), {
@@ -42,6 +55,8 @@ function toResource(row: ShareRow, dashboardUrl: string | undefined) {
     fileId: row.file_id,
     path: row.folder_path,
     expiresAt: new Date(row.expires_at).toISOString(),
+    // Whether one is set, never the password or its hash.
+    passwordProtected: row.password_hash !== null,
     createdAt: new Date(row.created_at).toISOString(),
     // Cleartext by design — see migration 0016. A link nobody can copy twice
     // is not a share feature.
@@ -93,6 +108,7 @@ export async function createShare(ctx: AuthContext, request: Request): Promise<R
 
   const id = newId("shareLink", ctx.now);
   const { token, tokenHash } = await mintShareToken();
+  const passwordHash = body.password === undefined ? null : await hashSharePassword(body.password);
   // The actor as audit_events records one, for an agent and a person alike.
   const createdBy = ctx.identity.actorId;
 
@@ -103,6 +119,7 @@ export async function createShare(ctx: AuthContext, request: Request): Promise<R
     folderPath,
     token,
     tokenHash,
+    passwordHash,
     expiresAt,
     createdBy,
     now: ctx.now,
@@ -113,7 +130,7 @@ export async function createShare(ctx: AuthContext, request: Request): Promise<R
   auditAndNotify(ctx, request, "share.created", {
     resourceType: "share",
     resourceId: id,
-    metadata: { kind, fileId, path: folderPath, expiresAt },
+    metadata: { kind, fileId, path: folderPath, expiresAt, passwordProtected: passwordHash !== null },
     webhookData: { id, kind },
   });
 
@@ -126,6 +143,7 @@ export async function createShare(ctx: AuthContext, request: Request): Promise<R
       folder_path: folderPath,
       token,
       token_hash: tokenHash,
+      password_hash: passwordHash,
       expires_at: expiresAt,
       created_by: createdBy,
       created_at: ctx.now,

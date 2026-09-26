@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Button } from '../components/index.js';
 import { useAuth } from '../lib/auth.jsx';
 import { Nav, Footer } from './Marketing.jsx';
+import { formatDay } from './Profile.jsx';
 
 /**
  * The error surface — 8.27 404 · 8.28 403 · 8.29 500 · 8.30 Maintenance, plus
@@ -148,6 +149,25 @@ const ERRORS = {
     timer: 'This page refreshes itself periodically',
     links: [],
   },
+  /**
+   * Not an error, but the same surface: the one page a person sees after
+   * closing their account, signed out, with nothing of theirs left to render
+   * a shell around. The fact rows carry the two things they need to know —
+   * the date, and where the last message will go — and are filled from router
+   * state by `AccountClosed`, so a direct visit shows the body and no invented
+   * dates.
+   */
+  closed: {
+    label: 'CLOSED', family: 'ACCOUNT', tone: 'info',
+    title: 'Your account is closed',
+    body: 'Every workspace you owned is gone and you are signed out. Your files and your sign-in are erased on the date below, and we will email you then to confirm. After that date you can create a new account with the same address — nothing from this one comes back.',
+    cta: { label: 'Back to home', to: DEST.home },
+    alt: { label: 'Privacy policy', to: DEST.privacy },
+    links: [
+      { label: 'Create a new account', note: 'After the date above', to: DEST.signup },
+      { label: 'Privacy policy', note: 'What we keep, and for how long', to: DEST.privacy },
+    ],
+  },
 };
 
 /**
@@ -182,7 +202,7 @@ export function ErrorPage({ code, facts = [], reference, onRetry }) {
         <section className="err">
           <div className="err__main">
             <div className="err__codebar">
-              <span className={`err__code err__code--${e.tone}`}>{code}</span>
+              <span className={`err__code err__code--${e.tone}`}>{e.label ?? code}</span>
               <span className="err__family">{e.family}</span>
             </div>
             <h1 className="err__title">{e.title}</h1>
@@ -296,4 +316,25 @@ export function MovedPermanently() { return <ErrorPage code="301" />; }
 export function Unauthorized() {
   const { pathname } = useLocation();
   return <ErrorPage code="401" facts={[{ value: pathname }]} />;
+}
+
+/**
+ * After DELETE /v1/me. Profile.jsx signs the person out and navigates here
+ * with `{ erasesAt, email }` in router state; both rows are dropped on a direct
+ * visit rather than filled with a guess.
+ */
+export function AccountClosed() {
+  const { state } = useLocation();
+  const erasesAt = state?.erasesAt ? formatDay(new Date(state.erasesAt).getTime()) : null;
+  const email = state?.email ?? null;
+  return (
+    <ErrorPage
+      code="closed"
+      facts={[
+        { value: erasesAt ? `Files and sign-in erased on ${erasesAt}` : null },
+        { value: email && erasesAt ? `We will email ${email} on ${erasesAt} when it is done` : null },
+        { value: erasesAt ? `You can sign up again with the same address after ${erasesAt}` : null },
+      ]}
+    />
+  );
 }

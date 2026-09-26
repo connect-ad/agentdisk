@@ -16,10 +16,64 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ACCOUNT_PURGE_TTL_MS } from "../src/db/workspace-cascade";
-import { sweepPendingDeletions, releaseAddress } from "../src/jobs/pending-deletions";
-import { NOW, ORG_ID, seedTwoWorkspaces } from "./helpers";
+import {
+  sweepPendingDeletions,
+  releaseAddress,
+  ERASURE_NOTICE_GRACE_MS,
+} from "../src/jobs/pending-deletions";
+import type { EmailConfig } from "../src/lib/email";
+import type { FirebaseAdminConfig } from "../src/auth/firebase-admin";
+import { WorkspaceMembers } from "../src/db/members";
+import { NOW, ORG_ID, WORKSPACE_A, seedTwoWorkspaces } from "./helpers";
 import { AdminUserAccess } from "../src/admin/users-access";
 import type { AdminUser } from "../src/admin/access";
+
+/**
+ * Firebase, stubbed through the sweep's own seam. The sweep deletes the
+ * identity through `deleteFirebaseUser`, which needs a live project; these
+ * tests decide whether that succeeds so they can prove what the sweep does
+ * around it.
+ */
+let firebaseFails = false;
+const firebaseDeleted: string[] = [];
+const fakeDeleteUser = async (_c: unknown, _kv: unknown, uid: string): Promise<boolean> => {
+  if (firebaseFails) throw new Error("identity toolkit unavailable");
+  firebaseDeleted.push(uid);
+  return true;
+};
+
+const FIREBASE: FirebaseAdminConfig = {
+  projectId: "agentdisk-dev",
+  clientEmail: "svc@test",
+  privateKeyPem: "unused",
+} as unknown as FirebaseAdminConfig;
+
+/** Email, stubbed at the binding, so the real template runs. */
+let sendFails = false;
+const sent: { to: string; subject: string; text: string; from: string; replyTo?: string }[] = [];
+function emailStub(): EmailConfig {
+  return {
+    binding: {
+      send: async (message: {
+        to: string;
+        subject: string;
+        text: string;
+        from: { email: string };
+        replyTo?: string;
+      }) => {
+        if (sendFails) throw Object.assign(new Error("rejected"), { code: "E_TEMPORARY" });
+        sent.push({
+          to: message.to,
+          subject: message.subject,
+          text: message.text,
+          from: message.from.email,
+          replyTo: message.replyTo,
+        });
+        return { messageId: "msg_test" };
+      },
+    } as unknown as SendEmail,
+  };
+}
 
 const ADMIN: AdminUser = {
   id: "adm_TEST",
@@ -57,8 +111,14 @@ async function readUser(id: string) {
 
 beforeEach(async () => {
   await seedTwoWorkspaces();
-  await env.DB.prepare(`DELETE FROM users WHERE id LIKE 'usr_PURGE%'`).run();
+  await env.DB.prepare(`DELETE FROM memberships WHERE user_id LIKE 'usr_PURGE%'`).run();
+  await env.DB.prepare(`DELETE FROM users WHERE id LIKE 'usr_PURGE%' OR id LIKE 'usr_RETURN%'`).run();
   await env.DB.prepare(`DELETE FROM admin_actions`).run();
+  await env.DB.prepare(`DELETE FROM job_runs`).run();
+  firebaseFails = false;
+  sendFails = false;
+  firebaseDeleted.length = 0;
+  sent.length = 0;
 });
 
 describe("deleting an account", () => {
@@ -182,6 +242,147 @@ describe("releasing the identity and the address", () => {
 
     expect(result.identitySkipped).toBe(false);
     expect(result.identitiesReleased).toBe(0);
+  });
+});
+
+describe("the final notice (Day 7)", () => {
+  async function due(id: string, email: string, purgeAfter = NOW - 1): Promise<void> {
+    await seedDeletableUser(id, email);
+    await env.DB.prepare(
+      `UPDATE users SET deleted_at = ?, purge_after = ?, oauth_github_id = ?, email_verified_at = ?
+        WHERE id = ?`
+    )
+      .bind(NOW - ACCOUNT_PURGE_TTL_MS, purgeAfter, `gh-${id}`, NOW - ACCOUNT_PURGE_TTL_MS, id)
+      .run();
+  }
+
+  function sweep(overrides: Parameters<typeof sweepPendingDeletions>[3] = {}) {
+    return sweepPendingDeletions(env.DB, env.FILES, NOW, {
+      dryRun: false,
+      identity: { config: FIREBASE, kv: env.CACHE, deleteUser: fakeDeleteUser },
+      email: emailStub(),
+      ...overrides,
+    });
+  }
+
+  it("is sent to the real address before the identity goes and the address is scrubbed", async () => {
+    await due("usr_PURGE11", "kim@example.com");
+
+    const result = await sweep();
+
+    expect(result.erasureEmailsSent).toBe(1);
+    expect(result.identitiesReleased).toBe(1);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.to).toBe("kim@example.com");
+    expect(sent[0]?.subject).toBe("Your AgentDisk account has been permanently deleted");
+    expect(sent[0]?.from).toBe("noreply@agentdisk.io");
+    expect(sent[0]?.replyTo).toBe("connect@agentdisk.io");
+    expect(sent[0]?.text).toMatch(/kept at Stripe for seven years/);
+    expect(sent[0]?.text).toMatch(/connect@agentdisk.io/);
+    expect(firebaseDeleted).toEqual(["fb-usr_PURGE11"]);
+
+    const row = await readUser("usr_PURGE11");
+    expect(row?.email).toBe("deleted-usr_PURGE11@agentdisk.invalid");
+    expect(row?.firebase_uid).toBeNull();
+    expect(row?.purge_after).toBeNull();
+  });
+
+  it("scrubs the GitHub id and the verification stamp with the address", async () => {
+    await due("usr_PURGE12", "lee@example.com");
+    await sweep();
+    const row = await env.DB.prepare(
+      `SELECT oauth_github_id AS gh, email_verified_at AS verified FROM users WHERE id = ?`
+    ).bind("usr_PURGE12").first<{ gh: string | null; verified: number | null }>();
+    expect(row?.gh).toBeNull();
+    expect(row?.verified).toBeNull();
+  });
+
+  it("holds the release when the notice cannot be sent, and keeps the address for next time", async () => {
+    await due("usr_PURGE13", "max@example.com");
+    sendFails = true;
+
+    const result = await sweep();
+
+    expect(result.erasureEmailsFailed).toBe(1);
+    expect(result.identitiesReleased).toBe(0);
+    expect(firebaseDeleted).toEqual([]);
+    const row = await readUser("usr_PURGE13");
+    expect(row?.email).toBe("max@example.com");
+    expect(row?.firebase_uid).toBe("fb-usr_PURGE13");
+    // The claim was reverted, so the next run tries again.
+    const notified = await env.DB.prepare(`SELECT erasure_notified_at AS at FROM users WHERE id = ?`)
+      .bind("usr_PURGE13").first<{ at: number | null }>();
+    expect(notified?.at).toBeNull();
+  });
+
+  it("gives up waiting after two days and releases anyway", async () => {
+    // An address that will never accept mail must not hold the identity forever.
+    await due("usr_PURGE14", "nia@example.com", NOW - ERASURE_NOTICE_GRACE_MS - 1);
+    sendFails = true;
+
+    const result = await sweep();
+
+    expect(result.erasureEmailsFailed).toBe(1);
+    expect(result.identitiesReleased).toBe(1);
+    expect((await readUser("usr_PURGE14"))?.email).toBe("deleted-usr_PURGE14@agentdisk.invalid");
+  });
+
+  it("does not send twice when the identity deletion fails and is retried", async () => {
+    await due("usr_PURGE15", "oli@example.com");
+    firebaseFails = true;
+    const first = await sweep();
+    expect(first.erasureEmailsSent).toBe(1);
+    expect(first.failed).toBe(1);
+    expect((await readUser("usr_PURGE15"))?.email).toBe("oli@example.com");
+
+    firebaseFails = false;
+    const second = await sweep();
+    expect(second.erasureEmailsSent).toBe(0);
+    expect(second.identitiesReleased).toBe(1);
+    expect(sent).toHaveLength(1);
+  });
+
+  it("sends nothing on a dry run", async () => {
+    await due("usr_PURGE16", "pat@example.com");
+    const result = await sweep({ dryRun: true });
+    expect(result.erasureEmailsSent).toBe(0);
+    expect(sent).toHaveLength(0);
+    expect((await readUser("usr_PURGE16"))?.email).toBe("pat@example.com");
+  });
+
+  it("releases unannounced, and says so, when this deployment has no email binding", async () => {
+    await due("usr_PURGE17", "quinn@example.com");
+    const result = await sweep({ email: null });
+    expect(result.emailSkipped).toBe(true);
+    expect(result.identitiesReleased).toBe(1);
+    expect(sent).toHaveLength(0);
+  });
+});
+
+describe("no ghost members", () => {
+  it("cannot be invited by address during the window", async () => {
+    // The row still carries the real address for seven days. An invitation
+    // that found it would attach a membership to a tombstone.
+    await seedDeletableUser("usr_PURGE18", "ray@example.com");
+    await env.DB.prepare(`UPDATE users SET deleted_at = ?, purge_after = ? WHERE id = ?`)
+      .bind(NOW, NOW + ACCOUNT_PURGE_TTL_MS, "usr_PURGE18")
+      .run();
+
+    const found = await new WorkspaceMembers(env.DB, WORKSPACE_A).findUserByEmail("ray@example.com");
+    expect(found).toBeNull();
+  });
+
+  it("loses any membership that slipped through when the address is released", async () => {
+    await seedDeletableUser("usr_PURGE19", "sam@example.com");
+    await env.DB.prepare(
+      `INSERT INTO memberships (id, org_id, user_id, workspace_id, role, created_at)
+       VALUES ('mem_GHOST', ?, 'usr_PURGE19', ?, 'reader', ?)`
+    ).bind(ORG_ID, WORKSPACE_A, NOW).run();
+
+    await releaseAddress(env.DB, "usr_PURGE19", NOW);
+
+    const ghost = await env.DB.prepare(`SELECT id FROM memberships WHERE id = 'mem_GHOST'`).first();
+    expect(ghost).toBeNull();
   });
 });
 

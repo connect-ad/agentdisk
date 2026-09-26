@@ -204,6 +204,28 @@ account" happens on Stripe's page.
 
 ---
 
+## Part 7b — Closing your account
+
+Do this last, with a throwaway address: it genuinely deletes.
+
+**24. Profile menu → Account → "Delete account…".** Read the dialog. It names
+the workspaces you own, says that keys, agent identities, webhooks, share links
+and your guests' access go now, that files are erased within 7 days, and that on
+a named date your sign-in and email address go too. The red button only wakes up
+once you type your own address.
+
+**25. Confirm.** You are signed out and land on *Your account is closed*, which
+repeats the date and the address the last email will go to. Any subscription is
+cancelled and the card detached. If you were a guest in somebody else's
+workspace, that workspace is untouched; only your seat is gone.
+
+**26. Try to sign up again with the same address.** Refused for seven days — the
+address is being held so we can still email you. On the seventh day the sweep
+sends one final email from `noreply@agentdisk.io`, deletes the sign-in, and frees
+the address; after that a signup with it lands in a brand-new empty workspace.
+
+---
+
 ## Part 8 — The admin console (you, as the operator)
 
 This one is not customer-facing. It lives on its own hostname so a admin session

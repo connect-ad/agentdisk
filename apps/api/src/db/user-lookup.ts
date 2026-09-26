@@ -316,6 +316,33 @@ export async function listWorkspacesForUser(
 }
 
 /**
+ * The workspaces this person PAYS for — every workspace under an organization
+ * whose `owner_user_id` is them, whatever its status.
+ *
+ * Deliberately not `listWorkspacesForUser`, which answers a different question
+ * ("what can this person see") and includes every workspace they were invited
+ * into as a guest. `DELETE /v1/me` cascaded that list until 26 Sept 2026, and
+ * so destroyed hosts' workspaces when a reader closed their own account. This
+ * is the list an account closure is allowed to destroy.
+ */
+export async function listOwnedWorkspacesForUser(
+  db: D1Database,
+  userId: string
+): Promise<{ id: string; name: string; orgId: string }[]> {
+  const rows = await db
+    .prepare(
+      `SELECT w.id, w.name, w.org_id AS orgId
+         FROM workspaces w
+         JOIN organizations o ON o.id = w.org_id
+        WHERE o.owner_user_id = ?
+        ORDER BY w.created_at ASC`
+    )
+    .bind(userId)
+    .all<{ id: string; name: string; orgId: string }>();
+  return rows.results;
+}
+
+/**
  * "Log out everywhere" (30.4): every ID token issued before now stops working.
  *
  * The Firebase SDK holds a refresh token we never see, so the practical effect

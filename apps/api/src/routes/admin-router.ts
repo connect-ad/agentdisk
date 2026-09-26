@@ -105,6 +105,7 @@ export async function handleAdminRoute(
       PENDING_DELETION_ENABLED: env.PENDING_DELETION_ENABLED,
       FIREBASE_SERVICE_ACCOUNT_JSON: env.FIREBASE_SERVICE_ACCOUNT_JSON,
       FIREBASE_PROJECT_ID: env.FIREBASE_PROJECT_ID,
+      EMAIL: env.EMAIL,
     },
     // The same verifier and the same project as the customer chain. Admin are
     // told apart by their admin_users row, never by the credential.

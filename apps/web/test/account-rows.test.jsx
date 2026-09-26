@@ -47,6 +47,12 @@ vi.mock('../src/lib/workspace.jsx', () => ({
   useWorkspace: () => workspaceState
 }));
 
+// Profile navigates after closing the account, so it needs a router around it.
+vi.mock('react-router-dom', async importOriginal => ({
+  ...(await importOriginal()),
+  useNavigate: () => vi.fn(),
+}));
+
 const Profile = (await import('../src/routes/Profile.jsx')).default;
 
 afterEach(() => {

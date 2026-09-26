@@ -14,6 +14,7 @@ import Support from './routes/Support.jsx';
 import {
   NotFound, Forbidden, ServerError, Maintenance,
   Gone, BadRequest, RateLimited, NotModified, MovedPermanently, Unauthorized,
+  AccountClosed,
 } from './routes/ErrorPages.jsx';
 import { Sandbox } from './routes/Sandbox.jsx';
 import { Signup, VerifyEmail, ForgotPassword, ResetPassword, Login } from './routes/Auth.jsx';
@@ -414,6 +415,9 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/account/profile" element={<Profile />} />
+      {/* Public, because the person who lands here has just been signed out. */}
+      <Route path="/account-closed" element={<AccountClosed />} />
+
       {/*
         The design draws ten codes. Four already had routes; these six are new.
         They exist so a link, a redirect or a support article can name the page

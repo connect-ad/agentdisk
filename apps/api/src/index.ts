@@ -54,6 +54,7 @@ import {
 } from "./routes/members";
 import { resolveVerifiedUser } from "./auth/authenticate";
 import { deleteOwnAccount } from "./routes/account";
+import { sendSupportRequest } from "./routes/support";
 import { callerOf } from "./lib/claim-log";
 import { readFirebaseAdminConfig } from "./auth/firebase-admin";
 import { extractBearerToken, isApiKeyToken } from "./lib/keys";
@@ -536,6 +537,14 @@ export default {
         );
       }
 
+      // A person asking for help. `op: null` because no scope describes it -
+      // the route refuses an API key outright, and a reader may ask.
+      if (route === "POST /v1/support") {
+        return await authed({ op: null }, (ctx, req) =>
+          sendSupportRequest(ctx, req, { email: readEmailConfig(env) })
+        );
+      }
+
       // Search. `list` rather than `read`: a key that may not enumerate must
       // not be able to enumerate one query at a time.
       if (route === "GET /v1/search") {
@@ -987,6 +996,10 @@ export default {
             // there, so the person's next signup fails on EMAIL_EXISTS with
             // nothing on our side explaining why.
             identity: { config: readFirebaseAdminConfig(env), kv: env.CACHE },
+            // The final notice to a closed account, sent before its address is
+            // released. Null here means unannounced releases, and the result
+            // says so.
+            email: readEmailConfig(env),
           });
           console.log(
             JSON.stringify({
@@ -999,6 +1012,10 @@ export default {
               rowsDeleted: sweep.rowsDeleted,
               bytesFreed: sweep.bytesFreed,
               failed: sweep.failed,
+              identitiesReleased: sweep.identitiesReleased,
+              erasureEmailsSent: sweep.erasureEmailsSent,
+              erasureEmailsFailed: sweep.erasureEmailsFailed,
+              emailSkipped: sweep.emailSkipped,
             })
           );
         } catch (err) {

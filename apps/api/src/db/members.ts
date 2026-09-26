@@ -64,10 +64,15 @@ export class WorkspaceMembers {
     firebase_uid: string | null;
     emailVerifiedAt: number | null;
   } | null> {
+    // `deleted_at IS NULL`: for seven days after somebody closes their account
+    // the row still carries their real address (so the final notice can reach
+    // it). Without this filter an invitation to that address would attach a
+    // membership to the tombstone, which would then sit in the members list
+    // forever as `deleted-...@agentdisk.invalid` once the sweep scrubbed it.
     return this.db
       .prepare(
         `SELECT id, email, firebase_uid, email_verified_at AS emailVerifiedAt
-           FROM users WHERE email = ?`
+           FROM users WHERE email = ? AND deleted_at IS NULL`
       )
       .bind(email)
       .first<{

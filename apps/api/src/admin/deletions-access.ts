@@ -19,6 +19,7 @@ import {
   type SweepResult,
 } from "../jobs/pending-deletions";
 import { readFirebaseAdminConfig } from "../auth/firebase-admin";
+import { readEmailConfig } from "../lib/email";
 import { UNCLAIMED_TTL_MS } from "../lib/claim";
 
 export interface DeletionQueue {
@@ -58,6 +59,8 @@ export interface SweepBindings {
     PENDING_DELETION_ENABLED?: string;
     FIREBASE_SERVICE_ACCOUNT_JSON?: string;
     FIREBASE_PROJECT_ID?: string;
+    /** The final notice to a closed account goes out through this. */
+    EMAIL?: SendEmail;
   };
   kv: KVNamespace;
 }
@@ -233,6 +236,9 @@ export class AdminDeletionsAccess extends AuditedAdminAccess {
       actorId: this.admin.id,
       actorEmail: this.admin.email,
       identity: { config: readFirebaseAdminConfig(bindings.env), kv: bindings.kv },
+      // Same notice the cron sends. A run from the console must not release an
+      // identity silently that the hourly run would have announced.
+      email: readEmailConfig(bindings.env),
     });
 
     await this.recordFleet({
@@ -245,6 +251,8 @@ export class AdminDeletionsAccess extends AuditedAdminAccess {
         objectsDeleted: result.objectsDeleted,
         bytesFreed: result.bytesFreed,
         identitiesReleased: result.identitiesReleased,
+        erasureEmailsSent: result.erasureEmailsSent,
+        erasureEmailsFailed: result.erasureEmailsFailed,
         failed: result.failed,
       },
     });

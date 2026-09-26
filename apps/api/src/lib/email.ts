@@ -284,6 +284,109 @@ export async function sendTestEmail(
   });
 }
 
+/* ------------------------------ support ------------------------------ */
+
+/**
+ * Where the dashboard's Support form delivers. One constant, deliberately: it
+ * is an inbox a person reads, not a per-environment setting, and a dev
+ * deployment writing to the same inbox as prod is a feature — a request from
+ * `app-dev` is still a request.
+ */
+export const SUPPORT_INBOX = "connect@amardisk.io";
+
+/**
+ * The address a support request is sent *from*. On `SENDING_DOMAIN`, so it is
+ * deliverable; distinct from `SENDER_EMAIL` so the inbox can filter "a person
+ * asked for help through the site" from the product's own transactional mail.
+ * The person's address goes in Reply-To, never in From: a From we do not own
+ * is refused by Cloudflare, and a reply must reach the person, not us.
+ */
+export const SUPPORT_SENDER = `websupport@${SENDING_DOMAIN}`;
+
+/**
+ * The topics the Support screen offers, and the words it shows for each. The
+ * screen sends the id; the message carries the label, because "keys" tells the
+ * reader less than "Key or scope problem". Change one and change the other:
+ * `routes/Support.jsx` holds the same table.
+ */
+export const SUPPORT_TOPICS = {
+  billing: "Billing or invoices",
+  keys: "Key or scope problem",
+  errors: "Agent hitting 5xx",
+  other: "Something else",
+} as const;
+
+export type SupportTopic = keyof typeof SUPPORT_TOPICS;
+
+export interface SupportRequestEmail {
+  /** The signed-in person's verified address, from the credential. */
+  fromPerson: string;
+  topic: SupportTopic;
+  subject: string;
+  message: string;
+  workspace: { id: string; name: string };
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * A request for help, as a person typed it on the Support screen.
+ *
+ * The facts come first and the message last, so whoever reads the inbox sees
+ * who is asking, about what, and from which workspace before the prose. The
+ * message is plain text in both parts — the HTML part is the text escaped, so
+ * nothing typed into the box becomes markup in the inbox.
+ */
+export async function sendSupportRequestEmail(
+  config: EmailConfig,
+  options: SupportRequestEmail
+): Promise<SendResult> {
+  const topicLabel = SUPPORT_TOPICS[options.topic];
+  const facts: [string, string][] = [
+    ["From", options.fromPerson],
+    ["Topic", topicLabel],
+    ["Workspace", `${options.workspace.name} (${options.workspace.id})`],
+    ["Subject", options.subject],
+  ];
+
+  const text = [
+    ...facts.map(([label, value]) => `${label}: ${value}`),
+    "",
+    options.message,
+  ].join("\n");
+
+  const html =
+    `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;` +
+    `font-size:14px;line-height:1.6;color:#111621">` +
+    `<table style="border-collapse:collapse;margin:0 0 16px">` +
+    facts
+      .map(
+        ([label, value]) =>
+          `<tr><td style="padding:2px 12px 2px 0;color:#5f6875">${label}</td>` +
+          `<td style="padding:2px 0">${escapeHtml(value)}</td></tr>`
+      )
+      .join("") +
+    `</table>` +
+    `<div style="white-space:pre-wrap">${escapeHtml(options.message)}</div>` +
+    `</div>`;
+
+  return await sendEmail(config, {
+    to: SUPPORT_INBOX,
+    fromAddress: SUPPORT_SENDER,
+    fromName: "AgentDisk web support",
+    replyTo: options.fromPerson,
+    subject: `[${topicLabel}] ${options.subject}`,
+    html,
+    text,
+  });
+}
+
 /* --------------------------- the renewal ladder --------------------------- */
 /**
  * Three messages, sent by `jobs/billing-renewal.ts` around a renewal.
@@ -409,6 +512,98 @@ export async function sendPaymentFailedEmail(
     subject: `Payment failed for your ${planName} plan`,
     html,
     text,
+  });
+}
+
+/* ---------------------------- account closure ---------------------------- */
+
+export interface AccountErasedEmail {
+  to: string;
+  /** The day the person closed the account, already formatted for a human. */
+  closedDate: string;
+}
+
+/**
+ * Day 7 after a person closes their own account: the last message, sent by the
+ * sweep in `jobs/pending-deletions.ts` immediately BEFORE it deletes the
+ * Firebase identity and releases the address.
+ *
+ * The order is the whole design. The address was deliberately kept for seven
+ * days so this could be sent; once the sweep releases it there is nowhere to
+ * send to, so a failed send holds the release for that hour rather than the
+ * other way round — the one place in this codebase where an email outcome is
+ * allowed to gate a state change, and `pending-deletions.ts` says why.
+ *
+ * From `noreply@`, because there is no account left to reply about, with
+ * Reply-To pointing at support so "reply to this message" still reaches a
+ * person. Both addresses are on `SENDING_DOMAIN`.
+ */
+export async function sendAccountErasedEmail(
+  config: EmailConfig,
+  options: AccountErasedEmail
+): Promise<SendResult> {
+  const { to, closedDate } = options;
+
+  const opening =
+    `On ${closedDate} you asked us to close your AgentDisk account. The seven-day period ` +
+    `has now ended and we have completed the deletion.`;
+  const today =
+    "Your files, unreachable since that day, are now erased, and so is your sign-in identity. " +
+    "This email address is no longer attached to any AgentDisk account and can be used to " +
+    "create a new one.";
+  const already =
+    `Every workspace you owned, with its API keys, agents, webhooks, share links and folder ` +
+    `structure; access for anyone you had invited; your subscription and saved payment details.`;
+  const kept =
+    "Invoices, kept at Stripe for seven years, because tax law requires it. They hold your " +
+    "billing name, address and the amounts paid, and nothing else.";
+  const closing =
+    "Nothing can be recovered. If you did not request this closure, reply to this message or " +
+    `write to ${SENDER_EMAIL}.`;
+
+  const para = (text: string) =>
+    `<p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#374151">${text}</p>`;
+  const label = (text: string) =>
+    `<p style="margin:0 0 6px;font-size:13px;font-weight:600;color:#111621">${text}</p>`;
+
+  const html = layout(
+    "Your AgentDisk account has been permanently deleted",
+    [
+      para(opening),
+      label("Removed today"),
+      para(today),
+      label(`Already removed on ${closedDate}`),
+      para(already),
+      label("What we keep"),
+      para(kept),
+      `<p style="margin:0;font-size:13px;line-height:1.6;color:#5f6875">${closing}</p>`,
+    ].join("")
+  );
+
+  const text = [
+    opening,
+    "",
+    "Removed today",
+    today,
+    "",
+    `Already removed on ${closedDate}`,
+    already,
+    "",
+    "What we keep",
+    kept,
+    "",
+    closing,
+    "",
+    "— AgentDisk",
+  ].join("\n");
+
+  return await sendEmail(config, {
+    to,
+    subject: "Your AgentDisk account has been permanently deleted",
+    html,
+    text,
+    fromAddress: COMPOSE_DEFAULT_SENDER,
+    replyTo: SENDER_EMAIL,
   });
 }
 

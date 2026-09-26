@@ -374,6 +374,31 @@ export function createApiClient(getToken) {
       request(`/v1/shares/${shareId}`, { method: 'DELETE', workspaceId }),
 
     logoutEverywhere: workspaceId =>
-      request('/v1/me/logout-all', { method: 'POST', workspaceId })
+      request('/v1/me/logout-all', { method: 'POST', workspaceId }),
+
+    /**
+     * Close the signed-in person's own account.
+     *
+     * The typed address travels in the body, so the confirmation belongs to the
+     * operation rather than to this client. Resolves to
+     * `{ workspacesDeleted, filesQueued, billing, purgeAfter }`; `purgeAfter` is
+     * the day the bytes, the sign-in and the address go. Refused for an API
+     * key, for a mismatched address, and with 409 when the subscription could
+     * not be ended — in which case nothing was deleted.
+     */
+    deleteAccount: (workspaceId, confirmEmail) =>
+      request('/v1/me', { method: 'DELETE', body: { confirmEmail }, workspaceId }),
+
+    /**
+     * Send the Support form: one email to the support inbox.
+     *
+     * `topic` is one of the ids the screen offers; the server words it. The
+     * person's address is not sent — the server takes it from the credential,
+     * so what the inbox replies to is the account that asked. Resolves to
+     * `{ sent: true }`; refused for an API key, and 500 when this deployment
+     * cannot send mail, which is a failure rather than a quiet no-op.
+     */
+    sendSupportRequest: (workspaceId, { topic, subject, message }) =>
+      request('/v1/support', { method: 'POST', body: { topic, subject, message }, workspaceId })
   };
 }

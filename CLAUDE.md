@@ -223,6 +223,29 @@ were not touched. See `backlog/002`.
   a screen written for somebody whose invitation was revoked. R2 objects go
   before the D1 rows, matching the purge job: the rows are the only record of
   which objects exist, so losing them first orphans bytes nothing can find.
+- **Closing an account takes what the person pays for, and only that.**
+  `DELETE /v1/me` cascades every workspace under an organization whose
+  `owner_user_id` is the caller — Readers and Admins are guests, and the
+  owner's closure takes the workspace from under them, the way deleting a
+  Google account takes the shared file from its editors. Where the caller was
+  themselves a guest, only their membership row goes. Until 26 Sept 2026 the
+  route cascaded `listWorkspacesForUser`, which answers "what can this person
+  *see*", so a reader closing their own account destroyed the host's workspace;
+  `test/account.test.ts` pins both directions. Two more rules live in the same
+  route: **a Stripe failure refuses the whole closure** (409, nothing destroyed)
+  rather than deleting an account that keeps being billed with nobody left to
+  notice; and **every non-ended subscription is cancelled**, not only `active`
+  — a `past_due` one bills again the moment the card works.
+- **The Day-7 notice is sent before the address is released, and a failed send
+  holds that release.** The one deliberate exception to "state changes and
+  lifecycle emails are separate passes": the address was kept for seven days
+  precisely so this message could reach it, and once `releaseAddress` runs
+  there is nowhere to send to. The claim is an atomic
+  `UPDATE ... WHERE erasure_notified_at IS NULL`, so the hourly cron and the
+  console's Run now cannot both send; a bounce is retried hourly for
+  `ERASURE_NOTICE_GRACE_MS` (48 h) and then the release goes ahead anyway,
+  because a dead address must not hold a person's identity in our systems
+  forever. From `noreply@agentdisk.io`, Reply-To `connect@agentdisk.io`.
 - **A workspace slug is an address; the `ws_...` ID is still the identifier.**
   Dashboard URLs are `/w/{slug}`, and two invariants keep that from becoming a
   second identity. **A slug can never look like an ID:** `slugify` lowercases and
@@ -686,8 +709,8 @@ live deployment rather than inferred from the code — see
 person can follow.
 
 ```
-apps/api    925 tests across 48 files · typecheck clean
-apps/web    333 tests across 24 files · build clean
+apps/api    956 tests across 49 files · typecheck clean
+apps/web    346 tests across 25 files · build clean
 apps/admin   52 tests across 4 files · build clean · 110 KiB gzipped
 Worker      226 KiB gzipped, against Cloudflare's 1 MB limit
 ```

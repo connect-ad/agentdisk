@@ -1,7 +1,22 @@
 import { useAuth, describeAuthError } from '../lib/auth.jsx';
 import React, { useState } from 'react';
-import { Input, Button, Badge, Alert } from '../components/index.js';
+import { useNavigate } from 'react-router-dom';
+import { Input, Button, Badge, Alert, Modal, Icon } from '../components/index.js';
 import { useWorkspace } from '../lib/workspace.jsx';
+
+/** Seven days from now, the way the API stamps it, for the dialog's date. */
+const PURGE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * A date the way the emails write it, in UTC, so the dialog, the closed page
+ * and the Day-7 message all name the same day — a browser east of UTC+4 would
+ * otherwise show a deadline one day out from the one the email states.
+ */
+export function formatDay(ms) {
+  return new Date(ms).toLocaleDateString('en-GB', {
+    day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
+  });
+}
 
 /**
  * 8.26 Account — MVP-0
@@ -106,8 +121,9 @@ export default function Profile() {
   // reads the display name off the token's `name` claim and syncs the address
   // from the token on the next request. So these edits are the whole change,
   // and there is no endpoint of ours missing behind them.
-  const { user, updateDisplayName, requestEmailChange } = useAuth();
-  const { api, workspaceId, role, workspace } = useWorkspace();
+  const { user, updateDisplayName, requestEmailChange, signOut } = useAuth();
+  const { api, workspaceId, role, workspace, workspaces = [] } = useWorkspace();
+  const navigate = useNavigate();
   // 'owner' | 'admin' | 'reader' -> the design's own casing ('Owner').
   const roleLabel = role ? role.charAt(0).toUpperCase() + role.slice(1) : '';
   const workspaceName = workspace?.name ?? '';
@@ -126,6 +142,39 @@ export default function Profile() {
   const [error, setError] = useState(null);
   const [endingSessions, setEndingSessions] = useState(false);
   const [sessionsEnded, setSessionsEnded] = useState(false);
+  const [closing, setClosing] = useState(false);       // the dialog is open
+  const [confirmEmail, setConfirmEmail] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
+
+  // What the owner pays for, and so what goes with them. Guests' workspaces
+  // are not in this list and are not touched.
+  const owned = workspaces.filter(w => w.role === 'owner');
+  const emailMatches = confirmEmail.trim().toLowerCase() === currentEmail.toLowerCase() && currentEmail !== '';
+  const erasesOn = formatDay(Date.now() + PURGE_WINDOW_MS);
+
+  /**
+   * Close the account.
+   *
+   * The API is the authority on what happens and refuses on its own — a
+   * mismatched address, an API key, a subscription it could not end (409, with
+   * nothing deleted). On success the person is signed out of Firebase here,
+   * because their token is already refused server-side and a dashboard that
+   * keeps rendering against a dead session is the confusing half of that.
+   */
+  const closeAccount = async () => {
+    if (!workspaceId || !emailMatches) return;
+    setDeleting(true); setDeleteError(null);
+    try {
+      const result = await api.deleteAccount(workspaceId, confirmEmail.trim());
+      const erasesAt = result?.purgeAfter ?? new Date(Date.now() + PURGE_WINDOW_MS).toISOString();
+      await signOut();
+      navigate('/account-closed', { replace: true, state: { erasesAt, email: currentEmail } });
+    } catch (err) {
+      setDeleteError(`${err?.message ?? 'Could not close the account.'}${err?.requestId ? ` (request ${err.requestId})` : ''}`);
+      setDeleting(false);
+    }
+  };
 
   const timeZone = browserTimeZone();
   const session = thisDevice();
@@ -375,27 +424,85 @@ export default function Profile() {
       </section>
 
       {/*
-        The reference's delete-account card. Its copy — "You own one workspace.
-        Transfer it first, or it is deleted with the account." — describes a
-        transfer-or-delete flow that does not exist: no endpoint deletes an
-        account. So the control is visibly disabled and says why rather than
-        opening a dialog that cannot finish, the failure backlog/023 tracks.
+        The reference's delete-account card. Its copy described a
+        transfer-or-delete flow this product does not have; what it has is
+        DELETE /v1/me, which takes every workspace the person pays for and
+        nothing they were merely invited into. The dialog says exactly that,
+        in the owner's words, before asking for the address.
+
+        Workspace-scoped like the sessions control above: the endpoint needs a
+        workspace in the request, and this screen is also routed standalone at
+        /account/profile, so without one the control is disabled rather than
+        firing a call that cannot succeed.
       */}
       <section className="acctcard acctcard--danger">
         <h3 className="acctcard__h3">Delete account</h3>
         <div className="acctcard__body">
           <p className="ad-small ad-measure">
-            Deleting an account removes it and every workspace it owns. This is not
-            available from the dashboard yet — contact support and we will do it by hand.
+            Closes this account and removes every workspace it owns, now. Files are erased
+            within 7 days; your sign-in and email address go on the same day.
           </p>
         </div>
         <div className="acctcard__foot">
-          <Button variant="danger-outline" size="sm" disabled aria-disabled="true">
+          <Button
+            variant="danger-outline"
+            size="sm"
+            disabled={!workspaceId}
+            aria-disabled={!workspaceId || undefined}
+            onClick={() => { setConfirmEmail(''); setDeleteError(null); setClosing(true); }}
+          >
             Delete account…
           </Button>
-          <span className="ad-meta">Not available yet</span>
+          {!workspaceId ? <span className="ad-meta">Open this from inside a workspace</span> : null}
         </div>
       </section>
+
+      <Modal
+        open={closing}
+        title="Delete your account?"
+        tone="danger"
+        mark={<Icon name="alert" size={16} />}
+        onClose={() => { if (!deleting) setClosing(false); }}
+        onSubmit={() => { if (emailMatches) void closeAccount(); }}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setClosing(false)} disabled={deleting}>Cancel</Button>
+            <Button type="submit" variant="danger" loading={deleting} disabled={!emailMatches}>
+              Delete my account
+            </Button>
+          </>
+        }
+      >
+        {/* The owner's wording, on purpose: what goes now, what goes on the date,
+            what stays and where. The date is the same UTC day the Day-7 email
+            will name. */}
+        <div className="ad-measure">
+          <p style={{ marginTop: 0 }}>
+            This door only opens one way. Confirm, and your
+            {owned.length > 0 ? (
+              <> workspace{owned.length === 1 ? '' : 's'} (<strong>{owned.map(w => w.name).join(', ')}</strong>),</>
+            ) : ' workspaces,'}
+            {' '}every API key, agent identity, webhook and share link in them, and your guests&apos;
+            access are gone for good. Agents stop mid-sentence. Your subscription ends.
+          </p>
+          <p>
+            Your files go unreachable now and are erased within 7 days. On or shortly after{' '}
+            <strong>{erasesOn}</strong> we delete your sign-in and email address too, send you one
+            last note, and forget we ever met. Come back later and you start as a stranger. Only
+            your invoices stay, at Stripe, for seven years, because tax law says so.
+          </p>
+          <p style={{ marginBottom: 0 }}>Download what you want to keep before you go.</p>
+        </div>
+        {deleteError ? <Alert tone="danger" title={deleteError} /> : null}
+        <Input
+          label="Type your email address to confirm"
+          type="email"
+          mono
+          placeholder={currentEmail}
+          value={confirmEmail}
+          onChange={e => setConfirmEmail(e.target.value)}
+        />
+      </Modal>
     </div>
   );
 }

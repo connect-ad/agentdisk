@@ -79,14 +79,16 @@ export interface AdminDeps {
    */
   files?: R2Bucket;
   /**
-   * The subset of `env` the sweep reads - the enable flag and the Firebase
-   * service account. Narrowed to those three keys so a handler cannot reach
-   * past it to a secret it was not given.
+   * The subset of `env` the sweep reads - the enable flag, the Firebase
+   * service account, and the email binding for the final notice to a closed
+   * account. Narrowed to those keys so a handler cannot reach past it to a
+   * secret it was not given.
    */
   sweepEnv?: {
     PENDING_DELETION_ENABLED?: string;
     FIREBASE_SERVICE_ACCOUNT_JSON?: string;
     FIREBASE_PROJECT_ID?: string;
+    EMAIL?: SendEmail;
   };
   /**
    * The same Firebase verifier the customer chain uses, and deliberately the

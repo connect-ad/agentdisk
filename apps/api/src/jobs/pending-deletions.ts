@@ -22,12 +22,26 @@
 import { newId } from "../lib/ids";
 import { CLAIM_ATTEMPT_RETENTION_MS } from "../lib/claim-log";
 import { deleteFirebaseUser, type FirebaseAdminConfig } from "../auth/firebase-admin";
+import { sendAccountErasedEmail, type EmailConfig } from "../lib/email";
 
 /** R2 accepts up to 1000 keys in one delete. */
 const R2_DELETE_CHUNK = 1000;
 
 /** Bounded so one run cannot exceed a Worker's CPU or wall-clock budget. */
 const DEFAULT_LIMIT = 500;
+
+/**
+ * How long past its due date an account keeps waiting for its final notice to
+ * be delivered before the release goes ahead without it.
+ *
+ * The notice is sent BEFORE the address is released, and a failed send holds
+ * the release for that hour - the address was kept for seven days precisely so
+ * this message could reach it. But an address that will never accept mail (the
+ * domain is gone, the provider rejects the sender) must not hold a person's
+ * identity in our systems forever; that would invert the promise the sweep
+ * exists to keep. Two days of hourly retries is long past any transient outage.
+ */
+export const ERASURE_NOTICE_GRACE_MS = 48 * 60 * 60 * 1000;
 
 export interface SweepResult {
   examined: number;
@@ -39,6 +53,12 @@ export interface SweepResult {
   identitiesReleased: number;
   /** True when the identity pass was skipped for want of a Firebase config. */
   identitySkipped: boolean;
+  /** Final "your account has been deleted" notices delivered this run. */
+  erasureEmailsSent: number;
+  /** Notices that could not be sent; each held its account's release for this run. */
+  erasureEmailsFailed: number;
+  /** True when no email binding was available, so releases went ahead unannounced. */
+  emailSkipped: boolean;
   /** Claim-attempt rows removed past their 90-day retention. */
   claimAttemptsTrimmed: number;
   dryRun: boolean;
@@ -74,7 +94,19 @@ export interface SweepOptions {
    * next signup fails on EMAIL_EXISTS with nothing in our data explaining why.
    * The two are released together or not at all.
    */
-  identity?: { config: FirebaseAdminConfig | null; kv: KVNamespace };
+  identity?: {
+    config: FirebaseAdminConfig | null;
+    kv: KVNamespace;
+    /** Tests only: stands in for `deleteFirebaseUser`, which needs a live project. */
+    deleteUser?: typeof deleteFirebaseUser;
+  };
+  /**
+   * How the final notice is sent. Absent or null skips the notice and says so
+   * in the result; the release still happens. Deployments without the binding
+   * are test environments, and a person's identity must not be held hostage
+   * to a message that no configuration can send.
+   */
+  email?: EmailConfig | null;
 }
 
 interface PendingRow {
@@ -129,6 +161,9 @@ export async function sweepPendingDeletions(
     failed: 0,
     identitiesReleased: 0,
     identitySkipped: false,
+    erasureEmailsSent: 0,
+    erasureEmailsFailed: 0,
+    emailSkipped: false,
     claimAttemptsTrimmed: 0,
     dryRun,
     runId,
@@ -207,7 +242,16 @@ export async function sweepPendingDeletions(
       }
     }
 
-    await releaseIdentities(db, now, dryRun, force, limit, options.identity, result);
+    await releaseIdentities(
+      db,
+      now,
+      dryRun,
+      force,
+      limit,
+      options.identity,
+      options.email ?? null,
+      result
+    );
 
     // The claim-attempt log's retention, trimmed by the sweep that already
     // runs. These rows hold IP addresses of unauthenticated visitors, so they
@@ -231,13 +275,21 @@ export async function sweepPendingDeletions(
 }
 
 /**
- * Free the email address, and mark the purge finished.
+ * Free the email address, scrub what else identifies the person, and mark the
+ * purge finished.
  *
- * Called only after the Firebase identity is gone, and all three fields move
+ * Called only after the Firebase identity is gone, and every field moves
  * together: the address is released so the person can sign up again, the uid is
- * cleared so a retry cannot repeat a delete that already succeeded, and
- * `purge_after` is cleared so the row reads as finished rather than
- * perpetually due.
+ * cleared so a retry cannot repeat a delete that already succeeded, the GitHub
+ * id and the verification stamp go because they are still a piece of the person
+ * (and `oauth_github_id` is UNIQUE, so a returning GitHub user would otherwise
+ * collide exactly as the email used to), and `purge_after` is cleared so the
+ * row reads as finished rather than perpetually due.
+ *
+ * Any membership still pointing at the row goes too. None should exist - the
+ * closure removed them - but an invitation sent to the held address inside the
+ * window used to create one, and a tombstone in a members list is the ghost
+ * this line exists to prevent.
  *
  * `.invalid` is reserved by RFC 2606 and can never resolve or receive mail —
  * the same pattern `db/bootstrap.ts` uses for provisional sandbox owners. The
@@ -252,14 +304,71 @@ export async function releaseAddress(
   userId: string,
   now: number
 ): Promise<void> {
-  await db
-    .prepare(
-      `UPDATE users
-          SET email = ?, firebase_uid = NULL, purge_after = NULL, updated_at = ?
-        WHERE id = ?`
-    )
-    .bind(`deleted-${userId}@agentdisk.invalid`, now, userId)
+  await db.batch([
+    db.prepare(`DELETE FROM memberships WHERE user_id = ?`).bind(userId),
+    db
+      .prepare(
+        `UPDATE users
+            SET email = ?, firebase_uid = NULL, oauth_github_id = NULL,
+                email_verified_at = NULL, purge_after = NULL, updated_at = ?
+          WHERE id = ?`
+      )
+      .bind(`deleted-${userId}@agentdisk.invalid`, now, userId),
+  ]);
+}
+
+/**
+ * Send the final notice, once.
+ *
+ * The claim is the UPDATE: only the caller whose statement changed a row sends,
+ * so the hourly cron and the console's Run now cannot both deliver it. If the
+ * send then fails, the claim is reverted so the next run tries again; the
+ * address is untouched either way, because the caller has not released it yet.
+ *
+ * Returns false when nothing was sent and the caller should not proceed.
+ */
+async function sendFinalNotice(
+  db: D1Database,
+  email: EmailConfig,
+  user: DueUser,
+  now: number
+): Promise<boolean> {
+  const claimed = await db
+    .prepare(`UPDATE users SET erasure_notified_at = ? WHERE id = ? AND erasure_notified_at IS NULL`)
+    .bind(now, user.id)
     .run();
+  if ((claimed.meta.changes ?? 0) === 0) return true; // somebody else already sent it
+
+  try {
+    await sendAccountErasedEmail(email, {
+      to: user.email,
+      closedDate: new Date(user.deleted_at).toISOString().slice(0, 10),
+    });
+    return true;
+  } catch (err) {
+    await db
+      .prepare(`UPDATE users SET erasure_notified_at = NULL WHERE id = ? AND erasure_notified_at = ?`)
+      .bind(user.id, now)
+      .run();
+    console.log(
+      JSON.stringify({
+        level: "warn",
+        message: "account erasure notice failed; release held",
+        userId: user.id,
+        reason: err instanceof Error ? err.message : String(err),
+      })
+    );
+    return false;
+  }
+}
+
+interface DueUser {
+  id: string;
+  firebase_uid: string;
+  email: string;
+  deleted_at: number;
+  purge_after: number;
+  erasure_notified_at: number | null;
 }
 
 /**
@@ -286,12 +395,14 @@ async function releaseIdentities(
   dryRun: boolean,
   force: boolean,
   limit: number,
-  identity: { config: FirebaseAdminConfig | null; kv: KVNamespace } | undefined,
+  identity: SweepOptions["identity"],
+  email: EmailConfig | null,
   result: SweepResult
 ): Promise<void> {
   const due = await db
     .prepare(
-      `SELECT id, firebase_uid FROM users
+      `SELECT id, firebase_uid, email, deleted_at, purge_after, erasure_notified_at
+         FROM users
         WHERE purge_after IS NOT NULL
           AND purge_after <= ?
           AND deleted_at IS NOT NULL
@@ -299,7 +410,7 @@ async function releaseIdentities(
         ORDER BY purge_after LIMIT ?`
     )
     .bind(force ? Number.MAX_SAFE_INTEGER : now, limit)
-    .all<{ id: string; firebase_uid: string }>();
+    .all<DueUser>();
 
   const rows = due.results ?? [];
   if (rows.length === 0) return;
@@ -316,13 +427,31 @@ async function releaseIdentities(
     return;
   }
 
+  if (email === null) result.emailSkipped = true;
+  const deleteUser = identity.deleteUser ?? deleteFirebaseUser;
+
   for (const user of rows) {
     if (dryRun) {
       result.identitiesReleased += 1;
       continue;
     }
+
+    // The notice first, and a failed notice holds this account's release -
+    // unless it has been failing for two days past due, in which case the
+    // address is not going to accept it and the person's identity must not
+    // wait on it any longer. See ERASURE_NOTICE_GRACE_MS.
+    if (email !== null && user.erasure_notified_at === null) {
+      const sent = await sendFinalNotice(db, email, user, now);
+      if (sent) {
+        result.erasureEmailsSent += 1;
+      } else {
+        result.erasureEmailsFailed += 1;
+        if (now < user.purge_after + ERASURE_NOTICE_GRACE_MS) continue;
+      }
+    }
+
     try {
-      await deleteFirebaseUser(identity.config, identity.kv, user.firebase_uid, now);
+      await deleteUser(identity.config, identity.kv, user.firebase_uid, now);
       await releaseAddress(db, user.id, now);
       result.identitiesReleased += 1;
     } catch (err) {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { Nav, Footer } from './Marketing.jsx';
 
 /**
@@ -46,7 +46,7 @@ const SECTIONS = [
   { id: 'overview', label: 'Overview', group: 'START HERE',
     subs: ['What AgentDisk is', 'How it fits together', 'The entity model', 'Two surfaces, one authorization chain'] },
   { id: 'quickstart', label: 'Quick start', group: 'START HERE',
-    subs: ['Before you begin', '1. Get a workspace', '2. Create an agent and a key', '3. Connect your AI tool', '4. Verify the connection', '5. Use the REST API', 'Troubleshooting'] },
+    subs: ['Let me guide', 'Before you begin', '1. Get a workspace', '2. Create an agent and a key', '3. Connect your AI tool', '4. Verify the connection', '5. Use the REST API', 'Troubleshooting'] },
   { id: 'features', label: 'Features', group: 'PRODUCT',
     subs: ['Files and folders', 'Agents and scoped keys', 'The MCP server', 'Workspaces and claiming', 'Members', 'Share links', 'Webhooks', 'Activity log', 'Usage, plans and billing', 'The dashboard'] },
   { id: 'data-security', label: 'Data security', group: 'TRUST',
@@ -56,7 +56,7 @@ const SECTIONS = [
   { id: 'deleting-account', label: 'Deleting your account', group: 'TRUST',
     subs: ['How to do it', 'What happens, in order', 'What outlives the account', 'If you were a guest'] },
   { id: 'privacy', label: 'Privacy', group: 'TRUST',
-    subs: ['What we collect', 'What we never see', 'Processors', 'Retention'] },
+    subs: ['What we collect', 'What we never see', 'Processors', 'Retention', 'Cookies', 'International transfers', 'Children', 'Your rights', 'Changes and contact'] },
   { id: 'safety', label: 'Safety', group: 'TRUST',
     subs: ['The platform', 'The request path', 'The edges', 'The operators', 'How we know it works', 'What we do not claim', 'Reporting a vulnerability'] },
   { id: 'reference', label: 'Reference', group: 'REFERENCE',
@@ -105,7 +105,7 @@ const ROUTES = [
   ]],
   ['Workspaces', [
     ['GET', '/v1/workspaces', 'The workspaces the signed-in person can reach'],
-    ['POST', '/v1/workspaces', 'Signed in: add a workspace. No credential: Turnstile-gated sandbox'],
+    ['POST', '/v1/workspaces', 'Signed in: add a workspace. No credential: bot-checked sandbox'],
     ['PATCH', '/v1/workspaces/:id', 'Rename. The slug never changes'],
     ['DELETE', '/v1/workspaces/:id', 'Destroy a workspace (owner, name in body, never the last one)'],
     ['GET', '/v1/workspaces/claim/:token', 'Preview a sandbox claim, no credential'],
@@ -158,8 +158,8 @@ const ROUTES = [
   ]],
   ['Billing', [
     ['GET', '/v1/billing', 'Plan, period, status'],
-    ['POST', '/v1/billing/checkout-session', 'Start a Stripe Checkout for a plan and an interval'],
-    ['POST', '/v1/billing/portal-session', 'Open Stripe’s portal for the card and invoices'],
+    ['POST', '/v1/billing/checkout-session', 'Start a hosted checkout for a plan and an interval'],
+    ['POST', '/v1/billing/portal-session', 'Open the billing portal for the card and invoices'],
     ['POST', '/v1/billing/change-plan', 'Upgrade now and prorated, or downgrade at the period end'],
     ['POST', '/v1/billing/cancel', 'Cancel at the period end'],
     ['POST', '/v1/billing/resume', 'Take a cancellation back before the date arrives'],
@@ -488,7 +488,7 @@ function ArchitectureDiagram() {
           <span className="doc__diagkicker">PEOPLE</span>
           <strong>Dashboard</strong>
           <span>app.agentdisk.io</span>
-          <span className="doc__diagsub">Firebase ID token</span>
+          <span className="doc__diagsub">signed-in session</span>
         </div>
         <div className="doc__diagbox doc__diagbox--caller">
           <span className="doc__diagkicker">AGENTS</span>
@@ -500,7 +500,7 @@ function ArchitectureDiagram() {
       <div className="doc__diagarrow" aria-hidden="true">→</div>
       <div className="doc__diagcol">
         <div className="doc__diagbox doc__diagbox--core">
-          <span className="doc__diagkicker">ONE CLOUDFLARE WORKER</span>
+          <span className="doc__diagkicker">ONE EDGE SERVICE</span>
           <strong>api.agentdisk.io</strong>
           <span>REST at /v1 · MCP at /mcp</span>
           <ol className="doc__diagchain">
@@ -515,16 +515,191 @@ function ArchitectureDiagram() {
       </div>
       <div className="doc__diagarrow" aria-hidden="true">→</div>
       <div className="doc__diagcol">
-        <div className="doc__diagbox"><span className="doc__diagkicker">D1</span><strong>Metadata</strong><span>files, folders, keys, audit</span></div>
-        <div className="doc__diagbox"><span className="doc__diagkicker">R2</span><strong>Bytes</strong><span>one prefix per workspace</span></div>
-        <div className="doc__diagbox"><span className="doc__diagkicker">KV · QUEUE · CRON</span><strong>Rate limits, webhooks, sweeps</strong></div>
-        <div className="doc__diagbox doc__diagbox--ext"><span className="doc__diagkicker">OUTSIDE</span><strong>Firebase · Stripe · Turnstile</strong><span>identity, billing, bot gate</span></div>
+        <div className="doc__diagbox"><span className="doc__diagkicker">METADATA DB</span><strong>Records</strong><span>files, folders, keys, audit</span></div>
+        <div className="doc__diagbox"><span className="doc__diagkicker">OBJECT STORAGE</span><strong>Bytes</strong><span>one prefix per workspace</span></div>
+        <div className="doc__diagbox"><span className="doc__diagkicker">CACHE · QUEUE · SCHEDULER</span><strong>Rate limits, webhooks, sweeps</strong></div>
+        <div className="doc__diagbox doc__diagbox--ext"><span className="doc__diagkicker">OUTSIDE</span><strong>Identity · Billing · Bot check</strong><span>sign-in, payments, sandbox gate</span></div>
       </div>
       <figcaption className="doc__diagcap">
-        Both surfaces enter the same Worker and the same six-step authorization chain. A handler
+        Both surfaces enter the same service and the same six-step authorization chain. A handler
         never sees a raw database or bucket, only a copy already bound to one workspace.
       </figcaption>
     </figure>
+  );
+}
+
+/* ── let me guide ────────────────────────────────────────────────────────
+   Two questions, one tailored path. Everything it renders is drawn from the
+   same CLIENTS and REST snippets as the reference material below it, so the
+   guided and the unguided routes cannot disagree. Nothing is sent anywhere;
+   the state lives in the component. */
+
+const GOALS = [
+  { id: 'try', label: 'Try it with no account', hint: 'A sandbox workspace and a key in a minute. Claim it later if you like it.' },
+  { id: 'agent', label: 'Give my agent a disk', hint: 'I have an account. My agent needs its own scoped space.' },
+  { id: 'editor', label: 'Connect my editor', hint: 'Claude, Cursor, VS Code and friends, in a workspace I own.' },
+  { id: 'script', label: 'Script against the REST API', hint: 'curl, Python, Node. No MCP client involved.' },
+];
+
+const CLIENT_LABELS = {
+  'claude-code': 'Claude Code',
+  'claude-desktop': 'Claude Desktop',
+  cursor: 'Cursor',
+  vscode: 'VS Code',
+  windsurf: 'Windsurf',
+  zed: 'Zed',
+  codex: 'Codex CLI',
+  gemini: 'Gemini CLI',
+  'any-client': 'Other / raw HTTP',
+};
+
+function ClaimPromo({ lead }) {
+  return (
+    <div className="doc__promo" role="note">
+      <span className="doc__promokicker">KEEP WHAT YOU BUILT</span>
+      <p>
+        {lead} Open the claim link, sign in (free, no card), and choose <strong>Keep as a new
+        workspace</strong> or <strong>Merge into one you own</strong>. Your agent's key keeps
+        working either way, with no re-authentication. A sandbox holds 50 MB and is scheduled for
+        removal after seven days if nobody claims it.
+      </p>
+    </div>
+  );
+}
+
+function guideSteps(goal, chosen) {
+  const clientName = chosen ? CLIENT_LABELS[chosen.id] : 'your client';
+  const connect = chosen
+    ? { title: `Add AgentDisk to ${clientName}`, body: chosen.intro, blocks: chosen.blocks }
+    : null;
+  const verify = {
+    title: 'Verify',
+    body: `Ask ${clientName} to list the files at /. An empty listing is a success: the handshake worked and the key is scoped. The dashboard's MCP connection page reports the last call it saw from that key, and lists exactly the tools its scopes allow.`,
+  };
+
+  if (goal === 'try') {
+    return {
+      steps: [
+        { title: 'Open the sandbox', body: 'No sign-up. Pass the bot check and you get a workspace ID, an API key and a claim link. Copy all three: the key and the link are shown once.', link: { to: '/sandbox', label: 'Open the sandbox' } },
+        connect,
+        verify,
+      ],
+      promo: 'You already have a claim link from step 1.',
+    };
+  }
+  if (goal === 'agent' || goal === 'editor') {
+    const who = goal === 'agent' ? 'your agent' : 'your editor';
+    return {
+      steps: [
+        { title: 'Sign in and pick a workspace', body: 'Every workspace has its own agents, keys and files. Use the switcher at the top of the dashboard if you have more than one.', link: { to: '/login', label: 'Sign in' } },
+        { title: `Create an identity for ${who}`, body: 'Agent access → Agent identities → New. The name is a label people read beside its keys and its activity, so make it say what the agent is for.' },
+        { title: 'Mint a scoped key', body: goal === 'agent'
+            ? 'API keys → New. Give it read, write and list, add delete only if it must destroy files, and set a path prefix such as /agents/<name> so it cannot see the rest of the workspace. The key is shown when minted and can be revealed again by the owner.'
+            : 'API keys → New. Read, write and list, with a path prefix per project such as /projects/<name>, so the editor works in its own corner. The key is shown when minted and can be revealed again by the owner.' },
+        connect,
+        verify,
+      ],
+      promo: 'Made a sandbox earlier while trying things out?',
+    };
+  }
+  return {
+    steps: [
+      { title: 'Get a key', body: 'Either the sandbox, with no account, or Agent access → Agent identities → API keys once signed in. Scope it to what the script does.', link: { to: '/sandbox', label: 'Open the sandbox' } },
+      { title: 'Keep it out of your history', body: 'Export it once and reference the variable. Never put a key in a URL: the API refuses it and tells you to rotate.', blocks: [{ caption: 'SHELL', code: `export AGENTDISK_KEY=${KEY_PLACEHOLDER}` }] },
+      { title: 'Ask who you are', body: 'The answer names the workspace, the scopes, and the room left on the account.', blocks: [{ caption: 'WHO AM I', code: REST_WHOAMI }] },
+      { title: 'Write a file', body: 'Up to 1 MB inline. Larger files use the presigned flow in step 5 below.', blocks: [{ caption: 'CREATE A SMALL FILE', code: REST_INLINE }] },
+    ],
+    promo: 'Started from the sandbox?',
+  };
+}
+
+function GuideMe() {
+  const [goal, setGoal] = useState(null);
+  const [client, setClient] = useState(null);
+  const needsClient = goal !== null && goal !== 'script';
+  const chosen = needsClient ? CLIENTS.find(c => c.id === client) ?? null : null;
+  const ready = goal === 'script' || chosen !== null;
+  const guide = ready ? guideSteps(goal, chosen) : null;
+
+  return (
+    <div className="doc__guide">
+      <fieldset className="doc__pickgroup">
+        <legend className="doc__picklegend">What do you want to do?</legend>
+        <div className="doc__picks">
+          {GOALS.map(g => (
+            <label key={g.id} className={goal === g.id ? 'doc__pick is-on' : 'doc__pick'}>
+              <input type="radio" name="guide-goal" value={g.id} checked={goal === g.id} onChange={() => setGoal(g.id)} />
+              <span className="doc__picklabel">{g.label}</span>
+              <span className="doc__pickhint">{g.hint}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      {needsClient ? (
+        <fieldset className="doc__pickgroup">
+          <legend className="doc__picklegend">Which AI tool?</legend>
+          <div className="doc__picks doc__picks--dense">
+            {CLIENTS.map(c => (
+              <label key={c.id} className={client === c.id ? 'doc__pick is-on' : 'doc__pick'}>
+                <input type="radio" name="guide-client" value={c.id} checked={client === c.id} onChange={() => setClient(c.id)} />
+                <span className="doc__picklabel">{CLIENT_LABELS[c.id]}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
+
+      {guide ? (
+        <div className="doc__guideout" aria-live="polite">
+          <div className="doc__guidehead">Your path</div>
+          <ol className="doc__guidesteps">
+            {guide.steps.filter(Boolean).map((s, i) => (
+              <li key={i} className="doc__guidestep">
+                <div className="doc__guidetitle">{s.title}</div>
+                <p className="doc__p">{s.body}</p>
+                {s.link ? <Link to={s.link.to} className="doc__guidelink">{s.link.label} →</Link> : null}
+                {s.blocks ? s.blocks.map(b => <Code key={b.caption} caption={b.caption}>{b.code}</Code>) : null}
+              </li>
+            ))}
+          </ol>
+          <ClaimPromo lead={guide.promo} />
+        </div>
+      ) : (
+        <p className="doc__guideempty" aria-live="polite">
+          {goal === null ? 'Pick a goal to get a path written for it.' : 'Now pick the tool you use.'}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ── the account-deletion process, as a timeline ───────────────────────── */
+
+const DELETION_FLOW = [
+  { when: 'You', title: 'Confirm', body: 'Profile → Delete account, then type your email address. Over the API it is DELETE /v1/me with a signed-in token. An API key is refused.' },
+  { when: 'Instant', title: 'Billing is settled first', body: 'Every live subscription is cancelled and the saved card detached. If the payment processor refuses, nothing is deleted and you get a 409 to try again.' },
+  { when: 'Instant', title: 'Workspaces you own are destroyed', body: 'Keys, agents, memberships, webhooks, share links, folders and file records go in this request. Everyone you invited loses access. Up to 20 workspaces per request.' },
+  { when: 'Instant', title: 'Your guest seats are removed', body: 'Seats, keys and share links you held in other people’s workspaces. Their workspaces are untouched.' },
+  { when: 'Instant', title: 'You are signed out everywhere', body: 'Your record is marked. From here nothing of yours is reachable.' },
+  { when: 'Day 7', title: 'Bytes erased, identity released', body: 'The last file bytes are removed, your sign-in identity is deleted and your email address is released. One confirmation email is sent first; if it cannot be delivered it is retried for 48 hours, then the release goes ahead.', accent: true },
+  { when: 'Stays', title: 'Invoices, for seven years', body: 'At the payment processor, because tax law requires it. Request logs for around 90 days on their normal schedule. Nothing else.', muted: true },
+];
+
+function DeletionFlow() {
+  return (
+    <ol className="doc__flow" aria-label="Account deletion, step by step">
+      {DELETION_FLOW.map(s => (
+        <li key={s.title} className={`doc__flowstep${s.accent ? ' is-accent' : ''}${s.muted ? ' is-muted' : ''}`}>
+          <span className="doc__flowwhen">{s.when}</span>
+          <span className="doc__flowdot" aria-hidden="true" />
+          <div className="doc__flowbody">
+            <div className="doc__flowtitle">{s.title}</div>
+            <p>{s.body}</p>
+          </div>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -557,14 +732,17 @@ export function Docs() {
   const ids = React.useMemo(() => SECTIONS.map(s => s.id), []);
   const active = useActiveSection(ids);
 
-  // `/docs/quickstart` scrolls to that section on arrival. A hash does the
-  // same through the browser, so only the path form needs help.
+  // `/docs/quickstart` and `/docs#privacy` both scroll to the section on
+  // arrival. The browser handles a hash on a full load, but a client-side
+  // navigation (the footer's Privacy link, the /privacy redirect) does not
+  // scroll on its own, so both forms are handled here.
+  const location = useLocation();
   useEffect(() => {
-    const target = params['*'];
+    const target = params['*'] || location.hash.slice(1);
     if (!target) return;
     const el = document.getElementById(target.replace(/\/+$/, ''));
     if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView();
-  }, [params]);
+  }, [params, location.hash]);
 
   const current = SECTIONS.find(s => s.id === active) ?? SECTIONS[0];
 
@@ -620,9 +798,9 @@ export function Docs() {
               </P>
               <P>
                 It is serverless end to end. There is nothing to run: the API, the MCP server and
-                the dashboard are Cloudflare Workers, the metadata is in Cloudflare D1, the bytes
-                are in Cloudflare R2. Pricing is hard-capped per plan, so a runaway agent can hit
-                a limit but never a surprise bill.
+                the dashboard run at the edge, file bytes live in block-based object storage, and
+                metadata in an edge database. Pricing is hard-capped per plan, so a runaway agent
+                can hit a limit but never a surprise bill.
               </P>
               <P>
                 The problem it solves is that an agent given an S3 bucket or a shared drive gets
@@ -636,7 +814,7 @@ export function Docs() {
 
               <H3 id={slug('The entity model')}>The entity model</H3>
               <List items={[
-                <><strong>Account.</strong> A person who signed in through Firebase (Google, GitHub, email and password, or an email link). An account owns a billing account with one plan and one card.</>,
+                <><strong>Account.</strong> A person who signed in (Google, GitHub, email and password, or an email link). An account owns a billing account with one plan and one card.</>,
                 <><strong>Workspace.</strong> The unit of storage and isolation. One billing account owns many workspaces. Each has a URL slug that never changes and a <code>ws_…</code> ID that the API uses.</>,
                 <><strong>Member.</strong> A person invited into one workspace as a <em>reader</em>. Membership is per workspace, so inviting somebody into one client's workspace never shows them the one beside it. Readers cannot write; writing belongs to the owner and to the keys they mint.</>,
                 <><strong>Agent.</strong> A named identity inside a workspace that keys belong to. Disabling an agent stops every key it holds on the next request.</>,
@@ -663,10 +841,18 @@ export function Docs() {
                 in the dashboard; step 3 is one config block in the tool you already use.
               </P>
 
+              <H3 id={slug('Let me guide')}><strong>Let me guide</strong></H3>
+              <P>
+                Answer two questions and get the exact steps for your situation, with the config
+                block for the tool you use. The full reference follows below if you would rather
+                read it all.
+              </P>
+              <GuideMe />
+
               <H3 id={slug('Before you begin')}>Before you begin</H3>
               <List items={[
                 <>An AgentDisk account. <Link to="/signup">Start free</Link> with Google, GitHub or email. No card is asked for.</>,
-                <>Or no account at all: <Link to="/sandbox">the sandbox</Link> creates a workspace and a key from a browser, gated by Cloudflare Turnstile. It holds a tighter allowance (50 MB, 500 files, 500 MB egress, 10,000 requests) and is scheduled for removal after seven days unless you claim it from the link it shows you.</>,
+                <>Or no account at all: <Link to="/sandbox">the sandbox</Link> creates a workspace and a key from a browser, behind a bot check. It holds a tighter allowance (50 MB, 500 files, 500 MB egress, 10,000 requests) and is scheduled for removal after seven days unless you claim it from the link it shows you.</>,
                 <>An MCP-capable client, or just <code>curl</code>. The MCP server is HTTP; there is no package to install and no CLI of ours to log in with.</>,
               ]} />
 
@@ -798,7 +984,7 @@ export function Docs() {
 
               <H3 id={slug('The MCP server')}>The MCP server</H3>
               <P>
-                JSON-RPC 2.0 over streamable HTTP at <code>/mcp</code>, in the same Worker as the
+                JSON-RPC 2.0 over streamable HTTP at <code>/mcp</code>, in the same service as the
                 REST API. Authentication is an API key, exactly as REST; there is deliberately no
                 human sign-in path, because MCP is how an agent connects and a person's session is
                 not something a model should hold. Tool results carry the JSON payload as text and
@@ -810,7 +996,7 @@ export function Docs() {
               <List items={[
                 <><strong>Many per account.</strong> One billing account, one plan, many workspaces. Storage and file count pool across them; egress is per workspace.</>,
                 <><strong>Slugs.</strong> Dashboard URLs are <code>/w/&lt;slug&gt;</code>. A slug is derived once at creation and a rename never changes it, so a link never breaks. The <code>ws_…</code> ID stays the identifier the API uses.</>,
-                <><strong>Agent-first sandbox.</strong> A workspace and a key can be created with no account at all, from a browser, behind Turnstile and a per-IP limit. The response includes a one-time claim link.</>,
+                <><strong>Agent-first sandbox.</strong> A workspace and a key can be created with no account at all, from a browser, behind a bot check and a per-IP limit. The response includes a one-time claim link.</>,
                 <><strong>Claiming.</strong> Opening the claim link previews the sandbox without signing in. Claiming it, signed in, either keeps it as a new workspace under your account or merges its files into a workspace you already own and repoints the agent's existing key, so the agent's next call lands in the new home with no re-authentication. A merge is all-or-nothing against your quota.</>,
                 <><strong>Sweep.</strong> Unclaimed sandboxes are scheduled for removal after seven days.</>,
               ]} />
@@ -888,7 +1074,7 @@ export function Docs() {
               <List items={[
                 <><strong>Requests are unlimited</strong> on every plan. Storage and file count pool across the account; egress is counted per workspace per month and resets on the workspace's own period.</>,
                 <><strong>Warnings before walls.</strong> A write that lands the account at 80% or 95% of its allowance carries a warning on the response; a write that would exceed it is refused with 429 and the dimension named.</>,
-                <><strong>Stripe, monthly or yearly, auto-renewing.</strong> Checkout happens on Stripe's page, where promotion codes are entered. Cards and invoices live in Stripe's portal; we never see or store card numbers.</>,
+                <><strong>Monthly or yearly, auto-renewing.</strong> Checkout happens on our payment processor's page, where promotion codes are entered. Cards and invoices live in its portal; we never see or store card numbers.</>,
                 <><strong>Upgrades are immediate and prorated; downgrades wait for the period end</strong>, so nobody is dropped below the storage they are already using mid-period.</>,
                 <><strong>Cancel and resume are ours.</strong> Cancelling stops renewal at the period end and keeps everything you paid for until then; resume takes it back any time before the date.</>,
                 <><strong>A failing card does not delete anything quickly.</strong> Writes are blocked while the account is past due, reads continue, and the seven-day grace is counted on our clock and announced by email before any data is scheduled for removal. A successful payment clears the schedule.</>,
@@ -918,12 +1104,12 @@ export function Docs() {
               <Table
                 head={['Data', 'Where', 'Notes']}
                 rows={[
-                  ['File bytes', 'Cloudflare R2', 'One object per file, under a per-workspace prefix built from server IDs. Your path is metadata and never part of the object key.'],
-                  ['Metadata, keys, memberships, audit', 'Cloudflare D1', 'SQLite at the edge. Keys are stored as a SHA-256 hash for authentication and as AES-256-GCM ciphertext for reveal.'],
-                  ['Rate-limit counters, JWKS cache', 'Cloudflare KV', 'Short-lived, no file content.'],
-                  ['Webhook deliveries', 'Cloudflare Queues', 'Payloads carry ids, paths and sizes only.'],
-                  ['Identity', 'Firebase Authentication (Google)', 'Passwords, OAuth and session tokens. We receive the verified identifier and email, never a password.'],
-                  ['Billing', 'Stripe', 'Card, invoices, subscription. We store the customer and subscription ids and a mirror of the period.'],
+                  ['File bytes', 'Block-based object storage', 'One object per file, under a per-workspace prefix built from server IDs. Your path is metadata and never part of the object key.'],
+                  ['Metadata, keys, memberships, audit', 'Edge database', 'Keys are stored as a SHA-256 hash for authentication and as AES-256-GCM ciphertext for reveal.'],
+                  ['Rate-limit counters, key cache', 'Edge cache', 'Short-lived, no file content.'],
+                  ['Webhook deliveries', 'Delivery queue', 'Payloads carry ids, paths and sizes only.'],
+                  ['Identity', 'Managed sign-in provider', 'Passwords, OAuth and session tokens. We receive the verified identifier and email, never a password.'],
+                  ['Billing', 'Payment processor', 'Card, invoices, subscription. We store the customer and subscription ids and a mirror of the period.'],
                 ]}
               />
 
@@ -944,8 +1130,8 @@ export function Docs() {
               <H3 id={slug('Encryption')}>Encryption</H3>
               <List items={[
                 <><strong>In transit.</strong> TLS everywhere: browser to dashboard, client to API, presigned upload and download to storage. The dashboard sends HSTS for a year with subdomains included.</>,
-                <><strong>At rest.</strong> R2 and D1 encrypt data at rest as part of Cloudflare's platform. This is provider-managed encryption, not end-to-end: our own Worker can read your files when a request authorizes it to, which is what serving them requires.</>,
-                <><strong>Secrets at rest.</strong> API keys are sealed with AES-256-GCM under a key that exists only as a Worker secret, never in Terraform state or CI output, and each ciphertext is bound to its own row so a copied ciphertext opens as nothing. Share-link passwords are PBKDF2 hashes. Claim tokens and API keys are looked up by SHA-256.</>,
+                <><strong>At rest.</strong> Object storage and the database are encrypted at rest by our infrastructure provider. This is provider-managed encryption, not end-to-end: our own service can read your files when a request authorizes it to, which is what serving them requires.</>,
+                <><strong>Secrets at rest.</strong> API keys are sealed with AES-256-GCM under a key that exists only as a runtime secret, never in infrastructure state or build output, and each ciphertext is bound to its own row so a copied ciphertext opens as nothing. Share-link passwords are PBKDF2 hashes. Claim tokens and API keys are looked up by SHA-256.</>,
               ]} />
 
               <H3 id={slug('Credentials')}>Credentials</H3>
@@ -953,7 +1139,7 @@ export function Docs() {
                 <>Keys are 32 base62 characters of CSPRNG output, about 190 bits, read from the Authorization header and nowhere else. A key in a query string is rejected with a message telling you to rotate it.</>,
                 <>Every authentication failure returns one identical body, so the API is never an oracle telling somebody which of their guesses is a real key that merely expired.</>,
                 <>Scopes fail closed: an unparseable or unrecognised scope grants nothing.</>,
-                <>Human sessions are Firebase ID tokens verified in the Worker with Web Crypto against Google's public keys. A deleted or disabled account is refused from our own record before Firebase's, so a token that is still technically valid cannot outlive the account.</>,
+                <>Human sessions are signed identity tokens verified in our service against the sign-in provider's public keys. A deleted or disabled account is refused from our own record before the provider's, so a token that is still technically valid cannot outlive the account.</>,
                 <>An API key can never act as a person: it cannot close the account, delete a workspace, reveal another key, invite a member or end browser sessions.</>,
               ]} />
 
@@ -1052,17 +1238,18 @@ export function Docs() {
               <Code caption="CLOSE THE ACCOUNT">{REST_DELETE_ACCOUNT}</Code>
 
               <H3 id={slug('What happens, in order')}>What happens, in order</H3>
-              <List items={[
-                <><strong>Billing first.</strong> Every subscription that has not already ended is cancelled, any pending downgrade schedule is released, and the saved payment method is detached. <strong>If Stripe refuses, nothing is deleted</strong> and you get a 409: an account that keeps being billed with nobody able to sign in to stop it is recoverable by nobody, while pressing the button again is.</>,
-                <><strong>Every workspace you own is destroyed</strong>, exactly as in <a href="#deleting-data">Deleting your data</a>: credentials, memberships, webhooks, share links, folders and file records in this request, bytes within seven days. Everyone you invited loses access, the way deleting a Google account takes the shared document from its editors. Up to 20 workspaces are handled in one request; an account with more is asked to delete some first.</>,
-                <><strong>Your guest seats elsewhere</strong>, and any keys or share links you created in workspaces other people own, are removed. Those workspaces are otherwise untouched.</>,
-                <><strong>Your user record is marked</strong> and you are signed out everywhere. From this moment nothing of yours is reachable.</>,
-                <><strong>Seven days later</strong> the hourly sweep removes the last bytes, deletes your Firebase identity, and releases your email address. Before it releases the address it sends one final message to it confirming the account is gone; if that message cannot be delivered it is retried for 48 hours, and then the release goes ahead anyway.</>,
-              ]} />
+              <DeletionFlow />
+              <P>
+                The order is the point: billing is settled before anything is destroyed, because an
+                account that keeps being billed with nobody able to sign in is recoverable by
+                nobody, while pressing the button again is. Workspaces go exactly as in{' '}
+                <a href="#deleting-data">Deleting your data</a>: records now, bytes within seven
+                days, nothing recoverable by you in between.
+              </P>
 
               <H3 id={slug('What outlives the account')}>What outlives the account</H3>
               <List items={[
-                <><strong>Invoices</strong>, at Stripe, for seven years. Tax law requires it and GDPR Article 17(3)(b) exempts it. They hold your billing name, address and amounts, and nothing about your files.</>,
+                <><strong>Invoices</strong>, at the payment processor, for seven years. Tax law requires it and GDPR Article 17(3)(b) exempts it. They hold your billing name, address and amounts, and nothing about your files.</>,
                 <><strong>Infrastructure request logs</strong>, for around 90 days, on their normal schedule.</>,
                 <><strong>Nothing else.</strong> You can sign up again with the same address afterwards; nothing is restored.</>,
               ]} />
@@ -1078,15 +1265,24 @@ export function Docs() {
             {/* ═══════════════════════ PRIVACY ═══════════════════════ */}
             <section id="privacy" className="doc__section">
               <H2 id="privacy-heading">Privacy</H2>
+              <p className="doc__meta">Privacy Policy · Draft · last updated 26 September 2026</p>
+              <Note tone="warn">
+                This is AgentDisk's privacy policy, and it is a first draft written alongside the
+                product. It has not been reviewed by a lawyer and is published so the product can
+                be tested end to end. The <Link to="/terms">Terms of Service</Link> carry the same
+                notice.
+              </Note>
               <P>
-                This is a plain-language summary. The <Link to="/privacy">Privacy Policy</Link> is
-                the authoritative text and wins where the two differ; it carries its own notice
-                that it is a draft pending legal review.
+                This policy explains how AgentDisk collects, uses and shares information when you
+                use the website, the dashboard, the API and the MCP server. It applies to human
+                account holders and to information generated by AI agents acting under an account
+                holder's authorisation. Files an agent creates are treated exactly as files a
+                person uploads; nothing here differs by who acted.
               </P>
 
               <H3 id={slug('What we collect')}>What we collect</H3>
               <List items={[
-                <><strong>Account information:</strong> the identifier Firebase issues for you, your email address, and which sign-in provider you used.</>,
+                <><strong>Account information:</strong> the identifier our sign-in provider issues for you, your email address, and which sign-in method you used.</>,
                 <><strong>Your content:</strong> the files you and your agents store, with the metadata you attach.</>,
                 <><strong>Request logs:</strong> endpoint, method, status, latency, request ID and the calling identity, for security, quota enforcement and debugging. IP addresses, for rate limiting and abuse prevention, on the same schedule.</>,
                 <><strong>Support requests:</strong> what you send through the Support form, from the address you signed in with.</>,
@@ -1094,8 +1290,8 @@ export function Docs() {
 
               <H3 id={slug('What we never see')}>What we never see</H3>
               <List items={[
-                <><strong>Your password.</strong> Sign-up, reset and change all go to Firebase. This backend never receives, hashes or stores one, and the password policy is enforced there.</>,
-                <><strong>Your card number.</strong> Checkout and the portal are Stripe's pages. We hold Stripe's customer and subscription identifiers and nothing about the card.</>,
+                <><strong>Your password.</strong> Sign-up, reset and change all go to the sign-in provider. This backend never receives, hashes or stores one, and the password policy is enforced there.</>,
+                <><strong>Your card number.</strong> Checkout and the portal are the payment processor's pages. We hold its customer and subscription identifiers and nothing about the card.</>,
                 <><strong>Your file contents, in the ordinary course.</strong> We compute a checksum, sign a URL and measure a size. We do not open, view or process contents except to investigate abuse, a security incident or a valid legal request, and we do not claim the architecture makes that impossible, because it does not.</>,
                 <><strong>Analytics or marketing cookies.</strong> Strictly necessary session and security storage only. Consent will be asked before that changes.</>,
               ]} />
@@ -1121,8 +1317,45 @@ export function Docs() {
                 <>A deleted file: gone in the request.</>,
                 <>A deleted workspace or account: records gone in the request, bytes within seven days, the email address and sign-in released on day seven with one confirmation message.</>,
                 <>Request logs: around 90 days. Your workspace's Activity log: the life of the workspace.</>,
-                <>Invoices: seven years, at Stripe.</>,
+                <>Invoices: seven years, at the payment processor.</>,
+                <>We may hold data longer where an active dispute or a legal obligation demands it.</>,
               ]} />
+
+              <H3 id={slug('Cookies')}>Cookies</H3>
+              <P>
+                Strictly necessary session and security storage only. There are no analytics or
+                marketing cookies, and this policy will be updated and consent asked before that
+                changes. Your theme choice is kept in your browser and never sent to us.
+              </P>
+
+              <H3 id={slug('International transfers')}>International transfers</H3>
+              <P>
+                Our infrastructure and sign-in providers operate global networks, so your data may
+                be processed outside your home country. The specific transfer mechanisms require
+                legal review before this policy is final.
+              </P>
+
+              <H3 id={slug('Children')}>Children</H3>
+              <P>
+                The service is not directed to anyone under 16, and we do not knowingly collect
+                their information. If we learn that we have, we delete it.
+              </P>
+
+              <H3 id={slug('Your rights')}>Your rights</H3>
+              <P>
+                Depending on where you live you may have rights to access, correct, delete, export
+                or object to the processing of your data. Deletion and export are in your own hands
+                in the product, see <a href="#deleting-data">Deleting your data</a> and{' '}
+                <a href="#deleting-account">Deleting your account</a>. For anything else, contact
+                us.
+              </P>
+
+              <H3 id={slug('Changes and contact')}>Changes and contact</H3>
+              <P>
+                Material changes are posted here with an updated date, and account owners are
+                notified by email for significant ones. Questions about this policy go to{' '}
+                <code>connect@agentdisk.io</code> or the Support form in the dashboard.
+              </P>
             </section>
 
             {/* ════════════════════════ SAFETY ════════════════════════ */}
@@ -1135,11 +1368,11 @@ export function Docs() {
 
               <H3 id={slug('The platform')}>The platform</H3>
               <List items={[
-                <><strong>Serverless on Cloudflare's edge.</strong> No servers, no SSH, no patching window. The API with its MCP server, the dashboard and the admin console are three Workers; the data is in R2, D1, KV and Queues in the same account.</>,
-                <><strong>Custom domains only.</strong> The default <code>workers.dev</code> hostname is switched off for every Worker, so there is no second public entry point that bypasses the named domains.</>,
-                <><strong>Infrastructure as code.</strong> Everything is declared in Terraform, one workspace per environment, with a guard that refuses to run in any other. Only one pipeline may apply changes; the others read outputs and cannot write.</>,
-                <><strong>Resource IDs are never typed by hand.</strong> CI injects them from Terraform outputs and asserts every name against the environment before deploying, so a stale selection fails loudly instead of applying one environment's intent to another's resources.</>,
-                <><strong>Secrets that decrypt data never enter Terraform or CI artifacts.</strong> The database encryption key and the session signing key live only as Worker secrets pushed through GitHub Environments.</>,
+                <><strong>Serverless at the edge.</strong> No servers, no SSH, no patching window. The API with its MCP server, the dashboard and the admin console are three edge services; the data is in block-based object storage, an edge database, a cache and a queue in the same account.</>,
+                <><strong>Custom domains only.</strong> The provider's default public hostname is switched off for every service, so there is no second entry point that bypasses the named domains.</>,
+                <><strong>Infrastructure as code.</strong> Everything is declared, one configuration per environment, with a guard that refuses to run in any other. Only one pipeline may apply changes; the others read outputs and cannot write.</>,
+                <><strong>Resource IDs are never typed by hand.</strong> The deploy injects them from the infrastructure outputs and asserts every name against the environment before deploying, so a stale selection fails loudly instead of applying one environment's intent to another's resources.</>,
+                <><strong>Secrets that decrypt data never enter infrastructure state or build artifacts.</strong> The database encryption key and the session signing key live only as runtime secrets.</>,
               ]} />
 
               <H3 id={slug('The request path')}>The request path</H3>
@@ -1153,8 +1386,8 @@ export function Docs() {
 
               <H3 id={slug('The edges')}>The edges</H3>
               <List items={[
-                <><strong>The dashboard</strong> ships a Content-Security-Policy that names only the API it was built against, Firebase, Turnstile, Google Fonts and the R2 upload host; plus HSTS, <code>X-Frame-Options: DENY</code>, <code>nosniff</code> and a strict referrer policy. A CORS allow-list names the dashboard and console origins and nothing else.</>,
-                <><strong>The one unauthenticated write</strong>, sandbox creation, sits behind Cloudflare Turnstile verified server-side and a per-IP limit of ten per hour. Turnstile failing closed means we stop issuing sandboxes rather than start issuing them to bots.</>,
+                <><strong>The dashboard</strong> ships a Content-Security-Policy that names only the API it was built against, the sign-in provider, the bot check, the font host and the upload host; plus HSTS, <code>X-Frame-Options: DENY</code>, <code>nosniff</code> and a strict referrer policy. A CORS allow-list names the dashboard and console origins and nothing else.</>,
+                <><strong>The one unauthenticated write</strong>, sandbox creation, sits behind a bot check verified server-side and a per-IP limit of ten per hour. The check failing closed means we stop issuing sandboxes rather than start issuing them to bots.</>,
                 <><strong>Share-link passwords</strong> are limited to ten wrong guesses per fifteen minutes per link, and share tokens are 32 random characters looked up by hash.</>,
                 <><strong>Webhook deliveries</strong> are signed with a timestamp inside the signed material and a five-minute replay window.</>,
               ]} />
@@ -1177,9 +1410,9 @@ export function Docs() {
 
               <H3 id={slug('What we do not claim')}>What we do not claim</H3>
               <List items={[
-                <>Not end-to-end encrypted. Our Worker can read your files when a request authorizes it; encryption at rest is Cloudflare's.</>,
+                <>Not end-to-end encrypted. Our service can read your files when a request authorizes it; encryption at rest is the infrastructure provider's.</>,
                 <>No compliance certification is claimed. The Terms and Privacy Policy are drafts awaiting legal review and say so on the page.</>,
-                <>Log out everywhere invalidates every issued session token but cannot revoke Firebase's underlying refresh token from a Worker; a stolen device should also change its password.</>,
+                <>Log out everywhere invalidates every issued session token but cannot revoke the sign-in provider's underlying refresh token; a stolen device should also change its password.</>,
                 <>No per-key rate limit on the authenticated surface yet. Quotas are the throttle there; the rate limits that exist guard sandbox creation and share-link passwords, and are coarse and eventually consistent.</>,
               ]} />
 
@@ -1245,7 +1478,7 @@ export function Docs() {
                   ['Download URL', '1 hour'],
                   ['Share link lifetime', '7 days, default and maximum'],
                   ['Share password', '6 to 128 characters; 10 wrong guesses per 15 minutes per link'],
-                  ['Sandbox creation', '10 per hour per IP, plus Turnstile'],
+                  ['Sandbox creation', '10 per hour per IP, plus a bot check'],
                   ['Page size', '50 default, 200 maximum'],
                   ['Tags per file', '32'],
                   ['Agent and key names', '15 characters'],

@@ -607,6 +607,59 @@
   white-space:pre}
 
 /* CTA band */
+/* The sandbox-and-claim spotlight on the landing page. One accent-washed
+   panel, a soft radial glow behind it, three flow nodes and a mock claim card:
+   decoration carries the message so the copy can stay short. */
+.mk__theme{display:inline-flex;align-items:center}
+.mk__spot{position:relative;overflow:hidden;display:grid;
+  grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:var(--s-9);align-items:center;
+  padding:var(--s-9);border:1px solid var(--accent-line);border-radius:var(--r-4);
+  background:linear-gradient(135deg,var(--accent-soft) 0%,var(--surface) 70%)}
+.mk__spotglow{position:absolute;right:-8rem;top:-8rem;width:26rem;height:26rem;
+  border-radius:var(--r-full);pointer-events:none;
+  background:radial-gradient(closest-side,var(--accent-soft-2),transparent)}
+.mk__spotcol{position:relative;min-width:0}
+.mk__spoth{font-family:var(--font-display);font-size:var(--t-32);font-weight:var(--w-semi);
+  letter-spacing:var(--tr-mid);line-height:var(--lh-snug);color:var(--ink);
+  margin:var(--s-4) 0 var(--s-7);max-width:18ch;text-wrap:balance}
+.mk__spotflow{list-style:none;margin:0 0 var(--s-7);padding:0;display:flex;
+  align-items:stretch;gap:var(--s-3);flex-wrap:wrap}
+.mk__spotnode{flex:1 1 8rem;min-width:0;display:flex;flex-direction:column;gap:var(--s-1);
+  padding:var(--s-4) var(--s-5);border:1px solid var(--line);border-radius:var(--r-2);
+  background:var(--surface)}
+.mk__spotnode strong{font-size:var(--t-14);font-weight:var(--w-semi);color:var(--ink)}
+.mk__spotnode--claim{border-color:var(--accent);background:var(--accent-soft-2);
+  box-shadow:0 0 0 4px var(--accent-soft)}
+.mk__spotnum{font-family:var(--font-mono);font-size:var(--t-10);letter-spacing:var(--tr-caps);
+  color:var(--accent-ink)}
+.mk__spotsub{font-size:var(--t-12);line-height:var(--lh-snug);color:var(--ink-2)}
+.mk__spotarrow{align-self:center;font-size:var(--t-18);color:var(--ink-3);flex:none}
+.mk__spotcard{position:relative;display:flex;flex-direction:column;gap:var(--s-4);
+  padding:var(--s-6);border:1px solid var(--accent-line);border-radius:var(--r-3);
+  background:var(--dark);color:var(--dark-ink);transform:rotate(-1.5deg);
+  box-shadow:0 1.5rem 3rem var(--shadow-tint)}
+.mk__spotcardkick{font-family:var(--font-mono);font-size:var(--t-10);letter-spacing:var(--tr-caps);
+  color:var(--dark-accent)}
+.mk__spotcardurl{font-family:var(--font-mono);font-size:var(--t-13);color:var(--dark-ink);
+  padding:var(--s-3) var(--s-4);border:1px solid var(--dark-line);border-radius:var(--r-2);
+  background:var(--dark-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mk__spotopts{display:flex;gap:var(--s-3);flex-wrap:wrap}
+.mk__spotopt{font-size:var(--t-12);padding:var(--s-2) var(--s-4);border-radius:var(--r-full);
+  border:1px solid var(--dark-line);color:var(--dark-ink-2)}
+.mk__spotopt--on{border-color:var(--dark-accent);color:var(--dark-ink);
+  background:var(--dark-2)}
+.mk__spotcardfoot{font-family:var(--font-mono);font-size:var(--t-10);color:var(--dark-ink-2)}
+@media (max-width:1350px){
+  .mk__spot{grid-template-columns:minmax(0,1fr)}
+  .mk__spotcard{transform:none;max-width:26rem}
+}
+@media (max-width:875px){
+  .mk__spot{padding:var(--s-7)}
+  .mk__spoth{font-size:var(--t-26)}
+  .mk__spotarrow{display:none}
+  .mk__spotnode{flex-basis:100%}
+}
+
 .mk__band{border:1px solid var(--accent-line);background:var(--accent-soft);
   border-radius:var(--r-4);padding:var(--s-9);display:flex;flex-wrap:wrap;
   align-items:center;gap:var(--s-8)}
@@ -870,6 +923,8 @@
 .doc__h3{font-family:var(--font-display);font-size:var(--t-16);
   font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink);
   margin:var(--s-8) 0 var(--s-3);scroll-margin-top:calc(var(--topbar-h) + var(--s-6))}
+.doc__meta{font-family:var(--font-mono);font-size:var(--t-11);color:var(--ink-3);
+  margin:0 0 var(--s-5)}
 .doc__h4{font-size:var(--t-14);font-weight:var(--w-semi);color:var(--ink);
   margin:var(--s-7) 0 var(--s-3)}
 .doc__client{padding-left:var(--s-5);border-left:2px solid var(--line);
@@ -912,6 +967,82 @@
 .doc__chip{font-family:var(--font-mono);font-size:var(--t-12);color:var(--ink);
   border:1px solid var(--line);background:var(--surface);border-radius:var(--r-2);
   padding:var(--s-2) var(--s-4)}
+
+/* "Let me guide": two radio groups drawn as pick cards, then the generated
+   path. Real radio inputs, visually hidden, so keyboard and screen readers get
+   a form and everybody else gets cards. */
+.doc__guide{border:1px solid var(--accent-line);background:var(--accent-soft);
+  border-radius:var(--r-3);padding:var(--s-6);margin-bottom:var(--s-8)}
+.doc__pickgroup{border:0;padding:0;margin:0 0 var(--s-6);min-width:0}
+.doc__picklegend{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--ink-3);margin-bottom:var(--s-4);padding:0}
+.doc__picks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-4)}
+.doc__picks--dense{grid-template-columns:repeat(3,minmax(0,1fr))}
+.doc__pick{position:relative;display:flex;flex-direction:column;gap:var(--s-1);
+  padding:var(--s-4) var(--s-5);border:1px solid var(--line);border-radius:var(--r-2);
+  background:var(--surface);cursor:pointer;transition:border-color var(--d-2) var(--ease-out),
+  background var(--d-2) var(--ease-out)}
+.doc__pick:hover{border-color:var(--line-3)}
+.doc__pick.is-on{border-color:var(--accent);background:var(--accent-soft-2)}
+.doc__pick input{position:absolute;opacity:0;width:1px;height:1px;margin:0}
+.doc__pick:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+.doc__picklabel{font-size:var(--t-13);font-weight:var(--w-semi);color:var(--ink)}
+.doc__pickhint{font-size:var(--t-12);line-height:var(--lh-snug);color:var(--ink-2)}
+.doc__guideempty{font-size:var(--t-13);color:var(--ink-3);margin:0}
+.doc__guideout{border-top:1px solid var(--accent-line);padding-top:var(--s-6)}
+.doc__guidehead{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--accent-ink);margin-bottom:var(--s-5)}
+.doc__guidesteps{margin:0;padding:0;list-style:none;counter-reset:guide;
+  display:flex;flex-direction:column;gap:var(--s-5)}
+.doc__guidestep{counter-increment:guide;position:relative;padding-left:var(--s-9)}
+.doc__guidestep::before{content:counter(guide);position:absolute;left:0;top:0;
+  width:1.5rem;height:1.5rem;border-radius:var(--r-2);display:flex;align-items:center;
+  justify-content:center;font-family:var(--font-mono);font-size:var(--t-11);
+  font-weight:var(--w-semi);background:var(--accent);color:var(--on-accent)}
+.doc__guidetitle{font-size:var(--t-14);font-weight:var(--w-semi);color:var(--ink);
+  margin-bottom:var(--s-2);line-height:1.5rem}
+.doc__guidestep .doc__p{margin-bottom:var(--s-3)}
+.doc__guidestep .doc__code{margin:var(--s-3) 0 var(--s-2)}
+.doc__guidelink{display:inline-block;font-size:var(--t-13);font-weight:var(--w-semi);
+  color:var(--accent-ink);margin-bottom:var(--s-3)}
+.doc__promo{margin-top:var(--s-6);padding:var(--s-5) var(--s-6);border-radius:var(--r-2);
+  background:var(--surface);border:1px solid var(--accent-line)}
+.doc__promokicker{display:block;font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--accent-ink);margin-bottom:var(--s-3)}
+.doc__promo p{margin:0;font-size:var(--t-13);line-height:var(--lh-loose);color:var(--ink-2)}
+.doc__promo strong{color:var(--ink);font-weight:var(--w-semi)}
+@media (max-width:875px){
+  .doc__picks,.doc__picks--dense{grid-template-columns:minmax(0,1fr)}
+}
+
+/* Account deletion as a timeline: a rail on the left, a dot per step, the
+   moment it happens in the margin. */
+.doc__flow{list-style:none;margin:0 0 var(--s-6);padding:0;display:flex;
+  flex-direction:column;position:relative}
+.doc__flow::before{content:"";position:absolute;left:5.75rem;top:var(--s-3);
+  bottom:var(--s-3);width:1px;background:var(--line-2)}
+.doc__flowstep{display:grid;grid-template-columns:5rem 1.5rem minmax(0,1fr);
+  gap:0 var(--s-3);align-items:start;padding:var(--s-3) 0}
+.doc__flowwhen{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--ink-3);text-align:right;padding-top:0.25rem}
+.doc__flowdot{width:0.75rem;height:0.75rem;border-radius:var(--r-full);
+  background:var(--surface);border:2px solid var(--line-3);justify-self:center;
+  margin-top:0.2rem;position:relative}
+.doc__flowstep.is-accent .doc__flowdot{border-color:var(--accent);background:var(--accent)}
+.doc__flowstep.is-accent .doc__flowwhen{color:var(--accent-ink)}
+.doc__flowstep.is-muted{opacity:.7}
+.doc__flowbody{padding:var(--s-3) var(--s-5);border:1px solid var(--line);
+  border-radius:var(--r-2);background:var(--surface)}
+.doc__flowstep.is-accent .doc__flowbody{border-color:var(--accent-line);background:var(--accent-soft)}
+.doc__flowtitle{font-size:var(--t-13);font-weight:var(--w-semi);color:var(--ink);
+  margin-bottom:var(--s-1)}
+.doc__flowbody p{margin:0;font-size:var(--t-12-5);line-height:var(--lh-loose);color:var(--ink-2)}
+@media (max-width:875px){
+  .doc__flow::before{left:0.7rem}
+  .doc__flowstep{grid-template-columns:1.5rem minmax(0,1fr)}
+  .doc__flowwhen{grid-column:2;text-align:left;padding-top:0;order:-1}
+  .doc__flowdot{grid-row:span 2}
+}
 
 /* The architecture diagram: callers, the Worker, the stores. Boxes and a text
    arrow so it inherits the theme and reads to a screen reader. */

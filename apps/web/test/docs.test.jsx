@@ -8,6 +8,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import React from 'react';
 
@@ -92,7 +93,36 @@ describe('docs page', () => {
     expect(screen.getByRole('heading', { name: 'Deleting your data' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Deleting your account' })).toBeTruthy();
     expect(screen.getAllByText(/"permanent": true/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Seven days later/).length).toBeGreaterThan(0);
+    // The account-deletion process is a timeline, and day seven is its accent step.
+    const flow = screen.getByRole('list', { name: 'Account deletion, step by step' });
+    expect(within(flow).getAllByRole('listitem').length).toBe(7);
+    expect(within(flow).getByText('Day 7')).toBeTruthy();
+  });
+
+  it('names no infrastructure vendor outside the processors table', () => {
+    const { container } = renderAt('/docs');
+    const article = container.querySelector('article');
+    const text = article.textContent;
+    // The processors table is a privacy disclosure and may name companies; the
+    // rest of the page describes the architecture in generic terms.
+    expect(text).not.toMatch(/\bR2\b|\bD1\b|Turnstile|\bWorkers?\b|Terraform/);
+  });
+
+  it('guides a first-timer from the sandbox to a claim, for the tool they pick', async () => {
+    const user = userEvent.setup();
+    const { container } = renderAt('/docs');
+    const guideOut = () => within(container.querySelector('.doc__guide'));
+    expect(screen.getByText('Pick a goal to get a path written for it.')).toBeTruthy();
+    await user.click(screen.getByLabelText(/Try it with no account/));
+    expect(screen.getByText('Now pick the tool you use.')).toBeTruthy();
+    await user.click(screen.getByLabelText('Cursor'));
+    expect(guideOut().getByText('Add AgentDisk to Cursor')).toBeTruthy();
+    expect(guideOut().getByRole('link', { name: 'Open the sandbox →' }).getAttribute('href')).toBe('/sandbox');
+    expect(guideOut().getByText('KEEP WHAT YOU BUILT')).toBeTruthy();
+    // A script needs no client and gets the REST path instead.
+    await user.click(screen.getByLabelText(/Script against the REST API/));
+    expect(screen.queryByText('Which AI tool?')).toBeNull();
+    expect(guideOut().getByText('WHO AM I')).toBeTruthy();
   });
 
   it('renders the same page for a nested docs path', () => {

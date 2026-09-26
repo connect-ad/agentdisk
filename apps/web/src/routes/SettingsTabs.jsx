@@ -333,7 +333,7 @@ export function PrivacyTab() {
       <Panel
         title="What we store"
         subtitle="A summary of the privacy policy. The policy itself is the authoritative text."
-        footer={<Button variant="link" as={Link} to="/privacy">Read the full privacy policy</Button>}
+        footer={<Button variant="link" as={Link} to="/docs#privacy">Read the full privacy policy</Button>}
       >
         <dl className="dl">
           <dt>File contents</dt><dd>Stored in Cloudflare R2 and encrypted at rest.</dd>
@@ -372,7 +372,7 @@ export function PrivacyTab() {
           Self-service export is not built. Your files and metadata can be retrieved
           today through the API, which is the same data an archive would contain.
           <br />
-          <Link to="/privacy">Privacy policy §13 and §18</Link> cover the right itself
+          <Link to="/docs#privacy">Privacy policy §13 and §18</Link> cover the right itself
           and where to send a request.
         </Alert>
       </Panel>
@@ -405,7 +405,7 @@ export function PrivacyTab() {
           <Alert tone="warn" title="Not available yet">
             Self-service account deletion is not built. You can delete a workspace and
             everything in it today from Settings &rarr; General, and revoke every key
-            from the API keys screen. <Link to="/privacy">Privacy policy §13 and §18</Link>
+            from the API keys screen. <Link to="/docs#privacy">Privacy policy §13 and §18</Link>
             cover the right itself and where to send a request.
           </Alert>
           <div>

@@ -181,7 +181,7 @@ export default function CookieNotice() {
             Neither optional category is running, so there is nothing to switch
             off yet. Your answer is stored and is what the product has to check
             first. The full detail is in the{' '}
-            <Link to="/privacy" onClick={() => setPrefsOpen(false)}>privacy policy</Link>.
+            <Link to="/docs#privacy" onClick={() => setPrefsOpen(false)}>privacy policy</Link>.
           </p>
         </Modal>
       ) : null}

@@ -483,7 +483,7 @@ export function Signup() {
               <span className="auth__check"><Tick width={3.4} /></span>
               <span className="auth__consenttx">
                 I agree to the <Link to="/terms">terms of service</Link> and{' '}
-                <Link to="/privacy">privacy policy</Link>
+                <Link to="/docs#privacy">privacy policy</Link>
               </span>
             </label>
 

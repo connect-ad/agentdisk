@@ -38,7 +38,7 @@ const DEST = {
   signup: '/signup',
   reset: '/forgot-password',
   app: '/app',
-  privacy: '/privacy',
+  privacy: '/docs#privacy',
   terms: '/terms',
 };
 

@@ -7,6 +7,7 @@ import {
 } from '../lib/pricing.js';
 import Logo from '../components-local/Logo.jsx';
 import { SupportDialog } from '../components-local/SupportDialog.jsx';
+import ThemeToggle from '../components-local/ThemeToggle.jsx';
 
 /**
  * 8.1 Landing · 8.2 Pricing.
@@ -77,6 +78,13 @@ const FEATURES = [
     title: 'Who touched what',
     body: 'Human and agent actions land in the same log, with actor, path, scope and source IP.',
   },
+];
+
+/** The sandbox-to-claim flow on the landing page. Numbers, not paragraphs. */
+const SPOT_FLOW = [
+  { num: '01', title: 'Sandbox', sub: 'workspace + key, no sign-up' },
+  { num: '02', title: 'Agent works', sub: 'files land, scoped and logged' },
+  { num: '03', title: 'Claim link', sub: 'one click makes it yours', claim: true },
 ];
 
 const STEPS = [
@@ -164,6 +172,10 @@ export function Nav() {
           onClick={() => setSupportOpen(true)}>
           Support
         </button>
+        {/* The same light/dark control the dashboard's top bar carries. The
+            marketing pages sit inside the ThemeProvider already (main.jsx), so
+            the choice made here is the one the dashboard opens with. */}
+        <span className="mk__theme"><ThemeToggle /></span>
         {user ? (
           <Button size="sm" as={Link} to="/app">Open dashboard</Button>
         ) : (
@@ -206,7 +218,7 @@ export function Footer() {
           <Link to="/docs">Docs</Link>
           <Link to="/pricing">Pricing</Link>
           <Link to="/terms">Terms</Link>
-          <Link to="/privacy">Privacy</Link>
+          <Link to="/docs#privacy">Privacy</Link>
         </span>
       </div>
     </footer>
@@ -265,6 +277,52 @@ export function Landing() {
             </div>
           </div>
           <TerminalPanel />
+        </section>
+
+        {/* The sandbox and the claim link, as the attraction they are: a disk
+            with no sign-up, then one link to make it yours. Three nodes and a
+            mock claim card carry it; the words are kept to what fits on a
+            glance, and the docs carry the rest. */}
+        <section className="mk__section">
+          <div className="mk__spot">
+            <div className="mk__spotglow" aria-hidden="true" />
+            <div className="mk__spotcol">
+              <span className="mk__kicker">NO ACCOUNT · ONE MINUTE</span>
+              <h2 className="mk__spoth">A disk for your agent, before you even sign up.</h2>
+              <ol className="mk__spotflow" aria-label="From sandbox to your account">
+                {SPOT_FLOW.map((n, i) => (
+                  <React.Fragment key={n.title}>
+                    {i > 0 ? <li className="mk__spotarrow" aria-hidden="true">→</li> : null}
+                    <li className={n.claim ? 'mk__spotnode mk__spotnode--claim' : 'mk__spotnode'}>
+                      <span className="mk__spotnum">{n.num}</span>
+                      <strong>{n.title}</strong>
+                      <span className="mk__spotsub">{n.sub}</span>
+                    </li>
+                  </React.Fragment>
+                ))}
+              </ol>
+              <div className="mk__ctas">
+                <Button size="lg" as={Link} to="/sandbox"
+                  iconRight={<Icon name="chevronRight" size={16} />}>
+                  Open a sandbox
+                </Button>
+                <Button size="lg" variant="secondary" as={Link} to="/docs/quickstart">
+                  How claiming works
+                </Button>
+              </div>
+            </div>
+            <div className="mk__spotcard" aria-hidden="true">
+              <span className="mk__spotcardkick">CLAIM LINK · SHOWN ONCE</span>
+              <span className="mk__spotcardurl">app.agentdisk.io/claim/••••••••</span>
+              <div className="mk__spotopts">
+                <span className="mk__spotopt mk__spotopt--on">Keep as new workspace</span>
+                <span className="mk__spotopt">Merge into mine</span>
+              </div>
+              <span className="mk__spotcardfoot">
+                Your agent's key keeps working · 50 MB · 7 days to claim
+              </span>
+            </div>
+          </div>
         </section>
 
         <section className="mk__section">

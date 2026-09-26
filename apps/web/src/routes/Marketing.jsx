@@ -135,14 +135,39 @@ const navLinkClass = ({ isActive }) =>
 export function Nav() {
   const { user } = useAuth();
   const [supportOpen, setSupportOpen] = useState(false);
+  /*
+   * The phone treatment. Below 875px the row of links does not fit beside the
+   * brand — at 360px it ran to 740px and dragged the whole page sideways — so
+   * the links become a panel under the bar, opened by one button. Same links,
+   * same order, same components: the panel is a layout of the row, not a
+   * second navigation. Nav is remounted per route, so the panel closes on
+   * every navigation without a listener; Escape closes it in place.
+   */
+  const [menuOpen, setMenuOpen] = useState(false);
+  React.useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onKey = e => { if (e.key === 'Escape') setMenuOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [menuOpen]);
   return (
     <>
-    <nav className="mk__nav">
+    <nav className={menuOpen ? 'mk__nav is-open' : 'mk__nav'}>
       <Link to="/" className="mk__brand">
         <Logo size={28} />
         <span className="mk__wordmark">AgentDisk</span>
       </Link>
-      <span className="mk__navlinks">
+      <button
+        type="button"
+        className="mk__burger"
+        aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+        aria-expanded={menuOpen}
+        aria-controls="mk-navlinks"
+        onClick={() => setMenuOpen(o => !o)}
+      >
+        <Icon name={menuOpen ? 'x' : 'menu'} size={18} />
+      </button>
+      <span className="mk__navlinks" id="mk-navlinks">
         {/* NavLink marks the current page with `aria-current="page"`, and the
             class carries the visible state -- a bordered pill, see app.css.
             Before this the three rendered identically in the accent, so
@@ -175,15 +200,20 @@ export function Nav() {
         {/* The same light/dark control the dashboard's top bar carries. The
             marketing pages sit inside the ThemeProvider already (main.jsx), so
             the choice made here is the one the dashboard opens with. */}
-        <span className="mk__theme"><ThemeToggle /></span>
-        {user ? (
-          <Button size="sm" as={Link} to="/app">Open dashboard</Button>
-        ) : (
-          <>
-            <Link to="/login" className="mk__navlink">Sign in</Link>
-            <Button size="sm" as={Link} to="/signup">Start free</Button>
-          </>
-        )}
+        {/* display:contents on desktop, so the row's own gap runs through it
+            unchanged; on a phone it is the panel's last row, the theme control
+            and the two actions side by side under a rule. */}
+        <span className="mk__navactions">
+          <span className="mk__theme"><ThemeToggle /></span>
+          {user ? (
+            <Button size="sm" as={Link} to="/app">Open dashboard</Button>
+          ) : (
+            <>
+              <Link to="/login" className="mk__navlink">Sign in</Link>
+              <Button size="sm" as={Link} to="/signup">Start free</Button>
+            </>
+          )}
+        </span>
       </span>
     </nav>
     {/* Outside the <nav>, and this is not cosmetic. .mk__nav is sticky with

@@ -390,6 +390,7 @@ export default function McpConnection() {
             // a generic failure is not audited at all — so there is no third
             // status to forward.
             <ActivityRow
+              className="actrow"
               key={event.id}
               action="mcp.call"
               actor={event.actor?.id ?? '—'}

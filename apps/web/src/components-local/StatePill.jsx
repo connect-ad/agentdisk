@@ -31,7 +31,16 @@ export default function StatePill({ tone = 'ok', icon = 'dot', label, title, ite
   useLayoutEffect(() => {
     if (!open || !trigger.current) return;
     const r = trigger.current.getBoundingClientRect();
-    setPos({ top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) });
+    const right = Math.max(8, window.innerWidth - r.right);
+    // Below the pill, unless that would put the menu under the bottom edge —
+    // the keys table is the last thing on its screen, so on a phone the pill
+    // is often in the bottom quarter, and a menu that opens off-screen reads
+    // as a tap that did nothing. Three items and their padding are ~130px.
+    if (r.bottom + 4 + 130 > window.innerHeight && r.top > 130) {
+      setPos({ bottom: window.innerHeight - r.top + 4, right });
+    } else {
+      setPos({ top: r.bottom + 4, right });
+    }
   }, [open]);
 
   useEffect(() => {
@@ -96,7 +105,7 @@ export default function StatePill({ tone = 'ok', icon = 'dot', label, title, ite
           className="menu kst__menu"
           role="menu"
           aria-label={`${label} key`}
-          style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 'var(--z-drawer)' }}
+          style={{ position: 'fixed', top: pos.top, bottom: pos.bottom, right: pos.right, zIndex: 'var(--z-drawer)' }}
           onClick={e => e.stopPropagation()}
         >
           {items.map(it => (

@@ -420,7 +420,7 @@ export default function AgentDetails() {
                     It has done nothing in the workspace&apos;s last {ACTIVITY_WINDOW} events.
                   </EmptyState>
                 ) : (
-                  eventRows.slice(0, OVERVIEW_EVENTS).map(e => <ActivityRow key={e.id} {...e} />)
+                  eventRows.slice(0, OVERVIEW_EVENTS).map(e => <ActivityRow key={e.id} className="actrow" {...e} />)
                 )}
               </Panel>
 
@@ -523,7 +523,7 @@ export default function AgentDetails() {
                   Older activity is still in the workspace log.
                 </EmptyState>
               ) : (
-                eventRows.map(e => <ActivityRow key={e.id} {...e} />)
+                eventRows.map(e => <ActivityRow key={e.id} className="actrow" {...e} />)
               )}
             </Panel>
           ) : null}

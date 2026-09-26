@@ -62,6 +62,11 @@ function Challenge({ onToken, onExpire }) {
     widgetRef.current = window.turnstile.render(containerRef.current, {
       sitekey: SITE_KEY,
       callback: onToken,
+      // The widget's fixed size is 300px wide, which is wider than a 360px
+      // phone leaves inside the card. Flexible fills the container instead,
+      // with the same 300px as its floor, so the card's padding is what has to
+      // give on a phone rather than the widget running out of it (app.css).
+      size: 'flexible',
       // A solved challenge does not stay solved. Clearing our copy on expiry
       // means the button disables rather than submitting a token the server
       // will (correctly) reject.

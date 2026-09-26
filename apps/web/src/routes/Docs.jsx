@@ -773,6 +773,38 @@ export function Docs() {
           </aside>
 
           <article className="doc__body">
+            {/*
+              The phone's table of contents. The sidebar TOC is hidden below
+              875px, which used to leave nine sections and a hundred screens
+              of text with no way to move between them except scrolling. This
+              is the same list, folded shut under the breadcrumb: a native
+              <details>, so it needs no script, is a button to a screen
+              reader, and closes itself nowhere — following a link scrolls
+              the page and the block stays where it was. CSS hides it above
+              875px, where the sidebar takes over.
+            */}
+            <details className="doc__mtoc">
+              <summary className="doc__mtocsum">
+                <span className="doc__mtoclabel">Contents</span>
+                <span className="doc__mtocnow">{current.label}</span>
+              </summary>
+              <div className="doc__mtoclist">
+                {Object.entries(GROUPS).map(([label, items]) => (
+                  <div key={label} className="doc__tocgroup">
+                    <div className="doc__toclabel">{label}</div>
+                    {items.map(s => (
+                      <a
+                        key={s.id}
+                        href={`#${s.id}`}
+                        className={s.id === active ? 'doc__tocitem is-current' : 'doc__tocitem'}
+                      >
+                        {s.label}
+                      </a>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </details>
             <nav className="doc__crumb" aria-label="Breadcrumb">
               <span>Docs</span><span aria-hidden="true">/</span>
               <span className="doc__crumbnow">{current.label}</span>

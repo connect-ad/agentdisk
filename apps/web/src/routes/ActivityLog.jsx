@@ -164,7 +164,7 @@ export default function ActivityLog() {
                 onKeyDown={ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setOpen(open === e.id ? null : e.id); } }}
                 style={{ cursor: 'pointer' }}
               >
-                <ActivityRow {...e} />
+                <ActivityRow className="actrow" {...e} />
               </div>
               {open === e.id ? (
                 <div style={{ padding: 'var(--s-5) var(--s-6)', background: 'var(--surface-2)', borderBottom: '1px solid var(--line)' }}>

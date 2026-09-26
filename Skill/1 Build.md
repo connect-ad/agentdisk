@@ -242,9 +242,40 @@ straight into the field passes with the bug present, because it re-targets the
 same element every character; delivering to whatever currently has focus is what
 makes a stolen focus show up as `expected 'r' to be 'research-bot'`.
 
-The screens have still never been rendered in a browser beyond four spot checks
-(`backlog 007`,
-`backlog 010`).
+### Rendering the screens in a real browser
+
+jsdom computes no layout, so nothing in `npm test` can say whether a screen
+fits a phone. `apps/web/harness/` does: it serves the real app through Vite
+with the Firebase auth module swapped for a stub (`vite.harness.config.js`),
+mocks every `/v1/*` call from `fixtures.mjs`, and drives the Chrome that is
+already installed through `playwright-core`. Nothing in it is deployed — the
+production build uses the root `vite.config.js` and never imports `harness/`.
+
+```
+cd apps/web
+npm i --no-save playwright-core            # or point PW_PATH at a copy elsewhere
+npx vite --config harness/vite.harness.config.js &      # 127.0.0.1:5199
+node harness/audit.mjs out/               # every route × 12 viewports, full-page shots
+node harness/audit.mjs out/ keys 390      # one route, one width
+node harness/interact.mjs out/ 360        # menus, drawers and dialogs, viewport shots
+```
+
+`audit.mjs` prints `FAIL` for a page that scrolls sideways or has an element
+outside the viewport, and writes `report.json`. It cannot see a subtitle
+crushed to one word per line or a name column wrapped to four — those were
+found by looking at the screenshots, which is what the full-page captures are
+for. Fixtures are deliberately long (a 60-character file name, a 30-character
+agent id, a two-line webhook URL) so that truncation is exercised rather than
+assumed. The two harness failures that recur are not product bugs:
+`key-state` needs the keys table scrolled *before* the tap, because the pill
+closes its menu on any scroll and Playwright's scroll-into-view lands after the
+click; and `settings-members` reports `OUT` because the members table is
+wider than a phone and scrolls inside its panel, which is the intended
+treatment for a data table.
+
+The responsive pass of 26 Sept 2026 is the section of that name at the end of
+`src/app.css`; `test/responsive.test.jsx` pins that every rule in it sits under
+a `max-width` query, so desktop cannot be changed by it.
 
 ---
 

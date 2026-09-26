@@ -1866,3 +1866,216 @@ button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
   .share__row{flex-wrap:wrap}
   .share__rowact{width:100%;justify-content:flex-end}
 }
+
+/* ==========================================================================
+   Responsive pass (26 Sept 2026)
+
+   The desktop layout is the baseline and is not touched: every rule below
+   either sits inside a max-width query or only takes effect when a container
+   is narrower than its content. The breakpoints are the file's own — 1350,
+   1125, 875, 560 — plus 600 for the tablet grids and 400 for the one card
+   that has to leave room for a 300px widget. Real px, as every media query in
+   this file: a query resolves rem against the initial 16, not this document's
+   125% root. Found by rendering every route at 360, 375, 390, 430, 768, 820,
+   1024, 1280, 1440 and 1920 in a real Chrome (apps/web/harness).
+   ========================================================================== */
+
+/* --- rules that only bite when squeezed, and so carry no query --- */
+
+/* A <select> refuses to be narrower than its longest option: `flex:1` on the
+   element does nothing while its automatic minimum is its content, and on the
+   MCP page the key picker ran 44px past a 360px screen. min-width:0 lets it
+   give way; the box then ellipsises the option text itself. */
+.select{max-width:100%;min-width:0}
+.select__el{min-width:0;width:100%;text-overflow:ellipsis}
+
+/* Tables scroll sideways rather than crush their columns — .tbl-scroll is
+   already overflow:auto — but nothing said so, and the cut-off column looked
+   like the end of the table. Two shadows painted on the scroller itself, each
+   under a cover that is attached to the content (`local`): the cover slides
+   away as you scroll and reveals the shadow, and on a table that fits the
+   covers never move, so a table that does not scroll shows nothing. Pure CSS;
+   the vendored DataTable is untouched. */
+.tbl-scroll{
+  background:
+    linear-gradient(to right,var(--surface) 40%,transparent) left/2.5rem 100% no-repeat local,
+    linear-gradient(to left,var(--surface) 40%,transparent) right/2.5rem 100% no-repeat local,
+    linear-gradient(to right,var(--shadow-tint),transparent) left/0.875rem 100% no-repeat scroll,
+    linear-gradient(to left,var(--shadow-tint),transparent) right/0.875rem 100% no-repeat scroll}
+.doc__tablewrap{
+  background:
+    linear-gradient(to right,var(--surface) 40%,transparent) left/2.5rem 100% no-repeat local,
+    linear-gradient(to left,var(--surface) 40%,transparent) right/2.5rem 100% no-repeat local,
+    linear-gradient(to right,var(--shadow-tint),transparent) left/0.875rem 100% no-repeat scroll,
+    linear-gradient(to left,var(--shadow-tint),transparent) right/0.875rem 100% no-repeat scroll}
+
+/* A number never breaks: at 1280px the files table's Created-by column,
+   which cannot wrap, squeezed Size until "2.0 KB" sat on two lines. */
+.tbl__num{white-space:nowrap}
+
+/* The activity row (vendored, inline-styled) leads with an actor id that has
+   no break point: at phone width a 30-character agent id ran under the time
+   on the right. .actrow is the class the three call sites now pass. */
+.actrow p{overflow-wrap:anywhere}
+.actrow code.inline{overflow-wrap:anywhere;white-space:normal}
+
+/* A definition list value can be a checksum, an id or a client string. */
+.dl dd{overflow-wrap:anywhere}
+
+/* --- the marketing nav on a phone ---
+   Below 875px the row of links does not fit beside the brand — at 360px it
+   ran to 740px and dragged the whole page sideways. The same links become a
+   panel under the bar, opened by one button (routes/Marketing.jsx). The bar
+   already carries backdrop-filter, which makes it the containing block for
+   the panel, and it is sticky at --z-nav, so the panel paints over the page
+   without a number of its own. */
+.mk__burger{display:none}
+.mk__navactions{display:contents}
+@media (max-width:875px){
+  .mk__burger{display:inline-flex;align-items:center;justify-content:center;
+    margin-left:auto;width:2.125rem;height:2.125rem;flex:none;
+    border:1px solid var(--line-2);border-radius:var(--r-2);
+    background:var(--surface);color:var(--ink);cursor:pointer}
+  .mk__burger:hover{background:var(--surface-2)}
+  .mk__navlinks{display:none;position:absolute;top:100%;left:0;right:0;
+    flex-direction:column;align-items:stretch;gap:var(--s-2);margin:0;
+    padding:var(--s-4) var(--gutter) var(--s-6);
+    background:var(--surface);border-bottom:1px solid var(--line);
+    box-shadow:var(--sh-3);animation:ad-fade var(--d-2) var(--ease)}
+  .mk__nav.is-open .mk__navlinks{display:flex}
+  .mk__pages{flex-direction:column;align-items:stretch;gap:var(--s-1)}
+  .mk__navlinks .mk__navlink{height:2.625rem;justify-content:flex-start;
+    font-size:var(--t-14)}
+  .mk__navactions{display:flex;align-items:center;gap:var(--s-4);
+    margin-top:var(--s-3);padding-top:var(--s-5);border-top:1px solid var(--line)}
+  .mk__navactions .mk__navlink,.mk__navactions .btn{flex:1 1 auto;
+    justify-content:center;height:2.625rem}
+  .mk__theme{flex:none}
+}
+
+/* --- the docs table of contents on a phone (routes/Docs.jsx) ---
+   The sidebar is hidden below 875px; this is the same list under the
+   breadcrumb, folded shut in a native <details>. */
+.doc__mtoc{display:none}
+@media (max-width:875px){
+  .doc__mtoc{display:block;margin-bottom:var(--s-6);border:1px solid var(--line);
+    border-radius:var(--r-3);background:var(--surface)}
+  .doc__mtocsum{display:flex;align-items:center;gap:var(--s-4);
+    padding:var(--s-4) var(--s-5);cursor:pointer;list-style:none;
+    font-size:var(--t-13);min-height:2.625rem}
+  .doc__mtocsum::-webkit-details-marker{display:none}
+  .doc__mtocsum::after{content:"";margin-left:auto;width:0.5rem;height:0.5rem;
+    flex:none;border-right:1.5px solid var(--ink-3);border-bottom:1.5px solid var(--ink-3);
+    transform:translateY(-0.125rem) rotate(45deg);transition:transform var(--d-2) var(--ease)}
+  .doc__mtoc[open] .doc__mtocsum::after{transform:translateY(0.125rem) rotate(-135deg)}
+  .doc__mtoclabel{font-family:var(--font-mono);font-size:var(--t-10);
+    letter-spacing:var(--tr-caps);color:var(--ink-3);flex:none}
+  .doc__mtocnow{font-weight:var(--w-semi);color:var(--ink);min-width:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .doc__mtoclist{padding:var(--s-2) var(--s-4) var(--s-4);border-top:1px solid var(--line)}
+  .doc__mtoclist .doc__tocgroup{margin:var(--s-4) 0 0}
+  .doc__mtoclist .doc__tocitem{padding:var(--s-4) var(--s-4);font-size:var(--t-13)}
+}
+
+/* --- tablet and down --- */
+@media (max-width:875px){
+  /* Page head: the body took flex:1 — basis 0 — so beside two buttons it
+     shrank to a sliver and the subtitle came out one word per line. 16rem is
+     the width a subtitle needs to read; with less than that, the actions wrap
+     under the title instead. */
+  .page-head__body{flex:1 1 16rem}
+  /* The same fault in a panel head: a title and subtitle beside an actions
+     group that never wrapped ("Failing — last 5 deliveries" came out one
+     word per line beside two buttons). */
+  .panel__head{flex-wrap:wrap}
+  .panel__head>div:first-child{flex:1 1 12rem}
+  .panel__actions{flex-wrap:wrap}
+  /* API keys: every column carries a percentage, so with no floor the table
+     shrank to the screen and the name wrapped to four lines. 46rem is where
+     the six columns still read; below it the table scrolls. */
+  .ds__ktbl{min-width:46rem}
+  /* Even past that floor the browser hands the percentage columns their
+     share of the *container*, not of the table the nowrap key and scope
+     columns have pushed out, so the name was still 137px and wrapped to
+     three lines. A floor on the cell is what the name needs. */
+  .ds__ktbl .tbl__primary{min-width:11rem}
+  /* The stats band scrolls sideways by design; snapping lands each swipe on
+     a whole tile rather than between two, and the trailing padding lets the
+     last tile come fully into view. */
+  .shell__statsinner{scroll-snap-type:x proximity;scroll-padding-inline:var(--gutter)}
+  .wstat{scroll-snap-align:start}
+  /* Tablet keeps two columns of the marketing cards and the plans: one
+     column of short cards down a 768px screen was mostly gutter. Restated
+     after the earlier 875px rule, which folds them to one; 600px below takes
+     them there. */
+  .mk__grid4,.mk__prices{grid-template-columns:repeat(2,minmax(0,1fr))}
+  /* The account and agent heads carry a switch or a chip beside the title;
+     let those wrap rather than squeeze the title. */
+  .ds__head{align-items:flex-start}
+  /* The overflow drawer footer holds three buttons; on a phone they share the
+     row and wrap. */
+  .dw__foot .btn{flex:1 1 auto}
+  /* A dialog is a grid item, and a grid item's automatic minimum is its
+     content's min-content width: one unbreakable key string in the reveal
+     dialog made the whole dialog 560px on a 360px screen. min-width:0 lets
+     the dialog take the width it was given, and the key field inside it
+     scrolls, as it was already written to. */
+  .modal{min-width:0}
+}
+
+@media (max-width:600px){
+  .mk__grid4,.mk__prices{grid-template-columns:minmax(0,1fr)}
+}
+
+/* --- phone --- */
+@media (max-width:560px){
+  /* Dialogs: the scrim's 25px inset and the head's 25px padding left a
+     dialog with 240px of usable width on a 360px phone. */
+  .scrim{padding:var(--s-4)}
+  .modal__head{padding:var(--s-6) var(--s-6) var(--s-4)}
+  .modal__body{padding:0 var(--s-6) var(--s-6)}
+  .modal__foot{padding:var(--s-5) var(--s-6);flex-wrap:wrap}
+  .modal__foot .btn{flex:1 1 auto}
+  .ds__kview{--kv-pad:var(--s-6)}
+  /* A toast is 18.75rem at minimum, which is 375px: wider than the screen it
+     was pinned to the corner of. */
+  .toast{min-width:0;width:calc(100vw - 2 * var(--s-7));max-width:none}
+  /* The workspace menu drops from the switcher at up to 90vw wide, and the
+     switcher starts 80px in, so the panel ran off the right edge. On a phone
+     both menus span the bar instead, fixed under it; the top bar is sticky,
+     which does not contain a fixed descendant. */
+  .wsx__menu,.wsx__menu--right{position:fixed;top:calc(var(--topbar-h) + var(--s-2));
+    left:var(--gutter);right:var(--gutter);width:auto;min-width:0}
+  /* Definition lists stack: a 150px key beside a 150px value is neither a
+     table nor a sentence. */
+  .dl{grid-template-columns:minmax(0,1fr);gap:var(--s-1) 0}
+  .dl dt{margin-top:var(--s-4)}
+  .dl dt:first-child{margin-top:0}
+  /* Account rows: the key on its own line above the value, Edit still at the
+     right; the value may wrap rather than ellipsise a name to "Rina Kes…". */
+  .acctrow{flex-wrap:wrap;column-gap:0.875rem;row-gap:var(--s-2)}
+  .acctrow__k{flex:0 0 100%;width:auto}
+  .acctrow__v{white-space:normal;overflow-wrap:anywhere}
+  /* The device column carries an inline flex:1, so it is the minimum width
+     that puts it on a row of its own; the time and the tag share the next. */
+  .sessrow{flex-wrap:wrap;row-gap:var(--s-3)}
+  .sessrow>:first-child{min-width:100%}
+  /* The toolbar's search takes a row of its own; the spacer that pushed the
+     sort control to the far end has nothing to push against. */
+  .toolbar>.field{flex:1 1 100%}
+  .toolbar__spacer{display:none}
+  /* Stat tiles a little narrower, so the next one shows at the edge and the
+     band reads as something that scrolls. */
+  .wstat{flex-basis:11.25rem}
+  /* The share page's row of facts and the claim page's tiles already stack;
+     the error page's two actions share a row. */
+  .err__actions .btn{flex:1 1 auto}
+}
+
+/* The sandbox card has to leave 300px for the Turnstile widget, which is its
+   smallest size: 40px of page and 30px of card each side left 220px on a
+   360px phone. 10px and 15px leave 310px. */
+@media (max-width:400px){
+  .auth--card{padding:var(--s-4)}
+  .auth--card .auth__card{padding:var(--s-5)}
+}

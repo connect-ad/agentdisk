@@ -481,6 +481,16 @@ were not touched. See `backlog/002`.
   declares `requirement.demand`**, so the middleware cannot compute this before
   the handler runs; the warning is set on the context by the handler and
   serialized onto the response once, centrally, by `withAuth`.
+- **One WAF rule lives in the Cloudflare dashboard, not in Terraform.** The
+  zone has a rate-limiting rule named *Rate limit sandbox creation
+  (POST /v1/workspaces)*, made by hand on 27 Sept 2026 as a burst guard in
+  front of the Worker's own 10-per-hour-per-IP limit. It is the one exception
+  to "all infrastructure is code", for two reasons: the Terraform token lacks
+  Zone WAF: Edit, and a zone allows exactly one rate-limit ruleset, so
+  Terraform would have to *import* it rather than create a second. Do not
+  create another; when Terraform takes it over, import it. Its expression
+  should exclude requests carrying an `Authorization` header, so a signed-in
+  person creating a workspace is never counted.
 - **The unclaimed sweep defaults to reporting, not deleting.**
   `expireUnclaimedWorkspaces` takes `dryRun` and defaults it to `true`; only
   `SANDBOX_EXPIRY_ENABLED = "true"` turns on real deletion. Dev holds weeks of
@@ -759,8 +769,11 @@ under the caller's billing account, or merging its files into a workspace they
 already administer and deleting the sandbox. A merge repoints the agent's
 *existing* key row rather than reissuing, so the agent's next call lands in the
 new workspace with no re-authentication. Unclaimed workspaces are held to a
-tighter `SANDBOX_LIMITS` allowance and are swept after 7 days — that sweep is
-live but in log-only mode, see `backlog/030`.
+tighter `SANDBOX_LIMITS` allowance and are swept after 7 days. The sweep
+defaults to reporting, and **dev sets `SANDBOX_EXPIRY_ENABLED = "true"` in
+`wrangler.toml`, so in dev it deletes**; prod's section has it `"false"` and
+flips there, not in a dashboard, when prod is first applied. (An earlier
+version of this file said dev was log-only; it was not.)
 The MCP server exposes eleven tools at `/mcp` in the same Worker — each one
 calls the REST handler that already does the work, so the two surfaces are
 literally the same code and cannot drift in what they allow. `read_file` (by id

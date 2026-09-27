@@ -105,7 +105,14 @@ describe('docs page', () => {
 
   it('tells a Claude Code user what to expect, how to validate, and how to start clean', () => {
     const { container } = renderAt('/docs');
-    const text = container.querySelector('#client-claude-code').textContent;
+    const block = container.querySelector('#client-claude-code');
+    const text = block.textContent;
+    // In the order a person meets them: the output follows the command that
+    // produces it, and the file the command writes comes last.
+    const captions = [...block.querySelectorAll('.doc__codecap')].map(el => el.textContent);
+    expect(captions).toEqual([
+      'TERMINAL', 'EXPECTED OUTPUT', 'VALIDATE', 'ALREADY EXISTS · CLEAN START', '.MCP.JSON (EQUIVALENT)',
+    ]);
     // The masked header is explained as masking, not as a failure.
     expect(text).toContain('"Authorization": "[REDACTED]"');
     expect(text).toMatch(/not an error/);

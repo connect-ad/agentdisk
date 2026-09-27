@@ -360,11 +360,12 @@ const CLIENTS = [
     id: 'claude-code', name: 'Claude Code',
     intro: 'One command registers the server for the current project. The transport has to be named: a bare url entry in .mcp.json is read as a stdio server and fails to start.',
     blocks: [
+      // In the order a person meets them: the command, what it prints, how to
+      // prove it worked, how to redo it, and only then the file it wrote.
       { caption: 'TERMINAL', code: CFG_CLAUDE_CODE_CLI, variants: CLAUDE_CODE_CLI_SHELLS },
-      { caption: '.MCP.JSON (EQUIVALENT)', code: CFG_CLAUDE_CODE_JSON },
       {
         caption: 'EXPECTED OUTPUT',
-        lead: '[REDACTED] is Claude Code hiding your key from the terminal, not an error. The full value is in its config and is sent on every call. The same line appears if the variable was empty, so do not stop here.',
+        lead: 'The command above prints this. [REDACTED] is Claude Code hiding your key from the terminal, not an error: the full value is in its config and is sent on every call. The same line appears if the variable was empty, so do not stop here.',
         code: CLAUDE_CODE_EXPECTED,
       },
       {
@@ -376,6 +377,11 @@ const CLIENTS = [
         caption: 'ALREADY EXISTS · CLEAN START',
         lead: 'claude mcp add refuses a name that is already registered. Remove the entry and add it again; neither command touches the key itself, and the audit log on our side is unaffected. Add -s user to register it for every project, or -s project to write .mcp.json, which puts the key in a file the repository may commit.',
         code: CLAUDE_CODE_RESET,
+      },
+      {
+        caption: '.MCP.JSON (EQUIVALENT)',
+        lead: 'What the command writes. Editing this file by hand is the same as running it.',
+        code: CFG_CLAUDE_CODE_JSON,
       },
     ],
   },

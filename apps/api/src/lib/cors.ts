@@ -21,7 +21,7 @@
  */
 
 /** Sent on the preflight. `authorization` is the one that actually matters. */
-const ALLOWED_HEADERS = "authorization, content-type, idempotency-key";
+const ALLOWED_HEADERS = "authorization, content-type, idempotency-key, x-agentdisk-session";
 
 const ALLOWED_METHODS = "GET, POST, PATCH, DELETE, OPTIONS";
 

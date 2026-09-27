@@ -525,6 +525,127 @@ describe("GET /v1/files/:id/download", () => {
   });
 });
 
+describe("GET /v1/files/:id/content", () => {
+  async function activeFile(
+    token: string,
+    body: { path: string; content: string; mimeType?: string }
+  ): Promise<string> {
+    const res = await call("POST", "/v1/files", token, body);
+    expect(res.status).toBe(201);
+    const { file } = (await res.json()) as { file: { id: string } };
+    return file.id;
+  }
+
+  it("returns text inline as UTF-8, with the file's metadata beside it", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
+    const note = "# tasks\n- [ ] write the summary\n- [x] fetch sources\n";
+    const fileId = await activeFile(token, {
+      path: "/memory/tasks.md",
+      mimeType: "text/markdown",
+      content: toBase64(note),
+    });
+
+    const res = await call("GET", `/v1/files/${fileId}/content`, token);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      encoding: string; content: string; sizeBytes: number; file: { path: string };
+    };
+    expect(body.encoding).toBe("utf-8");
+    expect(body.content).toBe(note);
+    expect(body.sizeBytes).toBe(new TextEncoder().encode(note).byteLength);
+    expect(body.file.path).toBe("/memory/tasks.md");
+  });
+
+  it("treats an untyped file as text when its bytes decode, which is what agents write", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
+    const fileId = await activeFile(token, { path: "/untyped", content: toBase64("plain words") });
+
+    const body = (await (await call("GET", `/v1/files/${fileId}/content`, token)).json()) as {
+      encoding: string; content: string;
+    };
+    expect(body.encoding).toBe("utf-8");
+    expect(body.content).toBe("plain words");
+  });
+
+  it("falls back to base64 for bytes that are not UTF-8, whatever the label says", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
+    // 0xff 0xfe is invalid as UTF-8, and this file claims to be text.
+    const raw = "ÿþ\u0000binary";
+    const fileId = await activeFile(token, {
+      path: "/mislabelled.txt",
+      mimeType: "text/plain",
+      content: btoa(raw),
+    });
+
+    const body = (await (await call("GET", `/v1/files/${fileId}/content`, token)).json()) as {
+      encoding: string; content: string;
+    };
+    expect(body.encoding).toBe("base64");
+    expect(atob(body.content)).toBe(raw);
+  });
+
+  it("books egress exactly as a download does", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
+    const fileId = await activeFile(token, { path: "/e.txt", content: toBase64("egress me") });
+    await call("GET", `/v1/files/${fileId}/content`, token);
+
+    const row = await env.DB.prepare(`SELECT egress_bytes_period FROM workspaces WHERE id = ?`)
+      .bind(WORKSPACE_A)
+      .first<{ egress_bytes_period: number }>();
+    expect(row?.egress_bytes_period).toBe("egress me".length);
+  });
+
+  it("refuses a file with no bytes yet", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
+    const started = await call("POST", "/v1/files", token, { path: "/p.bin", sizeBytes: 10 });
+    const { file } = (await started.json()) as { file: { id: string } };
+
+    expect((await call("GET", `/v1/files/${file.id}/content`, token)).status).toBe(409);
+  });
+
+  it("refuses a file over the inline cap and points at the download URL", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
+    const fileId = await activeFile(token, { path: "/big.txt", content: toBase64("small really") });
+    // The row is the authority for size; pretend the object is larger than the cap.
+    await env.DB.prepare(`UPDATE files SET size_bytes = ? WHERE id = ?`)
+      .bind(1024 * 1024 + 1, fileId)
+      .run();
+
+    const res = await call("GET", `/v1/files/${fileId}/content`, token);
+    expect(res.status).toBe(413);
+    const body = (await res.json()) as ErrorBody;
+    expect(body.error.message).toContain("download");
+  });
+
+  it("needs read scope", async () => {
+    const writer = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ["write"] });
+    const fileId = await activeFile(writer.token, { path: "/w.txt", content: toBase64("x") });
+    expect((await call("GET", `/v1/files/${fileId}/content`, writer.token)).status).toBe(403);
+  });
+
+  it("is invisible outside the key's path prefix", async () => {
+    const owner = await seedApiKey({ workspaceId: WORKSPACE_A });
+    const fileId = await activeFile(owner.token, { path: "/private/x.txt", content: toBase64("x") });
+    const scoped = await seedApiKey({ workspaceId: WORKSPACE_A, pathPrefix: "/agents/bot" });
+
+    const res = await call("GET", `/v1/files/${fileId}/content`, scoped.token);
+    // A 403 would confirm the file exists; the prefix rule answers as if it did not.
+    expect([403, 404]).toContain(res.status);
+    const text = await res.text();
+    expect(text).not.toContain("x.txt");
+  });
+
+  it("cannot reach another workspace's bytes", async () => {
+    const mine = await seedApiKey({ workspaceId: WORKSPACE_A });
+    const theirs = await seedApiKey({ workspaceId: WORKSPACE_B });
+    const fileId = await activeFile(theirs.token, { path: "/theirs.txt", content: toBase64("secret") });
+
+    const res = await call("GET", `/v1/files/${fileId}/content`, mine.token);
+    expect(res.status).toBe(404);
+    expect(await res.text()).not.toContain("secret");
+  });
+});
+
 describe("DELETE", () => {
   async function activeFile(token: string, content = "bytes"): Promise<string> {
     const res = await call("POST", "/v1/files", token, {

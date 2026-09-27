@@ -51,6 +51,26 @@ function ipOf(request: Request): string | null {
   return request.headers.get("cf-connecting-ip");
 }
 
+/** The header a client may send to say which session, model or run it is. */
+export const SESSION_HEADER = "x-agentdisk-session";
+export const SESSION_LABEL_MAX = 120;
+
+/**
+ * A client-supplied label for the row (migration 0031).
+ *
+ * Unverified by design - it is for the person reading the log, and nothing
+ * decides anything on it. Bounded and stripped of control characters for the
+ * same reason `client` is truncated: a caller must not be able to grow or
+ * deface the audit table. Empty after cleaning means none was sent.
+ */
+export function sessionOf(request: Request): string | null {
+  const raw = request.headers.get(SESSION_HEADER);
+  if (raw === null) return null;
+  // oxlint-disable-next-line no-control-regex -- stripping control chars is the point
+  const cleaned = raw.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, SESSION_LABEL_MAX);
+  return cleaned === "" ? null : cleaned;
+}
+
 /**
  * Record something that happened, without making the caller wait for it.
  *
@@ -77,6 +97,7 @@ export function audit(
       client: clientOf(request),
       request_id: ctx.requestId,
       metadata: details.metadata === undefined ? null : JSON.stringify(details.metadata),
+      session_label: sessionOf(request),
       created_at: ctx.now,
     })
     .catch((err: unknown) => {

@@ -113,6 +113,39 @@ describe("what gets recorded", () => {
     expect(upload?.metadata).not.toContain(content);
   });
 
+  it("keeps the session label a client sends, cleaned and bounded, and null when there is none", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ["write", "list"] });
+
+    await SELF.fetch(`${URL_BASE}/v1/agents`, {
+      method: "POST",
+      headers: { ...bearer(token), "content-type": "application/json", "x-agentdisk-session": "  nightly-job\u0007 #12  " },
+      body: JSON.stringify({ name: "labelled" }),
+    });
+    await post("/v1/agents", token, { name: "unlabelled" });
+    await SELF.fetch(`${URL_BASE}/v1/agents`, {
+      method: "POST",
+      headers: { ...bearer(token), "content-type": "application/json", "x-agentdisk-session": "x".repeat(500) },
+      body: JSON.stringify({ name: "long" }),
+    });
+
+    const rows = await env.DB.prepare(
+      `SELECT metadata, session_label FROM audit_events WHERE workspace_id = ? AND action = 'agent.created' ORDER BY created_at ASC, rowid ASC`
+    ).bind(WORKSPACE_A).all<{ metadata: string; session_label: string | null }>();
+    const byName = new Map((rows.results ?? []).map(r => [JSON.parse(r.metadata).name as string, r.session_label]));
+
+    // Control characters stripped, whitespace trimmed: a caller cannot deface the log.
+    expect(byName.get("labelled")).toBe("nightly-job #12");
+    expect(byName.get("unlabelled")).toBeNull();
+    expect(byName.get("long")).toHaveLength(120);
+
+    // And it comes back on the activity feed, where a person reads it.
+    const body = (await (
+      await SELF.fetch(`${URL_BASE}/v1/activity`, { headers: bearer(token) })
+    ).json()) as { events: { session: string | null; metadata: { name: string } }[] };
+    const labelled = body.events.find(e => e.metadata?.name === "labelled");
+    expect(labelled?.session).toBe("nightly-job #12");
+  });
+
   it("names the agent as the actor, not the person who minted its key", async () => {
     const agentId = await seedAgent({ id: "agt_AUDIT", workspaceId: WORKSPACE_A });
     const { token } = await seedApiKey({

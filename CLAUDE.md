@@ -709,9 +709,10 @@ live deployment rather than inferred from the code — see
 person can follow.
 
 ```
-apps/api    956 tests across 49 files · typecheck clean
-apps/web    366 tests across 29 files · build clean
+apps/api    984 tests across 50 files · typecheck clean
+apps/web    375 tests across 31 files · build clean
 apps/admin   52 tests across 4 files · build clean · 110 KiB gzipped
+apps/cli     11 tests across 1 file  · no dependencies · not yet published
 Worker      226 KiB gzipped, against Cloudflare's 1 MB limit
 ```
 
@@ -740,10 +741,15 @@ look for the missing role: **no invitable role can write.** Somebody invited
 into a workspace reads it; writing belongs to the owner and to the API keys
 they mint, which is where agent writes came from anyway.
 
-The REST surface covers files (both upload paths, move, copy, soft delete,
-restore), folders, search, agents, keys, members, webhooks, activity, billing,
-and workspaces — including `DELETE /v1/workspaces/:id`, which destroys one and
-everything in it.
+The REST surface covers files (both upload paths, an inline read at
+`GET /v1/files/:id/content` for anything up to 1 MB, move, copy, and permanent
+delete — restore and the 24-hour grace were removed deliberately, see the
+header of `routes/files.ts`), folders, search, agents, keys, members, webhooks,
+activity, billing, and workspaces — including `DELETE /v1/workspaces/:id`,
+which destroys one and everything in it. Any request may carry an
+`X-AgentDisk-Session` header naming the session, model or run; it is stored on
+the audit row (`audit_events.session_label`, migration 0031) and shown in
+Activity. It is a label a person reads, never an identity.
 
 **Agent-provisioned workspaces can now be claimed.** `POST /v1/workspaces`
 returns a one-time claim link beside the one-time API key;
@@ -755,12 +761,23 @@ already administer and deleting the sandbox. A merge repoints the agent's
 new workspace with no re-authentication. Unclaimed workspaces are held to a
 tighter `SANDBOX_LIMITS` allowance and are swept after 7 days — that sweep is
 live but in log-only mode, see `backlog/030`.
-The MCP server exposes ten tools at `/mcp` in the same Worker — each one calls
-the REST handler that already does the work, so the two surfaces are literally
-the same code and cannot drift in what they allow.
+The MCP server exposes eleven tools at `/mcp` in the same Worker — each one
+calls the REST handler that already does the work, so the two surfaces are
+literally the same code and cannot drift in what they allow. `read_file` (by id
+or by path) is the one that lets an agent with no HTTP tool read back what it
+wrote; `initialize` now returns `instructions` telling a model when to persist,
+and every tool description says when to use it. The tool list is mirrored by
+hand in `Docs.jsx` and `McpConnection.jsx`, and `docs.test.jsx` and
+`mcp.test.ts` both pin the count, so adding a tool touches four files.
 
-An hourly cron purges soft-deleted objects past their 24-hour grace period and
-reconciles the usage counters against the rows.
+`apps/cli/` is `npx agentdisk`: a dependency-free Node client for the REST API
+(`ls`, `cat`, `put`, `get`, `rm --yes`, `mkdir`, `search`, `whoami`, with
+`--session` for the audit label). It resolves a path by listing its parent and
+matching the whole path, never by prefix. Not yet published to npm, and not in
+CI.
+
+An hourly cron reaps files whose delete was interrupted between D1 and R2,
+purges expired share links, and reconciles the usage counters against the rows.
 
 ### What is not built
 

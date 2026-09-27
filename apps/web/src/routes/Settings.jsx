@@ -194,7 +194,7 @@ function SecurityTab({ onToast }) {
           title="SSO is available on the Team plan"
           actions={<Button size="sm" variant="secondary" disabled>Configure SSO</Button>}
         >
-          SAML and OIDC arrive with Team-tier workspaces in MVP-1. This is separate from the
+          SAML and OIDC are planned for Team-plan workspaces. This is separate from the
           Google and GitHub buttons on the sign-in screen, which every plan already has.
         </EmptyState>
       </Panel>

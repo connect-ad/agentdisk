@@ -172,6 +172,22 @@ describe("POST /v1/workspaces - provisioning", () => {
     expect(body.agent.name).toBe("research-bot");
     expect(body.apiKey.token).toMatch(/^ask_live_[0-9A-Za-z]{32}$/);
 
+    // The terms travel with the key: the caller is told how long each thing
+    // lasts and what the sandbox may hold, so an agent can relay it verbatim.
+    expect(body.apiKey.expiresAt).toBeNull();
+    // One clock for the claim link and the sweep: the day the link dies is the
+    // day the workspace becomes deletable.
+    expect(body.workspace.deleteAfter).toBe(new Date(body.claim.expiresAt).toISOString());
+    expect(body.workspace.limits).toMatchObject({
+      storageBytes: 50 * 1024 * 1024,
+      files: 500,
+      egressBytesPerPeriod: 500 * 1024 * 1024,
+      requestsPerPeriod: 10_000,
+      shareLinks: 0,
+    });
+    expect(body.workspace.afterClaim.keyKeepsWorking).toBe(true);
+    expect(body.notice).toMatch(/no expiry/);
+
     const ws = await env.DB.prepare(`SELECT * FROM workspaces WHERE id = ?`)
       .bind(body.workspace.id)
       .first<any>();

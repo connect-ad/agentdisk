@@ -95,6 +95,8 @@ export interface AuditEventRow {
   client: string | null;
   request_id: string | null;
   metadata: string | null;
+  /** Client-supplied session, model or run label (migration 0031). A label, never an identity. */
+  session_label: string | null;
   created_at: number;
 }
 

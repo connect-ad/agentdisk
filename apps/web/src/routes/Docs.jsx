@@ -75,11 +75,12 @@ const slug = text => text.toLowerCase().replace(/^\d+\.\s*/, '').replace(/[^a-z0
 
 /* ── data ────────────────────────────────────────────────────────────────── */
 
-/** `mcp/tools.ts` — the ten tools, in registration order, with the scope each needs. */
+/** `mcp/tools.ts` — the eleven tools, in registration order, with the scope each needs. */
 export const MCP_TOOLS = [
   { name: 'list_files', body: 'List files and folders under a path, with pagination.', scope: 'list' },
-  { name: 'search_files', body: 'Match a substring against name and path. Results never leave the key’s prefix.', scope: 'list' },
-  { name: 'get_file', body: 'Metadata plus a short-lived download URL. Counts against egress.', scope: 'read' },
+  { name: 'search_files', body: 'Match a substring against name, path, caption and tags, never the contents. Results never leave the key’s prefix.', scope: 'list' },
+  { name: 'read_file', body: 'The contents, by id or by path: UTF-8 text, or base64 for anything else. Up to 1 MB. Counts against egress.', scope: 'read' },
+  { name: 'get_file', body: 'Metadata plus a short-lived download URL, for files over 1 MB. Counts against egress.', scope: 'read' },
   { name: 'get_metadata', body: 'Metadata only, no download URL. Free of egress.', scope: 'read' },
   { name: 'create_file', body: 'Base64 content up to 1 MB inline, or a presigned upload URL above it.', scope: 'write' },
   { name: 'update_file', body: 'Change caption, tags or custom metadata. Bytes are immutable.', scope: 'write' },
@@ -119,6 +120,7 @@ const ROUTES = [
     ['POST', '/v1/files', 'Create: inline base64 up to 1 MB, or declare sizeBytes for a presigned PUT'],
     ['POST', '/v1/files/:id/complete', 'Confirm a presigned upload; the size is re-read from storage'],
     ['GET', '/v1/files/:id', 'Metadata and a one-hour download URL'],
+    ['GET', '/v1/files/:id/content', 'The bytes inline, up to 1 MB: UTF-8 text or base64, counted as egress'],
     ['GET', '/v1/files/:id/download', 'A one-hour presigned GET, counted as egress'],
     ['PATCH', '/v1/files/:id', 'Caption, tags, custom metadata'],
     ['POST', '/v1/files/:id/move', 'Move or rename'],
@@ -217,6 +219,50 @@ const CFG_CLAUDE_CODE_CLI = `export AGENTDISK_KEY=${KEY_PLACEHOLDER}
 claude mcp add --transport http agentdisk ${MCP_ENDPOINT} \\
   --header "Authorization: Bearer $AGENTDISK_KEY"`;
 
+/* The same command per shell. `export` is Bash; PowerShell sets an
+   environment variable with `$env:` and continues a line with a backtick, and
+   cmd.exe uses `set`, `%VAR%` and a caret. The key placeholder and the URL
+   are the same in all three, so a test can pin every variant at once. */
+const CFG_CLAUDE_CODE_CLI_PS = `$env:AGENTDISK_KEY = "${KEY_PLACEHOLDER}"
+claude mcp add --transport http agentdisk ${MCP_ENDPOINT} \`
+  --header "Authorization: Bearer $env:AGENTDISK_KEY"`;
+
+const CFG_CLAUDE_CODE_CLI_CMD = `set AGENTDISK_KEY=${KEY_PLACEHOLDER}
+claude mcp add --transport http agentdisk ${MCP_ENDPOINT} ^
+  --header "Authorization: Bearer %AGENTDISK_KEY%"`;
+
+/* What `claude mcp add` prints, and how to prove it worked. The confirmation
+   masks the header on purpose - a terminal is logged and screenshotted - so
+   the same line appears whether the variable held a key or nothing at all.
+   The handshake is the only proof, which is why VALIDATE follows. */
+const CLAUDE_CODE_EXPECTED = `Added HTTP MCP server agentdisk with URL: ${MCP_ENDPOINT} to local config
+Headers: {
+  "Authorization": "[REDACTED]"
+}`;
+
+const CLAUDE_CODE_VALIDATE = `claude mcp get agentdisk     # the stored entry; the header stays masked
+claude mcp list              # agentdisk … ✓ Connected, or ✗ Failed to connect
+
+# inside a session
+/mcp                         # agentdisk, and the tools your key's scopes allow`;
+
+const CLAUDE_CODE_RESET = `claude mcp remove agentdisk
+# then add it again with the TERMINAL command above`;
+
+/** Shell tabs for the Claude Code command. Bash first: Linux, macOS and WSL. */
+const CLAUDE_CODE_CLI_SHELLS = [
+  { label: 'Bash / zsh', code: CFG_CLAUDE_CODE_CLI },
+  { label: 'PowerShell', code: CFG_CLAUDE_CODE_CLI_PS },
+  { label: 'cmd', code: CFG_CLAUDE_CODE_CLI_CMD },
+];
+
+/** Exporting the key alone, per shell, for the guided quick start. */
+const EXPORT_KEY_SHELLS = [
+  { label: 'Bash / zsh', code: `export AGENTDISK_KEY=${KEY_PLACEHOLDER}` },
+  { label: 'PowerShell', code: `$env:AGENTDISK_KEY = "${KEY_PLACEHOLDER}"` },
+  { label: 'cmd', code: `set AGENTDISK_KEY=${KEY_PLACEHOLDER}` },
+];
+
 const CFG_CLAUDE_CODE_JSON = `{
   "mcpServers": {
     "agentdisk": {
@@ -314,8 +360,23 @@ const CLIENTS = [
     id: 'claude-code', name: 'Claude Code',
     intro: 'One command registers the server for the current project. The transport has to be named: a bare url entry in .mcp.json is read as a stdio server and fails to start.',
     blocks: [
-      { caption: 'TERMINAL', code: CFG_CLAUDE_CODE_CLI },
+      { caption: 'TERMINAL', code: CFG_CLAUDE_CODE_CLI, variants: CLAUDE_CODE_CLI_SHELLS },
       { caption: '.MCP.JSON (EQUIVALENT)', code: CFG_CLAUDE_CODE_JSON },
+      {
+        caption: 'EXPECTED OUTPUT',
+        lead: '[REDACTED] is Claude Code hiding your key from the terminal, not an error. The full value is in its config and is sent on every call. The same line appears if the variable was empty, so do not stop here.',
+        code: CLAUDE_CODE_EXPECTED,
+      },
+      {
+        caption: 'VALIDATE',
+        lead: 'Prove the handshake. A key with read and list shows five tools; a full key shows eleven. "Failed to connect" with a 401 means the variable was empty or wrong: set it again in the same window and re-add.',
+        code: CLAUDE_CODE_VALIDATE,
+      },
+      {
+        caption: 'ALREADY EXISTS · CLEAN START',
+        lead: 'claude mcp add refuses a name that is already registered. Remove the entry and add it again; neither command touches the key itself, and the audit log on our side is unaffected. Add -s user to register it for every project, or -s project to write .mcp.json, which puts the key in a file the repository may commit.',
+        code: CLAUDE_CODE_RESET,
+      },
     ],
   },
   {
@@ -393,9 +454,25 @@ curl -X POST ${API_BASE}/v1/files/$FILE_ID/complete \\
   -H "Authorization: Bearer $AGENTDISK_KEY" \\
   -H "Content-Type: application/json" -d '{}'`;
 
+const REST_READ = `curl ${API_BASE}/v1/files/$FILE_ID/content \\
+  -H "Authorization: Bearer $AGENTDISK_KEY"
+# → { "file": { "id": "file_…", "path": "/notes/hello.txt", … },
+#     "encoding": "utf-8", "content": "hello from an agent", "sizeBytes": 19 }`;
+
 const REST_DOWNLOAD = `curl ${API_BASE}/v1/files/$FILE_ID/download \\
   -H "Authorization: Bearer $AGENTDISK_KEY"
 # → { "url": "https://…", "method": "GET", "expiresAt": "…", "sizeBytes": 8421376 }`;
+
+const SESSION_HEADER = `# REST: one header on any call
+curl ${API_BASE}/v1/files \\
+  -H "Authorization: Bearer $AGENTDISK_KEY" \\
+  -H "X-AgentDisk-Session: nightly-report #42"
+
+# MCP: add it to the headers block of your client's config
+"headers": {
+  "Authorization": "Bearer ${KEY_PLACEHOLDER}",
+  "X-AgentDisk-Session": "nightly-report #42"
+}`;
 
 const REST_DELETE = `curl -X DELETE ${API_BASE}/v1/files/$FILE_ID \\
   -H "Authorization: Bearer $AGENTDISK_KEY"
@@ -423,13 +500,48 @@ const ok = fresh && timingSafeEqual(expected, v1);`;
 /* ── small building blocks ─────────────────────────────────────────────── */
 
 /** `wrap` for prose to paste — a prompt — rather than code to keep aligned. */
-function Code({ caption, wrap = false, children }) {
+/**
+ * A code block, optionally in several shells.
+ *
+ * `variants` is a list of `{ label, code }`; the bar grows a tab per entry and
+ * the first is shown by default. It exists because `export` is Bash, and a
+ * person on Windows pasting it into PowerShell gets "export is not recognized"
+ * from a page that claimed to be a quick start. The default stays Bash, since
+ * that is what Linux, macOS and WSL all run.
+ */
+function Code({ caption, wrap = false, variants, children }) {
+  const [active, setActive] = useState(0);
+  const body = variants ? variants[Math.min(active, variants.length - 1)].code : children;
+  const tabsId = `${slug(caption ?? 'code')}-tabs`;
   return (
     <div className="doc__code">
       <div className="doc__codebar">
         <span className="doc__codecap">{caption}</span>
+        {variants ? (
+          <div className="doc__codetabs" role="tablist" aria-label={`${caption} shell`}>
+            {variants.map((v, i) => (
+              <button
+                key={v.label}
+                type="button"
+                role="tab"
+                id={`${tabsId}-${i}`}
+                aria-selected={i === active}
+                className={i === active ? 'doc__codetab doc__codetab--on' : 'doc__codetab'}
+                onClick={() => setActive(i)}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
-      <pre className={wrap ? 'doc__codebody doc__codebody--wrap' : 'doc__codebody'}>{children}</pre>
+      <pre
+        className={wrap ? 'doc__codebody doc__codebody--wrap' : 'doc__codebody'}
+        role={variants ? 'tabpanel' : undefined}
+        aria-labelledby={variants ? `${tabsId}-${active}` : undefined}
+      >
+        {body}
+      </pre>
     </div>
   );
 }
@@ -624,7 +736,7 @@ function guideSteps(goal, chosen) {
   return {
     steps: [
       { title: 'Get a key', body: 'Either the sandbox, with no account, or Agent access → Agent identities → API keys once signed in. Scope it to what the script does.', link: { to: '/sandbox', label: 'Open the sandbox' } },
-      { title: 'Keep it out of your history', body: 'Export it once and reference the variable. Never put a key in a URL: the API refuses it and tells you to rotate.', blocks: [{ caption: 'SHELL', code: `export AGENTDISK_KEY=${KEY_PLACEHOLDER}` }] },
+      { title: 'Keep it out of your history', body: 'Export it once and reference the variable. Never put a key in a URL: the API refuses it and tells you to rotate.', blocks: [{ caption: 'SHELL', code: `export AGENTDISK_KEY=${KEY_PLACEHOLDER}`, variants: EXPORT_KEY_SHELLS }] },
       { title: 'Ask who you are', body: 'The answer names the workspace, the scopes, and the room left on the account.', blocks: [{ caption: 'WHO AM I', code: REST_WHOAMI }] },
       { title: 'Write a file', body: 'Up to 1 MB inline. Larger files use the presigned flow in step 5 below.', blocks: [{ caption: 'CREATE A SMALL FILE', code: REST_INLINE }] },
     ],
@@ -734,7 +846,12 @@ function GuideMe() {
                     <span className="sr-only"> (opens in a new tab)</span>
                   </a>
                 ) : null}
-                {s.blocks ? s.blocks.map(b => <Code key={b.caption} caption={b.caption} wrap={b.wrap}>{b.code}</Code>) : null}
+                {s.blocks ? s.blocks.map(b => (
+                  <React.Fragment key={b.caption}>
+                    {b.lead ? <P>{b.lead}</P> : null}
+                    <Code caption={b.caption} wrap={b.wrap} variants={b.variants}>{b.code}</Code>
+                  </React.Fragment>
+                )) : null}
                 {s.after ? <p className="doc__p">{s.after}</p> : null}
               </li>
             ))}
@@ -1009,7 +1126,12 @@ export function Docs() {
                 <div key={c.id} className="doc__client" id={`client-${c.id}`}>
                   <h4 className="doc__h4">{c.name}</h4>
                   <P>{c.intro}</P>
-                  {c.blocks.map(b => <Code key={b.caption} caption={b.caption}>{b.code}</Code>)}
+                  {c.blocks.map(b => (
+                    <React.Fragment key={b.caption}>
+                      {b.lead ? <P>{b.lead}</P> : null}
+                      <Code caption={b.caption} variants={b.variants}>{b.code}</Code>
+                    </React.Fragment>
+                  ))}
                 </div>
               ))}
 
@@ -1017,7 +1139,7 @@ export function Docs() {
               <P>
                 On a successful handshake the client lists the tools your key's scopes allow. The
                 server filters <code>tools/list</code> by scope, so a key with <code>read</code> and{' '}
-                <code>list</code> sees four tools, not ten. That is the scope model working, not a
+                <code>list</code> sees five tools, not eleven. That is the scope model working, not a
                 broken handshake. The dashboard's <strong>MCP connection</strong> page shows the same
                 list for whichever key you select, and reports the last call it saw from that key.
               </P>
@@ -1047,6 +1169,12 @@ export function Docs() {
                 declaration.
               </P>
               <Code caption="UPLOAD A LARGE FILE">{REST_PRESIGNED}</Code>
+              <P>
+                Anything up to 1 MB can be read back inline. Text comes back as UTF-8, anything
+                else as base64, and the response says which.
+              </P>
+              <Code caption="READ A SMALL FILE">{REST_READ}</Code>
+              <P>Above 1 MB, ask for a download URL instead. Both count as egress.</P>
               <Code caption="DOWNLOAD">{REST_DOWNLOAD}</Code>
               <Code caption="DELETE — PERMANENT">{REST_DELETE}</Code>
               <P>
@@ -1058,7 +1186,7 @@ export function Docs() {
                 <><strong>401 UNAUTHORIZED.</strong> The credential was not accepted. Unknown, revoked, expired, disabled-agent and malformed keys all return the same body on purpose; the reason goes to our server log, never to the response. Check the key's status and its agent's status in the dashboard.</>,
                 <><strong>403 FORBIDDEN.</strong> Authenticated, but the key lacks the operation for this call, or the path is outside its prefix. The message says which. Over MCP a refused tool call is also recorded in Activity as <code>mcp.&lt;tool&gt;</code> with the result <em>denied</em>; a refused REST call is not.</>,
                 <><strong>400 mentioning the URL.</strong> You put the key in a query string. It is already in logs and shell history; rotate it.</>,
-                <><strong>The client lists fewer than ten tools.</strong> Expected. Tools you cannot call are not shown.</>,
+                <><strong>The client lists fewer than eleven tools.</strong> Expected. Tools you cannot call are not shown.</>,
                 <><strong>Claude Code says the server failed to start.</strong> The <code>.mcp.json</code> entry is missing <code>"type": "http"</code>, so it tried to spawn the URL as a command.</>,
                 <><strong>Claude Desktop shows nothing.</strong> Its config cannot hold a URL; use the mcp-remote bridge above and restart the app.</>,
                 <><strong>429 LIMIT_EXCEEDED.</strong> A quota (the body's <code>details.limit</code> says which: storage, files, egress) or a rate limit. Free space, upgrade, or wait for the window.</>,
@@ -1074,7 +1202,8 @@ export function Docs() {
               <List items={[
                 <><strong>Two upload paths.</strong> Inline base64 for anything up to 1 MB; a presigned PUT straight to storage above that, up to the plan's per-file cap. The API is never in the byte path for large files.</>,
                 <><strong>Integrity.</strong> Declare a SHA-256 with an inline upload and storage verifies it, refusing a body that does not match. On a presigned upload the checksum you declare is recorded with the file, not verified against the bytes. Every file record carries its checksum.</>,
-                <><strong>Metadata that agents can reason about.</strong> MIME type, size, a caption, up to 32 tags, and custom key-value metadata. Search matches name, path, caption and tags, and tells you which fields it looked at.</>,
+                <><strong>Read back inline.</strong> Any file up to 1 MB comes back as text or base64 in one call, over REST or as the <code>read_file</code> tool, so an agent with no way to follow a URL can still read what it wrote. Larger files get a download URL.</>,
+                <><strong>Metadata that agents can reason about.</strong> MIME type, size, a caption, up to 32 tags, and custom key-value metadata. Search matches name, path, caption and tags, never the contents, and tells you which fields it looked at.</>,
                 <><strong>Move, copy, rename.</strong> Moves check write at both ends. Copies check read at the source and write at the destination, and the bytes stay inside storage.</>,
                 <><strong>Folders are lazy.</strong> A file can be created at any depth without folder rows above it. A folder only refuses deletion when a file's path is inside it, however the file was created.</>,
                 <><strong>Permanent deletion.</strong> Deleting a file destroys the bytes and the record in the same request. There is no recycle bin. The dashboard's confirmation says exactly that.</>,
@@ -1161,6 +1290,14 @@ export function Docs() {
                 it. It is kept for the life of the workspace. The full event list is in the{' '}
                 <a href="#activity-events">Reference</a>.
               </P>
+              <P>
+                One key is often shared by many runs of the same agent, so a client may name its
+                session with an <code>X-AgentDisk-Session</code> header on any request, for example
+                a model name and a run number. It is shown beside the event in Activity and returned
+                as <code>session</code> by the API. It is a label a person reads, never an identity:
+                nothing is authorized on it, and it is trimmed to 120 characters.
+              </P>
+              <Code caption="NAMING A SESSION">{SESSION_HEADER}</Code>
 
               <H3 id={slug('Usage, plans and billing')}>Usage, plans and billing</H3>
               <P>

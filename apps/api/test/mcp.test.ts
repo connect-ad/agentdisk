@@ -123,7 +123,28 @@ describe("tools/list is filtered by scope", () => {
       ops: ["read", "list", "write", "delete"],
     });
     const names = toolNames(await rpc("tools/list", {}, token));
-    expect(names).toHaveLength(10);
+    expect(names).toHaveLength(11);
+  });
+
+  it("offers read_file to a reader, beside get_file", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ["read"] });
+    const names = toolNames(await rpc("tools/list", {}, token));
+    expect(names).toContain("read_file");
+    expect(names).toContain("get_file");
+    expect(names).not.toContain("list_files");
+  });
+
+  it("tells the model what each tool is for, not only what it does", async () => {
+    // A description is the only documentation an agent reads before choosing.
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
+    const result = (await rpc("tools/list", {}, token)).result as {
+      tools: { name: string; description: string }[];
+    };
+    const byName = new Map(result.tools.map(t => [t.name, t.description]));
+    expect(byName.get("create_file")).toMatch(/survive this session/);
+    expect(byName.get("read_file")).toMatch(/read back/);
+    expect(byName.get("search_files")).toMatch(/does not look inside/);
+    expect(byName.get("delete_file")).toMatch(/no restore/);
   });
 
   it("needs a credential at all", async () => {
@@ -146,7 +167,76 @@ describe("tools/list is filtered by scope", () => {
   });
 });
 
+describe("initialize", () => {
+  it("carries instructions that tell an agent when to persist, with no credential", async () => {
+    const res = await rpc("initialize", {});
+    const result = res.result as { instructions?: string; serverInfo: { name: string } };
+    expect(result.serverInfo.name).toBe("agentdisk");
+    expect(result.instructions).toMatch(/survive this session/);
+    expect(result.instructions).toMatch(/read_file/);
+    expect(result.instructions).toMatch(/permanent/);
+    // Unauthenticated, so nothing workspace-shaped may appear.
+    expect(result.instructions).not.toMatch(/ws_/);
+  });
+});
+
 describe("tools/call", () => {
+  it("reads a file back by path, as text", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ["read", "write"] });
+    const note = "remember: the summary is due Friday";
+    await rpc(
+      "tools/call",
+      { name: "create_file", arguments: { path: "/memory/notes.md", mimeType: "text/markdown", content: btoa(note) } },
+      token
+    );
+
+    const read = await rpc("tools/call", { name: "read_file", arguments: { path: "/memory/notes.md" } }, token);
+    expect(isError(read)).toBe(false);
+    const payload = payloadOf(read) as { encoding: string; content: string };
+    expect(payload.encoding).toBe("utf-8");
+    expect(payload.content).toBe(note);
+    // And the same text sits in the block a plain client renders.
+    const text = (read.result as { content: { text: string }[] }).content[0]!.text;
+    expect(text).toContain("the summary is due Friday");
+  });
+
+  it("reads a file back by id", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ["read", "write"] });
+    const created = await rpc(
+      "tools/call",
+      { name: "create_file", arguments: { path: "/by-id.txt", mimeType: "text/plain", content: btoa("by id") } },
+      token
+    );
+    const id = (payloadOf(created).file as { id: string }).id;
+
+    const read = await rpc("tools/call", { name: "read_file", arguments: { id } }, token);
+    expect((payloadOf(read) as { content: string }).content).toBe("by id");
+  });
+
+  it("refuses read_file by path outside the key's prefix, without confirming the file", async () => {
+    const owner = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ["read", "write"] });
+    await rpc(
+      "tools/call",
+      { name: "create_file", arguments: { path: "/private/secret.txt", mimeType: "text/plain", content: btoa("s") } },
+      owner.token
+    );
+    const scoped = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ["read"], pathPrefix: "/agents/bot" });
+
+    const read = await rpc("tools/call", { name: "read_file", arguments: { path: "/private/secret.txt" } }, scoped.token);
+    expect(isError(read)).toBe(true);
+    expect(JSON.stringify(read)).not.toContain("secret.txt\"}");
+  });
+
+  it("answers a missing path as not found, and a call with neither id nor path as an error", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ["read"] });
+    const missing = await rpc("tools/call", { name: "read_file", arguments: { path: "/nowhere.txt" } }, token);
+    expect(isError(missing)).toBe(true);
+    expect(JSON.stringify(missing)).toContain("NOT_FOUND");
+
+    const neither = await rpc("tools/call", { name: "read_file", arguments: {} }, token);
+    expect(isError(neither)).toBe(true);
+  });
+
   it("creates and lists a file", async () => {
     const { token } = await seedApiKey({
       workspaceId: WORKSPACE_A,
@@ -263,5 +353,24 @@ describe("audit", () => {
     expect(actions).toContain("mcp.create_file");
     // A create_file call carries base64 file content in its arguments.
     expect(JSON.stringify(rows.results)).not.toContain(secretish);
+  });
+
+  it("records the session label a client sends, so one key's runs can be told apart", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A, ops: ["read", "list"] });
+    await SELF.fetch(MCP_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+        // ASCII on purpose: a browser's fetch refuses a non-ASCII header value.
+        "x-agentdisk-session": "claude-opus / run 42",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 99, method: "tools/call", params: { name: "list_files", arguments: {} } }),
+    });
+
+    const row = await env.DB.prepare(
+      `SELECT session_label FROM audit_events WHERE workspace_id = ? AND action = 'mcp.list_files'`
+    ).bind(WORKSPACE_A).first<{ session_label: string | null }>();
+    expect(row?.session_label).toBe("claude-opus / run 42");
   });
 });

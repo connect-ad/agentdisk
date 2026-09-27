@@ -46,6 +46,8 @@ function toResource(row: AuditEventRow) {
     ip: row.ip,
     client: row.client,
     requestId: row.request_id,
+    /** What the client called its session, model or run. Null when it said nothing. */
+    session: row.session_label ?? null,
     metadata,
     at: new Date(row.created_at).toISOString(),
   };

@@ -590,6 +590,110 @@ export async function downloadFile(ctx: AuthContext, _request: Request, fileId: 
   });
 }
 
+/**
+ * MIME types whose bytes are handed back as text when they decode as UTF-8.
+ *
+ * `application/octet-stream` is on the list because it is the default when a
+ * caller declares nothing, and most files an agent writes without a MIME type
+ * are notes. The strict decode below is what keeps a binary file that was
+ * mislabelled from coming back as garbage: if it is not valid UTF-8 it is
+ * base64, whatever the label says.
+ */
+function looksTextual(mimeType: string): boolean {
+  const type = mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (type.startsWith("text/")) return true;
+  if (type.endsWith("+json") || type.endsWith("+xml")) return true;
+  return [
+    "application/json",
+    "application/xml",
+    "application/javascript",
+    "application/ecmascript",
+    "application/typescript",
+    "application/yaml",
+    "application/x-yaml",
+    "application/toml",
+    "application/x-sh",
+    "application/x-ndjson",
+    "application/octet-stream",
+  ].includes(type);
+}
+
+function encodeBase64(bytes: Uint8Array): string {
+  // btoa on a 1 MB binary string is fine in a Worker; chunking keeps the
+  // intermediate string from being built by a million single-char concats.
+  let binary = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+/**
+ * GET /v1/files/:id/content - the bytes themselves, inline.
+ *
+ * The counterpart of the inline create path (10.4), and it exists because the
+ * download URL alone broke the product's own promise: an agent in Claude
+ * Desktop, Cursor or any client without an HTTP tool could write a note with
+ * `create_file` and then had no way to read it back. Same 1 MB cap as the
+ * inline write, so the two paths are symmetrical; above it, `download` still
+ * hands out a presigned URL and the Worker stays out of the byte path.
+ *
+ * Text comes back as UTF-8 in `content` with `encoding: "utf-8"`; anything
+ * else is base64 with `encoding: "base64"`. The caller never has to guess
+ * which, and a model reading a tool result sees its note as a note.
+ *
+ * Egress is booked exactly as `download` books it - the same `assertQuotaAndWarn`
+ * and the same counter - because an inline read that skipped it would be a
+ * free bypass of the egress allowance.
+ */
+export async function readFile(ctx: AuthContext, _request: Request, fileId: string): Promise<Response> {
+  const row = await requireFile(ctx, fileId, "read");
+
+  if (row.status !== "active") {
+    throw new ApiError("CONFLICT", `This file is ${row.status} and has no bytes to read.`, {
+      details: { status: row.status },
+    });
+  }
+
+  if (row.size_bytes > MAX_INLINE_BYTES) {
+    throw new ApiError(
+      "PAYLOAD_TOO_LARGE",
+      `Inline reads are capped at ${MAX_INLINE_BYTES} bytes and this file holds ${row.size_bytes}; ` +
+        "use the download URL instead.",
+      { details: { limit: "inline", used: row.size_bytes, max: MAX_INLINE_BYTES } }
+    );
+  }
+
+  assertQuotaAndWarn(ctx, { egressBytes: row.size_bytes });
+
+  const object = await ctx.storage.getBody(fileId);
+  if (object === null) {
+    throw new ApiError("CONFLICT", "This file's contents are no longer available.", {
+      internalReason: `object missing for active file ${fileId}`,
+    });
+  }
+  const bytes = new Uint8Array(await object.arrayBuffer());
+  await ctx.db.counters.apply({ egressBytes: row.size_bytes }, ctx.now);
+
+  let text: string | null = null;
+  if (looksTextual(row.mime_type)) {
+    try {
+      text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes);
+    } catch {
+      text = null;
+    }
+  }
+
+  const tags = await ctx.db.files.getTags(fileId);
+  return json({
+    file: toFileResource(row, tags),
+    encoding: text === null ? "base64" : "utf-8",
+    content: text ?? encodeBase64(bytes),
+    sizeBytes: bytes.byteLength,
+  });
+}
+
 /** PATCH /v1/files/:id - metadata only; bytes are immutable. */
 export async function patchFile(ctx: AuthContext, request: Request, fileId: string): Promise<Response> {
   const body = parseBody(PatchSchema, await readJson(request));

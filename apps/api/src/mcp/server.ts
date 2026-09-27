@@ -24,8 +24,44 @@ import { audit } from "../lib/audit";
 import { TOOLS, TOOLS_BY_NAME } from "./tools";
 
 /** What this server reports itself as during `initialize`. */
-const SERVER_INFO = { name: "agentdisk", version: "1.0.0" };
+const SERVER_INFO = { name: "agentdisk", version: "1.1.0" };
 const PROTOCOL_VERSION = "2025-06-18";
+
+/**
+ * What the server tells a model about itself, before it sees a single tool.
+ *
+ * MCP clients hand `instructions` to the model as part of its system context,
+ * which makes this the highest-leverage paragraph in the product: an agent
+ * with a local disk will always prefer it, and an agent without one only uses
+ * this if it has been told what it is for. So this says when to persist, how
+ * paths work, that contents are immutable, and that deletes are permanent.
+ *
+ * Deliberately generic. `initialize` is unauthenticated, so nothing here may
+ * mention a workspace, a key, a path that exists or a person.
+ */
+const INSTRUCTIONS = [
+  [
+    "AgentDisk is persistent, audited file storage for AI agents. The key you connect with",
+    "binds you to one workspace and, often, to a path prefix inside it; the tools you can",
+    "see are the ones that key allows. Use it to persist anything that must survive this",
+    "session or be read by another agent or a person: notes, task lists, results, and",
+    "intermediate artefacts. Anything you only keep in context is lost when the session ends.",
+  ].join(" "),
+  [
+    "Paths are absolute and start with \"/\" (for example \"/memory/tasks.md\"); folders are",
+    "created as needed. Prefer read_file to read text back (it takes a path), and list_files",
+    "or search_files to find what earlier sessions left. Contents are immutable: to change a",
+    "file, create it at a new path, or delete_file and create_file again. Deletion is",
+    "permanent and there is no restore, so do not delete anything you were not asked to.",
+    "Every call is recorded in an audit log the workspace owner can read.",
+  ].join(" "),
+  [
+    "If you created this workspace yourself as a sandbox, the response that gave you the",
+    "key also gave you a one-time claim link. Show that link to the person you work for",
+    "straight away: it is how they take ownership, it cannot be reissued, and an unclaimed",
+    "sandbox is deleted after seven days.",
+  ].join(" "),
+].join("\n\n");
 
 interface JsonRpcRequest {
   jsonrpc?: string;
@@ -131,6 +167,7 @@ export async function handleMcp(request: Request, deps: McpDeps): Promise<Respon
         protocolVersion: PROTOCOL_VERSION,
         capabilities: { tools: { listChanged: false } },
         serverInfo: SERVER_INFO,
+        instructions: INSTRUCTIONS,
       });
 
     case "notifications/initialized":

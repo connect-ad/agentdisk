@@ -1,6 +1,6 @@
 /**
  * The docs page is written by hand from the code, so the parts most likely to
- * drift are pinned here: the section ids the TOC links to, the ten MCP tool
+ * drift are pinned here: the section ids the TOC links to, the eleven MCP tool
  * names, the key prefix, and the fact that every client the quick start names
  * gets a config block. A docs page that names a tool the server does not
  * register, or a key prefix it has never issued, is worse than no page.
@@ -38,7 +38,7 @@ const SECTION_IDS = [
 
 /** `apps/api/src/mcp/tools.ts`, in registration order. */
 const SERVER_TOOLS = [
-  'list_files', 'search_files', 'get_file', 'get_metadata', 'create_file',
+  'list_files', 'search_files', 'read_file', 'get_file', 'get_metadata', 'create_file',
   'update_file', 'delete_file', 'create_folder', 'move_file', 'copy_file',
 ];
 
@@ -74,6 +74,50 @@ describe('docs page', () => {
     expect(code).toContain('ask_live_');
     expect(code).not.toContain('adk_live');
     expect(code).toContain('/mcp');
+  });
+
+  it('offers the Claude Code command per shell, Bash first, and swaps the block on click', async () => {
+    const { container } = renderAt('/docs');
+    const block = container.querySelector('#client-claude-code');
+    const tabs = within(block).getAllByRole('tab').map(t => t.textContent);
+    expect(tabs).toEqual(['Bash / zsh', 'PowerShell', 'cmd']);
+
+    const body = () => within(block).getByRole('tabpanel').textContent;
+    expect(body()).toContain('export AGENTDISK_KEY=');
+
+    await userEvent.click(within(block).getByRole('tab', { name: 'PowerShell' }));
+    expect(body()).toContain('$env:AGENTDISK_KEY = ');
+    expect(body()).toContain('Bearer $env:AGENTDISK_KEY');
+    expect(body()).not.toContain('export ');
+
+    await userEvent.click(within(block).getByRole('tab', { name: 'cmd' }));
+    expect(body()).toContain('set AGENTDISK_KEY=');
+    expect(body()).toContain('%AGENTDISK_KEY%');
+
+    // Every shell registers the same server at the same URL with the same key.
+    for (const tab of ['Bash / zsh', 'PowerShell', 'cmd']) {
+      await userEvent.click(within(block).getByRole('tab', { name: tab }));
+      expect(body()).toContain('claude mcp add --transport http agentdisk');
+      expect(body()).toContain('/mcp');
+      expect(body()).toContain('ask_live_');
+    }
+  });
+
+  it('tells a Claude Code user what to expect, how to validate, and how to start clean', () => {
+    const { container } = renderAt('/docs');
+    const text = container.querySelector('#client-claude-code').textContent;
+    // The masked header is explained as masking, not as a failure.
+    expect(text).toContain('"Authorization": "[REDACTED]"');
+    expect(text).toMatch(/not an error/);
+    // Validation names the commands and the tool counts the scope filter produces.
+    expect(text).toContain('claude mcp get agentdisk');
+    expect(text).toContain('claude mcp list');
+    expect(text).toMatch(/five tools/);
+    expect(text).toMatch(/eleven/);
+    // A clean start is remove then add, and the scope flags are named.
+    expect(text).toContain('claude mcp remove agentdisk');
+    expect(text).toMatch(/-s user/);
+    expect(text).toMatch(/-s project/);
   });
 
   it('gives every named client its own configuration block', () => {

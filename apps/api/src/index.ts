@@ -67,6 +67,7 @@ import {
   getFile,
   listFiles,
   patchFile,
+  readFile,
   searchFiles,
 } from "./routes/files";
 import {
@@ -808,6 +809,11 @@ export default {
         }
         if (segments.length === 4 && request.method === "GET" && action === "download") {
           return await onFile({ op: "read" }, downloadFile);
+        }
+        // The bytes inline, for a caller that cannot follow a URL. Same
+        // `read` op as download, same egress accounting inside the handler.
+        if (segments.length === 4 && request.method === "GET" && action === "content") {
+          return await onFile({ op: "read" }, readFile);
         }
         // No `restore`: a delete destroys the object and the row in the
         // request that asked for it, so there is nothing for it to act on.

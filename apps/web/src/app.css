@@ -951,6 +951,16 @@
   padding:var(--s-4) var(--s-5);border-bottom:1px solid var(--line)}
 .doc__codecap{font-family:var(--font-mono);font-size:var(--t-10);
   letter-spacing:var(--tr-wide);color:var(--ink-3)}
+/* Shell tabs on a code block. Same mono caption type as the label beside
+   them, so the bar reads as one line; the selected one takes the ink. */
+.doc__codetabs{display:flex;gap:var(--s-1);flex-wrap:wrap}
+.doc__codetab{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-wide);color:var(--ink-3);background:none;
+  border:1px solid transparent;border-radius:var(--r-1);
+  padding:var(--s-1) var(--s-3);cursor:pointer}
+.doc__codetab:hover{color:var(--dark-ink)}
+.doc__codetab--on{color:var(--dark-ink);border-color:var(--line)}
+.doc__codetab:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .doc__codebody{margin:0;padding:var(--s-6);overflow-x:auto;
   font-family:var(--font-mono);font-size:var(--t-12);line-height:1.7;
   color:var(--dark-ink)}

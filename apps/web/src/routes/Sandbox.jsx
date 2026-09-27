@@ -94,6 +94,95 @@ function Challenge({ onToken, onExpire }) {
   return <div ref={containerRef} />;
 }
 
+/**
+ * The claim link, shown once, beside the key it travels with.
+ *
+ * A null URL means the deployment issued none (the API builds it from
+ * `DASHBOARD_URL`, and sends null when that is unset). That is said out loud
+ * rather than hidden, because a sandbox with no claim link can never become
+ * anybody's and its files have to be moved out by hand before the sweep.
+ */
+function ClaimLink({ claim }) {
+  const url = claim?.url ?? null;
+  const expires = claim?.expiresAt ? new Date(claim.expiresAt) : null;
+  const expiresText = expires && !Number.isNaN(expires.getTime())
+    ? expires.toLocaleDateString(undefined, { day: 'numeric', month: 'long' })
+    : null;
+
+  if (!url) {
+    return (
+      <div role="alert">
+        <Alert tone="warn" title="This sandbox has no claim link.">
+          The server issued none, so this workspace cannot be claimed later. Use the key
+          to read your files back and recreate them in a workspace you own.
+        </Alert>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s-3)' }} data-testid="claim-link">
+      <p className="ad-meta">
+        <strong>Your claim link, shown once.</strong> Open it signed in to make this
+        workspace yours, or send it to the person you work for. It cannot be shown again:
+        only a hash of it is kept.
+        {expiresText ? <> It expires on {expiresText}.</> : null}
+      </p>
+      <CodeBlock filename="claim-link" code={url} />
+    </div>
+  );
+}
+
+function fmtBytes(n) {
+  if (typeof n !== 'number') return '—';
+  if (n >= 1024 * 1024 * 1024) return `${Math.round(n / (1024 * 1024 * 1024))} GB`;
+  if (n >= 1024 * 1024) return `${Math.round(n / (1024 * 1024))} MB`;
+  return `${Math.round(n / 1024)} KB`;
+}
+
+function fmtDate(iso) {
+  const d = iso ? new Date(iso) : null;
+  return d && !Number.isNaN(d.getTime())
+    ? d.toLocaleDateString(undefined, { day: 'numeric', month: 'long' })
+    : null;
+}
+
+/**
+ * What the person now holds, in numbers: how long the key works, how long
+ * the workspace lasts unclaimed, what it may hold meanwhile, and what claiming
+ * changes. Every value comes from the response, so this cannot promise a limit
+ * the API does not enforce; the fallback text is for a response that lacks a
+ * field, never a number typed here.
+ */
+function SandboxTerms({ result }) {
+  const ws = result.workspace ?? {};
+  const limits = ws.limits ?? {};
+  const deleteAfter = fmtDate(ws.deleteAfter);
+  const rows = [
+    ['API key', 'No expiry and no use limit. Works for as long as this workspace exists, and keeps working after you claim it.'],
+    ['Workspace', deleteAfter
+      ? `Unclaimed, deleted on ${deleteAfter} with everything in it unless somebody claims it first.`
+      : 'Unclaimed. Deleted after seven days with everything in it unless somebody claims it first.'],
+    ['Storage', `${fmtBytes(limits.storageBytes)} · ${limits.files ?? '—'} files · ${fmtBytes(limits.maxFileBytes)} per file`],
+    ['Traffic', `${fmtBytes(limits.egressBytesPerPeriod)} download · ${limits.requestsPerPeriod?.toLocaleString() ?? '—'} requests per period`],
+    ['Share links', limits.shareLinks === 0 ? 'None until claimed' : String(limits.shareLinks ?? '—')],
+    ['After claiming', 'The key keeps working, the workspace moves onto your plan, and the deletion date is cleared.'],
+  ];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s-3)' }} data-testid="sandbox-terms">
+      <p className="ad-meta"><strong>What you have.</strong></p>
+      <dl className="dl">
+        {rows.map(([k, v]) => (
+          <React.Fragment key={k}>
+            <dt>{k}</dt>
+            <dd>{v}</dd>
+          </React.Fragment>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
 export function Sandbox() {
   const [agentName, setAgentName] = useState('sandbox-agent');
   const [token, setToken] = useState(null);
@@ -166,6 +255,14 @@ export function Sandbox() {
             </div>
 
             <ApiKeyDisplay revealed secret={result.apiKey?.token} lastFour={result.apiKey?.lastFour} />
+
+            {/* The claim link is the only door from this sandbox into an
+                account, and the server keeps only its hash: this is the one
+                time it can be shown. Until 27 Sept 2026 this screen dropped
+                it, so every browser-made sandbox was unclaimable from birth. */}
+            <ClaimLink claim={result.claim} />
+
+            <SandboxTerms result={result} />
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s-3)' }}>
               <p className="ad-meta">Upload a file, then read it back:</p>

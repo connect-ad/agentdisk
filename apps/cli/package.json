@@ -1,0 +1,28 @@
+{
+  "name": "agentdisk",
+  "version": "0.1.0",
+  "description": "Command-line client for AgentDisk: persistent, audited file storage for AI agents.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "agentdisk": "./bin/agentdisk.mjs"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test",
+    "lint": "node --check bin/agentdisk.mjs && node --check src/cli.mjs"
+  },
+  "keywords": [
+    "agentdisk",
+    "mcp",
+    "agents",
+    "storage",
+    "cli"
+  ]
+}

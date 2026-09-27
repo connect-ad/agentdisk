@@ -884,12 +884,12 @@ export class WorkspaceScopedAuditEvents extends WorkspaceScoped {
       .prepare(
         `INSERT INTO audit_events (
            id, workspace_id, actor_type, actor_id, action, resource_type,
-           resource_id, result, ip, client, request_id, metadata, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           resource_id, result, ip, client, request_id, metadata, session_label, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(row.id, this.workspaceId, row.actor_type, row.actor_id, row.action,
             row.resource_type, row.resource_id, row.result, row.ip, row.client,
-            row.request_id, row.metadata, row.created_at)
+            row.request_id, row.metadata, row.session_label, row.created_at)
       .run();
   }
 

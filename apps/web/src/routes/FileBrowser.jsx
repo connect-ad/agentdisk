@@ -339,7 +339,7 @@ export default function FileBrowser() {
       title={`No files match “${query}”`}
       actions={<Button size="sm" variant="secondary" onClick={() => setQuery('')}>Clear search</Button>}
     >
-      Search covers filenames, paths and extracted text in this workspace only.
+      Search covers file names, paths, captions and tags in this workspace only. It does not look inside files.
     </EmptyState>
   ) : (
     <EmptyState

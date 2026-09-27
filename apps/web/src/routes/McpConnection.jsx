@@ -47,8 +47,9 @@ const PLACEHOLDER = '<YOUR_API_KEY>';
  */
 const TOOLS = [
   { name: 'list_files', op: 'list', description: 'List files and folders under a path, with pagination.' },
-  { name: 'search_files', op: 'list', description: 'Search files by name or path. Always restricted to the paths this key may read.' },
-  { name: 'get_file', op: 'read', description: 'Get a file’s metadata together with a short-lived download URL.' },
+  { name: 'search_files', op: 'list', description: 'Search files by name, path, caption or tags, never inside contents. Always restricted to the paths this key may read.' },
+  { name: 'read_file', op: 'read', description: 'Read a file’s contents inline, by id or path: UTF-8 text or base64, up to 1 MB.' },
+  { name: 'get_file', op: 'read', description: 'Get a file’s metadata together with a short-lived download URL, for files over 1 MB.' },
   { name: 'get_metadata', op: 'read', description: 'Get a file’s metadata without issuing a download URL, and without counting against egress.' },
   { name: 'create_file', op: 'write', description: 'Create a file inline, or get a presigned upload URL for anything larger than 1 MB.' },
   { name: 'update_file', op: 'write', description: 'Update a file’s caption, tags or metadata. Does not change its contents.' },

@@ -42,17 +42,23 @@ const HERO_TAGS = ['NO CARD REQUIRED', 'REST + MCP', 'HARD-CAPPED PRICING'];
  * number (the design's "v3" named a field that does not exist); a denied call
  * is `403 FORBIDDEN` (`lib/errors.ts`), not `scope_denied`; and keys begin
  * `ask_live_` (`lib/keys.ts`), not `adk_live_`.
+ *
+ * Rewritten 27 Sept 2026. The design's transcript showed an 812 MB parquet
+ * file and a 504 MB index — a big-data story that sold to a different buyer
+ * than the headline above it. What an agent actually persists here is small
+ * and read back later: a task list one session writes and the next one reads.
+ * That is the story, and `read_file` is the tool that makes it true.
  */
 const TRANSCRIPT = [
-  { text: '> create_file /projects/research/corpus.parquet' },
-  { text: '  ✓ 812 MB · sha256:9f2c41ab', tone: 'ok' },
+  { text: '> create_file /memory/tasks.md' },
+  { text: '  ✓ 1.2 KB · sha256:c81e0f2d', tone: 'ok' },
   { text: '' },
-  { text: '> list_files /projects/research' },
-  { text: '  corpus.parquet      812 MB   12m ago' },
-  { text: '  embeddings.index    504 MB    3h ago' },
-  { text: '  run-manifest.json    18 KB    3h ago' },
+  { text: '> read_file /memory/tasks.md        # next session' },
+  { text: '  # Tasks · nightly-report #42' },
+  { text: '  - [x] fetch sources' },
+  { text: '  - [ ] draft the summary' },
   { text: '' },
-  { text: '> delete_file /projects/research/corpus.parquet' },
+  { text: '> delete_file /memory/tasks.md' },
   { text: '  ✗ 403 FORBIDDEN', tone: 'danger' },
   { text: '  key ask_live_••••4aUgT lacks delete', tone: 'warn' },
 ];
@@ -66,7 +72,7 @@ const FEATURES = [
   {
     kicker: 'PERSISTENT',
     title: 'State between runs',
-    body: 'Agents pick up where they left off. Files, folders and metadata survive process restarts.',
+    body: 'Agents pick up where they left off. Notes, task lists and results written in one session are read back in the next.',
   },
   {
     kicker: 'MCP NATIVE',

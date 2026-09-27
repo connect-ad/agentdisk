@@ -58,7 +58,12 @@ export default function ActivityLog() {
         resource: describeResource(e),
         time: relativeTime(e.at),
         status: e.result === 'success' ? 'ok' : e.result,
-        detail: e.result === 'denied' ? 'Rejected before it reached storage' : undefined,
+        // The session label is what tells two runs of one agent apart, so it
+        // rides on the row itself rather than only in the expanded detail.
+        detail: e.result === 'denied'
+          ? 'Rejected before it reached storage'
+          : (e.session ? `Session: ${e.session}` : undefined),
+        session: e.session ?? null,
         ip: e.ip ?? '—',
         client: e.client ?? '—',
         req: e.requestId ?? '—'
@@ -74,7 +79,7 @@ export default function ActivityLog() {
       if (actor !== 'all' && e.actorType !== actor) return false;
       if (action !== 'all' && e.action.split('.')[0] !== action) return false;
       const q = query.trim().toLowerCase();
-      if (q && !(e.resource + e.actor + e.action).toLowerCase().includes(q)) return false;
+      if (q && !(e.resource + e.actor + e.action + (e.session ?? '')).toLowerCase().includes(q)) return false;
       return true;
     });
   }, [events, actor, action, query, loading]);
@@ -114,7 +119,7 @@ export default function ActivityLog() {
         />
         <Input
           leadingIcon={<Icon name="search" size={14} style={{ color: 'var(--ink-4)' }} />}
-          placeholder="Actor, action or resource"
+          placeholder="Actor, action, resource or session"
           value={query}
           onChange={e => setQuery(e.target.value)}
         />
@@ -178,6 +183,7 @@ export default function ActivityLog() {
                     <dt>Request ID</dt><dd className="ad-mono-sm">{e.req}</dd>
                     <dt>Source IP</dt><dd className="ad-mono-sm">{e.ip}</dd>
                     <dt>Client</dt><dd className="ad-mono-sm">{e.client}</dd>
+                    <dt>Session</dt><dd className="ad-mono-sm">{e.session ?? '—'}</dd>
                     <dt>Resource</dt><dd className="ad-mono-sm">{e.resource}</dd>
                   </dl>
                 </div>

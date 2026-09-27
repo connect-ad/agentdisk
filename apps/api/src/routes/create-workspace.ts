@@ -120,10 +120,30 @@ export async function createWorkspace(
       // product's own audit (backlog/023) already found elsewhere.
       plan: "sandbox",
       claimed: false,
+      /**
+       * When the unclaimed sweep may remove this workspace and everything in
+       * it. Same instant the claim link stops working, because the two are
+       * one clock: claiming is the only thing that stops it.
+       */
+      deleteAfter: new Date(result.claimTokenExpiresAt).toISOString(),
       limits: {
         storageBytes: SANDBOX_LIMITS.storageBytes,
         files: SANDBOX_LIMITS.fileCount,
         maxFileBytes: SANDBOX_LIMITS.maxFileBytes,
+        egressBytesPerPeriod: SANDBOX_LIMITS.egressBytesPerPeriod,
+        requestsPerPeriod: SANDBOX_LIMITS.requestsPerPeriod,
+        shareLinks: SANDBOX_LIMITS.shareLinks,
+      },
+      /**
+       * What claiming changes, said here because the agent reading this is
+       * the one who will be asked "what happens if I claim it": the key keeps
+       * working, the workspace moves onto the account's plan, and the clock
+       * above stops.
+       */
+      afterClaim: {
+        keyKeepsWorking: true,
+        limitsBecome: "the claiming account's plan",
+        deleteAfter: null,
       },
     },
     agent: {
@@ -137,6 +157,13 @@ export async function createWorkspace(
       token: result.token,
       prefix: result.keyPrefix,
       lastFour: result.keyLastFour,
+      /**
+       * No expiry and no use count: the key lives as long as the workspace
+       * does. Stated explicitly so a caller does not assume a sandbox key is
+       * a short-lived one and stop using it early.
+       */
+      expiresAt: null,
+      validWhile: "the workspace exists; it is not revoked by claiming",
       scopes: {
         ops: SANDBOX_KEY_SCOPE.ops,
         pathPrefix: "/*",
@@ -154,8 +181,10 @@ export async function createWorkspace(
     },
     notice:
       "Store this key now. It is shown once and cannot be recovered - only a hash of it is kept. " +
-      "The claim URL is shown once too: it is how a person takes ownership of this workspace, " +
-      "and an unclaimed workspace is eventually deleted.",
+      "It has no expiry and no use limit; it works for as long as this workspace exists. " +
+      "The claim URL is shown once too: give it to the person you work for, because it is how they " +
+      "take ownership of this workspace. Until then the workspace is held to the sandbox limits " +
+      "above, and if nobody claims it by workspace.deleteAfter it is deleted with everything in it.",
   };
 
   return new Response(JSON.stringify(body), {

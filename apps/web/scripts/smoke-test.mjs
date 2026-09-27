@@ -105,6 +105,34 @@ async function fetchUntilHeaders(url, label) {
   return response;
 }
 
+/**
+ * Fetch `/robots.txt` until it is the robots file, or give up.
+ *
+ * The same race as `fetchUntilHeaders`, one deploy later and from the other
+ * side: a path that is *new* to the asset store answers through the SPA
+ * fallback — `index.html`, 200 — until the new asset list has propagated,
+ * and the document root was already confirmed live 0.02s earlier. Measured on
+ * the deploy that first shipped the file (Fixing_feedback_07, 27 Sept 2026):
+ * the smoke test got `<!doctype html>` and the same URL served the file
+ * correctly, unchanged, when checked by hand afterwards. Retried on the body,
+ * because the status is 200 either way.
+ */
+async function fetchRobotsUntilLive(url) {
+  let body = "";
+  for (let attempt = 1; attempt <= HEADER_ATTEMPTS; attempt++) {
+    const response = await fetch(url, { redirect: "manual" });
+    body = await response.text();
+    if (body.startsWith("User-agent:")) return body;
+    if (attempt === HEADER_ATTEMPTS) break;
+    console.log(
+      `  robots.txt: not live yet, SPA fallback answered ` +
+        `(attempt ${attempt}/${HEADER_ATTEMPTS}); retrying in ${HEADER_RETRY_MS / 1000}s`
+    );
+    await sleep(HEADER_RETRY_MS);
+  }
+  return body;
+}
+
 console.log(`Smoke-testing ${baseUrl} (worker: ${workerName})`);
 
 // --- 1. The document root serves the built SPA shell ----------------------
@@ -316,9 +344,9 @@ console.log("\n[6] Indexing");
   }
 
   // The body, not the status: with no file in dist/, the SPA fallback answers
-  // this path with index.html and 200, which a crawler reads as "no rules".
-  const robotsResponse = await fetchWithRetry(`${baseUrl}/robots.txt`, "robots.txt");
-  const robotsBody = robotsResponse ? await robotsResponse.text() : "";
+  // this path with index.html and 200, which a crawler reads as "no rules" —
+  // and so does a file that has not propagated yet, hence the retry.
+  const robotsBody = await fetchRobotsUntilLive(`${baseUrl}/robots.txt`);
   const expectedRule = indexable ? "Allow: /" : "Disallow: /";
   if (!robotsBody.startsWith("User-agent: *") || !robotsBody.includes(expectedRule)) {
     fail(`GET /robots.txt should say "${expectedRule}"; got: ${robotsBody.slice(0, 80).replace(/\n/g, "\\n")}`);

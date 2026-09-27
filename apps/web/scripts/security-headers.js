@@ -55,6 +55,30 @@ const GOOGLE_FONTS_FILES = "https://fonts.gstatic.com";
 /** Firebase's popup/redirect flow loads a helper iframe from here. */
 const GOOGLE_APIS = "https://apis.google.com";
 
+/**
+ * Only production may be indexed.
+ *
+ * The dev deployment is a working product on public hostnames, and until 28
+ * Sept 2026 nothing told a crawler otherwise: no robots.txt, no
+ * `X-Robots-Tag`, no meta tag, and every route answering 200 through the SPA
+ * fallback — a staging site indexed beside the real one, competing with it in
+ * results. The environment name is the CI job's `ENVIRONMENT_NAME`, which is
+ * the Terraform workspace the deploy is pinned to; Vite's own `mode` cannot
+ * tell dev from prod because both are `production` builds.
+ *
+ * `undefined` is not prod. A local build, a build from a caller that forgot
+ * the variable, and a build for an environment that does not exist yet all
+ * get the noindex treatment — the failure mode of the wrong default is a
+ * search index, and the failure mode of this one is an unlisted staging site.
+ */
+export const INDEXABLE_ENVIRONMENT = "prod";
+export function isIndexable(environment) {
+  return environment === INDEXABLE_ENVIRONMENT;
+}
+
+/** The `X-Robots-Tag` value and `<meta name="robots">` content for a non-indexable build. */
+export const ROBOTS_NOINDEX = "noindex, nofollow";
+
 function origin(url, fallback) {
   try {
     return new URL(url).origin;
@@ -125,7 +149,7 @@ export function contentSecurityPolicy({ apiBase, firebaseAuthDomain } = {}) {
  * reads.
  */
 export function securityHeaders(options = {}) {
-  return [
+  const headers = [
     ["Content-Security-Policy", contentSecurityPolicy(options)],
     // Two years is the submission requirement for HSTS preload; one year is the
     // figure asked for here and is the common floor. No `preload` token: that
@@ -136,10 +160,21 @@ export function securityHeaders(options = {}) {
     ["X-Content-Type-Options", "nosniff"],
     ["Referrer-Policy", "strict-origin-when-cross-origin"],
   ];
+  // Last, so the five above keep their positions in the generated file.
+  if (!isIndexable(options.environment)) {
+    headers.push(["X-Robots-Tag", ROBOTS_NOINDEX]);
+  }
+  return headers;
 }
 
-/** The names the smoke test and the tests both assert on. */
-export const REQUIRED_HEADERS = securityHeaders().map(([name]) => name);
+/**
+ * The names the smoke test and the tests both assert on: the five every
+ * environment carries. `X-Robots-Tag` is asserted separately, per environment,
+ * because its presence in prod would be the defect.
+ */
+export const REQUIRED_HEADERS = securityHeaders({ environment: INDEXABLE_ENVIRONMENT }).map(
+  ([name]) => name
+);
 
 /**
  * Everything under `/assets/` carries a content hash in its filename, so a
@@ -179,4 +214,30 @@ export function renderHeadersFile(options = {}) {
   }
   lines.push("", "/assets/*", `  Cache-Control: ${ASSET_CACHE_CONTROL}`);
   return `${lines.join("\n")}\n`;
+}
+
+/**
+ * The `robots.txt` body, written to `dist/` beside `_headers`.
+ *
+ * Generated rather than kept under `public/` for the same reason as the
+ * headers: it differs by environment. Without a file here, the SPA fallback
+ * answers `/robots.txt` with `index.html` and 200, which a crawler reads as
+ * "no rules" — the smoke test checks the body, not the status, for that reason.
+ */
+export function renderRobotsFile(options = {}) {
+  const rule = isIndexable(options.environment) ? "Allow: /" : "Disallow: /";
+  return `User-agent: *\n${rule}\n`;
+}
+
+/**
+ * The `<meta name="robots">` tag for `index.html`, or nothing.
+ *
+ * Third mechanism, third crawler population: one that ignores robots.txt and
+ * reads the document but not its headers. Injected at build by
+ * `vite.config.js` rather than written into `index.html`, so the committed
+ * document does not have to know which environment it will be built for.
+ */
+export function robotsMetaTag(options = {}) {
+  if (isIndexable(options.environment)) return null;
+  return { tag: "meta", attrs: { name: "robots", content: ROBOTS_NOINDEX }, injectTo: "head" };
 }

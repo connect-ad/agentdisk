@@ -17,8 +17,10 @@
  *
  * usage: smoke-test.mjs <base-url> <worker-name>
  * env:   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID (for the workers.dev check)
+ *        ENVIRONMENT_NAME (which side of the indexing check applies; unset is
+ *        treated as not prod, matching the build)
  */
-import { REQUIRED_HEADERS } from "./security-headers.js";
+import { REQUIRED_HEADERS, ROBOTS_NOINDEX, isIndexable } from "./security-headers.js";
 
 const baseUrl = process.argv[2]?.replace(/\/$/, "");
 const workerName = process.argv[3];
@@ -289,6 +291,39 @@ console.log("\n[5] Security headers");
     fail(`SPA fallback response is missing: ${missingOnDeepLink.join(", ")}`);
   } else {
     pass("SPA fallback carries all five headers");
+  }
+}
+
+// --- 6. Indexing ----------------------------------------------------------
+// Only prod may be indexed. Three mechanisms are built (header, robots.txt,
+// meta tag) and the two a crawler meets first are checked here, in the
+// direction the environment demands: dev missing its noindex is the defect
+// this section was written for, and prod *carrying* one would be worse.
+console.log("\n[6] Indexing");
+{
+  const environment = process.env.ENVIRONMENT_NAME;
+  const indexable = isIndexable(environment);
+  const rootResponse = await fetchWithRetry(`${baseUrl}/`, "indexing");
+  const robotsTag = rootResponse ? rootResponse.headers.get("X-Robots-Tag") : null;
+  if (!rootResponse) {
+    fail("GET / did not answer, so the indexing header could not be checked");
+  } else if (indexable && robotsTag) {
+    fail(`${environment} is indexable but GET / carries X-Robots-Tag: ${robotsTag}`);
+  } else if (!indexable && robotsTag !== ROBOTS_NOINDEX) {
+    fail(`GET / should carry X-Robots-Tag: ${ROBOTS_NOINDEX} outside prod, got ${robotsTag ?? "nothing"}`);
+  } else {
+    pass(`X-Robots-Tag is ${robotsTag ?? "absent"}, correct for ${environment ?? "an unnamed environment"}`);
+  }
+
+  // The body, not the status: with no file in dist/, the SPA fallback answers
+  // this path with index.html and 200, which a crawler reads as "no rules".
+  const robotsResponse = await fetchWithRetry(`${baseUrl}/robots.txt`, "robots.txt");
+  const robotsBody = robotsResponse ? await robotsResponse.text() : "";
+  const expectedRule = indexable ? "Allow: /" : "Disallow: /";
+  if (!robotsBody.startsWith("User-agent: *") || !robotsBody.includes(expectedRule)) {
+    fail(`GET /robots.txt should say "${expectedRule}"; got: ${robotsBody.slice(0, 80).replace(/\n/g, "\\n")}`);
+  } else {
+    pass(`robots.txt says ${expectedRule}`);
   }
 }
 

@@ -14,8 +14,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   REQUIRED_HEADERS,
+  ROBOTS_NOINDEX,
   contentSecurityPolicy,
+  isIndexable,
   renderHeadersFile,
+  renderRobotsFile,
+  robotsMetaTag,
   securityHeaders
 } from '../scripts/security-headers.js';
 
@@ -190,5 +194,60 @@ describe('the _headers file', () => {
    */
   it('does not set COOP, which would break popup sign-in', () => {
     expect(renderHeadersFile(OPTIONS)).not.toContain('Cross-Origin-Opener-Policy');
+  });
+});
+
+/**
+ * Three mechanisms, one decision. The dev deployment was fully indexable until
+ * 28 Sept 2026 — no robots.txt, no header, no meta tag, every route 200 —
+ * so each of the three is pinned to the same `isIndexable` answer, and the
+ * unset case is pinned to the safe side.
+ */
+describe('search-engine indexing', () => {
+  it('is allowed only for prod, and an unnamed environment is not prod', () => {
+    expect(isIndexable('prod')).toBe(true);
+    expect(isIndexable('dev')).toBe(false);
+    expect(isIndexable(undefined)).toBe(false);
+    expect(isIndexable('')).toBe(false);
+    expect(isIndexable('production')).toBe(false);
+  });
+
+  it('adds X-Robots-Tag to every response of a non-prod build, and never to prod', () => {
+    const dev = new Map(securityHeaders({ ...OPTIONS, environment: 'dev' }));
+    expect(dev.get('X-Robots-Tag')).toBe(ROBOTS_NOINDEX);
+    expect(ROBOTS_NOINDEX).toMatch(/\bnoindex\b/);
+
+    const local = new Map(securityHeaders(OPTIONS));
+    expect(local.get('X-Robots-Tag')).toBe(ROBOTS_NOINDEX);
+
+    const prod = new Map(securityHeaders({ ...OPTIONS, environment: 'prod' }));
+    expect(prod.has('X-Robots-Tag')).toBe(false);
+  });
+
+  it('keeps X-Robots-Tag out of REQUIRED_HEADERS, which every environment must carry', () => {
+    expect(REQUIRED_HEADERS).not.toContain('X-Robots-Tag');
+    expect(REQUIRED_HEADERS).toHaveLength(5);
+  });
+
+  it('writes the header under the catch-all rule so deep links carry it too', () => {
+    const catchAll = renderHeadersFile({ ...OPTIONS, environment: 'dev' }).split('/assets/*')[0];
+    expect(catchAll).toMatch(/^ {2}X-Robots-Tag: noindex, nofollow$/m);
+    expect(renderHeadersFile({ ...OPTIONS, environment: 'prod' })).not.toContain('X-Robots-Tag');
+  });
+
+  it('renders a robots.txt that disallows everything outside prod', () => {
+    expect(renderRobotsFile({ environment: 'dev' })).toBe('User-agent: *\nDisallow: /\n');
+    expect(renderRobotsFile({})).toBe('User-agent: *\nDisallow: /\n');
+    expect(renderRobotsFile({ environment: 'prod' })).toBe('User-agent: *\nAllow: /\n');
+  });
+
+  it('injects a robots meta tag into the document outside prod', () => {
+    expect(robotsMetaTag({ environment: 'dev' })).toEqual({
+      tag: 'meta',
+      attrs: { name: 'robots', content: ROBOTS_NOINDEX },
+      injectTo: 'head'
+    });
+    expect(robotsMetaTag({})).not.toBeNull();
+    expect(robotsMetaTag({ environment: 'prod' })).toBeNull();
   });
 });

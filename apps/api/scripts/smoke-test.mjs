@@ -43,9 +43,27 @@ for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
         );
         process.exit(1);
       } else {
+        // Indexing is refused on every response and by robots.txt, in every
+        // environment (src/lib/robots.ts). Checked on the deployed Worker
+        // because the header is attached at the exit, and an exit added later
+        // that skips the wrapper would pass every unit test.
+        const robotsTag = response.headers.get("x-robots-tag") ?? "";
+        if (!/\bnoindex\b/.test(robotsTag)) {
+          console.error(`FATAL: ${target} carries X-Robots-Tag "${robotsTag}", expected noindex.`);
+          process.exit(1);
+        }
+        const robotsUrl = `${baseUrl.replace(/\/$/, "")}/robots.txt`;
+        const robots = await fetch(robotsUrl);
+        const robotsBody = await robots.text();
+        if (!robots.ok || !/^Disallow: \/\s*$/m.test(robotsBody)) {
+          console.error(`FATAL: ${robotsUrl} answered HTTP ${robots.status} without "Disallow: /".`);
+          process.exit(1);
+        }
+
         console.log(`Smoke test passed: ${target}`);
         console.log(`  environment: ${body.environment}`);
         console.log(`  commit:      ${body.commit}`);
+        console.log(`  indexing:    refused (X-Robots-Tag: ${robotsTag}; robots.txt disallows /)`);
         process.exit(0);
       }
     }

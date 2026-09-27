@@ -111,6 +111,22 @@ were not touched. See `backlog/002`.
   pipeline. Generate the file from `scripts/security-headers.js` rather than
   writing headers anywhere else, and see 06 PART 16.9a for why COOP is absent
   and `style-src` still allows `'unsafe-inline'`.
+- **Only prod may be indexed, and "not named prod" means not prod.** Until
+  28 Sept 2026 `app-dev` was fully indexable: no `robots.txt`, no
+  `X-Robots-Tag`, no meta tag, every route 200 through the SPA fallback. The
+  dashboard now decides from the deploy job's `ENVIRONMENT_NAME` — Vite's
+  `mode` is `production` for both environments and cannot tell them apart —
+  and `isIndexable` in `scripts/security-headers.js` answers yes for `prod`
+  alone, so a local build or a caller that drops the variable ships noindex
+  rather than an indexed staging site. Three mechanisms come from that one
+  answer: the header in `_headers`, a generated `dist/robots.txt` (with no
+  file there the SPA fallback answers `/robots.txt` with `index.html` and
+  200, which a crawler reads as "no rules"), and a `<meta name="robots">`
+  injected at build. The smoke test checks the direction the environment
+  demands, so a prod carrying noindex fails too. The API Worker and the admin
+  console refuse indexing in **every** environment (`lib/robots.ts`,
+  `apps/admin/public/`): an API and a staff console have no prod in which
+  being found would be right, and neither reads `ENVIRONMENT` for it.
 - **Every authentication failure returns one identical body.** Unknown, revoked,
   expired, forged and disabled-agent credentials must stay indistinguishable to
   the caller — a distinguishable failure is an oracle telling an attacker which

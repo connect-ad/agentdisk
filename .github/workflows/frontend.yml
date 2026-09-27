@@ -304,6 +304,12 @@ jobs:
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
           EXPECTED_FIREBASE_PROJECT: ${{ vars.FIREBASE_PROJECT_ID }}
+          # Already set at job level; restated here because the build reads it.
+          # apps/web's vite.config.js decides from this name whether the build
+          # may be indexed — only "prod" may, and an unset name means no — so
+          # a build that lost this variable would ship a noindex prod, which
+          # the prod smoke test then fails.
+          ENVIRONMENT_NAME: ${{ inputs.environment }}
         run: |
           set -euo pipefail
           if [ -z "${VITE_API_BASE:-}" ]; then

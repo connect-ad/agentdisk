@@ -11,6 +11,7 @@
 import { toErrorResponse, ApiError } from "./lib/errors";
 import { newId } from "./lib/ids";
 import { withAuth, type Requirement, type Handler } from "./middleware/auth";
+import { robotsTxtResponse, withNoIndex } from "./lib/robots";
 import { whoami } from "./routes/whoami";
 import { logoutAll } from "./routes/logout-all";
 import { claimWorkspace, previewClaim } from "./routes/claim";
@@ -297,6 +298,10 @@ export default {
       // Public. No credential is read, so nothing here can leak one.
       if (route === "GET /v1/healthz") {
         return json(buildHealth(env, new Date()));
+      }
+      // Also public, and the same answer in every environment: see lib/robots.ts.
+      if (route === "GET /robots.txt") {
+        return robotsTxtResponse();
       }
 
       const authed = (requirement: Requirement, handler: Handler): Promise<Response> =>
@@ -856,10 +861,15 @@ export default {
     // Errors get the headers too. A 401 the browser refuses to let script read
     // is indistinguishable from a network failure, and "that credential isn't
     // valid" is exactly what a developer needs to see in their console.
+    //
+    // `withNoIndex` sits on the same two exits so that no response — success,
+    // error, share page or 404 — leaves without `X-Robots-Tag`. Wrapping the
+    // exits rather than each handler is what makes that a property of the
+    // Worker rather than a habit of its authors.
     try {
-      return withCorsHeaders(await respond(), request, env);
+      return withCorsHeaders(withNoIndex(await respond()), request, env);
     } catch (thrown) {
-      return withCorsHeaders(toErrorResponse(thrown, id), request, env);
+      return withCorsHeaders(withNoIndex(toErrorResponse(thrown, id)), request, env);
     }
   },
 

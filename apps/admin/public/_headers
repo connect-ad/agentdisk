@@ -1,0 +1,11 @@
+# Staff tooling is never indexed, in any environment — the same decision as
+# index.html's <meta name="robots">, restated as a header so a crawler that
+# reads headers before documents gets the answer first. This file is static
+# under public/ (not generated like apps/web's) because it has no environment
+# branch: there is no environment in which the console may be indexed.
+#
+# This is the only header the console sets. The security headers apps/web
+# carries were never added here — that is the deleted backlog/028, recoverable
+# from the tag pre-billing-module — and adding one line does not close it.
+/*
+  X-Robots-Tag: noindex, nofollow

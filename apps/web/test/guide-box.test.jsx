@@ -56,10 +56,10 @@ describe('the guide box', () => {
     expect(within(box).getByText('Your path', { selector: '.doc__guidehead' })).toBeTruthy();
   });
 
-  it('opens every link in the written path in a new tab, and says so', async () => {
+  it('opens every link in the written path in a new tab, except the sandbox, which opens in place', async () => {
     const user = userEvent.setup();
     const box = mount();
-    await user.click(within(box).getByLabelText(/Try it with no account/));
+    await user.click(within(box).getByLabelText(/Give my agent a disk/));
     await user.click(within(box).getByLabelText('Cursor'));
 
     const links = within(box).getAllByRole('link', { name: /opens in a new tab/ });
@@ -68,8 +68,18 @@ describe('the guide box', () => {
       expect(a.getAttribute('target')).toBe('_blank');
       expect(a.getAttribute('rel')).toContain('noreferrer');
     }
-    // The sandbox step is the one that leaves the page.
-    expect(links.some(a => a.getAttribute('href') === '/sandbox')).toBe(true);
+
+    // The sandbox step keeps its address for a middle-click, but a plain
+    // click opens the dialog here, so the two answers are not lost.
+    await user.click(within(box).getByText('Start over'));
+    await user.click(within(box).getByLabelText(/Try it with no account/));
+    await user.click(within(box).getByLabelText('Cursor'));
+    const sandbox = within(box).getByRole('link', { name: 'Get Sandbox Credentials' });
+    expect(sandbox.getAttribute('href')).toBe('/sandbox');
+    expect(sandbox.getAttribute('target')).toBeNull();
+    await user.click(sandbox);
+    expect(screen.getByRole('dialog', { name: 'Get Sandbox Credentials' })).toBeTruthy();
+    expect(within(box).getByText('Add AgentDisk to Cursor')).toBeTruthy();
   });
 
   it('ends every MCP path with two prompts to paste: write a file, then read it back', async () => {

@@ -16,7 +16,6 @@ import {
   Gone, BadRequest, RateLimited, NotModified, MovedPermanently, Unauthorized,
   AccountClosed,
 } from './routes/ErrorPages.jsx';
-import { Sandbox } from './routes/Sandbox.jsx';
 import { Signup, VerifyEmail, ForgotPassword, ResetPassword, Login } from './routes/Auth.jsx';
 import { Landing, Pricing } from './routes/Marketing.jsx';
 import Claim from './routes/Claim.jsx';
@@ -412,10 +411,11 @@ export default function App() {
       </Route>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
-      {/* Talks to the real API, unlike every other screen here: it is the one
-          way to obtain a first credential (05 PART 13's Turnstile-gated
-          POST /v1/workspaces). */}
-      <Route path="/sandbox" element={<Sandbox />} />
+      {/* The docs at the Quick start with the sandbox dialog already open. The
+          dialog talks to the real API, unlike every other screen here: it is
+          the one way to obtain a first credential (05 PART 13's
+          Turnstile-gated POST /v1/workspaces). */}
+      <Route path="/sandbox" element={<Docs sandbox />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />

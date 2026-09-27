@@ -83,7 +83,7 @@ describe("actual responses", () => {
 
   it("carries the header on an error, so the browser lets script read it", async () => {
     // A 401 a browser refuses to expose is indistinguishable from the network
-    // being down, and "that credential isn't valid" is the whole message.
+    // being down, and the one message every auth failure returns is the only guidance.
     const res = await SELF.fetch(`${URL_BASE}/v1/whoami`, {
       headers: { origin: DASHBOARD, authorization: "Bearer ask_live_nonsense" },
     });

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Icon } from '../components/index.js';
 import { Nav, Footer } from './Marketing.jsx';
+import { SandboxDialog } from '../components-local/SandboxDialog.jsx';
 
 /**
  * The documentation — one page, nine sections, written from the code.
@@ -731,7 +732,26 @@ function guideSteps(goal, chosen) {
   if (goal === 'try') {
     return {
       steps: [
-        { title: 'Open the sandbox', body: 'No sign-up. Pass the bot check and you get a workspace ID, an API key and a claim link. Copy all three: the key and the link are shown once.', link: { to: '/sandbox', label: 'Open the sandbox' } },
+        // The sandbox's terms live here, beside the button, and nowhere in the
+        // dialog it opens: what a person gets, why to keep both safe, and what
+        // happens if nobody claims. The numbers are SANDBOX_LIMITS in the
+        // API's lib/plans.ts, typed here because no sandbox exists yet to ask.
+        {
+          title: 'Get Sandbox access',
+          body: (
+            <>
+              No sign-up. Pass the bot check and you get two things, shown once in one block:
+              an <strong>API key</strong>, which is what your agent uses to read and write files,
+              and a <strong>claim link</strong>, which is the only way to make the workspace yours
+              later. Copy both now and keep them private. Anyone holding the key can act as your
+              agent, and anyone opening the link signed in becomes the owner. The workspace starts
+              unclaimed and holds 50 MB and 500 files. If nobody claims it within seven days, it is
+              wiped with everything in it and the key stops working. Claiming it keeps the key
+              working, moves the workspace onto your plan and removes the deadline.
+            </>
+          ),
+          link: { to: '/sandbox', label: 'Get Sandbox Credentials' },
+        },
         connect,
         verify,
       ],
@@ -755,7 +775,7 @@ function guideSteps(goal, chosen) {
   }
   return {
     steps: [
-      { title: 'Get a key', body: 'Either the sandbox, with no account, or Agent access → Agent identities → API keys once signed in. Scope it to what the script does.', link: { to: '/sandbox', label: 'Open the sandbox' } },
+      { title: 'Get a key', body: 'Either the sandbox, with no account, or Agent access → Agent identities → API keys once signed in. Scope it to what the script does.', link: { to: '/sandbox', label: 'Get Sandbox Credentials' } },
       { title: 'Keep it out of your history', body: 'Export it once and reference the variable. Never put a key in a URL: the API refuses it and tells you to rotate.', blocks: [{ caption: 'SHELL', code: `export AGENTDISK_KEY=${KEY_PLACEHOLDER}`, variants: EXPORT_KEY_SHELLS }] },
       { title: 'Ask who you are', body: 'The answer names the workspace, the scopes, and the room left on the account.', blocks: [{ caption: 'WHO AM I', code: REST_WHOAMI }] },
       { title: 'Write a file', body: 'Up to 1 MB inline. Larger files use the presigned flow in step 5 below.', blocks: [{ caption: 'CREATE A SMALL FILE', code: REST_INLINE }] },
@@ -778,7 +798,13 @@ function guideSteps(goal, chosen) {
  * this tab would replace it with the destination and lose their two answers.
  * The external glyph and the hidden note say so before the click.
  */
-function GuideMe() {
+/**
+ * `onSandbox` opens the sandbox dialog in place. The step's link keeps
+ * `href="/sandbox"` so a middle-click or a copied address still works, but a
+ * plain click must not leave the page: the two answers that wrote the path
+ * would be lost, and the dialog is the same flow /sandbox itself opens.
+ */
+function GuideMe({ onSandbox }) {
   const [goal, setGoal] = useState(null);
   const [client, setClient] = useState(null);
   const needsClient = goal !== null && goal !== 'script';
@@ -801,7 +827,8 @@ function GuideMe() {
         <div className="doc__guideintro">
           <h4 className="doc__guideq" id="guide-q">Get a path written for you</h4>
           <p className="doc__guidesub">
-            Answer two questions. Links in the path open in a new tab, so you keep your place.
+            Answer two questions. Links in the path open in a new tab, so you keep your place;
+            the sandbox opens right here.
           </p>
         </div>
         <ol className="doc__guidetrail" aria-label="Progress">
@@ -859,7 +886,16 @@ function GuideMe() {
               <li key={i} className="doc__guidestep">
                 <div className="doc__guidetitle">{s.title}</div>
                 <p className="doc__p">{s.body}</p>
-                {s.link ? (
+                {s.link && s.link.to === '/sandbox' && onSandbox ? (
+                  <a
+                    href={s.link.to}
+                    className="doc__guidelink"
+                    onClick={(e) => { if (!e.metaKey && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); onSandbox(); } }}
+                  >
+                    {s.link.label}
+                    <Icon name="chevronRight" size={13} aria-hidden="true" />
+                  </a>
+                ) : s.link ? (
                   <a href={s.link.to} target="_blank" rel="noreferrer" className="doc__guidelink">
                     {s.link.label}
                     <Icon name="external" size={13} aria-hidden="true" />
@@ -941,10 +977,26 @@ function useActiveSection(ids) {
 
 /* ── the page ────────────────────────────────────────────────────────────── */
 
-export function Docs() {
+/**
+ * `sandbox` is true when this page is reached as /sandbox: the docs render at
+ * the Quick start with the sandbox dialog already open, so the landing page's
+ * button and every outside link to /sandbox still land in the one sandbox
+ * flow. Closing from there moves the address to /docs/quickstart, since the
+ * page underneath is that.
+ */
+export function Docs({ sandbox = false }) {
   const params = useParams();
+  const navigate = useNavigate();
   const ids = React.useMemo(() => SECTIONS.map(s => s.id), []);
   const active = useActiveSection(ids);
+
+  const [sandboxOpen, setSandboxOpen] = useState(sandbox);
+  useEffect(() => { if (sandbox) setSandboxOpen(true); }, [sandbox]);
+  const openSandbox = () => setSandboxOpen(true);
+  const closeSandbox = () => {
+    setSandboxOpen(false);
+    if (sandbox) navigate('/docs/quickstart', { replace: true });
+  };
 
   // `/docs/quickstart` and `/docs#privacy` both scroll to the section on
   // arrival. The browser handles a hash on a full load, but a client-side
@@ -952,17 +1004,20 @@ export function Docs() {
   // scroll on its own, so both forms are handled here.
   const location = useLocation();
   useEffect(() => {
-    const target = params['*'] || location.hash.slice(1);
+    const target = params['*'] || location.hash.slice(1) || (sandbox ? 'quickstart' : '');
     if (!target) return;
     const el = document.getElementById(target.replace(/\/+$/, ''));
     if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView();
-  }, [params, location.hash]);
+  }, [params, location.hash, sandbox]);
 
   const current = SECTIONS.find(s => s.id === active) ?? SECTIONS[0];
 
   return (
     <div className="mk">
       <Nav />
+      {/* A direct child of .mk, beside the sticky nav rather than inside the
+          docs columns, so no ancestor's stacking context can cap the scrim. */}
+      <SandboxDialog open={sandboxOpen} onClose={closeSandbox} />
       <div className="mk__wrap">
         <div className="doc">
 
@@ -1093,12 +1148,12 @@ export function Docs() {
                 block for the tool you use. The full reference follows below if you would rather
                 read it all.
               </P>
-              <GuideMe />
+              <GuideMe onSandbox={openSandbox} />
 
               <H3 id={slug('Before you begin')}>Before you begin</H3>
               <List items={[
                 <>An AgentDisk account. <Link to="/signup">Start free</Link> with Google, GitHub or email. No card is asked for.</>,
-                <>Or no account at all: <Link to="/sandbox">the sandbox</Link> creates a workspace and a key from a browser, behind a bot check. It holds a tighter allowance (50 MB, 500 files, 500 MB egress, 10,000 requests) and is scheduled for removal after seven days unless you claim it from the link it shows you.</>,
+                <>Or no account at all: <Link to="/sandbox" onClick={(e) => { if (!e.metaKey && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); openSandbox(); } }}>the sandbox</Link> creates a workspace and a key from a browser, behind a bot check. It holds a tighter allowance (50 MB, 500 files, 500 MB egress, 10,000 requests) and is scheduled for removal after seven days unless you claim it from the link it shows you.</>,
                 <>An MCP-capable client, or just <code>curl</code>. The MCP server is HTTP; there is no package to install and no CLI of ours to log in with.</>,
               ]} />
 

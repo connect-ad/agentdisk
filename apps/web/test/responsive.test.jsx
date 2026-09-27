@@ -101,8 +101,9 @@ describe('the stylesheet leaves desktop alone', () => {
   });
 
   it('uses only the breakpoints the file already had, plus the two it names', () => {
+    // 400px went with the sandbox card it existed for; the sandbox is a dialog now.
     const widths = [...pass.matchAll(/@media \(max-width:(\d+)px\)/g)].map(m => Number(m[1]));
-    expect(new Set(widths)).toEqual(new Set([875, 600, 560, 400]));
+    expect(new Set(widths)).toEqual(new Set([875, 600, 560]));
     expect(pass).not.toMatch(/@media \(min-width/);
   });
 });

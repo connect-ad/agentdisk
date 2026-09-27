@@ -69,7 +69,7 @@ describe('script-src — the directive that does the work', () => {
   });
 
   it('allows only self and the two hosts that actually serve script', () => {
-    // Turnstile: routes/Sandbox.jsx loads its api.js. apis.google.com: the
+    // Turnstile: components-local/SandboxDialog.jsx loads its api.js. apis.google.com: the
     // Firebase popup helper. Nothing else in this app loads a third-party
     // script, and a third entry here should be treated as a question.
     expect(sources().sort()).toEqual(

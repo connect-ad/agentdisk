@@ -12,6 +12,8 @@
  *     - telling the caller which one it was hands an attacker a key oracle.
  */
 
+import { UNCLAIMED_TTL_MS } from "./claim";
+
 export type ErrorCode =
   | "UNAUTHORIZED"
   | "FORBIDDEN"
@@ -60,14 +62,27 @@ export class ApiError extends Error {
   }
 }
 
+const UNCLAIMED_DAYS = Math.round(UNCLAIMED_TTL_MS / (24 * 60 * 60 * 1000));
+
 /**
  * The single message every authentication failure returns.
  *
  * Deliberately says nothing about which part failed. `internalReason` carries
- * that for the log line.
+ * that for the log line. The message may still be useful: it lists every way
+ * a key stops working and what to do next, because a person holding a swept
+ * sandbox key otherwise sees the same four words as a typo and has nowhere to
+ * go. Listing all the causes at once gives nothing away; the oracle would be
+ * naming the one that applied. `test/auth.test.ts` pins that every failure,
+ * on every route, returns this body byte for byte.
  */
+export const UNAUTHORIZED_MESSAGE =
+  "That credential isn't valid. Check that the key was copied in full and is sent as " +
+  "an Authorization: Bearer header. A key stops working once it is revoked, its agent is " +
+  `disabled or its workspace is deleted, and an unclaimed sandbox is deleted after ${UNCLAIMED_DAYS} days. ` +
+  "Mint a new key in the dashboard, or start a new sandbox.";
+
 export function unauthorized(internalReason: string): ApiError {
-  return new ApiError("UNAUTHORIZED", "That credential isn't valid.", { internalReason });
+  return new ApiError("UNAUTHORIZED", UNAUTHORIZED_MESSAGE, { internalReason });
 }
 
 export function forbidden(message: string, details?: Record<string, unknown>): ApiError {

@@ -26,6 +26,7 @@ function renderAt(path) {
       <Routes>
         <Route path="/docs" element={<Docs />} />
         <Route path="/docs/*" element={<Docs />} />
+        <Route path="/sandbox" element={<Docs sandbox />} />
       </Routes>
     </MemoryRouter>
   );
@@ -177,12 +178,40 @@ describe('docs page', () => {
     expect(screen.getByText('Now pick the tool you use.')).toBeTruthy();
     await user.click(screen.getByLabelText('Cursor'));
     expect(guideOut().getByText('Add AgentDisk to Cursor')).toBeTruthy();
-    expect(guideOut().getByRole('link', { name: /Open the sandbox/ }).getAttribute('href')).toBe('/sandbox');
+    // Step 1 says what a sandbox gives and why both parts are kept safe, and
+    // its link opens the dialog in place rather than leaving the page.
+    const step1 = guideOut().getByText('Get Sandbox access').closest('.doc__guidestep');
+    expect(step1.textContent).toMatch(/API key/);
+    expect(step1.textContent).toMatch(/claim link/);
+    expect(step1.textContent).toMatch(/keep them private/);
+    expect(step1.textContent).toMatch(/seven days/);
+    expect(step1.textContent).toMatch(/key stops working/);
+    const open = guideOut().getByRole('link', { name: 'Get Sandbox Credentials' });
+    expect(open.getAttribute('href')).toBe('/sandbox');
+    expect(open.getAttribute('target')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await user.click(open);
+    expect(screen.getByRole('dialog', { name: 'Get Sandbox Credentials' })).toBeTruthy();
+    // The path that produced it is still on the page underneath.
+    expect(guideOut().getByText('Add AgentDisk to Cursor')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(guideOut().getByText('KEEP WHAT YOU BUILT')).toBeTruthy();
     // A script needs no client and gets the REST path instead.
     await user.click(screen.getByLabelText(/Script against the REST API/));
     expect(screen.queryByText('Which AI tool?')).toBeNull();
     expect(guideOut().getByText('WHO AM I')).toBeTruthy();
+  });
+
+  it('opens /sandbox as the docs with the dialog already up, and closing lands on the Quick start', async () => {
+    const user = userEvent.setup();
+    const { container } = renderAt('/sandbox');
+    // The page underneath is the docs, not a shell of its own.
+    expect(container.querySelector('section#quickstart')).not.toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Get Sandbox Credentials' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(container.querySelector('section#quickstart')).not.toBeNull();
   });
 
   it('renders the same page for a nested docs path', () => {

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, ApiKeyDisplay, Button, CodeBlock, Input } from '../components/index.js';
+import { ShellCodeBlock } from '../components-local/ShellCodeBlock.jsx';
 
 /**
  * The agent-first sandbox flow (02 PART 4.3, 05 PART 13's `POST /v1/workspaces`).
@@ -133,6 +134,81 @@ function ClaimLink({ claim }) {
   );
 }
 
+/**
+ * The agent's name is chosen here, not typed. `sandbox-agent` alone was the
+ * same name on every sandbox a person made, so two of them were told apart
+ * only by workspace ID; a UTC stamp makes each one say when it was made and
+ * stays inside the API's rule (letters, digits, spaces, `-` and `_`, 64 max).
+ * The field stays on screen so the person knows the name their key acts under.
+ */
+export function defaultAgentName(now = new Date()) {
+  const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, '').replace('T', '-');
+  return `sandbox-agent-${stamp}`;
+}
+
+/**
+ * The round trip per shell, on the same variable name the Docs page uses, so
+ * a person who moves from this screen to the Claude Code command finds
+ * AGENTDISK_KEY already set. PowerShell needs `curl.exe`: in Windows
+ * PowerShell the bare name is an alias for Invoke-WebRequest. Both Windows
+ * shells escape the JSON body's quotes, since neither has Bash's single-quoted
+ * literal; cmd comments with REM, because `#` is not a comment there.
+ */
+export function roundTripVariants(token, base) {
+  const json = '{"path":"/notes/hello.txt","mimeType":"text/plain","content":"aGVsbG8gYWdlbnRkaXNr"}';
+  const escaped = json.replace(/"/g, '\\"');
+  return [
+    {
+      label: 'Bash / zsh',
+      filename: 'round-trip.sh',
+      code: [
+        `export AGENTDISK_KEY='${token}'`,
+        '',
+        '# Create a file inline (base64, up to 1 MB)',
+        `curl -sS ${base}/v1/files \\`,
+        '  -H "authorization: Bearer $AGENTDISK_KEY" \\',
+        '  -H "content-type: application/json" \\',
+        `  -d '${json}'`,
+        '',
+        '# List what is there',
+        `curl -sS ${base}/v1/files -H "authorization: Bearer $AGENTDISK_KEY"`,
+      ].join('\n'),
+    },
+    {
+      label: 'PowerShell',
+      filename: 'round-trip.ps1',
+      code: [
+        `$env:AGENTDISK_KEY = '${token}'`,
+        '',
+        '# Create a file inline (base64, up to 1 MB)',
+        `curl.exe -sS ${base}/v1/files \``,
+        '  -H "authorization: Bearer $env:AGENTDISK_KEY" `',
+        '  -H "content-type: application/json" `',
+        `  -d '${escaped}'`,
+        '',
+        '# List what is there',
+        `curl.exe -sS ${base}/v1/files -H "authorization: Bearer $env:AGENTDISK_KEY"`,
+      ].join('\n'),
+    },
+    {
+      label: 'cmd',
+      filename: 'round-trip.cmd',
+      code: [
+        `set AGENTDISK_KEY=${token}`,
+        '',
+        'REM Create a file inline (base64, up to 1 MB)',
+        `curl -sS ${base}/v1/files ^`,
+        '  -H "authorization: Bearer %AGENTDISK_KEY%" ^',
+        '  -H "content-type: application/json" ^',
+        `  -d "${escaped}"`,
+        '',
+        'REM List what is there',
+        `curl -sS ${base}/v1/files -H "authorization: Bearer %AGENTDISK_KEY%"`,
+      ].join('\n'),
+    },
+  ];
+}
+
 function fmtBytes(n) {
   if (typeof n !== 'number') return '—';
   if (n >= 1024 * 1024 * 1024) return `${Math.round(n / (1024 * 1024 * 1024))} GB`;
@@ -184,7 +260,7 @@ function SandboxTerms({ result }) {
 }
 
 export function Sandbox() {
-  const [agentName, setAgentName] = useState('sandbox-agent');
+  const [agentName] = useState(() => defaultAgentName());
   const [token, setToken] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
@@ -242,8 +318,10 @@ export function Sandbox() {
 
   if (result) {
     const base = API_BASE || 'https://api-dev.agentdisk.io';
+    // The result carries a key, a link and curl lines that the 25rem form card
+    // could only show behind a horizontal scrollbar, so this screen is wider.
     return (
-      <div className="auth auth--card">
+      <div className="auth auth--card auth--wide">
         <div className="auth__inner">
           <div className="auth__card" style={{ gap: 'var(--s-6)' }}>
             <div>
@@ -266,20 +344,10 @@ export function Sandbox() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s-3)' }}>
               <p className="ad-meta">Upload a file, then read it back:</p>
-              <CodeBlock
-                filename="round-trip.sh"
-                code={[
-                  `KEY='${result.apiKey?.token}'`,
-                  '',
-                  '# Create a file inline (base64, up to 1 MB)',
-                  `curl -sS ${base}/v1/files \\`,
-                  '  -H "authorization: Bearer $KEY" \\',
-                  '  -H "content-type: application/json" \\',
-                  `  -d '{"path":"/notes/hello.txt","mimeType":"text/plain","content":"aGVsbG8gYWdlbnRkaXNr"}'`,
-                  '',
-                  '# List what is there',
-                  `curl -sS ${base}/v1/files -H "authorization: Bearer $KEY"`,
-                ].join('\n')}
+              <ShellCodeBlock
+                label="Round trip shell"
+                variants={roundTripVariants(result.apiKey?.token, base)}
+                data-testid="round-trip"
               />
             </div>
           </div>
@@ -310,9 +378,9 @@ export function Sandbox() {
             <Input
               label="Agent name"
               value={agentName}
-              onChange={(event) => setAgentName(event.target.value)}
-              hint="Letters, digits, spaces, hyphens and underscores."
-              maxLength={64}
+              readOnly
+              mono
+              hint="Chosen for you, stamped with the time this sandbox was started. Your key acts under this name."
             />
             <Challenge key={resetKey} onToken={onToken} onExpire={onExpire} />
             <Button type="submit" full loading={busy} disabled={!token || busy}>

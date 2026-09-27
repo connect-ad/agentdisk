@@ -234,17 +234,15 @@ claude mcp add --transport http agentdisk ${MCP_ENDPOINT} ^
 /* What `claude mcp add` prints, and how to prove it worked. The confirmation
    masks the header on purpose - a terminal is logged and screenshotted - so
    the same line appears whether the variable held a key or nothing at all.
-   The handshake is the only proof, which is why VALIDATE follows. */
+   The handshake is the only proof, and that lives in step 4 (Verify the
+   connection); VALIDATE only shows the stored entry, so the step is not
+   repeated here. */
 const CLAUDE_CODE_EXPECTED = `Added HTTP MCP server agentdisk with URL: ${MCP_ENDPOINT} to local config
 Headers: {
   "Authorization": "[REDACTED]"
 }`;
 
-const CLAUDE_CODE_VALIDATE = `claude mcp get agentdisk     # the stored entry; the header stays masked
-claude mcp list              # agentdisk … ✓ Connected, or ✗ Failed to connect
-
-# inside a session
-/mcp                         # agentdisk, and the tools your key's scopes allow`;
+const CLAUDE_CODE_VALIDATE = `claude mcp get agentdisk     # the stored entry; the header stays masked`;
 
 const CLAUDE_CODE_RESET = `claude mcp remove agentdisk
 # then add it again with the TERMINAL command above`;
@@ -361,21 +359,28 @@ const CLIENTS = [
     intro: 'One command registers the server for the current project. The transport has to be named: a bare url entry in .mcp.json is read as a stdio server and fails to start.',
     blocks: [
       // In the order a person meets them: the command, what it prints, how to
-      // prove it worked, how to redo it, and only then the file it wrote.
+      // see what was stored, how to redo it, and only then the file it wrote.
+      // The leads after the command are exceptions - a masked header, a 401,
+      // a name already taken - so they render as Info notes rather than as
+      // steps, or a reader takes "do not stop here" for another thing to do.
+      // Proving the handshake is step 4 and is not repeated here.
       { caption: 'TERMINAL', code: CFG_CLAUDE_CODE_CLI, variants: CLAUDE_CODE_CLI_SHELLS },
       {
         caption: 'EXPECTED OUTPUT',
+        note: true,
         lead: 'The command above prints this. [REDACTED] is Claude Code hiding your key from the terminal, not an error: the full value is in its config and is sent on every call. The same line appears if the variable was empty, so do not stop here.',
         code: CLAUDE_CODE_EXPECTED,
       },
       {
         caption: 'VALIDATE',
-        lead: 'Prove the handshake. A key with read and list shows five tools; a full key shows eleven. "Failed to connect" with a 401 means the variable was empty or wrong: set it again in the same window and re-add.',
+        note: true,
+        lead: 'Optional. This shows the entry Claude Code stored; whether it connects is proven in step 4. "Failed to connect" with a 401 there means the variable was empty or wrong: set it again in the same window and re-add.',
         code: CLAUDE_CODE_VALIDATE,
       },
       {
         caption: 'ALREADY EXISTS · CLEAN START',
-        lead: 'claude mcp add refuses a name that is already registered. Remove the entry and add it again; neither command touches the key itself, and the audit log on our side is unaffected. Add -s user to register it for every project, or -s project to write .mcp.json, which puts the key in a file the repository may commit.',
+        note: true,
+        lead: 'Only if claude mcp add refuses the name as already registered. Remove the entry and add it again; neither command touches the key itself, and the audit log on our side is unaffected. Add -s user to register it for every project, or -s project to write .mcp.json, which puts the key in a file the repository may commit.',
         code: CLAUDE_CODE_RESET,
       },
       {
@@ -552,9 +557,18 @@ function Code({ caption, wrap = false, variants, children }) {
   );
 }
 
-function Note({ tone, children }) {
+/* `label` names the note in a word ("Info") so an aside is told apart from a
+   step by more than its tint; the CLAUDE.md rule is that colour never carries
+   meaning alone. */
+function Note({ tone, label, children }) {
   return (
     <div className={tone === 'warn' ? 'doc__note doc__note--warn' : 'doc__note'} role="note">
+      {label ? (
+        <span className="doc__notelabel">
+          <Icon name="info" size={14} aria-hidden="true" />
+          {label}
+        </span>
+      ) : null}
       <span>{children}</span>
     </div>
   );
@@ -1134,7 +1148,8 @@ export function Docs() {
                   <P>{c.intro}</P>
                   {c.blocks.map(b => (
                     <React.Fragment key={b.caption}>
-                      {b.lead ? <P>{b.lead}</P> : null}
+                      {b.lead && b.note ? <Note label="Info">{b.lead}</Note> : null}
+                      {b.lead && !b.note ? <P>{b.lead}</P> : null}
                       <Code caption={b.caption} variants={b.variants}>{b.code}</Code>
                     </React.Fragment>
                   ))}
@@ -1195,7 +1210,7 @@ export function Docs() {
                 <><strong>The client lists fewer than eleven tools.</strong> Expected. Tools you cannot call are not shown.</>,
                 <><strong>Claude Code says the server failed to start.</strong> The <code>.mcp.json</code> entry is missing <code>"type": "http"</code>, so it tried to spawn the URL as a command.</>,
                 <><strong>Claude Desktop shows nothing.</strong> Its config cannot hold a URL; use the mcp-remote bridge above and restart the app.</>,
-                <><strong>429 LIMIT_EXCEEDED.</strong> A quota (the body's <code>details.limit</code> says which: storage, files, egress) or a rate limit. Free space, upgrade, or wait for the window.</>,
+                <><strong>429 LIMIT_EXCEEDED.</strong> A quota (the body's <code>details.limit</code> says which: storage, files, egress) or a rate limit. Free space, upgrade, or wait for the window. If the message says <em>too many failed authentication attempts</em>, your address sent thirty bad credentials in fifteen minutes, usually a stale key in one client's config, and every call from that address is refused until the window ends. Fix the key, then wait.</>,
                 <><strong>Every write fails with a billing message.</strong> The account is past due or expired. Fix the card under Billing; reads keep working throughout.</>,
               ]} />
             </section>

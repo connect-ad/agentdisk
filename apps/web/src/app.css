@@ -415,6 +415,9 @@
 .auth--card{padding:var(--s-9)}
 .auth--card .auth__inner{width:100%;max-width:25rem;display:flex;
   flex-direction:column;gap:var(--s-6)}
+/* The sandbox result: a key, a claim link and curl lines that the form's
+   25rem could only show behind a horizontal scrollbar. */
+.auth--card.auth--wide .auth__inner{max-width:44rem}
 .auth--card .auth__brand{justify-content:center}
 .auth--card .auth__wordmark{font-size:var(--t-16);
   letter-spacing:var(--tr-snug)}
@@ -964,6 +967,16 @@
 .doc__codetab--on{color:var(--ink);background:var(--accent-soft);
   border-color:var(--accent);box-shadow:var(--ring)}
 .doc__codetab:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+/* The same shell tabs inside the vendored CodeBlock's header (ShellCodeBlock),
+   on the dark tokens that header already uses so they sit level with Copy. */
+.code__tabs{display:flex;gap:var(--s-1);flex-wrap:wrap}
+.code__tab{font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-wide);color:var(--dark-ink-2);background:none;
+  border:1px solid transparent;border-radius:var(--r-1);
+  padding:var(--s-1) var(--s-3);cursor:pointer}
+.code__tab:hover{color:var(--dark-ink)}
+.code__tab--on{color:var(--dark-ink);border-color:var(--dark-ink-2)}
+.code__tab:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .doc__codebody{margin:0;padding:var(--s-6);overflow-x:auto;
   font-family:var(--font-mono);font-size:var(--t-12);line-height:1.7;
   color:var(--dark-ink)}
@@ -1022,6 +1035,8 @@
   margin-bottom:var(--s-4)}
 .doc__railitem:hover{text-decoration:none;color:var(--ink)}
 .doc__note--warn{border-color:var(--warn-line);background:var(--warn-soft)}
+.doc__notelabel{display:inline-flex;align-items:center;gap:var(--s-2);flex:none;
+  font-weight:600;color:var(--accent-ink);white-space:nowrap}
 .doc__p a,.doc__list a,.doc__note a{color:var(--accent-ink);text-decoration:underline;
   text-underline-offset:0.15em}
 .doc__p strong,.doc__list strong{color:var(--ink);font-weight:var(--w-semi)}

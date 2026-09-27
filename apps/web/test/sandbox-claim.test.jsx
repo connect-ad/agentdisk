@@ -10,7 +10,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 vi.stubEnv('VITE_TURNSTILE_SITE_KEY', 'test-site-key');
@@ -85,6 +85,60 @@ describe('sandbox result screen', () => {
     expect(terms).toMatch(/500 MB download · 10,000 requests/);
     expect(terms).toMatch(/None until claimed/);
     expect(terms).toMatch(/key keeps working/);
+  });
+
+  it('names the agent itself, stamped with the time, and does not let it be edited', async () => {
+    const fetchMock = stubCreate(CREATED);
+    render(<Sandbox />);
+    const field = screen.getByLabelText('Agent name');
+    // sandbox-agent-YYYYMMDD-HHMMSS: unique per sandbox, inside the API's
+    // rule (letters, digits, spaces, - and _; 64 max), and not typed by hand.
+    expect(field.value).toMatch(/^sandbox-agent-\d{8}-\d{6}$/);
+    expect(field.readOnly).toBe(true);
+    await userEvent.type(field, 'x');
+    expect(field.value).toMatch(/^sandbox-agent-\d{8}-\d{6}$/);
+
+    const button = await screen.findByRole('button', { name: 'Create sandbox' });
+    await waitFor(() => expect(button.disabled).toBe(false));
+    await userEvent.click(button);
+    await screen.findByText('Your sandbox is ready');
+    // The name on screen is the name that was sent.
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).agentName).toBe(field.value);
+  });
+
+  it('shows the round trip per shell on the AGENTDISK_KEY the docs use, never a second variable name', async () => {
+    stubCreate(CREATED);
+    await createSandbox();
+
+    const block = screen.getByTestId('round-trip');
+    const body = () => block.querySelector('.code__pre').textContent;
+    const key = CREATED.apiKey.token;
+
+    // Bash first, and the key is bound to the same name the Docs page exports.
+    expect(body()).toContain(`export AGENTDISK_KEY='${key}'`);
+    expect(body()).toContain('Bearer $AGENTDISK_KEY');
+    expect(body()).not.toMatch(/\bKEY=/);
+
+    await userEvent.click(within(block).getByRole('tab', { name: 'PowerShell' }));
+    expect(body()).toContain(`$env:AGENTDISK_KEY = '${key}'`);
+    expect(body()).toContain('Bearer $env:AGENTDISK_KEY');
+    // Windows PowerShell aliases curl to Invoke-WebRequest; the .exe is named.
+    expect(body()).toContain('curl.exe -sS');
+
+    await userEvent.click(within(block).getByRole('tab', { name: 'cmd' }));
+    expect(body()).toContain(`set AGENTDISK_KEY=${key}`);
+    expect(body()).toContain('Bearer %AGENTDISK_KEY%');
+    expect(body()).toContain('REM ');
+
+    // Every shell uploads the same file to the same API and reads it back.
+    for (const tab of ['Bash / zsh', 'PowerShell', 'cmd']) {
+      await userEvent.click(within(block).getByRole('tab', { name: tab }));
+      expect(body()).toContain('https://api.test/v1/files');
+      expect(body()).toContain('/notes/hello.txt');
+      expect(body()).toContain('aGVsbG8gYWdlbnRkaXNr');
+    }
+    // The result card is the wide one; the form keeps its sign-in width.
+    expect(document.querySelector('.auth--card.auth--wide')).not.toBeNull();
   });
 
   it('says so plainly when the deployment issued no link', async () => {

@@ -116,15 +116,24 @@ describe('docs page', () => {
     // The masked header is explained as masking, not as a failure.
     expect(text).toContain('"Authorization": "[REDACTED]"');
     expect(text).toMatch(/not an error/);
-    // Validation names the commands and the tool counts the scope filter produces.
+    // Validation shows the stored entry only. Proving the handshake is step 4,
+    // so the list command and /mcp are not repeated inside step 2.
     expect(text).toContain('claude mcp get agentdisk');
-    expect(text).toContain('claude mcp list');
-    expect(text).toMatch(/five tools/);
-    expect(text).toMatch(/eleven/);
+    expect(text).not.toContain('claude mcp list');
+    expect(text).not.toContain('inside a session');
+    expect(text).toMatch(/step 4/);
     // A clean start is remove then add, and the scope flags are named.
     expect(text).toContain('claude mcp remove agentdisk');
     expect(text).toMatch(/-s user/);
     expect(text).toMatch(/-s project/);
+    // The three leads after the command are exceptions, not steps: each is an
+    // Info note, named in a word so the tint is not the only signal.
+    const notes = [...block.querySelectorAll('.doc__note')];
+    expect(notes).toHaveLength(3);
+    for (const n of notes) expect(n.querySelector('.doc__notelabel').textContent).toBe('Info');
+    expect(notes[0].textContent).toMatch(/not an error/);
+    expect(notes[1].textContent).toMatch(/step 4/);
+    expect(notes[2].textContent).toMatch(/already registered/);
   });
 
   it('gives every named client its own configuration block', () => {

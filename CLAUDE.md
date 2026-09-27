@@ -488,9 +488,16 @@ were not touched. See `backlog/002`.
   to "all infrastructure is code", for two reasons: the Terraform token lacks
   Zone WAF: Edit, and a zone allows exactly one rate-limit ruleset, so
   Terraform would have to *import* it rather than create a second. Do not
-  create another; when Terraform takes it over, import it. Its expression
-  should exclude requests carrying an `Authorization` header, so a signed-in
-  person creating a workspace is never counted.
+  create another; when Terraform takes it over, import it. **Rule ID
+  `9da5250079bd491fb789031953815805`**, 2 requests per 10 seconds per IP, then
+  a 10-second block. It matches path and method only, and **that is a plan
+  limit, not an oversight**: the zone is on Free, and a header condition (to
+  skip signed-in callers, who create workspaces on the same route) is refused
+  with "not entitled … Advanced Rate Limiting plan is required". Both
+  `http.request.headers.names` and `http.request.headers["authorization"]`
+  were tried on 27 Sept 2026. Accepted as is, because a signed-in person
+  cannot create three workspaces from the dashboard inside ten seconds. Do not
+  split the route to suit the rule.
 - **The unclaimed sweep defaults to reporting, not deleting.**
   `expireUnclaimedWorkspaces` takes `dryRun` and defaults it to `true`; only
   `SANDBOX_EXPIRY_ENABLED = "true"` turns on real deletion. Dev holds weeks of

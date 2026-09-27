@@ -7,6 +7,7 @@ import {
   WORKSPACE_A,
   WORKSPACE_B,
   bearer,
+  resetRateLimits,
   resetTenantData,
   seedAgent,
   seedApiKey,
@@ -27,6 +28,10 @@ interface ErrorBody {
 beforeEach(async () => {
   await seedTwoWorkspaces();
   await resetTenantData();
+  // This file sends more refused credentials than any other - the route sweep
+  // alone is over forty from one address - so the per-address failure
+  // throttle (lib/auth-throttle.ts) would lock the test IP mid-file.
+  await resetRateLimits();
   await setWorkspaceStatus(WORKSPACE_A, "active");
   await setWorkspaceStatus(WORKSPACE_B, "active");
 });

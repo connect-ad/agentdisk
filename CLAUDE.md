@@ -124,6 +124,17 @@ were not touched. See `backlog/002`.
   `POST` with no credential at all is public there. `test/auth.test.ts` sweeps
   41 authenticated routes for this; a route added outside `withAuth` belongs in
   that table.
+- **Failed credentials are throttled per address, and only failures count.**
+  `lib/auth-throttle.ts`: thirty refused credentials from one IP in fifteen
+  minutes and `withAuth` answers that IP 429 before the lookup, valid key or
+  not, until the window ends. The unknown-token paths of the claim preview and
+  claim POST share the same shape. Three things are deliberate: a valid key is
+  never charged, so a busy agent cannot lock itself out; a 403 or 400 from an
+  authenticated caller is not a failure, so a wrong `workspaceId` cannot lock
+  an address; and the 401 body stays byte-identical, because the throttle
+  changes *when* a guess is answered, never *what* a failure says. REST and
+  MCP share one counter because they share one middleware. The counter lives
+  in KV, so `resetRateLimits()` between tests.
 - **Scope prefixes match whole segments.** `/agents/bot` must not authorize
   `/agents/bot-evil/secrets.txt`; a plain `startsWith` says it does.
 - **R2 bindings cannot presign.** `R2Bucket` is get/put/head/list. Presigned

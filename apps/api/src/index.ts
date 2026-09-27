@@ -309,6 +309,7 @@ export default {
             requestId: id,
             waitUntil: (promise) => ctx.waitUntil(promise),
             queue: env.JOBS,
+            kv: env.CACHE,
             firebase: firebaseConfig(env),
             dashboardUrl: env.DASHBOARD_URL,
             encryptionKey: env.DATABASE_ENCRYPTION_KEY,
@@ -392,7 +393,7 @@ export default {
           // this product, so asking them to create an account before telling
           // them what they would be claiming inverts the order of trust.
           if (request.method === "GET") {
-            return await previewClaim(env.DB, token, now, env.DASHBOARD_URL, callerOf(request));
+            return await previewClaim(env.DB, token, now, env.DASHBOARD_URL, callerOf(request), env.CACHE);
           }
 
           // Claiming is a person's act. An API key is refused for the same
@@ -422,6 +423,7 @@ export default {
               signing: () => readSigningConfig(env),
               requestId: id,
               now,
+              kv: env.CACHE,
             },
             user,
             token
@@ -641,6 +643,7 @@ export default {
           signing: () => signingConfig(env),
           requestId: id,
           waitUntil: (promise) => ctx.waitUntil(promise),
+          kv: env.CACHE,
           firebase: null,
         });
       }

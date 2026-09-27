@@ -45,6 +45,8 @@ import { WorkspaceMembers } from "../db/members";
 import type { JwksCache } from "../auth/firebase";
 import { extractBearerToken, isApiKeyToken } from "../lib/keys";
 import type { Identity } from "../auth/identity";
+import { AUTH_FAILURE_RATE_LIMIT, recordFailure, refuseIfLockedOut } from "../lib/auth-throttle";
+import { clientIdentifier } from "../lib/rate-limit";
 
 export interface AuthContext {
   requestId: string;
@@ -185,6 +187,13 @@ export interface WithAuthDeps {
   /** The jobs queue, passed through to handlers that fan out webhooks. */
   queue?: Queue;
   /**
+   * The KV namespace the failed-credential throttle counts in
+   * (lib/auth-throttle.ts). Optional: absent, credentials are still checked
+   * exactly as before and nothing is counted - the shape a test driving this
+   * middleware directly relies on.
+   */
+  kv?: KVNamespace;
+  /**
    * What the human path needs: somewhere to cache Google's JWKS, and the
    * Firebase project whose tokens this deployment accepts. Null when
    * FIREBASE_PROJECT_ID is unset, and then a non-key bearer token is refused
@@ -251,6 +260,14 @@ export async function withAuth(
   // generic 401 first would bury that.
   rejectQueryCredential(url);
 
+  // 0. An address that has failed too often this window is refused before the
+  // credential is even read, which is the whole point: a flood of guesses
+  // must stop costing a lookup each. See lib/auth-throttle.ts for why a valid
+  // key on a locked address is refused too, and why the threshold is where a
+  // misconfigured client never reaches it.
+  const address = clientIdentifier(request);
+  await refuseIfLockedOut(deps.kv, AUTH_FAILURE_RATE_LIMIT, address, now, "authentication attempts");
+
   // 1 + 2. Identity and its scope arrive together, whichever credential it is:
   // an API key's capabilities are on the key row, a person's follow from their
   // role. Neither needs a separate scope lookup that could be got wrong.
@@ -259,22 +276,32 @@ export async function withAuth(
   // AgentDisk key has a fixed prefix; anything else is offered to the Firebase
   // verifier, which rejects it unless it is a genuine ID token for this exact
   // project.
-  const presented = extractBearerToken(request);
-  if (presented === null) {
-    throw unauthorized("no bearer token in the Authorization header");
-  }
-
   let identity: Identity;
-  if (isApiKeyToken(presented)) {
-    const keyIdentity = await authenticateApiKey(request, deps.db, now);
-    await assertAgentEnabled(deps.db, keyIdentity);
-    // 3. For a key the workspace comes off the key row, full stop.
-    assertRequestedWorkspaceMatches(url, keyIdentity.workspaceId);
-    identity = keyIdentity;
-  } else {
-    // 3 happens inside, because for a person the workspace and the membership
-    // check that authorizes it are one question.
-    identity = await authenticateHuman(presented, url, deps, now);
+  try {
+    const presented = extractBearerToken(request);
+    if (presented === null) {
+      throw unauthorized("no bearer token in the Authorization header");
+    }
+
+    if (isApiKeyToken(presented)) {
+      const keyIdentity = await authenticateApiKey(request, deps.db, now);
+      await assertAgentEnabled(deps.db, keyIdentity);
+      // 3. For a key the workspace comes off the key row, full stop.
+      assertRequestedWorkspaceMatches(url, keyIdentity.workspaceId);
+      identity = keyIdentity;
+    } else {
+      // 3 happens inside, because for a person the workspace and the membership
+      // check that authorizes it are one question.
+      identity = await authenticateHuman(presented, url, deps, now);
+    }
+  } catch (err) {
+    // Only a refused credential counts. A 403 (wrong workspace, suspended) and
+    // a 400 (no workspaceId) come from callers who authenticated, and charging
+    // them would let a legitimate mistake lock out an address.
+    if (err instanceof ApiError && err.code === "UNAUTHORIZED") {
+      await recordFailure(deps.kv, AUTH_FAILURE_RATE_LIMIT, address, now);
+    }
+    throw err;
   }
 
   const scope = identity.scope;

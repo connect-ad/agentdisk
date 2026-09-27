@@ -35,6 +35,7 @@ import { sha256Hex } from "../lib/keys";
 import { SANDBOX_LIMITS, limitsFor } from "../lib/plans";
 import { assertWithinQuota } from "../lib/quota";
 import { recordClaimAttempt, callerOf } from "../lib/claim-log";
+import { CLAIM_GUESS_RATE_LIMIT, addressOf, recordFailure, refuseIfLockedOut } from "../lib/auth-throttle";
 import { normalizePath, PathValidationError } from "../lib/paths";
 import { isSlugConflict, uniqueWorkspaceSlug } from "../lib/slug";
 import { UNCLAIMED_TTL_MS, sandboxQuotaWarning } from "../lib/claim";
@@ -153,8 +154,16 @@ export async function previewClaim(
   token: string,
   now: number,
   dashboardUrl: string | undefined,
-  caller: { ip: string | null; userAgent: string | null } = { ip: null, userAgent: null }
+  caller: { ip: string | null; userAgent: string | null } = { ip: null, userAgent: null },
+  kv?: KVNamespace
 ): Promise<Response> {
+  // This route takes no credential, so it is the one place guessing tokens is
+  // free. An address that has guessed wrong too often this window is refused
+  // before the hash lookup (lib/auth-throttle.ts); the answer for a wrong
+  // guess below stays identical to what it always was.
+  const address = addressOf(caller.ip);
+  await refuseIfLockedOut(kv, CLAIM_GUESS_RATE_LIMIT, address, now, "claim attempts");
+
   const tokenHash = await sha256Hex(token);
   const workspace = await findByClaimToken(db, tokenHash);
 
@@ -163,6 +172,7 @@ export async function previewClaim(
   // where the three stay apart.
   if (workspace === null || workspace.status !== "active") {
     await recordClaimAttempt(db, { tokenHash, outcome: "unknown_token", ...caller }, now);
+    await recordFailure(kv, CLAIM_GUESS_RATE_LIMIT, address, now);
     throw noSuchClaim();
   }
 
@@ -253,6 +263,8 @@ export interface ClaimDeps {
   signing: SigningSource;
   requestId: string;
   now: number;
+  /** For the unknown-token throttle (lib/auth-throttle.ts). Optional, as in withAuth. */
+  kv?: KVNamespace;
 }
 
 /**
@@ -364,17 +376,22 @@ export async function claimWorkspace(
     );
   }
 
-  const tokenHash = await sha256Hex(token);
-  const workspace = await findByClaimToken(db, tokenHash);
-
   // Unlike the preview, this caller IS authenticated, so the refusals here can
   // say what went wrong without becoming an oracle - a person who has signed
   // in has not learned anything about a token they could not already try. The
   // attempts are recorded all the same: the question support gets is "who else
-  // has had this link", and only the log answers it.
+  // has had this link", and only the log answers it. The per-address throttle
+  // applies here too, because a signed-in account is cheap to make.
   const caller = { ...callerOf(request), userId: user.id };
+  const address = addressOf(caller.ip);
+  await refuseIfLockedOut(deps.kv, CLAIM_GUESS_RATE_LIMIT, address, now, "claim attempts");
+
+  const tokenHash = await sha256Hex(token);
+  const workspace = await findByClaimToken(db, tokenHash);
+
   if (workspace === null || workspace.status !== "active") {
     await recordClaimAttempt(db, { tokenHash, outcome: "unknown_token", ...caller }, now);
+    await recordFailure(deps.kv, CLAIM_GUESS_RATE_LIMIT, address, now);
     throw noSuchClaim();
   }
 

@@ -200,30 +200,34 @@ for (const path of ["/login", "/signup", "/w/acme-research/files"]) {
   }
 }
 
-// --- 2b. No source map beside the bundle ---------------------------------
-// `sourcemap: false` in vite.config.js. A map is the original source with its
-// comments, served to anyone who asks; this is the check that the setting is
-// still off and that nothing else put a map in dist.
-console.log("\n[2b] Source map");
-if (scriptMatch) {
-  const mapResponse = await fetch(`${baseUrl}${scriptMatch[1]}.map`, { redirect: "manual" });
-  if (mapResponse.status === 200) {
-    fail(`${scriptMatch[1]}.map is served (HTTP 200) — the bundle's source map is public`);
-  } else {
-    pass(`${scriptMatch[1]}.map -> HTTP ${mapResponse.status}`);
-  }
-}
-
 // --- 3b. The marketing routes are prerendered ----------------------------
 // Each of these is written as a static page at build time (scripts/prerender.mjs)
 // and carries a marker naming the route it holds. The empty SPA shell here
 // means the prerender step did not run, or the asset server is not serving
 // pricing.html / docs.html for the extensionless path.
+//
+// Retried on the body, like robots.txt: on the deploy that first shipped
+// these pages (Fixing_feedback_12, 28 Sept 2026) all three answered with the
+// previous build's empty shell for a few seconds after the root had already
+// passed, and were correct by the time anyone looked by hand.
 console.log("\n[3b] Prerendered marketing routes");
+/** The root body as served once the new asset list has propagated. */
+let propagatedRoot = rootBody;
 for (const path of ["/", "/pricing", "/docs"]) {
-  const response = await fetch(`${baseUrl}${path}`, { redirect: "manual" });
-  const body = await response.text();
   const marker = `<meta name="agentdisk:prerendered" content="${path}"`;
+  let response;
+  let body = "";
+  for (let attempt = 1; attempt <= HEADER_ATTEMPTS; attempt++) {
+    response = await fetch(`${baseUrl}${path}`, { redirect: "manual" });
+    body = await response.text();
+    if (body.includes(marker) || attempt === HEADER_ATTEMPTS) break;
+    console.log(
+      `  ${path}: prerendered page not live yet ` +
+        `(attempt ${attempt}/${HEADER_ATTEMPTS}); retrying in ${HEADER_RETRY_MS / 1000}s`
+    );
+    await sleep(HEADER_RETRY_MS);
+  }
+  if (path === "/") propagatedRoot = body;
 
   if (response.status !== 200) {
     fail(`GET ${path} returned HTTP ${response.status}, expected 200`);
@@ -233,6 +237,34 @@ for (const path of ["/", "/pricing", "/docs"]) {
     fail(`GET ${path} is prerendered but carries no per-page metadata (lib/seo.js)`);
   } else {
     pass(`${path} -> prerendered (${body.length} bytes)`);
+  }
+}
+
+// --- 3c. No source map beside the bundle ---------------------------------
+// `sourcemap: false` in vite.config.js. A map is the original source with its
+// comments, served to anyone who asks; this is the check that the setting is
+// still off and that nothing else put a map in dist.
+//
+// After 3b on purpose, and against the bundle the *propagated* root names:
+// the first run of this check read the root before the new asset list had
+// landed, found the previous build's bundle, and correctly reported that
+// build's map — which was real, and already gone.
+//
+// The status alone says nothing here: not_found_handling answers every unknown
+// path with index.html and 200, so an absent map looks like a served one until
+// the content type is read. A real map is application/json; the fallback is
+// text/html.
+console.log("\n[3c] Source map");
+const liveScript = propagatedRoot.match(/src="(\/assets\/index-[^"]+\.js)"/);
+if (!liveScript) {
+  fail("propagated root HTML references no hashed /assets/index-*.js bundle");
+} else {
+  const mapResponse = await fetch(`${baseUrl}${liveScript[1]}.map`, { redirect: "manual" });
+  const mapType = mapResponse.headers.get("content-type") ?? "";
+  if (mapResponse.status === 200 && !mapType.startsWith("text/html")) {
+    fail(`${liveScript[1]}.map is served (HTTP 200, ${mapType}) — the bundle's source map is public`);
+  } else {
+    pass(`${liveScript[1]}.map -> HTTP ${mapResponse.status} ${mapType || "no content-type"} (not a map)`);
   }
 }
 

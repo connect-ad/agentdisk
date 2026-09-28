@@ -352,6 +352,23 @@ were not touched. See `backlog/002`.
   per organization (`idx_workspaces_org_slug`), not global; the index is the
   guarantee and `uniqueWorkspaceSlug` is only advice, so `createWorkspaceForUser`
   retries a UNIQUE violation rather than pretending the read settled the race.
+- **`useWorkspace().loading` is derived, not a flag, and `/app` never
+  redirects to /login.** A returning person with a persisted Firebase session
+  opening `/app` cold was sent to a login wall and left there (REG-01,
+  28 Sept 2026, three weeks old by then). The session restores
+  asynchronously, so the workspace provider's first pass saw no user and
+  cleared its loading flag; when the user appeared, `/app` rendered in that
+  same commit, read "not loading, no workspace", and redirected — child
+  effects run before a parent's, so the provider's own fetch had not started.
+  `loading` now means "there is a user and the list is not theirs yet"
+  (`fetchedFor` uid), true from the render the user appears in. The redirect
+  component renders inside `RequireAuth`, so a person is signed in by the time
+  it runs; no workspace is the `NoWorkspace` explanation, never a login. And
+  `Login` sends an already-signed-in visitor on to `from` or `/app`, so the
+  dead end cannot exist whatever sends somebody there. A fresh sign-in never
+  hit this, which is why an earlier audit round passed it: the form sets the
+  user before navigating. `test/app-redirect.test.jsx` restores the session
+  after mount, the way Firebase does.
 - **A screen must compute permissions from the real credential, never from a
   fixture.** The MCP page listed every write tool as available to a key scoped
   `read, list`. The backend was never fooled — `tools/list` filters on scope and
@@ -575,7 +592,9 @@ were not touched. See `backlog/002`.
   to `createWorkspaceForUser` before the sandbox handler is reached, so an
   abuser on a shared address cannot spend a customer's budget, and an owned
   workspace carries no `creator_ip` and is never in the count. The claim
-  handler nulls the address. The response carries a `nextSteps` list telling
+  handler nulls the address. A successful creation carries the IETF draft's
+  `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` headers for
+  the hourly budget, so an agent sees it before it becomes a 429. The response carries a `nextSteps` list telling
   the agent where each secret goes — key to its own config, link to its
   person, neither into the workspace — and `apps/web/public/llms.txt` says
   the same to a model that arrives at the site cold. `test/bootstrap.test.ts`

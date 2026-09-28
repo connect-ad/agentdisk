@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Icon, Alert } from '../components/index.js';
 import { useAuth, describeAuthError } from '../lib/auth.jsx';
@@ -298,7 +298,8 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 function useAfterSignIn() {
   const navigate = useNavigate();
   const location = useLocation();
-  return () => navigate(location.state?.from ?? '/app', { replace: true });
+  const from = location.state?.from ?? '/app';
+  return useCallback(() => navigate(from, { replace: true }), [navigate, from]);
 }
 
 /**
@@ -789,8 +790,16 @@ export function ResetPassword() {
 export function Login() {
   const afterSignIn = useAfterSignIn();
   const {
-    signInWithPassword, sendEmailLink, isEmailLink, completeEmailLink, configured
+    signInWithPassword, sendEmailLink, isEmailLink, completeEmailLink, configured, user
   } = useAuth();
+
+  // Already signed in: carry on to wherever they were headed. Belt and braces
+  // for REG-01 - the race that sent a returning person here is fixed in the
+  // workspace provider, but a login page that shows a form to somebody who
+  // has a session is a dead end whatever sent them, so it must not exist.
+  useEffect(() => {
+    if (user) afterSignIn();
+  }, [user, afterSignIn]);
 
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');

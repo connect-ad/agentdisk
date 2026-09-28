@@ -92,17 +92,27 @@ export function RequireWorkspace() {
   }
 
   if (workspaces.length === 0 || !workspaceId) {
-    return (
-      <Centered>
-        <div>
-          <p>You don't have access to any workspace.</p>
-          <p className="ad-meta">
-            If somebody invited you, ask them to add you again — an invitation can be removed.
-          </p>
-        </div>
-      </Centered>
-    );
+    return <NoWorkspace />;
   }
 
   return <Outlet />;
+}
+
+/**
+ * Signed in, list loaded, nothing in it. A real state - an invitation can be
+ * removed - and the one answer for it, so `/app` and the workspace gate show
+ * the same words rather than one of them sending a signed-in person to a
+ * login they have already completed.
+ */
+export function NoWorkspace() {
+  return (
+    <Centered>
+      <div>
+        <p>You don't have access to any workspace.</p>
+        <p className="ad-meta">
+          If somebody invited you, ask them to add you again — an invitation can be removed.
+        </p>
+      </div>
+    </Centered>
+  );
 }

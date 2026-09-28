@@ -75,6 +75,12 @@ describe("POST /v1/workspaces - the gates", () => {
     const res = await createWorkspace(post({ name: "Agent made" }), deps({ turnstileSecret: undefined }));
     expect(res.status).toBe(201);
     expect(siteverifyCalls).toBe(0);
+    // The budget is advertised, not only enforced.
+    expect(res.headers.get("ratelimit-limit")).toBe(String(CREATE_WORKSPACE_RATE_LIMIT.limit));
+    expect(res.headers.get("ratelimit-remaining")).toBe(String(CREATE_WORKSPACE_RATE_LIMIT.limit - 1));
+    expect(Number(res.headers.get("ratelimit-reset"))).toBeGreaterThan(0);
+    const again = await createWorkspace(post({ name: "Second" }), deps({ turnstileSecret: undefined }));
+    expect(again.headers.get("ratelimit-remaining")).toBe(String(CREATE_WORKSPACE_RATE_LIMIT.limit - 2));
     const body = (await res.json()) as { workspace: { name: string }; nextSteps: string[] };
     expect(body.workspace.name).toBe("Agent made");
     // The model is told where each secret goes, in order.

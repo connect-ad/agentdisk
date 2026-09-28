@@ -43,17 +43,33 @@ export function WorkspaceProvider({ children }) {
 
   const [workspaces, setWorkspaces] = useState([]);
   const [currentId, setCurrentId] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [pending, setPending] = useState(true);
+  /**
+   * The uid the list was last fetched for, or null.
+   *
+   * `loading` is derived from this rather than kept as a flag, and the reason
+   * is a race that sent returning visitors to a login wall (REG-01, 28 Sept
+   * 2026). On a cold load the first pass here sees no user yet - Firebase
+   * restores the session asynchronously - and a plain flag was cleared by that
+   * pass. When the session then arrived, `/app` rendered in the same commit,
+   * read "not loading, no workspace", and redirected to /login before this
+   * provider's own effect could start the fetch: child effects run before a
+   * parent's. Deriving it means "there is a user and the list is not theirs
+   * yet" is loading from the very render the user appears in, with no effect
+   * ordering to get right.
+   */
+  const [fetchedFor, setFetchedFor] = useState(null);
   const [error, setError] = useState(null);
 
   const refresh = useCallback(async () => {
     if (!user) {
       setWorkspaces([]);
       setCurrentId(null);
-      setLoading(false);
+      setFetchedFor(null);
+      setPending(false);
       return;
     }
-    setLoading(true);
+    setPending(true);
     try {
       const { workspaces: list } = await api.listWorkspaces();
       setWorkspaces(list);
@@ -71,7 +87,10 @@ export function WorkspaceProvider({ children }) {
     } catch (err) {
       setError(err);
     } finally {
-      setLoading(false);
+      // Fetched for this user either way: a failure is a state to show, not a
+      // reason to keep saying "loading" forever.
+      setFetchedFor(user.uid);
+      setPending(false);
     }
   }, [api, user]);
 
@@ -135,6 +154,9 @@ export function WorkspaceProvider({ children }) {
     },
     [api]
   );
+
+  /** See `fetchedFor`. True from the render a user appears in until their list is here. */
+  const loading = user ? pending || fetchedFor !== user.uid : pending;
 
   const value = useMemo(
     () => ({

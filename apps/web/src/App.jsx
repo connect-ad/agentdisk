@@ -26,7 +26,7 @@ import McpConnection from './routes/McpConnection.jsx';
 import Billing from './routes/Billing.jsx';
 import Webhooks from './routes/Webhooks.jsx';
 import ActivityLog from './routes/ActivityLog.jsx';
-import RequireAuth, { RequireWorkspace } from './lib/RequireAuth.jsx';
+import RequireAuth, { NoWorkspace, RequireWorkspace } from './lib/RequireAuth.jsx';
 import WorkspaceSwitcher from './components-local/WorkspaceSwitcher.jsx';
 import AccountMenu from './components-local/AccountMenu.jsx';
 import ThemeToggle from './components-local/ThemeToggle.jsx';
@@ -78,10 +78,14 @@ export const NAV = [
  * reloads - so a bookmark, a redirect after sign-in and an email link all land
  * somewhere real instead of a hardcoded slug that belongs to nobody.
  */
-function CurrentWorkspaceRedirect() {
+export function CurrentWorkspaceRedirect() {
   const { workspaceId, workspaceSlug, loading } = useWorkspace();
   if (loading) return null;
-  return workspaceId ? <Navigate to={`/w/${workspaceSlug}`} replace /> : <Navigate to="/login" replace />;
+  // Never /login from here. This renders inside RequireAuth, so a person is
+  // signed in by the time it does; no workspace is the "nothing to reach"
+  // state, and it used to be answered with a redirect to a login they had
+  // just passed (REG-01, see lib/workspace.jsx for the race that exposed it).
+  return workspaceId ? <Navigate to={`/w/${workspaceSlug}`} replace /> : <NoWorkspace />;
 }
 
 /**

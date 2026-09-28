@@ -139,7 +139,7 @@ export async function createWorkspace(
   const now = deps.now ?? Date.now();
   const identifier = clientIdentifier(request);
 
-  await enforce(deps.kv, CREATE_WORKSPACE_RATE_LIMIT, identifier, now);
+  const rate = await enforce(deps.kv, CREATE_WORKSPACE_RATE_LIMIT, identifier, now);
 
   let raw: unknown;
   try {
@@ -290,6 +290,15 @@ export async function createWorkspace(
 
   return new Response(JSON.stringify(body), {
     status: 201,
-    headers: { "content-type": "application/json; charset=utf-8" },
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      // The IETF draft's three headers, so an agent can see its budget rather
+      // than discover it as a 429. Gate 1's numbers only: gate 2 is a count of
+      // rows a claim can change at any moment, so it is reported where it
+      // bites, in the refusal's `details`.
+      "ratelimit-limit": String(CREATE_WORKSPACE_RATE_LIMIT.limit),
+      "ratelimit-remaining": String(rate.remaining),
+      "ratelimit-reset": String(Math.max(1, Math.ceil((rate.resetAt - now) / 1000))),
+    },
   });
 }

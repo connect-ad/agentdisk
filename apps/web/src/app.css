@@ -1124,6 +1124,10 @@
   margin-bottom:var(--s-2);line-height:1.5rem}
 .doc__guidestep .doc__p{margin-bottom:var(--s-3)}
 .doc__guidestep .doc__code{margin:var(--s-3) 0 var(--s-2)}
+/* Prerendered markup for a route other than the one being viewed: hidden
+   before first paint by public/prerender-guard.js setting this attribute.
+   React's first commit discards the element, so nothing needs to undo it. */
+html[data-prerender="skip"] [data-prerendered]{display:none}
 /* A guide block folded behind a native <details>: the agent prompt on the
    sandbox step. Styled as the step's link is, so it reads as one more thing
    to open rather than a heading. */

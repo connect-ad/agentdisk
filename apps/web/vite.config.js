@@ -39,7 +39,13 @@ function securityHeadersFile(env) {
     // that read neither robots.txt nor response headers.
     transformIndexHtml() {
       const tag = robotsMetaTag(options);
-      return tag ? [tag] : [];
+      return [
+        ...(tag ? [tag] : []),
+        // Synchronous, from <head>, ahead of the body: it hides prerendered
+        // markup that belongs to another route before anything paints. See
+        // public/prerender-guard.js and scripts/prerender.mjs.
+        { tag: 'script', attrs: { src: '/prerender-guard.js' }, injectTo: 'head' }
+      ];
     },
     closeBundle() {
       writeFileSync(join(here, 'dist', '_headers'), renderHeadersFile(options), 'utf8');
@@ -56,6 +62,11 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), securityHeadersFile(env)],
-    build: { outDir: 'dist', sourcemap: true }
+    // No source map. Until 28 Sept 2026 a 2.5 MB map was served beside the
+    // bundle, and this codebase's comments are a guide to where its guards
+    // are and why. Set to 'hidden' if a map is ever wanted for local
+    // debugging, and keep `*.map` out of dist either way - the asset server
+    // uploads everything in it.
+    build: { outDir: 'dist', sourcemap: false }
   };
 });

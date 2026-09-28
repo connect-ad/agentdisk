@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet, useNavigate, useParams, useLocation, Link } from 'react-router-dom';
+import { applyPageMeta } from './lib/seo.js';
 import { AppShell, Badge, Button, Icon } from './components/index.js';
 
 import Dashboard from './routes/Dashboard.jsx';
@@ -355,8 +356,23 @@ function WorkspaceLayout() {
   );
 }
 
+/**
+ * Title and description tags for the current route, from the same table the
+ * build-time prerender writes into the static pages (lib/seo.js). Renders
+ * nothing; an effect, so it never runs during the prerender itself.
+ */
+function PageMeta() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    applyPageMeta(pathname);
+  }, [pathname]);
+  return null;
+}
+
 export default function App() {
   return (
+    <>
+    <PageMeta />
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/pricing" element={<Pricing />} />
@@ -440,5 +456,6 @@ export default function App() {
       <Route path="/maintenance" element={<Maintenance />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </>
   );
 }

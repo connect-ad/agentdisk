@@ -6,7 +6,7 @@
   "description": "AgentDisk dashboard SPA (Workers static assets). Screens per docs/design/03 PART 8.",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/check-jsx-identifiers.mjs && vite build",
+    "build": "node scripts/check-jsx-identifiers.mjs && vite build && node scripts/prerender.mjs",
     "preview": "vite preview",
     "deploy:dev": "wrangler deploy --env dev",
     "deploy:prod": "wrangler deploy --env prod",

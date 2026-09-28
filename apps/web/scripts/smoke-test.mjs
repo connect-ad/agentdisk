@@ -200,6 +200,42 @@ for (const path of ["/login", "/signup", "/w/acme-research/files"]) {
   }
 }
 
+// --- 2b. No source map beside the bundle ---------------------------------
+// `sourcemap: false` in vite.config.js. A map is the original source with its
+// comments, served to anyone who asks; this is the check that the setting is
+// still off and that nothing else put a map in dist.
+console.log("\n[2b] Source map");
+if (scriptMatch) {
+  const mapResponse = await fetch(`${baseUrl}${scriptMatch[1]}.map`, { redirect: "manual" });
+  if (mapResponse.status === 200) {
+    fail(`${scriptMatch[1]}.map is served (HTTP 200) — the bundle's source map is public`);
+  } else {
+    pass(`${scriptMatch[1]}.map -> HTTP ${mapResponse.status}`);
+  }
+}
+
+// --- 3b. The marketing routes are prerendered ----------------------------
+// Each of these is written as a static page at build time (scripts/prerender.mjs)
+// and carries a marker naming the route it holds. The empty SPA shell here
+// means the prerender step did not run, or the asset server is not serving
+// pricing.html / docs.html for the extensionless path.
+console.log("\n[3b] Prerendered marketing routes");
+for (const path of ["/", "/pricing", "/docs"]) {
+  const response = await fetch(`${baseUrl}${path}`, { redirect: "manual" });
+  const body = await response.text();
+  const marker = `<meta name="agentdisk:prerendered" content="${path}"`;
+
+  if (response.status !== 200) {
+    fail(`GET ${path} returned HTTP ${response.status}, expected 200`);
+  } else if (!body.includes(marker) || !body.includes("data-prerendered=")) {
+    fail(`GET ${path} is the empty SPA shell, not the prerendered page`);
+  } else if (!body.includes('<link rel="canonical"') || body.includes("<title>AgentDisk</title>")) {
+    fail(`GET ${path} is prerendered but carries no per-page metadata (lib/seo.js)`);
+  } else {
+    pass(`${path} -> prerendered (${body.length} bytes)`);
+  }
+}
+
 // --- 4. No second public hostname ----------------------------------------
 // The custom domain must be the ONLY way in. workers.dev is enabled by default
 // and publishes an unversioned public hostname that bypasses it.

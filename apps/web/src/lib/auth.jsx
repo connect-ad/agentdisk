@@ -39,8 +39,15 @@ import { POLICY_SENTENCE } from './password.js';
 
 const AuthContext = createContext(null);
 
-/** Where Firebase sends an email-link recipient back to. */
-const EMAIL_LINK_REDIRECT = `${window.location.origin}/login`;
+/**
+ * Where Firebase sends an email-link recipient back to.
+ *
+ * Guarded because this module is also loaded by the build-time prerender
+ * (src/entry-prerender.jsx), which runs under Node with no `window`. The
+ * value is only ever used from a click handler, so an empty origin there is
+ * never observed.
+ */
+const EMAIL_LINK_REDIRECT = `${typeof window === 'undefined' ? '' : window.location.origin}/login`;
 
 /** The address is remembered so the returning link does not have to ask again. */
 const EMAIL_LINK_KEY = 'agentdisk.emailLink.address';

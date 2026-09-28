@@ -3,6 +3,7 @@ node_modules/
 
 # Build output
 apps/web/dist/
+apps/web/dist-ssr/
 apps/admin/dist/
 
 # Screenshots from the responsive harness (apps/web/harness), when run

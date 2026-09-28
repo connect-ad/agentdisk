@@ -531,28 +531,29 @@ were not touched. See `backlog/002`.
   person, neither into the workspace — and `apps/web/public/llms.txt` says
   the same to a model that arrives at the site cold. `test/bootstrap.test.ts`
   and `test/workspaces.test.ts` pin all of it.
-- **One WAF rule lives in the Cloudflare dashboard, not in Terraform, and it
-  has never been seen to fire.** The zone has a rate-limiting rule named
-  *Rate limit sandbox creation (POST /v1/workspaces)*, recreated on 28 Sept
-  2026 as **rule ID `19943058f8c14b89bb894df8528e3dd4`**: expression
-  `http.request.uri.path eq "/v1/workspaces"`, 10 requests per 10 seconds
-  per IP, then a 10-second block. It is the one exception to "all
-  infrastructure is code": the Terraform token lacks Zone WAF: Edit, and a
-  zone allows exactly one rate-limit ruleset, so Terraform would have to
-  *import* it rather than create a second. Two things are known about it.
-  First, **on the Free plan a rate-limiting expression may use only the Path
-  and Verified Bot fields**: the original 27 Sept rule also matched
-  `http.request.method eq "POST"`, which the dashboard and the API accept
-  and the plan silently never evaluates, so that rule never counted
-  anything. Second, the path-only rule did not count either: bursts of 30
-  requests inside one second from one IP reached the Worker every time with
-  Security Events at zero, while the Free managed ruleset blocked a probe
-  from the same IP — the same symptom as an unresolved Cloudflare community
-  report on a Free zone with no Workers at all. Leave it deployed; it costs
-  nothing and starts working if Cloudflare fixes it. **Nothing depends on
-  it**: the Worker's own gates above are the fence. Being path-only it would
-  also count the dashboard's `GET /v1/workspaces`, which is why the threshold
-  is 10 and not 2.
+- **One WAF rule lives in the Cloudflare dashboard, not in Terraform.** The
+  zone has a rate-limiting rule named *Rate limit sandbox creation
+  (POST /v1/workspaces)*, recreated on 28 Sept 2026 as **rule ID
+  `19943058f8c14b89bb894df8528e3dd4`**: expression
+  `http.request.uri.path eq "/v1/workspaces"`, then a 10-second block,
+  answered by Cloudflare as 429 with body `error code: 1015`. It is the one
+  exception to "all infrastructure is code": the Terraform token lacks Zone
+  WAF: Edit, and a zone allows exactly one rate-limit ruleset, so Terraform
+  would have to *import* it rather than create a second. **On the Free plan a
+  rate-limiting expression may use only the Path and Verified Bot fields.**
+  The original 27 Sept rule also matched `http.request.method eq "POST"`,
+  which the dashboard and the API accept and the plan silently never
+  evaluates, so that rule never counted anything; the path-only rule counts
+  the dashboard's `GET /v1/workspaces` too, which is why its threshold must
+  stay well above what one page load makes. **Verified firing on 28 Sept
+  2026**: twelve GETs over one keep-alive connection answered 401 five times
+  and 429 seven times. It had looked inert for an hour first, and the reason
+  is worth keeping: the test machine sat behind a VPN that hands every TCP
+  connection a different address in `193.37.32.0/24`, so a loop of separate
+  `curl` calls never presented one IP to anything per-IP — not this rule, not
+  the Worker's KV limit, not the unclaimed cap. **Any per-IP test from that
+  machine must send every request over one connection** (one `curl`
+  invocation with many URLs), or it proves nothing.
 - **The unclaimed sweep defaults to reporting, not deleting.**
   `expireUnclaimedWorkspaces` takes `dryRun` and defaults it to `true`; only
   `SANDBOX_EXPIRY_ENABLED = "true"` turns on real deletion. Dev holds weeks of

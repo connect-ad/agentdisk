@@ -9,8 +9,8 @@
  *      person believes they have switched something off. So every path through
  *      the bar is checked against what `lib/consent.js` can read back, and an
  *      unreadable, stale or partial record has to read as undecided.
- *   2. **It says which category is running.** Analytics is Google Analytics,
- *      on a yes only; attribution collects nothing; the product itself sets no
+ *   2. **It says what is running.** Analytics is Google Analytics, on a yes
+ *      only, and the only optional category; the product itself sets no
  *      cookies (`Set-Cookie` appears nowhere in apps/api). The copy is pinned
  *      here so it cannot drift into the design's "essential cookies keep you
  *      signed in", which is the true sentence for a different product.
@@ -27,7 +27,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 import CookieNotice from '../src/components-local/CookieNotice.jsx';
 import {
-  CONSENT_VERSION, analyticsAllowed, marketingAllowed, readConsent, saveConsent
+  CONSENT_VERSION, analyticsAllowed, readConsent, saveConsent
 } from '../src/lib/consent.js';
 
 const KEY = 'agentdisk.cookie-consent';
@@ -51,7 +51,7 @@ describe('the bar', () => {
   });
 
   it('does not ask again once a decision is stored', () => {
-    saveConsent({ analytics: false, marketing: false });
+    saveConsent({ analytics: false });
     mount();
     expect(bar()).toBeNull();
   });
@@ -61,24 +61,23 @@ describe('the bar', () => {
     const text = bar().textContent;
     expect(text).toMatch(/kept in this browser/i);
     expect(text).toMatch(/Google Analytics runs only if you allow/i);
-    expect(text).toMatch(/attribution collects nothing today/i);
+    expect(text).not.toMatch(/attribution/i);
     // The design's sentence, which is not true of this product.
     expect(text).not.toMatch(/Essential cookies keep you signed in/i);
   });
 });
 
 describe('a recorded decision', () => {
-  it('accepts both optional categories and dismisses', async () => {
+  it('accepts analytics and dismisses', async () => {
     const user = userEvent.setup();
     mount();
     await user.click(screen.getByRole('button', { name: 'Accept all' }));
 
     expect(bar()).toBeNull();
     expect(analyticsAllowed()).toBe(true);
-    expect(marketingAllowed()).toBe(true);
   });
 
-  it('rejects both and still records the refusal, rather than staying silent', async () => {
+  it('rejects and still records the refusal, rather than staying silent', async () => {
     const user = userEvent.setup();
     mount();
     await user.click(screen.getByRole('button', { name: 'Reject non-essential' }));
@@ -102,16 +101,30 @@ describe('a recorded decision', () => {
 });
 
 describe('preferences', () => {
-  it('stores one category without the other', async () => {
+  it('opens with analytics on, but records nothing until saved', async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(screen.getByRole('button', { name: 'Manage preferences' }));
+
+    expect(screen.getByRole('switch', { name: 'Product analytics' }).checked).toBe(true);
+    // The draft is not a decision: nothing may run on a switch nobody pressed.
+    expect(readConsent()).toBeNull();
+    expect(analyticsAllowed()).toBe(false);
+
+    await user.click(screen.getByRole('button', { name: 'Save choices' }));
+    expect(bar()).toBeNull();
+    expect(analyticsAllowed()).toBe(true);
+  });
+
+  it('records a no when the switch is turned off and saved', async () => {
     const user = userEvent.setup();
     mount();
     await user.click(screen.getByRole('button', { name: 'Manage preferences' }));
     await user.click(screen.getByRole('switch', { name: 'Product analytics' }));
     await user.click(screen.getByRole('button', { name: 'Save choices' }));
 
-    expect(bar()).toBeNull();
-    expect(analyticsAllowed()).toBe(true);
-    expect(marketingAllowed()).toBe(false);
+    expect(readConsent()).not.toBeNull();
+    expect(analyticsAllowed()).toBe(false);
   });
 
   it('gives essential no switch at all, because it is not a choice', async () => {
@@ -120,19 +133,18 @@ describe('preferences', () => {
     await user.click(screen.getByRole('button', { name: 'Manage preferences' }));
 
     expect(screen.queryByRole('switch', { name: 'Essential' })).toBeNull();
-    expect(screen.getAllByRole('switch')).toHaveLength(2);
+    expect(screen.getAllByRole('switch')).toHaveLength(1);
     expect(screen.getByText('ALWAYS ON')).not.toBeNull();
   });
 
-  it('names analytics as Google Analytics and attribution as not in use', async () => {
+  it('names analytics as Google Analytics and offers no attribution', async () => {
     const user = userEvent.setup();
     mount();
     await user.click(screen.getByRole('button', { name: 'Manage preferences' }));
 
     expect(screen.getByText('GOOGLE ANALYTICS')).not.toBeNull();
-    expect(screen.getAllByText('NOT IN USE')).toHaveLength(1);
-    expect(screen.getByRole('dialog').textContent)
-      .toMatch(/Attribution is not in use/i);
+    expect(screen.queryByText('NOT IN USE')).toBeNull();
+    expect(screen.getByRole('dialog').textContent).not.toMatch(/attribution/i);
   });
 
   it('cancels without recording anything, so the question stays open', async () => {
@@ -174,7 +186,7 @@ describe('a record that cannot be honoured reads as no record', () => {
   it('re-asks after 12 months', () => {
     const thirteenMonths = Date.now() - 396 * 24 * 60 * 60 * 1000;
     window.localStorage.setItem(KEY, JSON.stringify({
-      v: CONSENT_VERSION, at: new Date(thirteenMonths).toISOString(), analytics: true, marketing: true
+      v: CONSENT_VERSION, at: new Date(thirteenMonths).toISOString(), analytics: true
     }));
 
     expect(analyticsAllowed()).toBe(false);
@@ -193,9 +205,9 @@ describe('a record that cannot be honoured reads as no record', () => {
 
   it('treats a missing flag as off rather than guessing', () => {
     window.localStorage.setItem(KEY, JSON.stringify({
-      v: CONSENT_VERSION, at: new Date().toISOString(), analytics: true
+      v: CONSENT_VERSION, at: new Date().toISOString()
     }));
-    expect(readConsent()).toEqual(expect.objectContaining({ analytics: true, marketing: false }));
+    expect(readConsent()).toEqual(expect.objectContaining({ analytics: false }));
   });
 
   it('survives storage that refuses to answer, and still asks', () => {

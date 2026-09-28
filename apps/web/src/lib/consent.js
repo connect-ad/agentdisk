@@ -10,9 +10,10 @@
  * theme and accent preferences (`lib/theme.jsx`).
  *
  * `analytics` is Google Analytics (`lib/analytics.js`), and it is the only
- * optional category in use; `marketing` still collects nothing. The Cookies
- * clause of the docs' Privacy section (`routes/Docs.jsx`) is the authoritative
- * text for both.
+ * optional category. An attribution category was removed on 28 Sept 2026
+ * because nothing ever read it; a category offered with nothing behind it is a
+ * switch that does nothing. The Cookies clause of the docs' Privacy section
+ * (`routes/Docs.jsx`) is the authoritative text.
  *
  * ── The rule for whoever adds analytics ───────────────────────────────────
  * `analyticsAllowed()` is the gate, and `lib/analytics.js` is the one thing
@@ -43,8 +44,8 @@ export const CONSENT_VERSION = 2;
 /** 12 months, per the design's own promise. */
 export const CONSENT_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
 
-/** The two categories a person can decide. Essential is not among them. */
-export const OPTIONAL_CATEGORIES = ['analytics', 'marketing'];
+/** The categories a person can decide. Essential is not among them. */
+export const OPTIONAL_CATEGORIES = ['analytics'];
 
 /**
  * The stored decision, or `null` when there is none to honour — no record, a
@@ -77,8 +78,8 @@ export function readConsent() {
   return {
     at: parsed.at,
     // Absent means off. A category nobody decided is not one you may run.
+    // A `marketing` field in an older record is ignored; nothing reads it.
     analytics: parsed.analytics === true,
-    marketing: parsed.marketing === true,
   };
 }
 
@@ -88,12 +89,11 @@ export function readConsent() {
  * in private mode who answers the question should not be asked again on this
  * page, only on the next load.
  */
-export function saveConsent({ analytics = false, marketing = false } = {}) {
+export function saveConsent({ analytics = false } = {}) {
   const record = {
     v: CONSENT_VERSION,
     at: new Date().toISOString(),
     analytics: analytics === true,
-    marketing: marketing === true,
   };
   try {
     window.localStorage.setItem(KEY, JSON.stringify(record));
@@ -121,8 +121,3 @@ export function analyticsAllowed() {
   return !!c && c.analytics;
 }
 
-/** The same, for attribution. */
-export function marketingAllowed() {
-  const c = readConsent();
-  return !!c && c.marketing;
-}

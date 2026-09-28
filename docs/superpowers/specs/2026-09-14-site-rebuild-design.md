@@ -248,5 +248,7 @@ before a tracker existed (`components-local/CookieNotice.jsx`, `lib/consent.js`)
 and Google Analytics 4 is now the thing the analytics category gates
 (`lib/analytics.js`). It loads only on a recorded yes, sends a route template
 rather than the real address, and refuses ads storage and Google signals. The
-attribution category is still wired to nothing and says so. `CONSENT_VERSION`
-went to 2, so every earlier answer is asked again.
+design's attribution category was removed, because nothing collects it, and the
+preferences switch for analytics starts on (only the draft; nothing loads before
+the person saves). `CONSENT_VERSION` went to 2, so every earlier answer is asked
+again.

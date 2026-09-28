@@ -18,14 +18,20 @@ import { applyAnalyticsConsent } from '../lib/analytics.js';
  *     in `apps/api`; sign-in is Firebase in browser storage and the API is
  *     bearer tokens. So "essential" here is browser storage, and the notice
  *     says storage where it means storage.
- *   - Analytics is Google Analytics and runs only on a yes; attribution
- *     collects nothing. The Cookies clause of the docs' Privacy section
- *     (`routes/Docs.jsx`) is the authoritative text, and the notice says
- *     which category is running and which is not.
+ *   - Analytics is Google Analytics and the only optional category. The
+ *     design's attribution category was removed because nothing collects it.
+ *     The Cookies clause of the docs' Privacy section (`routes/Docs.jsx`) is
+ *     the authoritative text.
  *
- * Both toggles write a decision that `lib/consent.js` gates on, and a decision
+ * The toggle writes a decision that `lib/consent.js` gates on, and a decision
  * takes effect on the page it was made on (`applyAnalyticsConsent`): turning
  * analytics off stops it now, not from the next load.
+ *
+ * ── Why the switch starts on ──────────────────────────────────────────────
+ * Owner's call, 28 Sept 2026: with no stored decision the preferences dialog
+ * opens with analytics switched on. Only the *draft* starts on. Nothing loads
+ * until the person presses Save choices or Accept all, so `lib/consent.js`'s
+ * rule that no decision is a no still holds.
  *
  * ── Why the title names the host you are on ───────────────────────────────
  * The record lives in this origin's localStorage, so a choice made on
@@ -69,12 +75,6 @@ const CATEGORIES = [
     tag: 'GOOGLE ANALYTICS',
     body: 'Which pages get visited, through Google Analytics. Links, workspace names and file paths are removed from the address before it is sent, and nothing about your files is. Sets Google’s _ga cookies.',
   },
-  {
-    key: 'marketing',
-    title: 'Attribution',
-    tag: 'NOT IN USE',
-    body: 'Which page or link sent you here. No third-party ad networks, and nothing collects this today.',
-  },
 ];
 
 function hostLabel() {
@@ -93,19 +93,16 @@ export default function CookieNotice() {
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
 
-  // The modal's working copy, seeded from any stored record. Optional
-  // categories default off, which is what "no decision" has to mean.
+  // The modal's working copy: a stored decision if there is one, otherwise
+  // on. See "Why the switch starts on" above; this draft is not a consent.
   const [draft, setDraft] = useState(() => {
     const stored = readConsent();
-    return {
-      analytics: !!stored && stored.analytics,
-      marketing: !!stored && stored.marketing,
-    };
+    return { analytics: stored ? stored.analytics : true };
   });
 
   function decide(choice) {
     applyAnalyticsConsent(saveConsent(choice));
-    setDraft({ analytics: choice.analytics, marketing: choice.marketing });
+    setDraft({ analytics: choice.analytics });
     setPrefsOpen(false);
     setDecided(true);
   }
@@ -120,16 +117,16 @@ export default function CookieNotice() {
           <p className="ckb__body">
             Sign-in and workspace state are kept in this browser; that part is
             essential and always on. Google Analytics runs only if you allow
-            it, and attribution collects nothing today.
+            it.
           </p>
         </div>
         <div className="ckb__actions">
           <Button variant="ghost" onClick={() => setSupportOpen(true)}>Support</Button>
           <Button variant="ghost" onClick={() => setPrefsOpen(true)}>Manage preferences</Button>
-          <Button variant="secondary" onClick={() => decide({ analytics: false, marketing: false })}>
+          <Button variant="secondary" onClick={() => decide({ analytics: false })}>
             Reject non-essential
           </Button>
-          <Button variant="primary" onClick={() => decide({ analytics: true, marketing: true })}>
+          <Button variant="primary" onClick={() => decide({ analytics: true })}>
             Accept all
           </Button>
         </div>
@@ -178,8 +175,7 @@ export default function CookieNotice() {
           </div>
           <p className="ckb__foot">
             Analytics runs only while it is switched on here, and switching it
-            off stops it on this page. Attribution is not in use. The full
-            detail is in the{' '}
+            off stops it on this page. The full detail is in the{' '}
             <Link to="/docs#privacy" onClick={() => setPrefsOpen(false)}>privacy policy</Link>.
           </p>
         </Modal>

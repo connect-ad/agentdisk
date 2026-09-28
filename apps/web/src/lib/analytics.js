@@ -26,8 +26,7 @@
  * instead: the route *template*, no query string, no fragment. Page titles
  * come from `lib/seo.js`'s static table and never name a workspace or a file.
  *
- * Ads storage, ad personalisation and Google signals are all refused. The
- * `marketing` consent category stays unused; nothing here reads it.
+ * Ads storage, ad personalisation and Google signals are all refused.
  *
  * ── What the GA console must also be told ───────────────────────────────────
  * Enhanced measurement runs inside gtag.js and no code here can switch it

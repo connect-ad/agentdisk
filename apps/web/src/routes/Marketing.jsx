@@ -6,6 +6,8 @@ import {
   PLANS, OVERAGES, FREE_SUMMARY, COUNTING_NOTE, YEARLY_NOTE, RENEWAL_NOTE
 } from '../lib/pricing.js';
 import Logo from '../components-local/Logo.jsx';
+import Byline from '../components-local/Byline.jsx';
+import { COMPANY_LEGAL_NAME, COMPANY_URL } from '../lib/company.js';
 import { SupportDialog } from '../components-local/SupportDialog.jsx';
 import ThemeToggle from '../components-local/ThemeToggle.jsx';
 
@@ -163,6 +165,11 @@ export function Nav() {
         <Logo size={28} />
         <span className="mk__wordmark">AgentDisk</span>
       </Link>
+      {/* The company, beside the brand. A sibling of the brand link, not a
+          child: it goes somewhere else (kernelv5.com), and an anchor inside
+          an anchor is invalid. Hidden under 875px, where the bar has no room
+          and the footer says the same thing. */}
+      <Byline className="mk__by" />
       <button
         type="button"
         className="mk__burger"
@@ -278,6 +285,7 @@ export function Footer() {
             <div className="mk__footfacts" aria-label="In short">
               {HERO_TAGS.map(t => <span key={t} className="mk__footfact">{t}</span>)}
             </div>
+            <Byline className="mk__footby" />
           </div>
           {FOOT_COLUMNS.map(col => (
             <div key={col.head} className="mk__footcol">
@@ -295,7 +303,14 @@ export function Footer() {
           ))}
         </div>
         <div className="mk__footbase">
-          <span>© {new Date().getFullYear()} AgentDisk</span>
+          {/* The legal name, because it is the one on the card statement:
+              somebody who sees "Kernelv5 Inc." on a bank statement must be
+              able to find those words on this site. AgentDisk stays the
+              brand everywhere above this line. */}
+          <span>
+            © {new Date().getFullYear()}{' '}
+            <a href={COMPANY_URL} target="_blank" rel="noopener noreferrer">{COMPANY_LEGAL_NAME}</a>
+          </span>
           <span>Files your agents can reason about.</span>
         </div>
       </div>

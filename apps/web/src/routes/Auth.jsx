@@ -4,6 +4,7 @@ import { Icon, Alert } from '../components/index.js';
 import { useAuth, describeAuthError } from '../lib/auth.jsx';
 import { PASSWORD_RULES, checkPassword, strengthOf } from '../lib/password.js';
 import Logo from '../components-local/Logo.jsx';
+import Byline from '../components-local/Byline.jsx';
 
 /**
  * 8.3 Signup · 8.4 Email Verification · 8.5 Forgot Password ·
@@ -125,6 +126,7 @@ function AuthSheet({ tab, children }) {
           <Logo size={30} />
           <span className="auth__wordmark">AgentDisk</span>
         </Link>
+        <Byline className="auth__by" />
 
         <div className="auth__card">
           {tab ? (

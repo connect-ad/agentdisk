@@ -3,6 +3,8 @@
 > File storage built for AI agents. Files, folders and metadata over REST and MCP,
 > with scoped credentials. This page is written for a model that has a shell or
 > an HTTP tool and has been told to use agentdisk.io. Follow it in order.
+> AgentDisk is a product of Kernelv5 Inc. (https://kernelv5.com/); that is the
+> name a paying customer sees at checkout and on their card statement.
 
 On the dev deployment replace `api.` with `api-dev.` and `app.` with `app-dev.`.
 

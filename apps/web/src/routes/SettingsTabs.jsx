@@ -15,6 +15,7 @@ import { useWorkspace } from '../lib/workspace.jsx';
 // and `PLANS[].price` survives only as the label for Free, which has no Stripe
 // price at all.
 import { COUNTING_NOTE, PLANS } from '../lib/pricing.js';
+import { COMPANY_LEGAL_NAME } from '../lib/company.js';
 
 /**
  * 8.22 Members · 8.24 Privacy · 8.25 Billing — MVP-1 settings tabs.
@@ -885,6 +886,14 @@ export function BillingTab() {
               code here would mean passing `discounts` instead, which Stripe
               refuses to accept alongside it. */}
           Have a promo code? Enter it on the payment page after you choose a plan.
+        </p>
+        {/* Said here, before the checkout button sends anybody to Stripe: the
+            hosted page and the card statement both carry the legal name, not
+            the brand, and a charge from a name you do not recognise is how a
+            chargeback starts. */}
+        <p className="ad-meta">
+          Charges appear on the payment page and your card statement as {COMPANY_LEGAL_NAME},
+          the company that provides AgentDisk.
         </p>
 
         <p className="ad-meta">{COUNTING_NOTE}</p>

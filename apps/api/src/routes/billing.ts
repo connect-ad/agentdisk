@@ -730,8 +730,9 @@ export function checkoutSessionParams(
     // the failure is silent — a correct-looking charge for the list price with
     // no tax row on it.
     //
-    // AgentDisk is a Delaware corporation selling digital services worldwide,
-    // so the supplier of record is the company: Stripe computes and reports,
+    // AgentDisk is sold by Kernelv5 Inc., a Delaware corporation selling
+    // digital services worldwide — the name on the checkout page and the card
+    // statement — so the supplier of record is the company: Stripe computes and reports,
     // it does not register or file. This line is the computation, not the
     // obligation.
     automatic_tax: { enabled: true },

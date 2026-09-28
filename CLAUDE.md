@@ -3,6 +3,16 @@
 Serverless file storage built for AI agents. Files, folders and metadata over
 REST and MCP — scoped credentials, hard-capped pricing, no servers to run.
 
+**AgentDisk is the brand; Kernelv5 Inc. (https://kernelv5.com/) is the
+company.** The legal name is what Stripe prints on the checkout page and the
+card statement, so the site has to carry it where a customer will look: the
+footer's copyright line, a "A project by Kernelv5" byline in the header, the
+footer and the auth sheet, the Terms and Privacy text, and the billing page's
+note above the checkout button. All of it reads `apps/web/src/lib/company.js`;
+change the name there and nowhere else. Kernelv5 has no logo, so the byline is
+a text wordmark by design. The Stripe-side business name and statement
+descriptor are dashboard settings (Settings → Business details), not code.
+
 ---
 
 ## Information Route

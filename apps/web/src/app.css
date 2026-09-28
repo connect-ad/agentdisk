@@ -216,6 +216,7 @@
 .auth__sheet > .auth__brand{align-self:flex-start;padding-left:0.15em}
 .auth__brand{display:flex;align-items:center;gap:0.5em;text-decoration:none}
 .auth__brand:hover{text-decoration:none}
+.auth__sheet > .auth__by{align-self:flex-start;margin-top:-0.45em;padding-left:0.15em}
 .auth__wordmark{font-family:var(--font-display);font-size:0.85em; /* 17 */
   font-weight:var(--w-semi);letter-spacing:-0.02em;color:var(--tx)}
 .auth__card{background:var(--surface);border:1px solid var(--line);
@@ -444,6 +445,20 @@
 .mk__brand:hover{text-decoration:none}
 .mk__wordmark{font-family:var(--font-display);font-size:var(--t-16);
   font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink)}
+/* The company byline, "A project by KERNELV5". Text, because Kernelv5 has no
+   logo: the lead is a quiet caption and the name is set in the mono caps the
+   site already uses for its small labels, so it reads as a mark beside the
+   AgentDisk wordmark and not as a sentence. One rule set; the header, the
+   footer and the auth sheet only place it. */
+.byline{display:inline-flex;align-items:baseline;gap:var(--s-2);text-decoration:none;
+  white-space:nowrap;color:var(--ink-3)}
+.byline:hover{text-decoration:none;color:var(--ink-2)}
+.byline:hover .byline__mark{color:var(--ink)}
+.byline__lead{font-size:var(--t-12)}
+.byline__mark{font-family:var(--font-mono);font-size:var(--t-11);font-weight:var(--w-semi);
+  letter-spacing:var(--tr-caps);text-transform:uppercase;color:var(--ink-2)}
+.mk__by{margin-left:calc(var(--s-4) * -1);padding-left:var(--s-4);
+  border-left:1px solid var(--line);line-height:1}
 .mk__navlinks{display:flex;align-items:center;gap:var(--s-7);margin-left:auto}
 /* The three page links sit in their own group at the design's tight 2px gap,
    because each one is a pill with its own padding -- the 20px above would put
@@ -745,6 +760,7 @@
 .mk__footfact{font-family:var(--font-mono);font-size:var(--t-10);letter-spacing:var(--tr-caps);
   color:var(--ink-3);border:1px solid var(--line);border-radius:var(--r-1);
   padding:var(--s-1) var(--s-3);white-space:nowrap}
+.mk__footby{margin-top:var(--s-6)}
 .mk__footcol{min-width:0}
 .mk__foothead{margin:0 0 var(--s-4);font-family:var(--font-mono);font-size:var(--t-10);
   font-weight:var(--w-reg);letter-spacing:var(--tr-caps);text-transform:uppercase;
@@ -2073,6 +2089,9 @@ button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
     border:1px solid var(--line-2);border-radius:var(--r-2);
     background:var(--surface);color:var(--ink);cursor:pointer}
   .mk__burger:hover{background:var(--surface-2)}
+  /* The company byline leaves the bar: at 360px the brand and the burger
+     are the whole row, and the footer carries the same line. */
+  .mk__by{display:none}
   .mk__navlinks{display:none;position:absolute;top:100%;left:0;right:0;
     flex-direction:column;align-items:stretch;gap:var(--s-2);margin:0;
     padding:var(--s-4) var(--gutter) var(--s-6);

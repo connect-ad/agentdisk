@@ -10,6 +10,8 @@
 import { SELF, env } from "cloudflare:test";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { NOW, WORKSPACE_A, seedApiKey, seedTwoWorkspaces } from "./helpers";
+import { provisionSandboxWorkspace } from "../src/db/bootstrap";
+import { SANDBOX_UNCLAIMED_PER_IP } from "../src/routes/create-workspace";
 
 const URL_BASE = "https://api-dev.agentdisk.io";
 const PROJECT_ID = "agentdisk-dev";
@@ -147,6 +149,50 @@ function asUser(token: string, body?: unknown): RequestInit {
 }
 
 describe('POST /v1/workspaces as a signed-in person', () => {
+  it('is never counted against the anonymous per-address sandbox cap', async () => {
+    // An abuser on the same address has filled every slot the anonymous path
+    // allows. The signed-in person beside them is identified by their token,
+    // not the address, and their workspace is owned at birth - so neither the
+    // cap nor the anonymous rate limit ever sees this request.
+    const IP = '5.5.5.5';
+    const sandboxes = [];
+    for (let i = 0; i < SANDBOX_UNCLAIMED_PER_IP; i++) {
+      sandboxes.push(
+        await provisionSandboxWorkspace(env.DB, {
+          workspaceName: `Abuse ${i}`,
+          agentName: 'bot',
+          now: NOW,
+          creatorIp: IP,
+        })
+      );
+    }
+
+    const token = await mint(OWNER_UID, 'wsowner@example.com');
+    const init = asUser(token, { name: 'Shared NAT' });
+    const res = await SELF.fetch(`${URL_BASE}/v1/workspaces`, {
+      ...init,
+      headers: { ...(init.headers as Record<string, string>), 'cf-connecting-ip': IP },
+    });
+    expect(res.status).toBe(201);
+
+    const body = (await res.json()) as { workspace: { id: string } };
+    const row = await env.DB.prepare(`SELECT creator_ip FROM workspaces WHERE id = ?`)
+      .bind(body.workspace.id)
+      .first<{ creator_ip: string | null }>();
+    // Owned at birth and carrying no address: it can never enter the count.
+    expect(row?.creator_ip).toBeNull();
+
+    // The sandboxes carry agents and keys this file's reset does not know
+    // about, so take them down in foreign-key order here.
+    for (const s of sandboxes) {
+      await env.DB.prepare(`DELETE FROM api_keys WHERE id = ?`).bind(s.keyId).run();
+      await env.DB.prepare(`DELETE FROM agents WHERE id = ?`).bind(s.agentId).run();
+      await env.DB.prepare(`DELETE FROM workspaces WHERE id = ?`).bind(s.workspaceId).run();
+      await env.DB.prepare(`DELETE FROM organizations WHERE id = ?`).bind(s.orgId).run();
+      await env.DB.prepare(`DELETE FROM users WHERE id = ?`).bind(s.userId).run();
+    }
+  });
+
   it('creates one under their own billing account', async () => {
     const token = await mint(OWNER_UID, 'wsowner@example.com');
     const res = await SELF.fetch(`${URL_BASE}/v1/workspaces`, asUser(token, { name: 'Client A' }));

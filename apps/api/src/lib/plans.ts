@@ -181,7 +181,7 @@ export function limitsFor(planOverride: string | null, orgPlan: string): PlanLim
  * the abuse; the per-file cap only bounds one request.
  */
 export const SANDBOX_LIMITS: PlanLimits = {
-  storageBytes: 50 * MB,
+  storageBytes: 500 * MB,
   fileCount: 500,
   egressBytesPerPeriod: 500 * MB,
   requestsPerPeriod: 10_000,
@@ -193,9 +193,10 @@ export const SANDBOX_LIMITS: PlanLimits = {
   // there is nothing for it to own a second of. Present because PlanLimits
   // requires it, not because it is a quota anything checks.
   workspaces: 1,
-  // Zero, not a smaller number. An unclaimed sandbox is anonymous and
-  // Turnstile-gated; nothing about it should be able to publish bytes to the
-  // open internet.
+  // Zero, not a smaller number. An unclaimed sandbox is anonymous - since
+  // 28 Sept 2026 not even bot-checked - and nothing about it may publish
+  // bytes to the open internet. This zero is most of what makes a flood of
+  // sandboxes harmless: private, expiring rows are not a hosting platform.
   shareLinks: 0,
 };
 
@@ -212,7 +213,8 @@ export interface ClaimState {
  * redundant check. `claimed_at IS NULL` alone would be the natural definition -
  * but applying it that way would retroactively re-tier every sandbox already
  * sitting in the dev environment from earlier testing, and any of them already
- * holding more than 50 MB would start failing *every* write the instant this
+ * holding more than the sandbox cap (50 MB when this shipped) would start failing
+ * *every* write the instant this
  * deployed. Requiring a claim token as well means only workspaces provisioned
  * after this shipped are affected, because only those were ever issued one.
  *

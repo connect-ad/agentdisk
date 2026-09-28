@@ -236,7 +236,7 @@ export function SandboxDialog({ open, onClose }) {
         {error ? <Alert tone="danger" title={error} /> : null}
         <Challenge key={resetKey} onToken={onToken} onExpire={onExpire} />
         <p className="ad-meta">
-          Sandboxes are rate limited and start unclaimed: seven days to claim, then wiped.
+          Sandboxes are rate limited and start unclaimed: three days to claim, then wiped.
         </p>
       </div>
     </Modal>

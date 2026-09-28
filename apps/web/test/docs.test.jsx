@@ -184,7 +184,7 @@ describe('docs page', () => {
     expect(step1.textContent).toMatch(/API key/);
     expect(step1.textContent).toMatch(/claim link/);
     expect(step1.textContent).toMatch(/keep them private/);
-    expect(step1.textContent).toMatch(/seven days/);
+    expect(step1.textContent).toMatch(/three days/);
     expect(step1.textContent).toMatch(/key stops working/);
     const open = guideOut().getByRole('link', { name: 'Get Sandbox Credentials' });
     expect(open.getAttribute('href')).toBe('/sandbox');

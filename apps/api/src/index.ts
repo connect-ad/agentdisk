@@ -93,7 +93,9 @@ export interface Env {
   ENVIRONMENT: string;
   /**
    * Turnstile's server-side secret, pushed by CI via `wrangler secret put`.
-   * Absent means POST /v1/workspaces refuses to run rather than running ungated.
+   * Only consulted when a caller offers a challenge token (the dashboard's
+   * sandbox dialog does; an agent does not). Absent, a token is refused
+   * rather than accepted unverified; a request with no token is unaffected.
    */
   TURNSTILE_SECRET_KEY?: string;
   /** Optional comma-separated hostname pinning for the Turnstile response. */
@@ -325,11 +327,11 @@ export default {
 
       // One path, two callers, told apart by whether a credential was offered.
       //
-      // Unauthenticated it is the Turnstile-gated sandbox: an agent
-      // provisioning itself a trial workspace, which is the product's own
-      // agent-first onboarding (05 PART 4.3) and is why the route accepts no
-      // credential at all. Its gates - a per-IP rate limit and Turnstile - live
-      // inside that handler.
+      // Unauthenticated it is the sandbox: an agent provisioning itself a
+      // trial workspace, which is the product's own agent-first onboarding
+      // (05 PART 4.3) and is why the route accepts no credential at all. Its
+      // gates - a per-IP creation limit, a per-IP cap on unclaimed sandboxes,
+      // and Turnstile when a browser offers a token - live inside that handler.
       //
       // Authenticated it is a person adding a workspace to the billing account
       // they already own. Keeping both on one path rather than inventing a

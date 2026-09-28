@@ -110,7 +110,7 @@ const ROUTES = [
   ]],
   ['Workspaces', [
     ['GET', '/v1/workspaces', 'The workspaces the signed-in person can reach'],
-    ['POST', '/v1/workspaces', 'Signed in: add a workspace. No credential: bot-checked sandbox'],
+    ['POST', '/v1/workspaces', 'Signed in: add a workspace. No credential: an agent sandbox, no bot check needed'],
     ['PATCH', '/v1/workspaces/:id', 'Rename. The slug never changes'],
     ['DELETE', '/v1/workspaces/:id', 'Destroy a workspace (owner, name in body, never the last one)'],
     ['GET', '/v1/workspaces/claim/:token', 'Preview a sandbox claim, no credential'],
@@ -697,8 +697,8 @@ function ClaimPromo({ lead }) {
       <p>
         {lead} Open the claim link, sign in (free, no card), and choose <strong>Keep as a new
         workspace</strong> or <strong>Merge into one you own</strong>. Your agent's key keeps
-        working either way, with no re-authentication. A sandbox holds 50 MB and is scheduled for
-        removal after seven days if nobody claims it.
+        working either way, with no re-authentication. A sandbox holds 500 MB and is scheduled for
+        removal after three days if nobody claims it.
       </p>
     </div>
   );
@@ -740,12 +740,13 @@ function guideSteps(goal, chosen) {
           title: 'Get Sandbox access',
           body: (
             <>
-              No sign-up. Pass the bot check and you get two things, shown once in one block:
+              No sign-up. From a browser, pass the bot check; from an agent, one POST with no token
+              at all. Either way you get two things, shown once in one block:
               an <strong>API key</strong>, which is what your agent uses to read and write files,
               and a <strong>claim link</strong>, which is the only way to make the workspace yours
               later. Copy both now and keep them private. Anyone holding the key can act as your
               agent, and anyone opening the link signed in becomes the owner. The workspace starts
-              unclaimed and holds 50 MB and 500 files. If nobody claims it within seven days, it is
+              unclaimed and holds 500 MB and 500 files. If nobody claims it within three days, it is
               wiped with everything in it and the key stops working. Claiming it keeps the key
               working, moves the workspace onto your plan and removes the deadline.
             </>
@@ -1153,7 +1154,7 @@ export function Docs({ sandbox = false }) {
               <H3 id={slug('Before you begin')}>Before you begin</H3>
               <List items={[
                 <>An AgentDisk account. <Link to="/signup">Start free</Link> with Google, GitHub or email. No card is asked for.</>,
-                <>Or no account at all: <Link to="/sandbox" onClick={(e) => { if (!e.metaKey && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); openSandbox(); } }}>the sandbox</Link> creates a workspace and a key from a browser, behind a bot check. It holds a tighter allowance (50 MB, 500 files, 500 MB egress, 10,000 requests) and is scheduled for removal after seven days unless you claim it from the link it shows you.</>,
+                <>Or no account at all: <Link to="/sandbox" onClick={(e) => { if (!e.metaKey && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); openSandbox(); } }}>the sandbox</Link> creates a workspace and a key from a browser, or from an agent with one POST and no bot check. It holds a tighter allowance (500 MB, 500 files, 500 MB egress, 10,000 requests) and is scheduled for removal after three days unless you claim it from the link it shows you.</>,
                 <>An MCP-capable client, or just <code>curl</code>. The MCP server is HTTP; there is no package to install and no CLI of ours to log in with.</>,
               ]} />
 
@@ -1310,9 +1311,9 @@ export function Docs({ sandbox = false }) {
               <List items={[
                 <><strong>Many per account.</strong> One billing account, one plan, many workspaces. Storage and file count pool across them; egress is per workspace.</>,
                 <><strong>Slugs.</strong> Dashboard URLs are <code>/w/&lt;slug&gt;</code>. A slug is derived once at creation and a rename never changes it, so a link never breaks. The <code>ws_…</code> ID stays the identifier the API uses.</>,
-                <><strong>Agent-first sandbox.</strong> A workspace and a key can be created with no account at all, from a browser, behind a bot check and a per-IP limit. The response includes a one-time claim link.</>,
+                <><strong>Agent-first sandbox.</strong> A workspace and a key can be created with no account at all, from a browser or from an agent with one POST and no bot check. Two per-IP limits gate it: ten creations an hour and five unclaimed sandboxes held at once. The response includes a one-time claim link and tells the agent where each secret goes.</>,
                 <><strong>Claiming.</strong> Opening the claim link previews the sandbox without signing in. Claiming it, signed in, either keeps it as a new workspace under your account or merges its files into a workspace you already own and repoints the agent's existing key, so the agent's next call lands in the new home with no re-authentication. A merge is all-or-nothing against your quota.</>,
-                <><strong>Sweep.</strong> Unclaimed sandboxes are scheduled for removal after seven days.</>,
+                <><strong>Sweep.</strong> Unclaimed sandboxes are scheduled for removal after three days.</>,
               ]} />
 
               <H3 id={slug('Members')}>Members</H3>
@@ -1850,7 +1851,7 @@ export function Docs({ sandbox = false }) {
               <H3 id={slug('The edges')}>The edges</H3>
               <List items={[
                 <><strong>The dashboard</strong> ships a Content-Security-Policy that names only the API it was built against, the sign-in provider, the bot check, the font host and the upload host; plus HSTS, <code>X-Frame-Options: DENY</code>, <code>nosniff</code> and a strict referrer policy. A CORS allow-list names the dashboard and console origins and nothing else.</>,
-                <><strong>The one unauthenticated write</strong>, sandbox creation, sits behind a bot check verified server-side and a per-IP limit of ten per hour. The check failing closed means we stop issuing sandboxes rather than start issuing them to bots.</>,
+                <><strong>The one unauthenticated write</strong>, sandbox creation, sits behind two per-IP limits: ten creations an hour, and five unclaimed sandboxes held at once. A browser's bot check is still verified server-side when one is sent, but an agent needs none, because what makes a flood of sandboxes harmless is what a sandbox cannot do: it has no share links, holds 500 MB, and is deleted after three days unless a person claims it.</>,
                 <><strong>Share-link passwords</strong> are limited to ten wrong guesses per fifteen minutes per link, and share tokens are 32 random characters looked up by hash.</>,
                 <><strong>Webhook deliveries</strong> are signed with a timestamp inside the signed material and a five-minute replay window.</>,
               ]} />
@@ -1936,12 +1937,12 @@ export function Docs({ sandbox = false }) {
                   ['Per-file cap', 'By plan: 100 MB, 500 MB, 1 GB, 4.9 GB'],
                   ['Storage, file count', 'By plan, pooled across the account; see the plan table'],
                   ['Egress', 'By plan, per workspace per month; see the plan table'],
-                  ['Sandbox allowance', '50 MB, 500 files, 500 MB egress, 10,000 requests, 1 agent, 1 key'],
+                  ['Sandbox allowance', '500 MB, 500 files, 500 MB egress, 10,000 requests, 1 agent, 1 key'],
                   ['Presigned upload URL', '15 minutes'],
                   ['Download URL', '1 hour'],
                   ['Share link lifetime', '7 days, default and maximum'],
                   ['Share password', '6 to 128 characters; 10 wrong guesses per 15 minutes per link'],
-                  ['Sandbox creation', '10 per hour per IP, plus a bot check'],
+                  ['Sandbox creation', '10 per hour per IP; 5 unclaimed sandboxes per IP at once'],
                   ['Page size', '50 default, 200 maximum'],
                   ['Tags per file', '32'],
                   ['Agent and key names', '15 characters'],

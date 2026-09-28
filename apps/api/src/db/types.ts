@@ -128,6 +128,13 @@ export interface WorkspaceRow {
    */
   claim_token_hash: string | null;
   claim_token_expires_at: number | null;
+  /**
+   * The address that provisioned this sandbox, for the per-address cap on
+   * unclaimed workspaces (routes/create-workspace.ts). NULL for anything a
+   * signed-in person created, for every row that predates migration 0032,
+   * and - cleared by the claim - for every workspace somebody now owns.
+   */
+  creator_ip: string | null;
   created_at: number;
   updated_at: number;
 }

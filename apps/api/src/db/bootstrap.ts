@@ -85,6 +85,12 @@ export interface ProvisionRequest {
    * provisioning response, and never again.
    */
   encryptionKey?: string | null;
+  /**
+   * The caller's address, stored on the row so the sandbox route can count
+   * how many unclaimed workspaces one address holds. Null or absent means
+   * the row is never counted - tests and any future non-anonymous caller.
+   */
+  creatorIp?: string | null;
 }
 
 export interface ProvisionResult {
@@ -154,8 +160,8 @@ export async function provisionSandboxWorkspace(
       .prepare(
         `INSERT INTO workspaces
            (id, org_id, name, slug, status, period_reset_at, claimed_at,
-            claim_token_hash, claim_token_expires_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'active', ?, NULL, ?, ?, ?, ?)`
+            claim_token_hash, claim_token_expires_at, creator_ip, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'active', ?, NULL, ?, ?, ?, ?, ?)`
       )
       // The organization two statements above is brand new, so this workspace
       // is alone in it and no uniqueness query is needed. The fallback covers a
@@ -168,6 +174,7 @@ export async function provisionSandboxWorkspace(
         now + PERIOD_LENGTH_MS,
         claimTokenHash,
         claimTokenExpiresAt,
+        request.creatorIp ?? null,
         now,
         now
       ),

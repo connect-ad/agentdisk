@@ -41,6 +41,7 @@ function workspace(
     claimed_at: NOW,
     claim_token_hash: null,
     claim_token_expires_at: null,
+    creator_ip: null,
     created_at: NOW,
     updated_at: NOW,
     ...overrides,

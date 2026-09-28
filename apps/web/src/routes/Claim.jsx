@@ -190,7 +190,7 @@ export default function Claim() {
         */}
         <Alert tone="danger" title="That claim link is not valid">
           It may have been claimed already, or expired — a sandbox and its link both last
-          seven days. If an agent gave you this link, ask it to provision a new workspace: a
+          three days. If an agent gave you this link, ask it to provision a new workspace: a
           claim link is shown once and cannot be reissued.
           {' '}
           If you think it was yours, <Link to="/app">check your dashboard</Link> — a workspace
@@ -263,8 +263,18 @@ export default function Claim() {
         subtitle="An agent created this workspace for you. Take ownership to keep it."
         actions={<Badge tone="neutral">Unclaimed</Badge>}
       >
-        {/* Every figure here is a field on the preview response, not a local
+        {/* What a sandbox is, for a person handed this link cold. Every figure
+            here and below is a field on the preview response, not a local
             calculation — see the note at the top of this file. */}
+        <p className="ad-meta" style={{ marginBottom: 'var(--s-4)' }}>
+          A sandbox is a temporary workspace an agent created without an account. It holds up to{' '}
+          {formatBytes(preview.limits.storageBytes)}
+          {preview.deletesAt
+            ? ` and is deleted with everything in it on ${new Date(preview.deletesAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long' })} unless somebody claims it`
+            : ''}
+          . Claiming keeps every file, keeps the agent&rsquo;s key working, and lets you read that key
+          from the Keys page.
+        </p>
         <div
           style={{
             display: 'grid',

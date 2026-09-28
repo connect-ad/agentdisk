@@ -51,9 +51,10 @@ export const SANDBOX_WARNING_FRACTION = 0.8;
  * somebody "3 days left" from its own arithmetic, while the job works to a
  * different number, is the drift `backlog/017` is about.
  *
- * Shorter than CLAIM_TOKEN_TTL_MS (30 days) on purpose - see the note there.
+ * CLAIM_TOKEN_TTL_MS is this same value, so the link dies the day the workspace
+ * becomes deletable - see the note there.
  */
-export const UNCLAIMED_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const UNCLAIMED_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
 /** The dimensions a sandbox warning can be about. Storage and files are the capped pair. */
 export type SandboxWarningDimension = "storage" | "files";

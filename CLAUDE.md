@@ -134,7 +134,7 @@ were not touched. See `backlog/002`.
   **An absent credential is one of those failures, not a missing route.**
   `withAuth` gets this right for every route that goes through it; the trap is
   the handful that do not. `/v1/workspaces` is hand-routed because one path
-  serves two callers — the anonymous Turnstile sandbox on POST, and a signed-in
+  serves two callers — the anonymous sandbox on POST, and a signed-in
   person on GET — and its hand-written branch answered "no token" with 404 "No
   such route.", which is the one thing that rules out the actual cause. Only
   `POST` with no credential at all is public there. `test/auth.test.ts` sweeps
@@ -508,23 +508,51 @@ were not touched. See `backlog/002`.
   declares `requirement.demand`**, so the middleware cannot compute this before
   the handler runs; the warning is set on the context by the handler and
   serialized onto the response once, centrally, by `withAuth`.
-- **One WAF rule lives in the Cloudflare dashboard, not in Terraform.** The
-  zone has a rate-limiting rule named *Rate limit sandbox creation
-  (POST /v1/workspaces)*, made by hand on 27 Sept 2026 as a burst guard in
-  front of the Worker's own 10-per-hour-per-IP limit. It is the one exception
-  to "all infrastructure is code", for two reasons: the Terraform token lacks
-  Zone WAF: Edit, and a zone allows exactly one rate-limit ruleset, so
-  Terraform would have to *import* it rather than create a second. Do not
-  create another; when Terraform takes it over, import it. **Rule ID
-  `9da5250079bd491fb789031953815805`**, 2 requests per 10 seconds per IP, then
-  a 10-second block. It matches path and method only, and **that is a plan
-  limit, not an oversight**: the zone is on Free, and a header condition (to
-  skip signed-in callers, who create workspaces on the same route) is refused
-  with "not entitled … Advanced Rate Limiting plan is required". Both
-  `http.request.headers.names` and `http.request.headers["authorization"]`
-  were tried on 27 Sept 2026. Accepted as is, because a signed-in person
-  cannot create three workspaces from the dashboard inside ten seconds. Do not
-  split the route to suit the rule.
+- **The sandbox route needs no Turnstile token, and the fence is what a
+  sandbox cannot do.** Since 28 Sept 2026 `POST /v1/workspaces` with no
+  credential and no `turnstileToken` provisions a sandbox — the route exists
+  for headless agents, which have no browser to solve a challenge in, and a
+  solver service cleared the challenge for cents anyway. A token, when the
+  dashboard's dialog sends one, is still verified and still fails closed.
+  Three things bound abuse instead, all in the Worker: the existing
+  10-per-hour-per-IP creation limit (KV); a cap of **five unclaimed
+  sandboxes per IP** (`SANDBOX_UNCLAIMED_PER_IP`), a `COUNT` over
+  `workspaces.creator_ip` (migration 0032) rather than a counter, so a claim
+  frees the slot the instant `claimed_at` is set and the sweep frees the
+  rest, with nothing to expire or clean; and `SANDBOX_LIMITS` itself —
+  500 MB, 500 MB egress, **zero share links**, deleted after three days.
+  Private, expiring, unshareable rows are not a hosting platform. **Only the
+  anonymous branch is charged**: a signed-in POST to the same path is routed
+  to `createWorkspaceForUser` before the sandbox handler is reached, so an
+  abuser on a shared address cannot spend a customer's budget, and an owned
+  workspace carries no `creator_ip` and is never in the count. The claim
+  handler nulls the address. The response carries a `nextSteps` list telling
+  the agent where each secret goes — key to its own config, link to its
+  person, neither into the workspace — and `apps/web/public/llms.txt` says
+  the same to a model that arrives at the site cold. `test/bootstrap.test.ts`
+  and `test/workspaces.test.ts` pin all of it.
+- **One WAF rule lives in the Cloudflare dashboard, not in Terraform, and it
+  has never been seen to fire.** The zone has a rate-limiting rule named
+  *Rate limit sandbox creation (POST /v1/workspaces)*, recreated on 28 Sept
+  2026 as **rule ID `19943058f8c14b89bb894df8528e3dd4`**: expression
+  `http.request.uri.path eq "/v1/workspaces"`, 10 requests per 10 seconds
+  per IP, then a 10-second block. It is the one exception to "all
+  infrastructure is code": the Terraform token lacks Zone WAF: Edit, and a
+  zone allows exactly one rate-limit ruleset, so Terraform would have to
+  *import* it rather than create a second. Two things are known about it.
+  First, **on the Free plan a rate-limiting expression may use only the Path
+  and Verified Bot fields**: the original 27 Sept rule also matched
+  `http.request.method eq "POST"`, which the dashboard and the API accept
+  and the plan silently never evaluates, so that rule never counted
+  anything. Second, the path-only rule did not count either: bursts of 30
+  requests inside one second from one IP reached the Worker every time with
+  Security Events at zero, while the Free managed ruleset blocked a probe
+  from the same IP — the same symptom as an unresolved Cloudflare community
+  report on a Free zone with no Workers at all. Leave it deployed; it costs
+  nothing and starts working if Cloudflare fixes it. **Nothing depends on
+  it**: the Worker's own gates above are the fence. Being path-only it would
+  also count the dashboard's `GET /v1/workspaces`, which is why the threshold
+  is 10 and not 2.
 - **The unclaimed sweep defaults to reporting, not deleting.**
   `expireUnclaimedWorkspaces` takes `dryRun` and defaults it to `true`; only
   `SANDBOX_EXPIRY_ENABLED = "true"` turns on real deletion. Dev holds weeks of
@@ -753,8 +781,8 @@ live deployment rather than inferred from the code — see
 person can follow.
 
 ```
-apps/api    984 tests across 50 files · typecheck clean
-apps/web    375 tests across 31 files · build clean
+apps/api   1009 tests across 52 files · typecheck clean
+apps/web    391 tests across 32 files · build clean
 apps/admin   52 tests across 4 files · build clean · 110 KiB gzipped
 apps/cli     11 tests across 1 file  · no dependencies · not yet published
 Worker      226 KiB gzipped, against Cloudflare's 1 MB limit
@@ -795,15 +823,16 @@ which destroys one and everything in it. Any request may carry an
 the audit row (`audit_events.session_label`, migration 0031) and shown in
 Activity. It is a label a person reads, never an identity.
 
-**Agent-provisioned workspaces can now be claimed.** `POST /v1/workspaces`
-returns a one-time claim link beside the one-time API key;
+**Agent-provisioned workspaces can now be claimed.** `POST /v1/workspaces`, with
+no credential and no bot check, returns a one-time claim link beside the
+one-time API key and a `nextSteps` list saying where each goes;
 `GET /v1/workspaces/claim/:token` previews it with no credential at all, and
 `POST` to the same path takes ownership — either keeping it as its own workspace
 under the caller's billing account, or merging its files into a workspace they
 already administer and deleting the sandbox. A merge repoints the agent's
 *existing* key row rather than reissuing, so the agent's next call lands in the
 new workspace with no re-authentication. Unclaimed workspaces are held to a
-tighter `SANDBOX_LIMITS` allowance and are swept after 7 days. The sweep
+tighter `SANDBOX_LIMITS` allowance (500 MB) and are swept after 3 days. The sweep
 defaults to reporting, and **dev sets `SANDBOX_EXPIRY_ENABLED = "true"` in
 `wrangler.toml`, so in dev it deletes**; prod's section has it `"false"` and
 flips there, not in a dashboard, when prod is first applied. (An earlier

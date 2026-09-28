@@ -88,11 +88,14 @@ function toBase64(value: string): string {
 }
 
 /** A sandbox provisioned exactly as the public endpoint provisions one. */
-async function provision(options: { name?: string; agent?: string; createdAt?: number } = {}) {
+async function provision(
+  options: { name?: string; agent?: string; createdAt?: number; creatorIp?: string } = {}
+) {
   const result = await provisionSandboxWorkspace(env.DB, {
     workspaceName: options.name ?? "Sandbox",
     agentName: options.agent ?? "sandbox-agent",
     now: options.createdAt ?? Date.now(),
+    creatorIp: options.creatorIp ?? null,
   });
   if (options.createdAt !== undefined) {
     await env.DB.prepare(`UPDATE workspaces SET created_at = ? WHERE id = ?`)
@@ -321,6 +324,26 @@ describe("GET /v1/workspaces/claim/:token - the preview", () => {
 });
 
 describe("POST /v1/workspaces/claim/:token - mode new", () => {
+  it("clears the creating address once a person owns the workspace", async () => {
+    // The address existed for the unclaimed cap and nothing else. After the
+    // claim it is personal data with no use, and the row must stop counting
+    // against the address that made it.
+    const sandbox = await provision({ creatorIp: "5.5.5.5" });
+    const token = await mint(OWNER_UID, "claimowner@example.com");
+
+    const res = await SELF.fetch(
+      `${URL_BASE}/v1/workspaces/claim/${sandbox.claimToken}`,
+      asUser(token, { mode: "new" })
+    );
+    expect(res.status).toBe(200);
+
+    const row = await env.DB.prepare(`SELECT creator_ip, claimed_at FROM workspaces WHERE id = ?`)
+      .bind(sandbox.workspaceId)
+      .first<{ creator_ip: string | null; claimed_at: number | null }>();
+    expect(row?.claimed_at).not.toBeNull();
+    expect(row?.creator_ip).toBeNull();
+  });
+
   it("moves the workspace onto the caller's billing account", async () => {
     const sandbox = await provision({ name: "Scratch" });
     const token = await mint(OWNER_UID, "claimowner@example.com");
@@ -621,7 +644,7 @@ describe("the sandbox quota warning", () => {
  * A sandbox that predates this feature has no claim token, so it must keep the
  * free plan's limits. Without this, deploying the tighter sandbox allowance
  * would have re-tiered every unclaimed workspace already in the dev environment
- * and made every write to an over-50 MB one fail instantly.
+ * and made every write to an over-cap one fail instantly.
  */
 describe("the sandbox limit is not applied retroactively", () => {
   it("leaves a pre-existing unclaimed workspace on the free plan's limits", async () => {

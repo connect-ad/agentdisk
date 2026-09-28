@@ -24,7 +24,7 @@ import { card, dataRow, headRow, input, mono, paneIn, pills, secondaryBtn, th } 
  * theirs. Attempts are a column, not the subject.
  *
  * ── Due for deletion ───────────────────────────────────────────────────────
- * The one filter with a deadline attached: unclaimed and past its seven days,
+ * The one filter with a deadline attached: unclaimed and past its three days,
  * which is precisely what the next sweep destroys. It is what you look at
  * before pressing run-now on the Deletions screen.
  */
@@ -41,7 +41,7 @@ export function ClaimLinks() {
       <h2 className="ds__h2">Claim links</h2>
       <p className="ds__sub">
         Every workspace an agent provisioned, and where its link stands. A link and the
-        sandbox it names both last seven days.
+        sandbox it names both last three days.
       </p>
 
       <section style={card}>

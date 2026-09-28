@@ -288,7 +288,14 @@ async function takeClaim(
   const result = await db
     .prepare(
       `UPDATE workspaces
-          SET claimed_at = ?, updated_at = ?
+          SET claimed_at = ?, updated_at = ?,
+              -- The creating address served the unclaimed cap and nothing
+              -- else; once a person owns the workspace it is personal data
+              -- with no further use. The undo below cannot restore it, so an
+              -- undone claim leaves the sandbox outside the cap - accepted,
+              -- because the undo only runs when the claim's own second half
+              -- failed, which is not a path an abuser can steer.
+              creator_ip = NULL
         WHERE id = ?
           AND claim_token_hash = ?
           AND claimed_at IS NULL

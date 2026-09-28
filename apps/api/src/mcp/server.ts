@@ -57,9 +57,11 @@ const INSTRUCTIONS = [
   ].join(" "),
   [
     "If you created this workspace yourself as a sandbox, the response that gave you the",
-    "key also gave you a one-time claim link. Show that link to the person you work for",
+    "key also gave you a one-time claim link. Store the key in your own config file, never",
+    "in a file inside the workspace. Show the claim link to the person you work for",
     "straight away: it is how they take ownership, it cannot be reissued, and an unclaimed",
-    "sandbox is deleted after seven days.",
+    "sandbox is deleted after three days. Once claimed, they can read this key again from",
+    "the dashboard's Keys page.",
   ].join(" "),
 ].join("\n\n");
 

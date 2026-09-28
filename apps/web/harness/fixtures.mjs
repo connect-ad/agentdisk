@@ -82,7 +82,7 @@ export const shares = { shares: [] };
 export const folders = { folders: [{ id: 'fld_1', path: '/research' }] };
 export const claimPreview = {
   workspace: { id: WS2.id, name: 'sandbox-7f3a', createdAt: iso(3600000), expiresAt: iso(-86400000 * 6), storageBytes: 1200000, fileCount: 4 },
-  limits: { storageBytes: 52428800 },
+  limits: { storageBytes: 524288000 },
   agent: { name: 'claude-desktop' },
   warning: null,
   claimable: true,

@@ -407,7 +407,7 @@ export function Landing() {
                 <span className="mk__spotopt">Merge into mine</span>
               </div>
               <span className="mk__spotcardfoot">
-                Your agent's key keeps working · 50 MB · 7 days to claim
+                Your agent's key keeps working · 500 MB · 3 days to claim
               </span>
             </div>
           </div>

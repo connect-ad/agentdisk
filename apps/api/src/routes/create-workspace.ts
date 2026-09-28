@@ -1,16 +1,40 @@
 /**
- * POST /v1/workspaces - 05 PART 13: "None (Turnstile-gated)", 10/hour/IP.
+ * POST /v1/workspaces - 05 PART 13, amended 28 Sept 2026.
  *
- * The only endpoint in the product that creates resources without a credential,
- * which makes its two gates the entire defence:
+ * The only endpoint in the product that creates resources without a credential.
  *
- *   1. A per-IP rate limit, checked first because it costs one KV read and
- *      stops a flood before we spend a network round trip on Turnstile.
- *   2. Turnstile, verified server-side. Failing closed on every error path,
- *      including Turnstile being unreachable.
+ * It used to require a Turnstile token, which made the route unusable by the
+ * audience it exists for: a headless agent has no browser to solve a challenge
+ * in, so the "no account, one minute" sandbox was a dashboard feature wearing
+ * an API's URL. The token is now optional. When a browser offers one it is
+ * verified exactly as before, failing closed on every error path; when an
+ * agent offers none the request goes through on the gates below alone.
  *
- * Both must run before any write. Nothing here is behind withAuth, so nothing
- * here may assume an identity exists.
+ * The gates, in the order they run, cheapest first:
+ *
+ *   1. A per-IP rate limit on creation: one KV read, ten an hour.
+ *   2. A per-IP cap on *unclaimed* sandboxes: one indexed D1 count, five at
+ *      once. The rate limit bounds how fast; this bounds how much one address
+ *      can occupy however long it keeps trying. It counts rows rather than
+ *      incrementing a counter, so a claim frees the slot the moment
+ *      `claimed_at` is set and the sweep frees the rest - an honest agent that
+ *      creates, claims and moves on is never locked out by its own history.
+ *   3. Turnstile, if and only if a token was offered.
+ *
+ * Why the captcha was never the fence: a solver service clears it for about a
+ * dollar a thousand. What makes a flood of sandboxes harmless is what a sandbox
+ * cannot do - SANDBOX_LIMITS caps its storage and egress and gives it zero
+ * share links, and the sweep deletes it after UNCLAIMED_TTL_MS. A thousand
+ * private, expiring, unshareable rows are a few cents of D1, not a hosting
+ * platform.
+ *
+ * Only the anonymous branch is charged against any of this. A signed-in
+ * person's POST to the same path is routed to createWorkspaceForUser before
+ * this file is reached (index.ts), so an abuser on a shared address cannot
+ * spend a customer's budget, and the customer's workspaces - owned at birth,
+ * never unclaimed - are never in the count.
+ *
+ * Nothing here is behind withAuth, so nothing here may assume an identity exists.
  */
 
 import { z } from "zod";
@@ -28,8 +52,25 @@ export const CREATE_WORKSPACE_RATE_LIMIT: RateLimitRule = {
   windowSeconds: 3600,
 };
 
+/**
+ * How many unclaimed sandboxes one address may hold at once.
+ *
+ * Five is enough for an agent running a handful of jobs in parallel and small
+ * enough that an address holds at most five sandbox allowances of storage. It
+ * is a per-address figure and datacenter agents share addresses, so the
+ * refusal names the two ways out: claim one, or create from the dashboard,
+ * which is not counted.
+ */
+export const SANDBOX_UNCLAIMED_PER_IP = 5;
+
 const BodySchema = z.object({
-  turnstileToken: z.string().min(1, "turnstileToken is required"),
+  /**
+   * Optional since 28 Sept 2026. Present means a browser solved a challenge
+   * and it is verified; absent means an agent, and the other gates carry it.
+   * An empty string is neither and is refused, so a client that lost its token
+   * finds out rather than silently taking the agent path.
+   */
+  turnstileToken: z.string().min(1, "turnstileToken, when sent, must not be empty").optional(),
   name: z.string().trim().min(1).max(64).optional(),
   agentName: z
     .string()
@@ -59,21 +100,46 @@ export interface CreateWorkspaceDeps {
   now?: number;
 }
 
+/**
+ * Gate 2. Reads the real state of the rows rather than a counter, so the
+ * number is always "how many unclaimed sandboxes does this address hold right
+ * now" - never "how many did it ever create".
+ */
+async function assertUnclaimedCap(db: D1Database, identifier: string): Promise<void> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS n
+         FROM workspaces
+        WHERE creator_ip = ?
+          AND claimed_at IS NULL
+          AND deleted_at IS NULL`
+    )
+    .bind(identifier)
+    .first<{ n: number }>();
+  const held = row?.n ?? 0;
+
+  if (held >= SANDBOX_UNCLAIMED_PER_IP) {
+    throw new ApiError(
+      "LIMIT_EXCEEDED",
+      `This address already holds ${SANDBOX_UNCLAIMED_PER_IP} unclaimed sandbox workspaces. ` +
+        "Claim one from its claim link, wait for an unclaimed one to expire, or sign in and " +
+        "create the workspace from the dashboard, which is not counted.",
+      {
+        details: { limit: "unclaimedWorkspaces", used: held, allowed: SANDBOX_UNCLAIMED_PER_IP },
+        internalReason: `unclaimed sandbox cap: ${identifier} holds ${held}`,
+      }
+    );
+  }
+}
+
 export async function createWorkspace(
   request: Request,
   deps: CreateWorkspaceDeps
 ): Promise<Response> {
   const now = deps.now ?? Date.now();
+  const identifier = clientIdentifier(request);
 
-  // Fail closed on a misconfigured deploy rather than quietly serving an
-  // ungated endpoint. Loud, because a missing bot gate is not a small thing.
-  if (!deps.turnstileSecret) {
-    throw new ApiError("INTERNAL_ERROR", "Something went wrong on our end.", {
-      internalReason: "TURNSTILE_SECRET_KEY is not set; refusing to provision without the gate",
-    });
-  }
-
-  await enforce(deps.kv, CREATE_WORKSPACE_RATE_LIMIT, clientIdentifier(request), now);
+  await enforce(deps.kv, CREATE_WORKSPACE_RATE_LIMIT, identifier, now);
 
   let raw: unknown;
   try {
@@ -86,21 +152,34 @@ export async function createWorkspace(
   if (!parsed.success) {
     throw validationError(
       parsed.error.issues[0]?.message ?? "Invalid request body.",
-      // Field paths only. The values are the caller's, and one of them is a
-      // Turnstile token we have no business echoing.
+      // Field paths only. The values are the caller's, and one of them may be
+      // a Turnstile token we have no business echoing.
       { fields: parsed.error.issues.map((issue) => issue.path.join(".")) }
     );
   }
 
-  const verification = await verifyTurnstile(deps.turnstileSecret, parsed.data.turnstileToken, {
-    remoteIp: request.headers.get("cf-connecting-ip"),
-    allowedHostnames: parseAllowedHostnames(deps.allowedHostnames),
-  });
+  await assertUnclaimedCap(deps.db, identifier);
 
-  if (!verification.success) {
-    throw new ApiError("FORBIDDEN", "That challenge could not be verified. Please try again.", {
-      internalReason: `turnstile rejected: ${verification.errorCodes.join(",")}`,
+  if (parsed.data.turnstileToken !== undefined) {
+    // A token was offered, so it is checked. A deploy that lost its secret
+    // must refuse the token rather than quietly accept it unverified: the
+    // caller said "I passed a challenge" and we cannot know that.
+    if (!deps.turnstileSecret) {
+      throw new ApiError("INTERNAL_ERROR", "Something went wrong on our end.", {
+        internalReason: "TURNSTILE_SECRET_KEY is not set; refusing to accept a challenge token unverified",
+      });
+    }
+
+    const verification = await verifyTurnstile(deps.turnstileSecret, parsed.data.turnstileToken, {
+      remoteIp: request.headers.get("cf-connecting-ip"),
+      allowedHostnames: parseAllowedHostnames(deps.allowedHostnames),
     });
+
+    if (!verification.success) {
+      throw new ApiError("FORBIDDEN", "That challenge could not be verified. Please try again.", {
+        internalReason: `turnstile rejected: ${verification.errorCodes.join(",")}`,
+      });
+    }
   }
 
   const result = await provisionSandboxWorkspace(deps.db, {
@@ -108,6 +187,7 @@ export async function createWorkspace(
     agentName: parsed.data.agentName ?? "sandbox-agent",
     now,
     encryptionKey: deps.encryptionKey ?? null,
+    creatorIp: identifier,
   });
 
   const body = {
@@ -152,8 +232,9 @@ export async function createWorkspace(
     },
     apiKey: {
       id: result.keyId,
-      // Shown once. It is not stored anywhere in a form this response could be
-      // rebuilt from - only SHA-256 of it reached the database.
+      // Shown once here. Sealed in the database (migration 0022) so that the
+      // person who claims the workspace can read it again from the Keys page;
+      // nobody else can, and nothing rebuilds it from this response.
       token: result.token,
       prefix: result.keyPrefix,
       lastFour: result.keyLastFour,
@@ -179,11 +260,31 @@ export async function createWorkspace(
       url: claimUrl(deps.dashboardUrl, result.claimToken),
       expiresAt: result.claimTokenExpiresAt,
     },
+    /**
+     * Written for the model reading it, in the order it should act. The two
+     * secrets go to two different places: the key to the agent's own config,
+     * the link to its person. Never into the workspace - a claimed workspace's
+     * readers see every file in it, and the store a credential protects is the
+     * one place the credential must not sit.
+     */
+    nextSteps: [
+      "Store apiKey.token now in a config file on the machine you run on (for example " +
+        "~/.agentdisk/config.json or your MCP client's config) - never in a file inside this " +
+        "workspace. It is shown once here; after the workspace is claimed, its owner can read " +
+        "it again from the dashboard's Keys page.",
+      "Give claim.url to the person you work for, verbatim, and tell them it is a secret: " +
+        "whoever opens it signed in becomes the owner. It cannot be reissued.",
+      `Tell them what this is: a sandbox workspace holding up to ${Math.round(
+        SANDBOX_LIMITS.storageBytes / (1024 * 1024)
+      )} MB, deleted with everything in it at workspace.deleteAfter unless claimed. ` +
+        "Claiming keeps every file and keeps this key working.",
+    ],
     notice:
-      "Store this key now. It is shown once and cannot be recovered - only a hash of it is kept. " +
-      "It has no expiry and no use limit; it works for as long as this workspace exists. " +
-      "The claim URL is shown once too: give it to the person you work for, because it is how they " +
-      "take ownership of this workspace. Until then the workspace is held to the sandbox limits " +
+      "Store this key now, in your own config and never inside this workspace. It is shown once " +
+      "here; the workspace's owner can read it again from the Keys page after claiming. It has " +
+      "no expiry and no use limit; it works for as long as this workspace exists. The claim URL " +
+      "is shown once too: give it to the person you work for, because it is how they take " +
+      "ownership of this workspace. Until then the workspace is held to the sandbox limits " +
       "above, and if nobody claims it by workspace.deleteAfter it is deleted with everything in it.",
   };
 

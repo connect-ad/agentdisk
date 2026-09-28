@@ -1,6 +1,10 @@
 import { SELF, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createWorkspace, CREATE_WORKSPACE_RATE_LIMIT } from "../src/routes/create-workspace";
+import {
+  createWorkspace,
+  CREATE_WORKSPACE_RATE_LIMIT,
+  SANDBOX_UNCLAIMED_PER_IP,
+} from "../src/routes/create-workspace";
 import { hashApiKey } from "../src/lib/keys";
 import { ApiError } from "../src/lib/errors";
 import { resetBootstrapData, resetRateLimits } from "./helpers";
@@ -35,6 +39,15 @@ function deps(overrides: Partial<Parameters<typeof createWorkspace>[1]> = {}) {
   };
 }
 
+/**
+ * Frees every slot the unclaimed cap counts, leaving the rate limit alone, so a
+ * test about one gate is not tripped by the other. The bootstrap reset already
+ * removes unclaimed workspaces in foreign-key order and touches no KV.
+ */
+async function releaseUnclaimed() {
+  await resetBootstrapData();
+}
+
 beforeEach(async () => {
   await resetRateLimits();
   await resetBootstrapData();
@@ -42,12 +55,38 @@ beforeEach(async () => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("POST /v1/workspaces - the gates", () => {
-  it("refuses to run at all when the Turnstile secret is missing", async () => {
+  it("refuses a challenge token it cannot verify, rather than accepting it unchecked", async () => {
     stubSiteverify();
-    // A deploy that lost its secret must not fall back to an ungated endpoint.
+    // A deploy that lost its secret must not turn "I passed the challenge"
+    // into a claim nobody checked.
     await expect(
       createWorkspace(post({ turnstileToken: "t" }), deps({ turnstileSecret: undefined }))
     ).rejects.toMatchObject({ code: "INTERNAL_ERROR" });
+  });
+
+  it("provisions with no token at all, and never calls siteverify for it", async () => {
+    // The agent path. No browser, no challenge, no round trip - and no need
+    // for the secret either, because nothing is verified.
+    let siteverifyCalls = 0;
+    vi.stubGlobal("fetch", async () => {
+      siteverifyCalls++;
+      return new Response(JSON.stringify({ success: true }));
+    });
+    const res = await createWorkspace(post({ name: "Agent made" }), deps({ turnstileSecret: undefined }));
+    expect(res.status).toBe(201);
+    expect(siteverifyCalls).toBe(0);
+    const body = (await res.json()) as { workspace: { name: string }; nextSteps: string[] };
+    expect(body.workspace.name).toBe("Agent made");
+    // The model is told where each secret goes, in order.
+    expect(body.nextSteps[0]).toMatch(/never in a file inside this workspace/);
+    expect(body.nextSteps[1]).toMatch(/claim\.url/);
+  });
+
+  it("still refuses an empty token: a client that lost it must find out", async () => {
+    stubSiteverify();
+    await expect(createWorkspace(post({ turnstileToken: "" }), deps())).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
   });
 
   it("rate-limits per IP at the 05 PART 13 figure", async () => {
@@ -58,6 +97,7 @@ describe("POST /v1/workspaces - the gates", () => {
     for (let i = 0; i < 10; i++) {
       const res = await createWorkspace(post({ turnstileToken: "t" }, "9.9.9.9"), deps());
       expect(res.status, `call ${i}`).toBe(201);
+      await releaseUnclaimed();
     }
     await expect(
       createWorkspace(post({ turnstileToken: "t" }, "9.9.9.9"), deps())
@@ -78,6 +118,7 @@ describe("POST /v1/workspaces - the gates", () => {
 
     for (let i = 0; i < 10; i++) {
       await createWorkspace(post({ turnstileToken: "t" }, "7.7.7.7"), deps());
+      await releaseUnclaimed();
     }
     const before = siteverifyCalls;
     await expect(
@@ -99,11 +140,14 @@ describe("POST /v1/workspaces - the gates", () => {
     expect(count?.n).toBe(0);
   });
 
-  it("rejects a body missing the challenge token", async () => {
+  it("records the creating address on the row, for the cap to count", async () => {
     stubSiteverify();
-    await expect(createWorkspace(post({ name: "Mine" }), deps())).rejects.toMatchObject({
-      code: "VALIDATION_ERROR",
-    });
+    const res = await createWorkspace(post({ name: "Mine" }, "4.4.4.4"), deps());
+    const body = (await res.json()) as { workspace: { id: string } };
+    const row = await env.DB.prepare(`SELECT creator_ip FROM workspaces WHERE id = ?`)
+      .bind(body.workspace.id)
+      .first<{ creator_ip: string | null }>();
+    expect(row?.creator_ip).toBe("4.4.4.4");
   });
 
   it("rejects a body that is not JSON", async () => {
@@ -179,7 +223,7 @@ describe("POST /v1/workspaces - provisioning", () => {
     // day the workspace becomes deletable.
     expect(body.workspace.deleteAfter).toBe(new Date(body.claim.expiresAt).toISOString());
     expect(body.workspace.limits).toMatchObject({
-      storageBytes: 50 * 1024 * 1024,
+      storageBytes: 500 * 1024 * 1024,
       files: 500,
       egressBytesPerPeriod: 500 * 1024 * 1024,
       requestsPerPeriod: 10_000,
@@ -336,5 +380,74 @@ describe("the full loop", () => {
 
     const after = await env.DB.prepare(`SELECT COUNT(*) AS n FROM workspaces`).first<{ n: number }>();
     expect(after?.n).toBe(before?.n);
+  });
+});
+
+describe("the per-address cap on unclaimed sandboxes", () => {
+  const IP = "5.5.5.5";
+
+  async function fill() {
+    for (let i = 0; i < SANDBOX_UNCLAIMED_PER_IP; i++) {
+      const res = await createWorkspace(post({ name: `Job ${i}` }, IP), deps());
+      expect(res.status, `sandbox ${i}`).toBe(201);
+    }
+  }
+
+  it("is five", () => {
+    expect(SANDBOX_UNCLAIMED_PER_IP).toBe(5);
+  });
+
+  it("refuses the sixth unclaimed sandbox from one address, and says how to get out", async () => {
+    await fill();
+    await expect(createWorkspace(post({ name: "Job 5" }, IP), deps())).rejects.toMatchObject({
+      code: "LIMIT_EXCEEDED",
+      details: { limit: "unclaimedWorkspaces", used: 5, allowed: 5 },
+      message: expect.stringMatching(/create the workspace from the dashboard/),
+    });
+    // Still well inside the hourly rate limit, so the cap is what refused.
+    expect(SANDBOX_UNCLAIMED_PER_IP + 1).toBeLessThan(CREATE_WORKSPACE_RATE_LIMIT.limit);
+  });
+
+  it("leaves a different address alone", async () => {
+    await fill();
+    expect((await createWorkspace(post({ name: "Elsewhere" }, "6.6.6.6"), deps())).status).toBe(201);
+  });
+
+  it("frees a slot the moment one of them is claimed", async () => {
+    await fill();
+    // Exactly what a claim does to the row, and the count reads the row.
+    await env.DB.prepare(
+      `UPDATE workspaces SET claimed_at = ?, creator_ip = NULL
+        WHERE id = (SELECT id FROM workspaces WHERE creator_ip = ? LIMIT 1)`
+    )
+      .bind(NOW, IP)
+      .run();
+    expect((await createWorkspace(post({ name: "Job 5" }, IP), deps())).status).toBe(201);
+  });
+
+  it("frees a slot when the console soft-deletes one", async () => {
+    await fill();
+    // The sweep removes the row outright, which frees it trivially; an admin
+    // delete only stamps deleted_at, and the count has to honour that too.
+    await env.DB.prepare(
+      `UPDATE workspaces SET deleted_at = ?
+        WHERE id = (SELECT id FROM workspaces WHERE creator_ip = ? LIMIT 1)`
+    )
+      .bind(NOW, IP)
+      .run();
+    expect((await createWorkspace(post({ name: "Job 5" }, IP), deps())).status).toBe(201);
+  });
+
+  it("counts before spending a Turnstile round trip", async () => {
+    await fill();
+    let siteverifyCalls = 0;
+    vi.stubGlobal("fetch", async () => {
+      siteverifyCalls++;
+      return new Response(JSON.stringify({ success: true }));
+    });
+    await expect(
+      createWorkspace(post({ turnstileToken: "t" }, IP), deps())
+    ).rejects.toMatchObject({ code: "LIMIT_EXCEEDED" });
+    expect(siteverifyCalls).toBe(0);
   });
 });

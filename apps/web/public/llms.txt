@@ -1,0 +1,98 @@
+# AgentDisk
+
+> File storage built for AI agents. Files, folders and metadata over REST and MCP,
+> with scoped credentials. This page is written for a model that has a shell or
+> an HTTP tool and has been told to use agentdisk.io. Follow it in order.
+
+On the dev deployment replace `api.` with `api-dev.` and `app.` with `app-dev.`.
+
+## 1. Create a sandbox workspace (no account, no bot check)
+
+One request. No credential, no token, no browser.
+
+    curl -s -X POST https://api.agentdisk.io/v1/workspaces \
+      -H "Content-Type: application/json" \
+      -d '{"name":"<short name for this job>","agentName":"<your name>"}'
+
+The response is shown once. It contains:
+
+- `apiKey.token` - the credential you use for every call after this.
+- `claim.url` - a secret link for the person you work for. Whoever opens it
+  signed in becomes the owner of the workspace.
+- `workspace.deleteAfter` - when the workspace is deleted unless claimed.
+- `workspace.limits` - what the sandbox may hold.
+- `nextSteps` - the three things to do now, in order. Do them.
+
+## 2. Where each secret goes
+
+- Store `apiKey.token` in a config file on the machine you run on, for example
+  `~/.agentdisk/config.json`, or in your MCP client's configuration. Never write
+  it into a file inside the workspace: a claimed workspace's readers can see
+  every file in it, and the store a credential protects is the one place the
+  credential must not sit. Once the workspace is claimed, its owner can read the
+  key again from the dashboard's Keys page, so a lost key is recoverable by the
+  person, not by you.
+- Give `claim.url` to your person, verbatim, and say it is a secret and cannot
+  be reissued.
+
+## 3. What to tell the person
+
+Say this, in your own words:
+
+- You created a temporary workspace called <name> on AgentDisk.
+- It is a sandbox: it holds up to 500 MB and 500 files, and it is deleted with
+  everything in it on <workspace.deleteAfter> unless they claim it.
+- To keep it, open the claim link and sign in (Google, GitHub or email; no card).
+  Treat the link like a password. Claiming keeps every file, keeps your key
+  working, and lets them read that key from the Keys page.
+- Offer to set up AgentDisk as an MCP server so the next session needs no curl.
+
+## 4. Limits on the anonymous path
+
+- 10 sandbox creations per hour per IP address.
+- 5 unclaimed sandboxes per IP address at once. A claim frees a slot at once,
+  and expiry frees the rest. If you are refused, ask your person to claim one
+  or to create the workspace from the dashboard, which is not counted.
+- A sandbox has no share links. Files are readable only with the key.
+
+## 5. Using the workspace
+
+Every call sends `Authorization: Bearer <apiKey.token>`. Optionally send
+`X-AgentDisk-Session: <your session or run name>`; it is stored on the audit row
+so the owner can see which run did what.
+
+Write a small file (up to 1 MB, base64 content):
+
+    curl -s -X POST https://api.agentdisk.io/v1/files \
+      -H "Authorization: Bearer $AGENTDISK_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"path":"/reports/summary.md","content":"<base64>"}'
+
+Read it back: `GET /v1/files/{id}/content` for anything up to 1 MB, or
+`GET /v1/files/{id}/download` for a one-hour presigned URL. List:
+`GET /v1/files`. Search: `GET /v1/search?q=...`. Larger uploads: send
+`sizeBytes` instead of `content` to receive a 15-minute presigned PUT, then
+`POST /v1/files/{id}/complete`.
+
+Who am I: `GET /v1/whoami` returns the workspace, the key's scopes and usage
+against the limits.
+
+## 6. MCP
+
+The same workspace over MCP, with the same key:
+
+    {
+      "mcpServers": {
+        "agentdisk": {
+          "url": "https://api.agentdisk.io/mcp",
+          "headers": { "Authorization": "Bearer <apiKey.token>" }
+        }
+      }
+    }
+
+The server's `initialize` response carries instructions on when to persist.
+Each tool's description says when to use it.
+
+## 7. Full documentation
+
+https://app.agentdisk.io/docs

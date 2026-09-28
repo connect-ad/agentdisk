@@ -282,6 +282,7 @@ export function MembersTab() {
 const SUBPROCESSORS = [
   { name: 'Cloudflare', purpose: 'Object storage (R2), database (D1), compute (Workers), CDN, transactional email', region: 'Global edge' },
   { name: 'Google (Firebase Authentication)', purpose: 'Sign-in, password storage, and session tokens', region: 'US / Global' },
+  { name: 'Google (Analytics)', purpose: 'Page-visit analytics, only with cookie consent', region: 'US / Global' },
   { name: 'Stripe', purpose: 'Payment processing and invoicing', region: 'US / EU' }
 ];
 

@@ -242,3 +242,11 @@ this spec declines to build. If the intent is to ship consent for a real analyti
 product that is coming, say so and it moves into phase 1 with the categories
 wired to something. If not, it should come out of the design file so the two
 stop disagreeing.
+
+**Resolved 28 Sept 2026.** The consent bar and preferences modal were built
+before a tracker existed (`components-local/CookieNotice.jsx`, `lib/consent.js`),
+and Google Analytics 4 is now the thing the analytics category gates
+(`lib/analytics.js`). It loads only on a recorded yes, sends a route template
+rather than the real address, and refuses ads storage and Google signals. The
+attribution category is still wired to nothing and says so. `CONSENT_VERSION`
+went to 2, so every earlier answer is asked again.

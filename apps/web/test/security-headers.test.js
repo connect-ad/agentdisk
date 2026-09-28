@@ -72,12 +72,18 @@ describe('script-src — the directive that does the work', () => {
     expect(sources()).not.toContain('https:');
   });
 
-  it('allows only self and the two hosts that actually serve script', () => {
+  it('allows only self and the three hosts that actually serve script', () => {
     // Turnstile: components-local/SandboxDialog.jsx loads its api.js. apis.google.com: the
-    // Firebase popup helper. Nothing else in this app loads a third-party
-    // script, and a third entry here should be treated as a question.
+    // Firebase popup helper. googletagmanager.com: gtag.js, injected by
+    // lib/analytics.js after consent. Nothing else in this app loads a
+    // third-party script, and a fourth entry here should be treated as a question.
     expect(sources().sort()).toEqual(
-      ['\'self\'', 'https://apis.google.com', 'https://challenges.cloudflare.com'].sort()
+      [
+        '\'self\'',
+        'https://apis.google.com',
+        'https://challenges.cloudflare.com',
+        'https://www.googletagmanager.com'
+      ].sort()
     );
   });
 
@@ -110,6 +116,13 @@ describe('the sources the app genuinely needs', () => {
     const prod = contentSecurityPolicy({ ...OPTIONS, apiBase: 'https://api.agentdisk.io' });
     expect(directive(prod, 'connect-src')).toContain('https://api.agentdisk.io');
     expect(directive(prod, 'connect-src')).not.toContain('https://api-dev.agentdisk.io');
+  });
+
+  /** Deleting these silently drops every analytics hit — lib/analytics.js. */
+  it('lets gtag.js reach Google Analytics collection', () => {
+    const sources = directive(policy(), 'connect-src');
+    expect(sources).toContain('https://*.google-analytics.com');
+    expect(sources).toContain('https://*.analytics.google.com');
   });
 
   /** Deleting these strips the app's typography — styles.css line 1. */

@@ -9,18 +9,16 @@
  * session and the last workspace you had open (`lib/workspace.jsx`), plus the
  * theme and accent preferences (`lib/theme.jsx`).
  *
- * The two optional categories collect nothing today. the Cookies clause of the docs' Privacy section (`routes/Docs.jsx`) is
- * the authoritative text and says exactly that. This module exists so that
- * when one of them starts, the choice a person already made is waiting for it
- * rather than being asked for afterwards — which is the wrong order, and the
- * one the policy promises not to take.
+ * `analytics` is Google Analytics (`lib/analytics.js`), and it is the only
+ * optional category in use; `marketing` still collects nothing. The Cookies
+ * clause of the docs' Privacy section (`routes/Docs.jsx`) is the authoritative
+ * text for both.
  *
  * ── The rule for whoever adds analytics ───────────────────────────────────
- * `analyticsAllowed()` is the gate. Nothing reads it yet, deliberately: there
- * is no analytics call to gate. A tag, a pixel or a `fetch` to a metrics
- * endpoint added without passing through it makes the notice a lie, and a
- * notice that lies is worse than no notice at all — it collects a decision and
- * then ignores it.
+ * `analyticsAllowed()` is the gate, and `lib/analytics.js` is the one thing
+ * that reads it. A tag, a pixel or a `fetch` to a metrics endpoint added
+ * without passing through it makes the notice a lie, and a notice that lies is
+ * worse than no notice at all — it collects a decision and then ignores it.
  *
  * ── Why a stale record re-asks ────────────────────────────────────────────
  * The design states "Saved for 12 months on this device", so a record older
@@ -34,8 +32,13 @@
 
 const KEY = 'agentdisk.cookie-consent';
 
-/** Bumped when a category is added or its meaning changes, which re-asks. */
-export const CONSENT_VERSION = 1;
+/**
+ * Bumped when a category is added or its meaning changes, which re-asks.
+ * 2: analytics started meaning Google Analytics. A yes recorded under 1 was
+ * given to a notice that said analytics collected nothing, so it is not a yes
+ * to this.
+ */
+export const CONSENT_VERSION = 2;
 
 /** 12 months, per the design's own promise. */
 export const CONSENT_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;

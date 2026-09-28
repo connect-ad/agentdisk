@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet, useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import { applyPageMeta } from './lib/seo.js';
+import { trackPageView } from './lib/analytics.js';
 import { AppShell, Badge, Button, Icon } from './components/index.js';
 
 import Dashboard from './routes/Dashboard.jsx';
@@ -364,11 +365,15 @@ function WorkspaceLayout() {
  * Title and description tags for the current route, from the same table the
  * build-time prerender writes into the static pages (lib/seo.js). Renders
  * nothing; an effect, so it never runs during the prerender itself.
+ *
+ * The page view goes after the title so Google records this page's title,
+ * and does nothing without analytics consent (lib/analytics.js).
  */
 function PageMeta() {
   const { pathname } = useLocation();
   useEffect(() => {
     applyPageMeta(pathname);
+    trackPageView(pathname);
   }, [pathname]);
   return null;
 }

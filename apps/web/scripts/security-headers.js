@@ -56,6 +56,15 @@ const GOOGLE_FONTS_FILES = "https://fonts.gstatic.com";
 const GOOGLE_APIS = "https://apis.google.com";
 
 /**
+ * Google Analytics, loaded by `lib/analytics.js` only after consent. The
+ * script comes from the tag manager host; hits go to regional collection
+ * hosts under both analytics domains, which is why those two are wildcards.
+ * These are Google's own published CSP sources for GA4.
+ */
+const GA_SCRIPT = "https://www.googletagmanager.com";
+const GA_COLLECT = ["https://*.google-analytics.com", "https://*.analytics.google.com"];
+
+/**
  * Only production may be indexed.
  *
  * The dev deployment is a working product on public hostnames, and until 28
@@ -114,7 +123,7 @@ export function contentSecurityPolicy({ apiBase, firebaseAuthDomain } = {}) {
     // The directive that actually stops XSS, and the one kept tightest: no
     // 'unsafe-inline', no 'unsafe-eval', no wildcard. Vite emits a single
     // hashed module script and no inline script, so 'self' is sufficient.
-    ["script-src", ["'self'", TURNSTILE, GOOGLE_APIS]],
+    ["script-src", ["'self'", TURNSTILE, GOOGLE_APIS, GA_SCRIPT]],
     // 'unsafe-inline' is required and is not laziness: 41 source files style
     // elements with React's `style={{…}}`, which the browser applies as an
     // inline style attribute. There is no hash or nonce that covers those, and
@@ -128,7 +137,7 @@ export function contentSecurityPolicy({ apiBase, firebaseAuthDomain } = {}) {
     ["img-src", ["'self'", "data:", "blob:", "https:"]],
     [
       "connect-src",
-      ["'self'", api, ...FIREBASE_ENDPOINTS, R2_S3, TURNSTILE],
+      ["'self'", api, ...FIREBASE_ENDPOINTS, R2_S3, TURNSTILE, GA_SCRIPT, ...GA_COLLECT],
     ],
     ["frame-src", [TURNSTILE, GOOGLE_APIS, ...(authDomain ? [authDomain] : [])]],
     ["worker-src", ["'self'", "blob:"]],

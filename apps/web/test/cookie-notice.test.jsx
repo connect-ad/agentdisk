@@ -9,9 +9,9 @@
  *      person believes they have switched something off. So every path through
  *      the bar is checked against what `lib/consent.js` can read back, and an
  *      unreadable, stale or partial record has to read as undecided.
- *   2. **It never claims a category is running when it is not.** The product
- *      collects no analytics and sets no cookies (`Set-Cookie` appears nowhere
- *      in apps/api), and `routes/Legal.jsx` §9 says so. The copy is pinned
+ *   2. **It says which category is running.** Analytics is Google Analytics,
+ *      on a yes only; attribution collects nothing; the product itself sets no
+ *      cookies (`Set-Cookie` appears nowhere in apps/api). The copy is pinned
  *      here so it cannot drift into the design's "essential cookies keep you
  *      signed in", which is the true sentence for a different product.
  *
@@ -56,11 +56,12 @@ describe('the bar', () => {
     expect(bar()).toBeNull();
   });
 
-  it('says what is true: browser storage, and nothing collected yet', () => {
+  it('says what is true: browser storage, and analytics only on a yes', () => {
     mount();
     const text = bar().textContent;
     expect(text).toMatch(/kept in this browser/i);
-    expect(text).toMatch(/collect nothing today/i);
+    expect(text).toMatch(/Google Analytics runs only if you allow/i);
+    expect(text).toMatch(/attribution collects nothing today/i);
     // The design's sentence, which is not true of this product.
     expect(text).not.toMatch(/Essential cookies keep you signed in/i);
   });
@@ -123,14 +124,15 @@ describe('preferences', () => {
     expect(screen.getByText('ALWAYS ON')).not.toBeNull();
   });
 
-  it('marks both optional categories as not in use, twice over', async () => {
+  it('names analytics as Google Analytics and attribution as not in use', async () => {
     const user = userEvent.setup();
     mount();
     await user.click(screen.getByRole('button', { name: 'Manage preferences' }));
 
-    expect(screen.getAllByText('NOT IN USE')).toHaveLength(2);
+    expect(screen.getByText('GOOGLE ANALYTICS')).not.toBeNull();
+    expect(screen.getAllByText('NOT IN USE')).toHaveLength(1);
     expect(screen.getByRole('dialog').textContent)
-      .toMatch(/Neither optional category is running/i);
+      .toMatch(/Attribution is not in use/i);
   });
 
   it('cancels without recording anything, so the question stays open', async () => {

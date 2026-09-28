@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Button, Modal, Switch } from '../components/index.js';
 import { SupportDialog } from './SupportDialog.jsx';
 import { readConsent, saveConsent } from '../lib/consent.js';
+import { applyAnalyticsConsent } from '../lib/analytics.js';
 
 /**
  * The consent notice, from `AgentDisk Site.dc.html` § COOKIE BAR and § COOKIE
@@ -17,15 +18,14 @@ import { readConsent, saveConsent } from '../lib/consent.js';
  *     in `apps/api`; sign-in is Firebase in browser storage and the API is
  *     bearer tokens. So "essential" here is browser storage, and the notice
  *     says storage where it means storage.
- *   - Nothing collects analytics or attribution today. the Cookies clause of the docs' Privacy section (`routes/Docs.jsx`)
- *     is the authoritative text and states that plainly, so the notice cannot
- *     imply otherwise by offering to switch off something that is not running.
+ *   - Analytics is Google Analytics and runs only on a yes; attribution
+ *     collects nothing. The Cookies clause of the docs' Privacy section
+ *     (`routes/Docs.jsx`) is the authoritative text, and the notice says
+ *     which category is running and which is not.
  *
- * The two optional toggles are still real: they write a decision, and
- * `lib/consent.js` is the gate anything future has to pass. Recording the
- * answer before there is a question to answer is the whole point — the policy
- * promises to ask *before* collecting, and that promise is only keepable if
- * the answer already exists.
+ * Both toggles write a decision that `lib/consent.js` gates on, and a decision
+ * takes effect on the page it was made on (`applyAnalyticsConsent`): turning
+ * analytics off stops it now, not from the next load.
  *
  * ── Why the title names the host you are on ───────────────────────────────
  * The record lives in this origin's localStorage, so a choice made on
@@ -61,13 +61,13 @@ const CATEGORIES = [
     title: 'Essential',
     tag: 'ALWAYS ON',
     locked: true,
-    body: 'Your sign-in session, the workspace you last had open, and your theme. Kept in this browser — this product sets no cookies of its own.',
+    body: 'Your sign-in session, the workspace you last had open, and your theme. Kept in this browser’s storage, not in cookies — the only cookies on this site are Google Analytics’, and only if you switch it on.',
   },
   {
     key: 'analytics',
     title: 'Product analytics',
-    tag: 'NOT IN USE',
-    body: 'Which dashboard features get used, aggregated and never file contents. Nothing collects this today.',
+    tag: 'GOOGLE ANALYTICS',
+    body: 'Which pages get visited, through Google Analytics. Links, workspace names and file paths are removed from the address before it is sent, and nothing about your files is. Sets Google’s _ga cookies.',
   },
   {
     key: 'marketing',
@@ -104,7 +104,7 @@ export default function CookieNotice() {
   });
 
   function decide(choice) {
-    saveConsent(choice);
+    applyAnalyticsConsent(saveConsent(choice));
     setDraft({ analytics: choice.analytics, marketing: choice.marketing });
     setPrefsOpen(false);
     setDecided(true);
@@ -119,9 +119,8 @@ export default function CookieNotice() {
           <p className="ckb__title">Cookies on {hostLabel()}</p>
           <p className="ckb__body">
             Sign-in and workspace state are kept in this browser; that part is
-            essential and always on. Analytics and attribution collect nothing
-            today — your choice here is what we will honour before anything
-            starts.
+            essential and always on. Google Analytics runs only if you allow
+            it, and attribution collects nothing today.
           </p>
         </div>
         <div className="ckb__actions">
@@ -178,9 +177,9 @@ export default function CookieNotice() {
             ))}
           </div>
           <p className="ckb__foot">
-            Neither optional category is running, so there is nothing to switch
-            off yet. Your answer is stored and is what the product has to check
-            first. The full detail is in the{' '}
+            Analytics runs only while it is switched on here, and switching it
+            off stops it on this page. Attribution is not in use. The full
+            detail is in the{' '}
             <Link to="/docs#privacy" onClick={() => setPrefsOpen(false)}>privacy policy</Link>.
           </p>
         </Modal>

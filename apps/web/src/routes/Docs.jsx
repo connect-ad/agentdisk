@@ -1627,6 +1627,7 @@ export function Docs({ sandbox = false }) {
                 <><strong>Your content:</strong> the files you and your agents store, with the metadata you attach.</>,
                 <><strong>Request logs:</strong> endpoint, method, status, latency, request ID and the calling identity, for security, quota enforcement and debugging. IP addresses, for rate limiting and abuse prevention, on the same schedule.</>,
                 <><strong>Support requests:</strong> what you send through the Support form, from the address you signed in with.</>,
+                <><strong>Usage analytics, only if you allow them:</strong> which pages of this site are visited, through Google Analytics. Workspace names, file paths and link tokens are removed from the address before it is sent. Nothing about your files, and nothing from the API or MCP.</>,
               ]} />
 
               <H3 id={slug('What we never see')}>What we never see</H3>
@@ -1634,7 +1635,7 @@ export function Docs({ sandbox = false }) {
                 <><strong>Your password.</strong> Sign-up, reset and change all go to the sign-in provider. This backend never receives, hashes or stores one, and the password policy is enforced there.</>,
                 <><strong>Your card number.</strong> Checkout and the portal are the payment processor's pages. We hold its customer and subscription identifiers and nothing about the card.</>,
                 <><strong>Your file contents, in the ordinary course.</strong> We compute a checksum, sign a URL and measure a size. We do not open, view or process contents except to investigate abuse, a security incident or a valid legal request, and we do not claim the architecture makes that impossible, because it does not.</>,
-                <><strong>Analytics or marketing cookies.</strong> Strictly necessary session and security storage only. Consent will be asked before that changes.</>,
+                <><strong>Advertising data.</strong> Google Analytics runs with ad storage, ad personalisation and Google signals switched off, and there are no marketing cookies.</>,
               ]} />
 
               <H3 id={slug('Processors')}>Processors</H3>
@@ -1643,6 +1644,7 @@ export function Docs({ sandbox = false }) {
                 rows={[
                   ['Cloudflare, Inc.', 'Compute, object storage, database, cache, queues, bot verification, and outbound email'],
                   ['Google LLC (Firebase Authentication)', 'Sign-in and session tokens'],
+                  ['Google LLC (Google Analytics)', 'Page-visit analytics on this site, only with your consent'],
                   ['Stripe, Inc.', 'Payments, invoices, the customer portal'],
                 ]}
               />
@@ -1664,15 +1666,18 @@ export function Docs({ sandbox = false }) {
 
               <H3 id={slug('Cookies')}>Cookies</H3>
               <P>
-                Strictly necessary session and security storage only. There are no analytics or
-                marketing cookies, and this policy will be updated and consent asked before that
-                changes. Your theme choice is kept in your browser and never sent to us.
+                Session and security storage is strictly necessary and always on. Google
+                Analytics is optional: it loads only after you allow it in the cookie notice,
+                sets Google's <code>_ga</code> cookies, and switching it off removes them. There
+                are no marketing cookies. Your theme choice is kept in your browser and never
+                sent to us.
               </P>
 
               <H3 id={slug('International transfers')}>International transfers</H3>
               <P>
-                Our infrastructure and sign-in providers operate global networks, so your data may
-                be processed outside your home country. The specific transfer mechanisms will be
+                Our infrastructure, sign-in and analytics providers operate global networks, so your
+                data may be processed outside your home country; Google Analytics data, when you allow
+                it, is processed by Google in the United States. The specific transfer mechanisms will be
                 stated here once the operating entity is finalised.
               </P>
 
@@ -1805,8 +1810,8 @@ export function Docs({ sandbox = false }) {
 
               <H3 id={slug('Third-party services')}>12. Third-party services</H3>
               <P>
-                The Service relies on the third-party infrastructure, sign-in and payment providers
-                named in the Privacy Policy. No third-party AI processor handles your files today;
+                The Service relies on the third-party infrastructure, sign-in, payment and analytics
+                providers named in the Privacy Policy. No third-party AI processor handles your files today;
                 if an optional feature ever sends content to one, the Privacy Policy will name it
                 before that happens. We are not responsible for the availability or acts of services
                 outside our control, though we select and monitor them as part of running the

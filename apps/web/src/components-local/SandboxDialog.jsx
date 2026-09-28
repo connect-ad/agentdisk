@@ -222,7 +222,7 @@ export function SandboxDialog({ open, onClose }) {
   return (
     <Modal
       title="Get Sandbox Credentials"
-      description="No account needed. Pass the bot check and you get an API key and a claim link, shown once."
+      description="Prove you're human and you get an API key and a claim link, shown once."
       onClose={onClose}
       onSubmit={submit}
       footer={(
@@ -235,8 +235,13 @@ export function SandboxDialog({ open, onClose }) {
         {/* Alert sets role="alert" itself for the danger tone. */}
         {error ? <Alert tone="danger" title={error} /> : null}
         <Challenge key={resetKey} onToken={onToken} onExpire={onExpire} />
+        {/* The one fact a person in this dialog may still need: a browser is
+            not the only way in. The claim deadline is not repeated here - the
+            Docs step says it, and the credentials screen after a successful
+            creation states it beside the key. */}
         <p className="ad-meta">
-          Sandboxes are rate limited and start unclaimed: three days to claim, then wiped.
+          Have an agent? It can create the sandbox itself. See &ldquo;Let your agent create it
+          instead&rdquo; in the <a href="/docs">Docs</a>.
         </p>
       </div>
     </Modal>

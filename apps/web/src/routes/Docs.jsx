@@ -740,18 +740,28 @@ function guideSteps(goal, chosen) {
           title: 'Get Sandbox access',
           body: (
             <>
-              No sign-up. From a browser, pass the bot check; from an agent, one POST with no token
-              at all. Either way you get two things, shown once in one block:
-              an <strong>API key</strong>, which is what your agent uses to read and write files,
-              and a <strong>claim link</strong>, which is the only way to make the workspace yours
-              later. Copy both now and keep them private. Anyone holding the key can act as your
-              agent, and anyone opening the link signed in becomes the owner. The workspace starts
-              unclaimed and holds 500 MB and 500 files. If nobody claims it within three days, it is
-              wiped with everything in it and the key stops working. Claiming it keeps the key
-              working, moves the workspace onto your plan and removes the deadline.
+              No sign-up. Open the sandbox here, or let your agent create one for you. You get an{' '}
+              <strong>API key</strong> for the agent and a <strong>claim link</strong> for you, shown
+              once, so keep them private. The sandbox holds 500 MB for three days, then it is wiped
+              and the key stops working. Claim it to keep it.
             </>
           ),
           link: { to: '/sandbox', label: 'Get Sandbox Credentials' },
+          // Behind a disclosure rather than a tooltip: the design system has no
+          // tooltip, a hover is invisible on a phone, and a native <details>
+          // needs no script. The prompt names the three things that matter -
+          // what to make, where the instructions are, where each secret goes -
+          // and llms.txt carries the rest, so the curl never has to appear here.
+          blocks: [
+            {
+              summary: 'Let your agent create it instead',
+              lead: 'Paste this to your agent:',
+              caption: 'PROMPT · CREATE A SANDBOX',
+              wrap: true,
+              code: `Create me a sandbox workspace on AgentDisk. Read ${typeof window === 'undefined' ? 'https://app.agentdisk.io' : window.location.origin}/llms.txt and follow it. Keep the API key in your own config and give me the claim link.`,
+              after: 'The agent does the rest and hands you the claim link.',
+            },
+          ],
         },
         connect,
         verify,
@@ -903,12 +913,26 @@ function GuideMe({ onSandbox }) {
                     <span className="sr-only"> (opens in a new tab)</span>
                   </a>
                 ) : null}
-                {s.blocks ? s.blocks.map(b => (
-                  <React.Fragment key={b.caption}>
-                    {b.lead ? <P>{b.lead}</P> : null}
-                    <Code caption={b.caption} wrap={b.wrap} variants={b.variants}>{b.code}</Code>
-                  </React.Fragment>
-                )) : null}
+                {s.blocks ? s.blocks.map(b => {
+                  const inner = (
+                    <>
+                      {b.lead ? <P>{b.lead}</P> : null}
+                      <Code caption={b.caption} wrap={b.wrap} variants={b.variants}>{b.code}</Code>
+                      {b.after ? <P>{b.after}</P> : null}
+                    </>
+                  );
+                  return b.summary ? (
+                    <details key={b.caption} className="doc__disclose">
+                      <summary className="doc__disclosesum">
+                        {b.summary}
+                        <Icon name="chevronDown" size={13} aria-hidden="true" />
+                      </summary>
+                      {inner}
+                    </details>
+                  ) : (
+                    <React.Fragment key={b.caption}>{inner}</React.Fragment>
+                  );
+                }) : null}
                 {s.after ? <p className="doc__p">{s.after}</p> : null}
               </li>
             ))}

@@ -1124,6 +1124,14 @@
   margin-bottom:var(--s-2);line-height:1.5rem}
 .doc__guidestep .doc__p{margin-bottom:var(--s-3)}
 .doc__guidestep .doc__code{margin:var(--s-3) 0 var(--s-2)}
+/* A guide block folded behind a native <details>: the agent prompt on the
+   sandbox step. Styled as the step's link is, so it reads as one more thing
+   to open rather than a heading. */
+.doc__disclose{margin:0 0 var(--s-3)}
+.doc__disclosesum{display:inline-flex;align-items:center;gap:var(--s-1);cursor:pointer;
+  list-style:none;font-size:var(--t-14);font-weight:var(--w-semi);color:var(--accent)}
+.doc__disclosesum::-webkit-details-marker{display:none}
+.doc__disclose[open] .doc__disclosesum svg{transform:rotate(180deg)}
 /* Opens in a new tab, and the glyph says so before the click. */
 .doc__guidelink{display:inline-flex;align-items:center;gap:var(--s-2);
   font-size:var(--t-13);font-weight:var(--w-semi);

@@ -21,7 +21,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWorkspace } from './workspace.jsx';
-import { clearCache, isFresh, peekCache, writeCache } from './resourceCache.js';
+import { isFresh, peekCache, subscribeCache, writeCache } from './resourceCache.js';
 
 /**
  * `view:` namespaces a screen's whole composed result away from the individual
@@ -51,16 +51,33 @@ export function useResource(load, deps = [], key) {
   // and writes the previous workspace's data over the current one's.
   const generation = useRef(0);
 
+  // What is on screen right now, readable from inside `run` without making
+  // `run` depend on `state` (which would re-create it, and so re-run the mount
+  // effect, on every answer).
+  const showing = useRef(state.status);
+  showing.current = state.status;
+
   const run = useCallback(
-    async (force = false) => {
+    /**
+     * `force` skips the cache. `behind` means "if you are already showing an
+     * answer, keep showing it while you fetch": the mode a write anywhere in
+     * the product puts every mounted resource into, so the stats band updates
+     * its figures in place rather than dropping to skeletons for a round trip
+     * on each keystroke-sized change somebody makes on another screen.
+     */
+    async (force = false, behind = false) => {
       if (!workspaceId) return;
       const mine = ++generation.current;
 
       const cached = force ? null : peekCache(cacheKey);
+      let keep = false;
       if (cached) {
         setState({ status: 'loaded', data: cached.data, error: null });
         if (isFresh(cached)) return;
         // Stale: leave it on screen and check behind it.
+        keep = true;
+      } else if (behind && showing.current === 'loaded') {
+        keep = true;
       } else {
         setState(previous => ({ ...previous, status: 'loading' }));
       }
@@ -74,7 +91,7 @@ export function useResource(load, deps = [], key) {
         // A background revalidation that fails keeps the data it was checking.
         // Replacing a working screen with an error page because one refresh did
         // not arrive is worse than being thirty seconds out of date.
-        if (cached) return;
+        if (keep) return;
         setState({ status: 'failed', data: null, error });
       }
     },
@@ -89,15 +106,25 @@ export function useResource(load, deps = [], key) {
   }, [run]);
 
   /**
-   * "Get me the current state of the world" — a retry after a failure, or a
-   * refetch after a write. It empties the cache rather than forcing this one
-   * key, because the composed result is built from the shared lists and forcing
-   * only the outer key would rebuild it out of the same cached pieces.
+   * A write anywhere empties the cache (`api.js`), and the store tells every
+   * mounted resource so. Each one fetches again behind whatever it is showing.
+   * This is what keeps the shell's stats band current: it never remounts and
+   * no screen knows to refresh it, so the clear has to be the trigger.
    */
-  const reload = useCallback(() => {
-    clearCache();
-    return run(true);
-  }, [run]);
+  useEffect(() => subscribeCache(() => { void run(false, true); }), [run]);
+
+  /**
+   * "Get me the current state of the world" — a retry after a failure, or a
+   * refetch after a write. It forces this resource's own loader; the shared
+   * lists underneath are served from the store, which is right in both cases.
+   * After a write the client has just emptied the store and started every
+   * mounted resource's refetch (above), so the loader joins those requests
+   * rather than adding to them — it used to clear the store here as well, and
+   * that second clear dropped the in-flight markers the first had set, so each
+   * write cost two of every request. After a failure the pieces that did
+   * arrive are fresh and the one that did not was never stored.
+   */
+  const reload = useCallback(() => run(true), [run]);
 
   return { ...state, reload };
 }

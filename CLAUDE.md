@@ -379,6 +379,27 @@ were not touched. See `backlog/002`.
   hit this, which is why an earlier audit round passed it: the form sets the
   user before navigating. `test/app-redirect.test.jsx` restores the session
   after mount, the way Firebase does.
+- **Clearing the resource cache is the refetch signal; nothing else is.**
+  The stats band above every screen showed "No agents yet" beside a list
+  with an agent in it until a full reload (FUNC-01, 28 Sept 2026, reproduced
+  in two audit rounds). The client already emptied `resourceCache` after
+  every non-GET, but emptying a store only changes the *next* read: a
+  `useResource` that had loaded kept its answer in React state, and each
+  screen's post-write `reload()` refreshed that screen alone. The band's
+  provider (`lib/usage.jsx`) is mounted once in the shell and never
+  remounts, so nobody ever asked it again. Now `clearCache` notifies every
+  mounted `useResource`, which refetches *behind* what it is showing — no
+  skeleton, and a failed refetch keeps the old figures. Two consequences.
+  **`reload()` no longer clears the cache itself**: it used to, and with the
+  subscription that second clear dropped the in-flight markers the first
+  had set, so each write cost two of every request; a test that stubs a
+  write method must call `clearCache()` in the stub, as the real client
+  would (`test/file-browser-wiring.test.jsx` shows the shape). And **the
+  usage provider takes the pathname as a dependency**, so a change made
+  outside this browser — an agent uploading through the API — shows on the
+  next navigation once the cached answer is past `TTL_MS`, at no cost while
+  it is fresh. `test/usage-refresh.test.jsx` pins the count of requests per
+  write as well as the figures.
 - **A screen must compute permissions from the real credential, never from a
   fixture.** The MCP page listed every write tool as available to a key scoped
   `read, list`. The backend was never fooled — `tools/list` filters on scope and
@@ -861,7 +882,7 @@ person can follow.
 
 ```
 apps/api   1009 tests across 52 files · typecheck clean
-apps/web    391 tests across 32 files · build clean
+apps/web    442 tests across 38 files · build clean
 apps/admin   52 tests across 4 files · build clean · 110 KiB gzipped
 apps/cli     11 tests across 1 file  · no dependencies · not yet published
 Worker      226 KiB gzipped, against Cloudflare's 1 MB limit

@@ -25,6 +25,7 @@
  */
 
 import React, { createContext, useContext } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useResource } from './useResource.js';
 import { fetchAgents, fetchWhoami } from './resources.js';
 
@@ -38,8 +39,23 @@ const loadUsage = async (api, workspaceId) => {
   return { me, agents: agents.agents ?? [] };
 };
 
+/**
+ * Two things keep the figures current, for two different kinds of change.
+ *
+ * A write made *here*, in this browser, empties the cache, and `useResource`
+ * refetches behind the figures it is showing (FUNC-01). A write made
+ * *elsewhere* — an agent uploading through the API, a colleague in another
+ * tab — reaches no cache in this browser, so the path is passed as a
+ * dependency: every navigation inside the shell asks the hook again, which is
+ * free while the cached answer is under `TTL_MS` old and a background
+ * revalidation once it is not. Tab-switching costs nothing; leaving an agent
+ * running for a minute and then clicking anywhere shows its work. This is
+ * the same rule every screen already follows by remounting on navigation;
+ * the provider needs it spelled out because it never remounts.
+ */
 export function WorkspaceUsageProvider({ children }) {
-  const resource = useResource(loadUsage, [], 'usage');
+  const { pathname } = useLocation();
+  const resource = useResource(loadUsage, [pathname], 'usage');
   return <UsageContext.Provider value={resource}>{children}</UsageContext.Provider>;
 }
 

@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { clearCache } from '../src/lib/resourceCache.js';
 
 vi.mock('../src/lib/workspace.jsx', () => ({
   useWorkspace: () => globalThis.__ws
@@ -78,7 +79,12 @@ async function deleteFromDrawer(user, name) {
 describe('File browser → delete', () => {
   it('calls the API rather than only showing a toast', async () => {
     const user = userEvent.setup();
-    const deleteFile = vi.fn(async () => ({ id: 'fil_A', deleted: true }));
+    // The real client empties the resource cache after every non-GET
+    // (`api.js`), and since FUNC-01 that clear is the one thing that makes a
+    // screen re-read; `reload()` no longer clears on its own. A stub standing
+    // in for the client has to do what the client does, or the re-read below
+    // is served from the cache and the assertion tests the stub, not the screen.
+    const deleteFile = vi.fn(async () => { clearCache(); return { id: 'fil_A', deleted: true }; });
     let listed = 0;
     const listFiles = vi.fn(async () => {
       listed += 1;

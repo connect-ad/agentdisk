@@ -112,7 +112,31 @@ export function fetchCached(key, fetcher, { force = false } = {}) {
 }
 
 /**
- * Empty the cache.
+ * Who wants to know when the cache is emptied. Every mounted `useResource`
+ * subscribes, so a write anywhere re-reads every resource that is on screen.
+ */
+const listeners = new Set();
+
+/**
+ * Be told when `clearCache` runs. Returns the unsubscribe.
+ *
+ * This is the second half of the invalidation story, and it was missing for
+ * three weeks (FUNC-01, 28 Sept 2026). Clearing the store only affects the
+ * *next* read; a resource that had already loaded kept its answer in React
+ * state and nothing told it to ask again. Each screen worked around that by
+ * calling its own `reload()` after its own writes — which refreshed the
+ * screen and nothing else, so the stats band in the shell, which is mounted
+ * once and never remounts, showed "No agents yet" beside a list with an agent
+ * in it until the page was reloaded. Now the clear itself is the signal, and
+ * the band needs no knowledge of which screen wrote what.
+ */
+export function subscribeCache(listener) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+/**
+ * Empty the cache, and tell every mounted resource to fetch again.
  *
  * Called on sign-out, on an account switch, and after every successful write.
  * Blunt on purpose: a per-resource invalidation table is a list somebody has to
@@ -120,7 +144,15 @@ export function fetchCached(key, fetcher, { force = false } = {}) {
  * their own change not having happened. Writes are rare next to reads, so the
  * cost of over-clearing is a handful of refetches and the benefit is that no
  * mutation can leave a stale screen behind it.
+ *
+ * The listeners run synchronously, and that is load-bearing rather than
+ * incidental: each one starts its loader before the next runs, so the shared
+ * lists they have in common are in flight by the time the second asks, and
+ * `fetchCached` joins that request instead of starting another. Notifying
+ * from a microtask would let something else clear the store between two
+ * subscribers and split one whoami into two.
  */
 export function clearCache() {
   entries.clear();
+  listeners.forEach(listener => listener());
 }

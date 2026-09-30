@@ -123,12 +123,12 @@ When multiple destinations appear possible, choose the most specific one.
 
 | Finding                                                       | Destination                                           |
 | ------------------------------------------------------------- | ----------------------------------------------------- |
-| How to run, build, test, or deploy                            | `Skill/1 Build.md`                                    |
-| Tokens, prices, thresholds, screen facts, approved deviations | `Skill/2 Design.md`                                   |
+| How to run, build or test                                     | `Skill/1 Build.md`                                    |
+| A rule, calibration or gotcha in an existing topic            | The topic's `Skill/<N> <Name>.md` (see CLAUDE.md)     |
 | A new reusable skill area with no existing document           | New `Skill/<N> <Name>.md` + `CLAUDE.md` catalog row   |
 | A rule describing where project knowledge belongs             | `CLAUDE.md` -> Information Route                      |
-| Work identified but not completed                             | New `backlog/NNN-<slug>.md` + `CLAUDE.md` catalog row |
-| Previously tracked work that is now completed                 | Update the backlog item's status line                 |
+| Work identified but not completed                             | The known-gaps list in `Skill/11 Operations.md`       |
+| Previously tracked work that is now completed                 | Remove it from that list                              |
 | A change to a custom command's behavior                       | `.claude/commands/<name>.md`                          |
 
 Do not create a new destination when an existing destination already applies.
@@ -140,17 +140,21 @@ This project already has homes for most knowledge. Prefer them over creating a
 
 | Finding                                     | Existing home here                                 |
 | ------------------------------------------- | -------------------------------------------------- |
-| Product, UX, architecture, security, test   | `docs/design/NN-<slug>.md` — the specification      |
-| A spec statement contradicted by the code    | Correct the doc in place (CLAUDE.md -> Precedence)  |
-| File-transfer and tooling gotchas            | `.design-sync/NOTES.md`                             |
-| Which Claude Design project is pinned        | `.design-sync/config.json`                          |
-| Outstanding or completed work                | `backlog/NNN-<slug>.md`                             |
-| Where knowledge lives                        | `CLAUDE.md` -> Information Route                    |
+| Deploying, pipelines, secrets, the cron       | `Skill/3 Deploy.md`                                 |
+| Terraform, DNS, Cloudflare resources          | `Skill/4 Infrastructure.md`                         |
+| Hostnames, indexing, headers, prerendering    | `Skill/5 Hostnames.md`                              |
+| Sign-in, Firebase, administrators             | `Skill/6 Auth and Firebase.md`                      |
+| Plans, checkout, webhooks, the grace ladder   | `Skill/7 Billing and Stripe.md`                     |
+| Isolation, quota, workspaces, sandboxes, keys | `Skill/8 Storage and Tenancy.md`                    |
+| The admin console                             | `Skill/9 Admin Console.md`                          |
+| Dashboard components, tokens, overlays, cache | `Skill/10 Dashboard.md`                             |
+| What is live, known gaps, runbook             | `Skill/11 Operations.md`                            |
+| A document contradicted by the code           | Correct the document in place; the code wins        |
+| Where knowledge lives                         | `CLAUDE.md`                                         |
 
-`Skill/1 Build.md` and `Skill/2 Design.md` do **not** exist yet. Create one only
-when a finding genuinely has no home above — build and deploy commands are the
-likely first case, once there is a backend to build. Add the catalog row to
-`CLAUDE.md` in the same pass.
+Eleven skills exist. Create a twelfth only when a finding genuinely has no home
+above, and add its row to `CLAUDE.md` in the same pass. There is no backlog
+folder and no specification folder any more; open work is the known-gaps list.
 
 `design-system/` is a byte-verified mirror. Never write to it.
 
@@ -181,7 +185,7 @@ Do not blindly append another statement.
 Determine whether:
 
 * the existing documentation is stale and should be replaced,
-* the new information is an unresolved proposal and belongs in `backlog/`,
+* the new information is an unresolved proposal and belongs in the known-gaps list,
 * or the conflict cannot be resolved and must remain an open question.
 
 Documentation should describe **one current truth**, not accumulate competing versions.
@@ -202,13 +206,12 @@ Rules:
 * Do not add explanatory prose that carries no new knowledge.
 * Do not duplicate knowledge across files.
 * Do not create files unless the finding requires one.
-* Update the `CLAUDE.md` catalog whenever a skill or backlog file is added,
+* Update the `CLAUDE.md` skill table whenever a skill is added,
   removed, or changes status.
 
 `CLAUDE.md` is only the **route and catalog**.
 
-Project knowledge belongs in the appropriate skill or backlog document, not
-inside `CLAUDE.md`.
+Project knowledge belongs in the appropriate skill, not inside `CLAUDE.md`.
 
 ---
 
@@ -222,9 +225,9 @@ For example:
 
 ```text
 Skill/1 Build.md - updated Node version.
-Skill/2 Design.md - corrected API timeout.
-backlog/014-cache-migration.md - added unresolved migration work.
-CLAUDE.md - updated catalog.
+Skill/7 Billing and Stripe.md - recorded the webhook API version.
+Skill/11 Operations.md - added an unresolved gap.
+CLAUDE.md - updated the skill table.
 ```
 
 If nothing is worth persisting:
@@ -260,7 +263,7 @@ Do not turn:
 
 into project facts.
 
-When uncertain, prefer an open question or backlog item over an invented fact.
+When uncertain, prefer an open question or a known-gaps entry over an invented fact.
 
 ---
 
@@ -348,7 +351,7 @@ Nothing was worth persisting.
 
 ## Do not commit
 
-`cpack` may write documentation and backlog files.
+`cpack` may write documentation files.
 
 It must never create a git commit.
 

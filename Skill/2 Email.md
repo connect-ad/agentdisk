@@ -167,7 +167,7 @@ own, because bounces cost sender reputation.
 The binding needs no secret and nothing in CI pushes one; `wrangler deploy`
 declares it from `wrangler.toml`, and the deploy log lists
 `env.EMAIL … Send Email`. The CI deploy token needed no extra permission for
-it. Prod carries the same block and has never been applied.
+it. Prod carries the same block and was first deployed on 30 September 2026.
 
 ---
 

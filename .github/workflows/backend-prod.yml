@@ -1,0 +1,40 @@
+name: Backend prod
+
+# The API Worker, its D1 migrations and its Worker secrets.
+#
+# infra/terraform is deliberately NOT in the path filter. This pipeline
+# only reads Terraform outputs, so an infrastructure change does not need
+# to redeploy the API - infra-prod.yml handles it.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/**"
+      - ".github/workflows/backend.yml"
+      - ".github/workflows/backend-prod.yml"
+  # Every caller is dispatchable, so any one area can be redeployed on its own
+  # without an empty commit. deploy-all-dev.yml drives all three in order.
+  workflow_dispatch:
+
+# Serialise deploys within an area, and never cancel one mid-flight: an
+# interrupted run can leave Terraform state locked or a deploy half-applied.
+#
+# Each area has its OWN group rather than one shared group. GitHub keeps only
+# one pending run per group, so sharing would let a burst of pushes silently
+# drop a queued deploy - and a deploy that vanishes without failing is the
+# outcome these pipelines exist to prevent.
+concurrency:
+  group: backend-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  run:
+    uses: ./.github/workflows/backend.yml
+    with:
+      environment: prod
+    secrets: inherit

@@ -1,0 +1,1488 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body { margin:0; -webkit-font-smoothing:antialiased; }
+    *:focus-visible { outline:2px solid var(--acc); outline-offset:2px; border-radius:4px; }
+    @keyframes shimmer { 0% { opacity:.45 } 50% { opacity:.9 } 100% { opacity:.45 } }
+    @keyframes toastIn { from { transform:translateY(10px); opacity:0 } to { transform:translateY(0); opacity:1 } }
+    @keyframes overlayIn { from { opacity:0 } to { opacity:1 } }
+    @keyframes drawerIn { from { transform:translateX(24px); opacity:0 } to { transform:translateX(0); opacity:1 } }
+    ::-webkit-scrollbar { height:8px; width:8px }
+    ::-webkit-scrollbar-thumb { background:var(--bd2); border-radius:99px }
+  </style>
+</helmet>
+
+<div style="min-height:100vh;background:#0E0E16;padding-bottom:40px">
+
+<div style="width:100%;background:#141420;border-bottom:1px solid #262636;position:sticky;top:0;z-index:70">
+  <div style="max-width:1240px;margin:0 auto;padding:9px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.12em;color:#7E8697;flex:0 0 auto">DASHBOARD SHELL</span>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:10px;flex:0 0 auto">
+      <div style="display:flex;gap:2px;background:#1D1D2B;border:1px solid #2C2C3D;border-radius:8px;padding:2px">
+        <sc-for list="{{ frames }}" as="f" hint-placeholder-count="3">
+          <button onClick="{{ f.pick }}" style="{{ f.style }}">{{ f.label }}</button>
+        </sc-for>
+      </div>
+      <button onClick="{{ toggleTheme }}" aria-label="Toggle colour mode" style="width:28px;height:28px;border:1px solid #2C2C3D;border-radius:7px;background:#1D1D2B;display:flex;align-items:center;justify-content:center;cursor:pointer">
+        <sc-if value="{{ isDark }}" hint-placeholder-val="{{ true }}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"></circle><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"></path></svg>
+        </sc-if>
+        <sc-if value="{{ isLight }}" hint-placeholder-val="{{ false }}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" stroke-width="2" stroke-linecap="round"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"></path></svg>
+        </sc-if>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div style="{{ stageStyle }}">
+<div style="{{ rootStyle }}">
+
+  <!-- ══ LAYER 0 — TOP BAR ══ -->
+  <header style="position:sticky;top:0;z-index:40;background:var(--surf);border-bottom:1px solid var(--bd)">
+    <div style="{{ barInner }}">
+      <div style="display:flex;align-items:center;gap:9px;flex:0 0 auto">
+        <img src="./agentdisk-logo.png" alt="AgentDisk" style="width:28px;height:28px;border-radius:7px;background:#FFFFFF;object-fit:contain;padding:2px;box-sizing:border-box;display:block">
+        <sc-if value="{{ showWordmark }}" hint-placeholder-val="{{ true }}">
+          <span style="font-family:'Outfit',system-ui,sans-serif;font-size:16.5px;font-weight:600;letter-spacing:-0.02em;color:var(--tx)">AgentDisk</span>
+        </sc-if>
+      </div>
+
+      <div style="width:1px;height:22px;background:var(--bd);margin:0 4px;flex:0 0 1px"></div>
+
+      <!-- workspace switcher -->
+      <div style="position:relative;min-width:0">
+        <button aria-haspopup="listbox" aria-expanded="{{ wsOpen }}" onClick="{{ toggleWs }}" style="display:flex;align-items:center;gap:9px;height:34px;padding:0 10px;border:1px solid var(--bd);border-radius:9px;background:var(--surf2);cursor:pointer;max-width:260px;font-family:'IBM Plex Sans',system-ui,sans-serif" style-hover="border-color:var(--bd2)">
+          <span style="width:20px;height:20px;border-radius:5px;background:var(--accSoft);border:1px solid var(--accBd);color:var(--acc);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:0 0 20px">{{ ws.initial }}</span>
+          <span style="font-size:13.5px;font-weight:600;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ws.name }}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.06em;color:var(--tx2);border:1px solid var(--bd);border-radius:4px;padding:2px 5px;flex:0 0 auto">{{ ws.plan }}</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--tx2)" stroke-width="2.2" stroke-linecap="round" style="flex:0 0 13px"><path d="m6 9 6 6 6-6"></path></svg>
+        </button>
+
+        <sc-if value="{{ wsOpen }}" hint-placeholder-val="{{ false }}">
+          <div role="listbox" style="position:absolute;top:40px;left:0;width:288px;background:var(--surf);border:1px solid var(--bd2);border-radius:12px;padding:6px;box-shadow:0 16px 44px var(--shadow);animation:overlayIn .12s ease">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.11em;color:var(--tx3);padding:7px 9px 6px">WORKSPACES</div>
+            <sc-for list="{{ workspaces }}" as="w" hint-placeholder-count="3">
+              <button onClick="{{ w.pick }}" style="{{ w.rowStyle }}">
+                <span style="width:22px;height:22px;border-radius:6px;background:var(--accSoft);border:1px solid var(--accBd);color:var(--acc);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:0 0 22px">{{ w.initial }}</span>
+                <span style="flex:1;min-width:0;text-align:left">
+                  <span style="display:block;font-size:13.5px;font-weight:500;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ w.name }}</span>
+                  <span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--tx3);margin-top:2px">{{ w.id }}</span>
+                </span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--tx2);flex:0 0 auto">{{ w.plan }}</span>
+                <sc-if value="{{ w.current }}" hint-placeholder-val="{{ false }}">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--acc)" stroke-width="2.6" stroke-linecap="round" style="flex:0 0 15px"><path d="M4 12.5 9 17.5 20 6.5"></path></svg>
+                </sc-if>
+              </button>
+            </sc-for>
+            <div style="border-top:1px solid var(--bd);margin:5px 4px 4px"></div>
+            <button style="display:flex;align-items:center;gap:9px;width:100%;padding:9px;border:none;background:transparent;border-radius:8px;cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif" style-hover="background:var(--surf2)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--acc)" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+              <span style="font-size:13.5px;font-weight:500;color:var(--acc)">New workspace</span>
+            </button>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="margin-left:auto;display:flex;align-items:center;gap:6px;flex:0 0 auto">
+        <button onClick="{{ toggleTheme }}" aria-label="Toggle colour mode" style="width:32px;height:32px;border:1px solid var(--bd);border-radius:8px;background:var(--surf2);display:flex;align-items:center;justify-content:center;cursor:pointer" style-hover="border-color:var(--bd2)">
+          <sc-if value="{{ isDark }}" hint-placeholder-val="{{ true }}">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--tx2)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"></circle><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"></path></svg>
+          </sc-if>
+          <sc-if value="{{ isLight }}" hint-placeholder-val="{{ false }}">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--tx2)" stroke-width="2" stroke-linecap="round"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"></path></svg>
+          </sc-if>
+        </button>
+
+        <sc-if value="{{ showDocsLink }}" hint-placeholder-val="{{ true }}">
+          <a href="#" style="height:32px;padding:0 11px;border-radius:8px;font-size:13px;font-weight:500;color:var(--tx2);display:flex;align-items:center;text-decoration:none">Docs</a>
+        </sc-if>
+
+        <!-- profile menu -->
+        <div style="position:relative">
+          <button aria-haspopup="menu" aria-expanded="{{ profOpen }}" onClick="{{ toggleProf }}" style="display:flex;align-items:center;gap:8px;height:34px;padding:0 8px 0 3px;border:1px solid var(--bd);border-radius:99px;background:var(--surf2);cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif" style-hover="border-color:var(--bd2)">
+            <span style="width:26px;height:26px;border-radius:99px;background:var(--acc);color:var(--accInk);font-size:11.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:0 0 26px">RK</span>
+            <sc-if value="{{ showProfName }}" hint-placeholder-val="{{ true }}">
+              <span style="font-size:13px;font-weight:500;color:var(--tx)">Rina Kessler</span>
+            </sc-if>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--tx2)" stroke-width="2.2" stroke-linecap="round"><path d="m6 9 6 6 6-6"></path></svg>
+          </button>
+
+          <sc-if value="{{ profOpen }}" hint-placeholder-val="{{ false }}">
+            <div role="menu" style="position:absolute;top:40px;right:0;width:236px;background:var(--surf);border:1px solid var(--bd2);border-radius:12px;padding:6px;box-shadow:0 16px 44px var(--shadow);animation:overlayIn .12s ease">
+              <div style="padding:9px 9px 11px;border-bottom:1px solid var(--bd);margin-bottom:5px">
+                <div style="font-size:13.5px;font-weight:600;color:var(--tx)">Rina Kessler</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--tx3);margin-top:3px">rina@kesslerlabs.dev</div>
+              </div>
+              <sc-for list="{{ profileItems }}" as="p" hint-placeholder-count="4">
+                <button role="menuitem" onClick="{{ p.pick }}" style="{{ p.style }}">
+                  <span style="flex:1;text-align:left">{{ p.label }}</span>
+                  <sc-if value="{{ p.external }}" hint-placeholder-val="{{ false }}">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M14 4h6v6M20 4l-8.5 8.5"></path><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"></path></svg>
+                  </sc-if>
+                </button>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ══ LAYER 1 — WORKSPACE INFO STRIP ══ -->
+  <div style="background:var(--surf2);border-bottom:1px solid var(--bd)">
+    <div style="{{ stripInner }}">
+      <sc-if value="{{ stripExpanded }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;align-items:center;gap:7px;min-width:0">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.1em;color:var(--tx3)">OWNER</span>
+          <span style="width:18px;height:18px;border-radius:99px;background:var(--acc);color:var(--accInk);font-size:8.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:0 0 18px">RK</span>
+          <span style="font-size:12.5px;color:var(--tx);font-weight:500">Rina Kessler</span>
+        </div>
+      </sc-if>
+      <sc-if value="{{ stripExpanded }}" hint-placeholder-val="{{ true }}">
+        <div style="width:1px;height:16px;background:var(--bd)"></div>
+      </sc-if>
+      <sc-if value="{{ stripExpanded }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;align-items:center;gap:7px;min-width:0">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.1em;color:var(--tx3)">WORKSPACE ID</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ws.id }}</span>
+          <button onClick="{{ copyId }}" aria-label="Copy workspace ID" style="width:22px;height:22px;border:1px solid var(--bd);border-radius:6px;background:var(--surf);display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 22px" style-hover="border-color:var(--bd2)">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--tx2)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M15 5.5A2.5 2.5 0 0 0 12.5 3H6a2 2 0 0 0-2 2v7.5A2.5 2.5 0 0 0 6.5 15"></path></svg>
+          </button>
+        </div>
+      </sc-if>
+      <sc-if value="{{ stripExpanded }}" hint-placeholder-val="{{ true }}">
+        <div style="width:1px;height:16px;background:var(--bd)"></div>
+      </sc-if>
+      <sc-if value="{{ stripExpanded }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;align-items:center;gap:7px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.1em;color:var(--tx3)">PLAN</span>
+          <span style="font-size:11px;font-weight:600;color:var(--acc);background:var(--accSoft);border:1px solid var(--accBd);border-radius:5px;padding:2px 7px">{{ ws.plan }}</span>
+          <a href="#" style="font-size:12px;color:var(--tx2)">Change</a>
+        </div>
+      </sc-if>
+      <sc-if value="{{ stripCollapsed }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ toggleStrip }}" aria-expanded="{{ infoOpen }}" style="display:flex;align-items:center;gap:7px;width:100%;background:transparent;border:none;padding:0;cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--tx2)" stroke-width="2.2" stroke-linecap="round" style="flex:0 0 13px"><path d="m9 6 6 6-6 6"></path></svg>
+          <span style="font-size:12.5px;color:var(--tx2)">Workspace details</span>
+          <span style="margin-left:auto;font-size:11px;font-weight:600;color:var(--acc);background:var(--accSoft);border:1px solid var(--accBd);border-radius:5px;padding:2px 7px">{{ ws.plan }}</span>
+        </button>
+      </sc-if>
+    </div>
+  </div>
+
+  <!-- ══ LAYER 2 — PERSISTENT STATS ══ -->
+  <div style="background:var(--surf2);border-bottom:1px solid var(--bd)">
+    <div style="{{ statsOuter }}">
+      <div style="{{ statsGrid }}">
+        <sc-for list="{{ stats }}" as="s" hint-placeholder-count="4">
+          <div style="{{ s.cardStyle }}">
+            <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.11em;color:var(--tx3)">{{ s.label }}</span>
+              <sc-if value="{{ s.flagged }}" hint-placeholder-val="{{ false }}">
+                <span style="{{ s.flagStyle }}">{{ s.flag }}</span>
+              </sc-if>
+            </div>
+            <div style="display:flex;align-items:baseline;gap:5px">
+              <span style="{{ s.numStyle }}">{{ s.value }}</span>
+              <span style="font-size:12.5px;color:var(--tx2);font-weight:500">{{ s.unit }}</span>
+            </div>
+            <sc-if value="{{ s.hasBar }}" hint-placeholder-val="{{ true }}">
+              <div style="margin-top:12px">
+                <div style="height:5px;border-radius:99px;background:var(--surf3);overflow:hidden">
+                  <div style="{{ s.barStyle }}"></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-top:6px">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--tx3)">{{ s.pctLabel }}</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--tx3)">{{ s.limit }}</span>
+                </div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ s.noBar }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:12px;display:flex;align-items:center;gap:6px;height:22px">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15l5-5 4 3 7-7"></path><path d="M20 6v5h-5"></path></svg>
+                <span style="font-size:11.5px;color:var(--tx2)">{{ s.delta }}</span>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ LAYER 3 — TAB BAR ══ -->
+  <div style="background:var(--surf);border-bottom:1px solid var(--bd);position:sticky;top:56px;z-index:30">
+    <div style="{{ tabsOuter }}">
+      <div role="tablist" aria-label="Workspace sections" style="display:flex;gap:2px;overflow-x:auto;scrollbar-width:none">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="9">
+          <button role="tab" aria-selected="{{ t.active }}" aria-controls="{{ t.panelId }}" tabindex="{{ t.tabIndex }}" onClick="{{ t.pick }}" style="{{ t.style }}">{{ t.label }}</button>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ ACCOUNT-AREA RETURN BAR ══ -->
+  <sc-if value="{{ inAccountArea }}" hint-placeholder-val="{{ false }}">
+    <div style="background:var(--accSoft);border-bottom:1px solid var(--accBd)">
+      <div style="{{ stripInner }}">
+        <button onClick="{{ backToWorkspace }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;padding:0;cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--acc)" stroke-width="2.4" stroke-linecap="round" style="flex:0 0 14px"><path d="M15 6l-6 6 6 6"></path></svg>
+          <span style="font-size:12.5px;font-weight:600;color:var(--acc)">Back to workspace</span>
+        </button>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.1em;color:var(--tx3);margin-left:6px">ACCOUNT AREA · {{ accountLabel }}</span>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ══ LAYER 4 — CONTENT ══ -->
+  <main style="{{ contentOuter }}">
+
+    <!-- ─── ACCOUNT ─── -->
+    <sc-if value="{{ tabAccount }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:680px">
+        <h2 style="{{ h2 }}">Account</h2>
+        <p style="margin:0 0 20px;font-size:13.5px;color:var(--tx2)">Personal details for this user, separate from any workspace.</p>
+
+        <div style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;padding:18px;margin-bottom:14px">
+          <div style="display:flex;align-items:center;gap:14px;padding-bottom:18px;border-bottom:1px solid var(--bd);margin-bottom:6px">
+            <span style="width:52px;height:52px;border-radius:99px;background:var(--acc);color:var(--accInk);font-family:'Outfit',system-ui,sans-serif;font-size:19px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:0 0 52px">RK</span>
+            <div>
+              <button style="height:32px;padding:0 13px;border:1px solid var(--bd2);border-radius:8px;background:var(--surf2);font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:12.5px;font-weight:500;color:var(--tx);cursor:pointer">Upload photo</button>
+              <div style="font-size:11.5px;color:var(--tx3);margin-top:6px">PNG or JPG, up to 2 MB</div>
+            </div>
+          </div>
+          <sc-for list="{{ accountRows }}" as="a" hint-placeholder-count="5">
+            <div style="display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--bd)">
+              <span style="width:104px;flex:0 0 104px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.1em;color:var(--tx3)">{{ a.k }}</span>
+              <span style="flex:1;min-width:0;font-size:13.5px;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.v }}</span>
+              <sc-if value="{{ a.tag }}" hint-placeholder-val="{{ false }}">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;letter-spacing:0.07em;padding:2px 6px;border-radius:4px;color:var(--okTx);background:var(--okSoft);border:1px solid var(--okBd);flex:0 0 auto">{{ a.tag }}</span>
+              </sc-if>
+              <sc-if value="{{ a.editable }}" hint-placeholder-val="{{ true }}">
+                <button style="background:transparent;border:none;padding:0;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:12.5px;font-weight:500;color:var(--acc);cursor:pointer;flex:0 0 auto">Edit</button>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;padding:18px;margin-bottom:14px">
+          <h3 style="{{ h3 }}">Active sessions</h3>
+          <div style="height:12px"></div>
+          <sc-for list="{{ sessions }}" as="x" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--bd)">
+              <span style="flex:1;min-width:0">
+                <span style="display:block;font-size:13px;font-weight:500;color:var(--tx)">{{ x.device }}</span>
+                <span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--tx3);margin-top:3px">{{ x.where }}</span>
+              </span>
+              <span style="font-size:11.5px;color:var(--tx2);flex:0 0 auto">{{ x.when }}</span>
+              <span style="{{ x.tagStyle }}">{{ x.tag }}</span>
+            </div>
+          </sc-for>
+          <div style="height:14px"></div>
+          <button style="height:34px;padding:0 13px;border:1px solid var(--bd2);border-radius:9px;background:transparent;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:12.5px;font-weight:500;color:var(--tx);cursor:pointer">Sign out other sessions</button>
+        </div>
+
+        <div style="border:1px solid var(--dngrBd);background:var(--surf);border-radius:12px;padding:18px">
+          <h3 style="margin:0 0 6px;font-family:'Outfit',system-ui,sans-serif;font-size:15px;font-weight:600;color:var(--dngrTx)">Delete account</h3>
+          <p style="margin:0 0 14px;font-size:13px;line-height:1.55;color:var(--tx2)">You own one workspace. Transfer it first, or it is deleted with the account.</p>
+          <button style="height:36px;padding:0 14px;border:1px solid var(--dngrBd);border-radius:9px;background:var(--dngrSoft);font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:13px;font-weight:600;color:var(--dngrTx);cursor:pointer">Delete account…</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ─── BILLING ─── -->
+    <sc-if value="{{ tabBilling }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:760px">
+        <h2 style="{{ h2 }}">Billing</h2>
+        <p style="margin:0 0 20px;font-size:13.5px;color:var(--tx2)">Kessler Labs · Team plan · billed monthly on the 1st.</p>
+
+        <div style="{{ twoCol }}">
+          <div style="border:1px solid var(--accBd);background:var(--accSoft);border-radius:12px;padding:18px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.11em;color:var(--acc);margin-bottom:12px">CURRENT PLAN</div>
+            <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:6px">
+              <span style="font-family:'Outfit',system-ui,sans-serif;font-size:32px;font-weight:600;letter-spacing:-0.03em;color:var(--tx);line-height:1">$49</span>
+              <span style="font-size:13px;color:var(--tx2)">/ month</span>
+            </div>
+            <div style="font-size:12.5px;color:var(--tx2);margin-bottom:16px">50 GB storage · 1M requests · 25 identities</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button style="height:34px;padding:0 13px;border:none;border-radius:9px;background:var(--acc);color:var(--accInk);font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:12.5px;font-weight:600;cursor:pointer">Change plan</button>
+              <button style="height:34px;padding:0 13px;border:1px solid var(--bd2);border-radius:9px;background:transparent;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:12.5px;font-weight:500;color:var(--tx);cursor:pointer">Cancel</button>
+            </div>
+          </div>
+
+          <div style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;padding:18px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.11em;color:var(--tx3);margin-bottom:12px">NEXT INVOICE · 1 OCT</div>
+            <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:16px">
+              <span style="font-family:'Outfit',system-ui,sans-serif;font-size:32px;font-weight:600;letter-spacing:-0.03em;color:var(--tx);line-height:1">$61.40</span>
+              <span style="font-size:12px;color:var(--tx3)">estimated</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;justify-content:space-between"><span style="font-size:12.5px;color:var(--tx2)">Team plan</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--tx)">$49.00</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="font-size:12.5px;color:var(--tx2)">Storage overage · 11.4 GB</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--tx)">$1.03</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="font-size:12.5px;color:var(--tx2)">Requests overage · 2.8M</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--tx)">$11.37</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:14px"></div>
+        <div style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;padding:18px;margin-bottom:14px">
+          <h3 style="{{ h3 }}">Payment method</h3>
+          <div style="height:12px"></div>
+          <div style="display:flex;align-items:center;gap:13px;border:1px solid var(--bd);border-radius:10px;padding:13px 14px">
+            <span style="width:38px;height:26px;border-radius:5px;background:var(--surf3);border:1px solid var(--bd);display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;color:var(--tx2);flex:0 0 38px">VISA</span>
+            <span style="flex:1;min-width:0">
+              <span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--tx)">•••• •••• •••• 4417</span>
+              <span style="display:block;font-size:11.5px;color:var(--tx3);margin-top:3px">Expires 09 / 28 · Rina Kessler</span>
+            </span>
+            <button style="background:transparent;border:none;padding:0;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:12.5px;font-weight:500;color:var(--acc);cursor:pointer;flex:0 0 auto">Replace</button>
+          </div>
+        </div>
+
+        <div style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;overflow:hidden">
+          <div style="padding:15px 18px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between">
+            <h3 style="{{ h3 }}">Invoices</h3>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.08em;color:var(--tx3)">DOWNLOAD ALL</span>
+          </div>
+          <sc-for list="{{ invoices }}" as="i" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid var(--bd)">
+              <span style="width:96px;flex:0 0 96px;font-size:13px;color:var(--tx)">{{ i.date }}</span>
+              <span style="flex:1;min-width:0;font-size:12.5px;color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ i.detail }}</span>
+              <span style="{{ i.statusStyle }}">{{ i.status }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--tx);width:66px;text-align:right;flex:0 0 66px">{{ i.amount }}</span>
+              <button aria-label="Download invoice" style="width:26px;height:26px;border:1px solid var(--bd);border-radius:7px;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 26px">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--tx2)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"></path></svg>
+              </button>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ─── CONTACT SUPPORT ─── -->
+    <sc-if value="{{ tabSupport }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:640px">
+        <h2 style="{{ h2 }}">Contact support</h2>
+        <p style="margin:0 0 20px;font-size:13.5px;color:var(--tx2)">Team plan includes email support. We attach your workspace ID and the last 50 audit entries automatically.</p>
+
+        <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:18px">
+          <sc-for list="{{ supportTopics }}" as="t" hint-placeholder-count="4">
+            <button style="{{ t.style }}">
+              <span style="{{ t.radioStyle }}"></span>
+              <span style="flex:1;min-width:0">
+                <span style="display:block;font-size:13.5px;font-weight:600;color:var(--tx)">{{ t.label }}</span>
+                <span style="display:block;font-size:12px;color:var(--tx2);margin-top:2px">{{ t.note }}</span>
+              </span>
+            </button>
+          </sc-for>
+        </div>
+
+        <div style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;padding:18px;margin-bottom:14px">
+          <label style="display:block;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.11em;color:var(--tx3);margin-bottom:7px">SUBJECT</label>
+          <div style="height:40px;border:1px solid var(--bd2);border-radius:9px;background:var(--surf2);display:flex;align-items:center;padding:0 12px;font-size:13.5px;color:var(--tx);margin-bottom:16px">research-agent getting 500 on large writes</div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px">
+            <label style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.11em;color:var(--tx3)">WHAT HAPPENED</label>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--tx3)">184 / 2000</span>
+          </div>
+          <div style="min-height:96px;border:1px solid var(--acc);border-radius:9px;background:var(--surf2);padding:12px;font-size:13.5px;line-height:1.6;color:var(--tx);margin-bottom:16px">Writes over ~700 MB fail with 500 internal_error about 40% of the time. Smaller writes to the same prefix always succeed. Started around 14:00 UTC today. Trace 9f2c41ab7de04c18.</div>
+          <div style="display:flex;align-items:center;gap:11px;border:1px solid var(--bd);border-radius:9px;padding:11px 13px;margin-bottom:16px">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--tx2)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 15px"><path d="M21.5 11.5 12 21a5.5 5.5 0 0 1-7.8-7.8l8-8a3.6 3.6 0 0 1 5.1 5.1l-8 8a1.8 1.8 0 0 1-2.5-2.5l7.3-7.3"></path></svg>
+            <span style="flex:1;min-width:0;font-size:12.5px;color:var(--tx2)">agentdisk-audit-2026-09-10.json · 41 KB</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;letter-spacing:0.07em;padding:2px 6px;border-radius:4px;color:var(--tx2);background:var(--surf3);border:1px solid var(--bd);flex:0 0 auto">AUTO</span>
+          </div>
+          <div style="display:flex;gap:9px;flex-wrap:wrap">
+            <button style="height:40px;padding:0 16px;border:none;border-radius:9px;background:var(--acc);color:var(--accInk);font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:13.5px;font-weight:600;cursor:pointer">Send request</button>
+            <button style="height:40px;padding:0 14px;border:1px solid var(--bd);border-radius:9px;background:transparent;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:13.5px;color:var(--tx);cursor:pointer">Save draft</button>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:11px;border:1px solid var(--okBd);background:var(--okSoft);border-radius:10px;padding:12px 14px">
+          <span style="width:7px;height:7px;border-radius:99px;background:var(--ok);display:block;flex:0 0 7px"></span>
+          <span style="font-size:12.5px;color:var(--okTx)">All systems normal · median first reply 38 minutes this week</span>
+        </div>
+      </div>
+    </sc-if>
+
+
+    <!-- ─── OVERVIEW ─── -->
+    <sc-if value="{{ tabOverview }}" hint-placeholder-val="{{ false }}">
+      <div role="tabpanel" id="panel-overview" style="display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;align-items:center;gap:12px;border:1px solid var(--warnBd);background:var(--warnSoft);border-radius:11px;padding:13px 15px">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="2.4" stroke-linecap="round" style="flex:0 0 17px"><path d="M12 4v9M12 17v.01"></path><circle cx="12" cy="12" r="9.2"></circle></svg>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13.5px;font-weight:600;color:var(--warnTx)">Storage is at 78% of your Team plan limit</div>
+            <div style="font-size:12.5px;color:var(--tx2);margin-top:2px">Agents will receive <span style="font-family:'IBM Plex Mono',monospace">507 Insufficient Storage</span> once the quota is reached.</div>
+          </div>
+          <a href="#" style="font-size:13px;font-weight:600;color:var(--warnTx);flex:0 0 auto">Review usage</a>
+        </div>
+
+        <div>
+          <h2 style="{{ h2 }}">Quick start</h2>
+          <div style="{{ quickGrid }}">
+            <sc-for list="{{ quickStart }}" as="q" hint-placeholder-count="3">
+              <button style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;padding:16px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:9px;font-family:'IBM Plex Sans',system-ui,sans-serif" style-hover="border-color:var(--accBd);background:var(--surf2)">
+                <span style="width:30px;height:30px;border-radius:8px;background:var(--accSoft);border:1px solid var(--accBd);display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:var(--acc)">{{ q.n }}</span>
+                <span style="font-size:14px;font-weight:600;color:var(--tx)">{{ q.title }}</span>
+                <span style="font-size:12.5px;line-height:1.5;color:var(--tx2)">{{ q.body }}</span>
+                <span style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--acc);margin-top:2px">{{ q.cta }}
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--acc)" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+                </span>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="{{ twoCol }}">
+          <div style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;padding:18px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px">
+              <h3 style="{{ h3 }}">Storage by type</h3>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--tx3)">39.1 GB TOTAL</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <sc-for list="{{ storageBreakdown }}" as="b" hint-placeholder-count="5">
+                <div>
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px">
+                    <span style="font-size:13px;color:var(--tx);font-weight:500">{{ b.label }}</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--tx2)">{{ b.size }}</span>
+                  </div>
+                  <div style="height:6px;border-radius:99px;background:var(--surf3);overflow:hidden"><div style="{{ b.barStyle }}"></div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;padding:18px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px">
+              <h3 style="{{ h3 }}">Recent activity</h3>
+              <button onClick="{{ goActivity }}" style="background:transparent;border:none;font-size:12.5px;font-weight:600;color:var(--acc);cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif">View all</button>
+            </div>
+            <div style="display:flex;flex-direction:column">
+              <sc-for list="{{ recentActivity }}" as="a" hint-placeholder-count="5">
+                <div style="display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--bd)">
+                  <span style="{{ a.dotStyle }}"></span>
+                  <span style="flex:1;min-width:0">
+                    <span style="display:block;font-size:13px;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.text }}</span>
+                    <span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--tx3);margin-top:3px">{{ a.target }}</span>
+                  </span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--tx3);flex:0 0 auto">{{ a.ago }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ─── FILES ─── -->
+    <sc-if value="{{ tabFiles }}" hint-placeholder-val="{{ true }}">
+      <div role="tabpanel" id="panel-files">
+        <nav aria-label="Breadcrumb" style="display:flex;align-items:center;gap:7px;margin-bottom:14px;flex-wrap:wrap">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--tx2)">agentdisk:/</span>
+          <span style="color:var(--tx3)">/</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--tx2)">projects</span>
+          <span style="color:var(--tx3)">/</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--tx);font-weight:600">research-agent</span>
+        </nav>
+
+        <div style="{{ fileToolbar }}">
+          <div style="flex:1;min-width:180px;height:34px;border:1px solid var(--bd);border-radius:9px;background:var(--surf);display:flex;align-items:center;gap:8px;padding:0 11px;max-width:320px">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--tx3)" stroke-width="2.2" stroke-linecap="round" style="flex:0 0 14px"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+            <span style="font-size:13px;color:var(--tx3)">Search this folder</span>
+          </div>
+          <div style="height:34px;border:1px solid var(--bd);border-radius:9px;background:var(--surf);display:flex;align-items:center;gap:8px;padding:0 11px">
+            <span style="font-size:13px;color:var(--tx2)">Created by</span>
+            <span style="font-size:13px;color:var(--tx);font-weight:500">All</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--tx2)" stroke-width="2.2" stroke-linecap="round"><path d="m6 9 6 6 6-6"></path></svg>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <button style="height:34px;padding:0 13px;border:1px solid var(--bd);border-radius:9px;background:var(--surf);font-size:13px;font-weight:500;color:var(--tx);cursor:pointer;display:flex;align-items:center;gap:7px;font-family:'IBM Plex Sans',system-ui,sans-serif" style-hover="border-color:var(--bd2)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--tx2)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2 2 0 0 1 5 5.5h3.6l1.8 2.2H19a2 2 0 0 1 2 2v7.8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"></path></svg>
+              New folder
+            </button>
+            <button style="height:34px;padding:0 14px;border:none;border-radius:9px;background:var(--acc);color:var(--accInk);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:7px;font-family:'IBM Plex Sans',system-ui,sans-serif">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accInk)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V5M7 10l5-5 5 5"></path><path d="M4 19h16"></path></svg>
+              Upload
+            </button>
+          </div>
+        </div>
+
+        <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;gap:12px;border:1px solid var(--accBd);background:var(--accSoft);border-radius:10px;padding:9px 13px;margin-bottom:12px;flex-wrap:wrap">
+            <span style="font-size:13px;font-weight:600;color:var(--acc)">{{ selCount }} selected</span>
+            <button onClick="{{ clearSel }}" style="background:transparent;border:none;font-size:12.5px;color:var(--tx2);cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif">Clear</button>
+            <div style="margin-left:auto;display:flex;gap:7px">
+              <button style="height:30px;padding:0 11px;border:1px solid var(--bd2);border-radius:8px;background:var(--surf);font-size:12.5px;color:var(--tx);cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif">Download</button>
+              <button style="height:30px;padding:0 11px;border:1px solid var(--bd2);border-radius:8px;background:var(--surf);font-size:12.5px;color:var(--tx);cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif">Move</button>
+              <button style="height:30px;padding:0 11px;border:1px solid var(--dngrBd);border-radius:8px;background:var(--dngrSoft);font-size:12.5px;font-weight:600;color:var(--dngrTx);cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif">Delete</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;overflow:hidden">
+          <sc-if value="{{ isDesktopTable }}" hint-placeholder-val="{{ true }}">
+            <div style="overflow-x:auto">
+              <div style="min-width:720px">
+                <div style="display:grid;grid-template-columns:38px 1fr 92px 108px 150px 104px 40px;align-items:center;gap:10px;padding:0 14px;height:38px;background:var(--surf2);border-bottom:1px solid var(--bd)">
+                  <span></span>
+                  <button onClick="{{ sortByName }}" style="{{ thName }}">Name
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" style="{{ sortIconStyle }}"><path d="m6 9 6 6 6-6"></path></svg>
+                  </button>
+                  <button onClick="{{ sortBySize }}" style="{{ thSize }}">Size</button>
+                  <span style="{{ th }}">Type</span>
+                  <span style="{{ th }}">Created by</span>
+                  <span style="{{ th }}">Modified</span>
+                  <span></span>
+                </div>
+                <sc-for list="{{ files }}" as="f" hint-placeholder-count="6">
+                  <div style="{{ f.rowStyle }}">
+                    <button onClick="{{ f.toggle }}" aria-label="Select row" style="{{ f.checkStyle }}">
+                      <sc-if value="{{ f.checked }}" hint-placeholder-val="{{ false }}">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--accInk)" stroke-width="3.4" stroke-linecap="round"><path d="M4 12.5 9 17.5 20 6.5"></path></svg>
+                      </sc-if>
+                    </button>
+                    <button onClick="{{ f.open }}" style="display:flex;align-items:center;gap:10px;min-width:0;background:transparent;border:none;padding:0;cursor:pointer;text-align:left;font-family:'IBM Plex Sans',system-ui,sans-serif">
+                      <span style="{{ f.iconStyle }}">{{ f.ext }}</span>
+                      <span style="min-width:0">
+                        <span style="display:block;font-size:13.5px;font-weight:500;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.name }}</span>
+                        <span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--tx3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.path }}</span>
+                      </span>
+                    </button>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--tx2)">{{ f.size }}</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--tx2)">{{ f.type }}</span>
+                    <span style="{{ f.byStyle }}">
+                      <span style="{{ f.byDot }}"></span>
+                      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.by }}</span>
+                    </span>
+                    <span style="font-size:12px;color:var(--tx2)">{{ f.modified }}</span>
+                    <button aria-label="Row actions" style="width:26px;height:26px;border:none;background:transparent;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:var(--surf3)">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--tx2)" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="1.4"></circle><circle cx="12" cy="5.5" r="1.4"></circle><circle cx="12" cy="18.5" r="1.4"></circle></svg>
+                    </button>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isCardTable }}" hint-placeholder-val="{{ false }}">
+            <div>
+              <sc-for list="{{ files }}" as="f" hint-placeholder-count="6">
+                <button onClick="{{ f.open }}" style="display:flex;align-items:flex-start;gap:11px;width:100%;padding:13px 14px;border:none;border-bottom:1px solid var(--bd);background:transparent;cursor:pointer;text-align:left;font-family:'IBM Plex Sans',system-ui,sans-serif">
+                  <span style="{{ f.iconStyle }}">{{ f.ext }}</span>
+                  <span style="flex:1;min-width:0">
+                    <span style="display:block;font-size:13.5px;font-weight:600;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.name }}</span>
+                    <span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--tx3);margin-top:3px">{{ f.size }} · {{ f.type }}</span>
+                    <span style="display:flex;align-items:center;gap:6px;margin-top:7px">
+                      <span style="{{ f.byDot }}"></span>
+                      <span style="font-size:11.5px;color:var(--tx2)">{{ f.by }} · {{ f.modified }}</span>
+                    </span>
+                  </span>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--tx3)" stroke-width="2.2" stroke-linecap="round" style="flex:0 0 15px;margin-top:4px"><path d="m9 6 6 6-6 6"></path></svg>
+                </button>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 14px;background:var(--surf2);flex-wrap:wrap;gap:8px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--tx3)">6 OBJECTS · 1.42 GB</span>
+            <span style="font-size:12px;color:var(--tx3)">Retention: 90 days · Versioning on</span>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ─── ACTIVITY ─── -->
+    <sc-if value="{{ tabActivity }}" hint-placeholder-val="{{ false }}">
+      <div role="tabpanel" id="panel-activity">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+          <sc-for list="{{ actorFilters }}" as="c" hint-placeholder-count="3">
+            <button onClick="{{ c.pick }}" style="{{ c.style }}">{{ c.label }}</button>
+          </sc-for>
+          <button onClick="{{ refreshActivity }}" style="margin-left:auto;height:32px;padding:0 12px;border:1px solid var(--bd);border-radius:8px;background:var(--surf);font-size:12.5px;font-weight:500;color:var(--tx);cursor:pointer;display:flex;align-items:center;gap:7px;font-family:'IBM Plex Sans',system-ui,sans-serif">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--tx2)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.4 5.7M20 5v6h-6"></path></svg>
+            Refresh
+          </button>
+        </div>
+
+        <div style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;overflow:hidden">
+          <sc-if value="{{ activityLoading }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:6px 0">
+              <sc-for list="{{ skeletons }}" as="k" hint-placeholder-count="5">
+                <div style="display:flex;align-items:center;gap:14px;padding:13px 14px;border-bottom:1px solid var(--bd)">
+                  <div style="height:11px;width:74px;border-radius:99px;background:var(--surf3);animation:shimmer 1.3s ease-in-out infinite"></div>
+                  <div style="height:11px;width:110px;border-radius:99px;background:var(--surf3);animation:shimmer 1.3s ease-in-out infinite .1s"></div>
+                  <div style="height:11px;flex:1;border-radius:99px;background:var(--surf3);animation:shimmer 1.3s ease-in-out infinite .2s"></div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ activityReady }}" hint-placeholder-val="{{ true }}">
+            <div style="overflow-x:auto">
+              <div style="min-width:700px">
+                <div style="display:grid;grid-template-columns:118px 168px 1fr 128px;gap:12px;align-items:center;padding:0 14px;height:38px;background:var(--surf2);border-bottom:1px solid var(--bd)">
+                  <span style="{{ th }}">Time (UTC)</span>
+                  <span style="{{ th }}">Actor</span>
+                  <span style="{{ th }}">Action</span>
+                  <span style="{{ th }}">Source IP</span>
+                </div>
+                <sc-for list="{{ activity }}" as="a" hint-placeholder-count="7">
+                  <div style="display:grid;grid-template-columns:118px 168px 1fr 128px;gap:12px;align-items:center;padding:11px 14px;border-bottom:1px solid var(--bd)">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--tx2)">{{ a.time }}</span>
+                    <span style="{{ a.actorStyle }}">
+                      <span style="{{ a.dot }}"></span>
+                      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.actor }}</span>
+                    </span>
+                    <span style="min-width:0">
+                      <span style="display:block;font-size:13px;color:var(--tx)">{{ a.action }}</span>
+                      <span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--tx3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.target }}</span>
+                    </span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--tx2)">{{ a.ip }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ─── AGENT IDENTITIES ─── -->
+    <sc-if value="{{ tabAgents }}" hint-placeholder-val="{{ false }}">
+      <div role="tabpanel" id="panel-agents">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:16px;flex-wrap:wrap">
+          <div>
+            <h2 style="{{ h2 }}">Agent identities</h2>
+            <p style="margin:0;font-size:13.5px;color:var(--tx2)">Each identity holds its own keys and scopes. Revoking an identity revokes every key under it.</p>
+          </div>
+          <button style="height:34px;padding:0 14px;border:none;border-radius:9px;background:var(--acc);color:var(--accInk);font-size:13px;font-weight:600;cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif">New identity</button>
+        </div>
+        <div style="{{ agentGrid }}">
+          <sc-for list="{{ agents }}" as="g" hint-placeholder-count="4">
+            <div style="{{ g.cardStyle }}">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px">
+                <span style="{{ g.dot }}"></span>
+                <span style="font-size:14px;font-weight:600;color:var(--tx);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ g.name }}</span>
+                <span style="{{ g.badge }}">{{ g.status }}</span>
+              </div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--tx3);margin-bottom:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ g.id }}</div>
+              <div style="display:flex;gap:20px;padding-top:13px;border-top:1px solid var(--bd)">
+                <span>
+                  <span style="display:block;font-family:'Outfit',system-ui,sans-serif;font-size:19px;font-weight:600;color:var(--tx)">{{ g.keys }}</span>
+                  <span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.08em;color:var(--tx3);margin-top:2px">KEYS</span>
+                </span>
+                <span>
+                  <span style="display:block;font-family:'Outfit',system-ui,sans-serif;font-size:19px;font-weight:600;color:var(--tx)">{{ g.requests }}</span>
+                  <span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.08em;color:var(--tx3);margin-top:2px">REQUESTS</span>
+                </span>
+                <span style="margin-left:auto;text-align:right">
+                  <span style="display:block;font-size:12px;color:var(--tx2)">{{ g.seen }}</span>
+                  <span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.08em;color:var(--tx3);margin-top:4px">LAST SEEN</span>
+                </span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ─── API KEYS ─── -->
+    <sc-if value="{{ tabKeys }}" hint-placeholder-val="{{ false }}">
+      <div role="tabpanel" id="panel-keys">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:16px;flex-wrap:wrap">
+          <div>
+            <h2 style="{{ h2 }}">API keys</h2>
+            <p style="margin:0;font-size:13.5px;color:var(--tx2)">Keys are shown in full once, at creation. After that only the last four characters are stored.</p>
+          </div>
+          <button onClick="{{ openKeyModal }}" style="height:34px;padding:0 14px;border:none;border-radius:9px;background:var(--acc);color:var(--accInk);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:7px;font-family:'IBM Plex Sans',system-ui,sans-serif">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accInk)" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+            Create key
+          </button>
+        </div>
+        <div style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;overflow:hidden">
+          <div style="overflow-x:auto">
+            <div style="min-width:760px">
+              <div style="display:grid;grid-template-columns:1fr 168px 148px 132px 96px 74px;gap:12px;align-items:center;padding:0 14px;height:38px;background:var(--surf2);border-bottom:1px solid var(--bd)">
+                <span style="{{ th }}">Label</span>
+                <span style="{{ th }}">Key</span>
+                <span style="{{ th }}">Scopes</span>
+                <span style="{{ th }}">Path prefix</span>
+                <span style="{{ th }}">Last used</span>
+                <span></span>
+              </div>
+              <sc-for list="{{ keys }}" as="k" hint-placeholder-count="4">
+                <div style="display:grid;grid-template-columns:1fr 168px 148px 132px 96px 74px;gap:12px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--bd)">
+                  <span style="min-width:0">
+                    <span style="display:block;font-size:13.5px;font-weight:500;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ k.label }}</span>
+                    <span style="display:block;font-size:11.5px;color:var(--tx3);margin-top:2px">{{ k.agent }}</span>
+                  </span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--tx2)">{{ k.masked }}</span>
+                  <span style="display:flex;gap:4px;flex-wrap:wrap">
+                    <sc-for list="{{ k.scopes }}" as="s" hint-placeholder-count="2">
+                      <span style="{{ s.style }}">{{ s.name }}</span>
+                    </sc-for>
+                  </span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ k.prefix }}</span>
+                  <span style="font-size:12px;color:var(--tx2)">{{ k.used }}</span>
+                  <button style="height:28px;border:1px solid var(--dngrBd);border-radius:7px;background:transparent;font-size:12px;font-weight:600;color:var(--dngrTx);cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif" style-hover="background:var(--dngrSoft)">Revoke</button>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ─── MCP ─── -->
+    <sc-if value="{{ tabMcp }}" hint-placeholder-val="{{ false }}">
+      <div role="tabpanel" id="panel-mcp" style="max-width:820px">
+        <h2 style="{{ h2 }}">Connect an agent over MCP</h2>
+        <p style="margin:0 0 20px;font-size:13.5px;line-height:1.6;color:var(--tx2)">The AgentDisk MCP server exposes this workspace as tools any MCP-capable client can call: <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--tx)">list</span>, <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--tx)">read</span>, <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--tx)">write</span>, <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--tx)">delete</span>, and <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--tx)">stat</span>.</p>
+
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;padding:18px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <span style="width:24px;height:24px;border-radius:7px;background:var(--accSoft);border:1px solid var(--accBd);color:var(--acc);font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center">1</span>
+              <h3 style="{{ h3 }}">Create a scoped key</h3>
+            </div>
+            <p style="margin:0 0 14px;font-size:13px;line-height:1.55;color:var(--tx2)">Give the agent the narrowest scopes it needs. A research agent usually wants read, write and list under one prefix.</p>
+            <button onClick="{{ goKeys }}" style="height:32px;padding:0 13px;border:1px solid var(--bd2);border-radius:8px;background:var(--surf2);font-size:12.5px;font-weight:500;color:var(--tx);cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif">Go to API keys</button>
+          </div>
+
+          <div style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;padding:18px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+              <span style="width:24px;height:24px;border-radius:7px;background:var(--accSoft);border:1px solid var(--accBd);color:var(--acc);font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center">2</span>
+              <h3 style="{{ h3 }}">Add the server to your client</h3>
+            </div>
+            <div style="display:flex;gap:2px;border-bottom:1px solid var(--bd);margin-bottom:14px;overflow-x:auto">
+              <sc-for list="{{ mcpClients }}" as="c" hint-placeholder-count="3">
+                <button onClick="{{ c.pick }}" style="{{ c.style }}">{{ c.label }}</button>
+              </sc-for>
+            </div>
+            <div style="border:1px solid var(--bd);border-radius:10px;overflow:hidden;background:var(--code)">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--bd)">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.08em;color:var(--tx3)">{{ snippet.file }}</span>
+                <button onClick="{{ copySnippet }}" style="height:24px;padding:0 9px;border:1px solid var(--bd);border-radius:6px;background:var(--surf);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.06em;color:var(--tx2);cursor:pointer">COPY</button>
+              </div>
+              <pre style="margin:0;padding:14px;overflow-x:auto;font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.65;color:var(--codeTx)">{{ snippet.code }}</pre>
+            </div>
+          </div>
+
+          <div style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;padding:18px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <span style="width:24px;height:24px;border-radius:7px;background:var(--accSoft);border:1px solid var(--accBd);color:var(--acc);font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center">3</span>
+              <h3 style="{{ h3 }}">Verify the handshake</h3>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;border:1px solid var(--okBd);background:var(--okSoft);border-radius:9px;padding:11px 13px">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--okTx)" stroke-width="2.8" stroke-linecap="round" style="flex:0 0 15px"><path d="M4 12.5 9 17.5 20 6.5"></path></svg>
+              <span style="font-size:13px;color:var(--okTx);font-weight:500">research-agent connected 14 minutes ago · 5 tools registered</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ─── WEBHOOKS ─── -->
+    <sc-if value="{{ tabHooks }}" hint-placeholder-val="{{ false }}">
+      <div role="tabpanel" id="panel-webhooks">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:16px;flex-wrap:wrap">
+          <div>
+            <h2 style="{{ h2 }}">Webhooks</h2>
+            <p style="margin:0;font-size:13.5px;color:var(--tx2)">Signed <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--tx)">POST</span> requests on file events. Failed deliveries retry six times over 24 hours.</p>
+          </div>
+          <button style="height:34px;padding:0 14px;border:none;border-radius:9px;background:var(--acc);color:var(--accInk);font-size:13px;font-weight:600;cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif">Add endpoint</button>
+        </div>
+        <div style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;overflow:hidden">
+          <div style="overflow-x:auto">
+            <div style="min-width:720px">
+              <div style="display:grid;grid-template-columns:1fr 210px 108px 132px;gap:12px;align-items:center;padding:0 14px;height:38px;background:var(--surf2);border-bottom:1px solid var(--bd)">
+                <span style="{{ th }}">Endpoint</span>
+                <span style="{{ th }}">Events</span>
+                <span style="{{ th }}">Status</span>
+                <span style="{{ th }}">Last delivery</span>
+              </div>
+              <sc-for list="{{ hooks }}" as="h" hint-placeholder-count="3">
+                <div style="display:grid;grid-template-columns:1fr 210px 108px 132px;gap:12px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--bd)">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ h.url }}</span>
+                  <span style="display:flex;gap:4px;flex-wrap:wrap">
+                    <sc-for list="{{ h.events }}" as="e" hint-placeholder-count="2">
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--tx2);background:var(--surf3);border-radius:4px;padding:2px 6px">{{ e.name }}</span>
+                    </sc-for>
+                  </span>
+                  <span style="{{ h.statusStyle }}">
+                    <span style="{{ h.dot }}"></span>{{ h.status }}
+                  </span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--tx2)">{{ h.last }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ─── USAGE ─── -->
+    <sc-if value="{{ tabUsage }}" hint-placeholder-val="{{ false }}">
+      <div role="tabpanel" id="panel-usage">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:18px;flex-wrap:wrap">
+          <div>
+            <h2 style="{{ h2 }}">Usage</h2>
+            <p style="margin:0;font-size:13.5px;color:var(--tx2)">Billing period 1–30 September 2026 · resets in 21 days</p>
+          </div>
+          <div style="height:32px;border:1px solid var(--bd);border-radius:8px;background:var(--surf);display:flex;align-items:center;gap:8px;padding:0 11px">
+            <span style="font-size:12.5px;color:var(--tx)">This period</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--tx2)" stroke-width="2.2" stroke-linecap="round"><path d="m6 9 6 6 6-6"></path></svg>
+          </div>
+        </div>
+
+        <div style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;padding:18px;margin-bottom:16px">
+          <div style="display:flex;flex-direction:column;gap:18px">
+            <sc-for list="{{ quotas }}" as="q" hint-placeholder-count="4">
+              <div>
+                <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:7px;gap:12px">
+                  <span style="font-size:13.5px;font-weight:500;color:var(--tx)">{{ q.label }}</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--tx2)">{{ q.detail }}</span>
+                </div>
+                <div style="height:7px;border-radius:99px;background:var(--surf3);overflow:hidden"><div style="{{ q.barStyle }}"></div></div>
+                <div style="display:flex;align-items:center;gap:7px;margin-top:6px">
+                  <span style="{{ q.tagStyle }}">{{ q.tag }}</span>
+                  <span style="font-size:11.5px;color:var(--tx3)">{{ q.note }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;padding:18px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px">
+            <h3 style="{{ h3 }}">API requests, last 14 days</h3>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--tx3)">PEAK 214K</span>
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:6px;height:132px">
+            <sc-for list="{{ chart }}" as="c" hint-placeholder-count="14">
+              <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:7px;height:100%">
+                <div style="{{ c.barStyle }}"></div>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--tx3)">{{ c.day }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ─── SETTINGS ─── -->
+    <sc-if value="{{ tabSettings }}" hint-placeholder-val="{{ false }}">
+      <div role="tabpanel" id="panel-settings">
+        <h2 style="{{ h2 }}">Settings</h2>
+        <div style="display:flex;gap:2px;border-bottom:1px solid var(--bd);margin-bottom:22px;overflow-x:auto">
+          <sc-for list="{{ subTabs }}" as="s" hint-placeholder-count="5">
+            <button onClick="{{ s.pick }}" style="{{ s.style }}">{{ s.label }}</button>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ subGeneral }}" hint-placeholder-val="{{ true }}">
+          <div style="max-width:660px;display:flex;flex-direction:column;gap:16px">
+            <div style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;padding:18px">
+              <h3 style="{{ h3 }}">Workspace</h3>
+              <div style="height:14px"></div>
+              <label style="display:block;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.11em;color:var(--tx3);margin-bottom:7px">DISPLAY NAME</label>
+              <div style="height:40px;border:1px solid var(--bd2);border-radius:9px;background:var(--surf2);display:flex;align-items:center;padding:0 12px;font-size:13.5px;color:var(--tx);margin-bottom:16px">Kessler Labs</div>
+              <label style="display:block;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.11em;color:var(--tx3);margin-bottom:7px">WORKSPACE ID</label>
+              <div style="height:40px;border:1px solid var(--bd);border-radius:9px;background:var(--surf3);display:flex;align-items:center;justify-content:space-between;padding:0 8px 0 12px;margin-bottom:6px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--tx2)">ws_8f3ac21d9e4b</span>
+                <button onClick="{{ copyId }}" style="height:28px;padding:0 10px;border:1px solid var(--bd2);border-radius:7px;background:var(--surf);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.06em;color:var(--tx2);cursor:pointer">COPY</button>
+              </div>
+              <p style="margin:0 0 16px;font-size:11.5px;color:var(--tx3)">Immutable. Used in API paths and MCP configuration.</p>
+              <label style="display:block;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.11em;color:var(--tx3);margin-bottom:7px">PRIMARY REGION</label>
+              <div style="height:40px;border:1px solid var(--bd2);border-radius:9px;background:var(--surf2);display:flex;align-items:center;justify-content:space-between;padding:0 12px;margin-bottom:20px">
+                <span style="font-size:13.5px;color:var(--tx)">eu-central-1 · Frankfurt</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--tx2)" stroke-width="2.2" stroke-linecap="round"><path d="m6 9 6 6 6-6"></path></svg>
+              </div>
+              <div style="display:flex;gap:9px">
+                <button style="height:38px;padding:0 16px;border:none;border-radius:9px;background:var(--acc);color:var(--accInk);font-size:13px;font-weight:600;cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif">Save changes</button>
+                <button style="height:38px;padding:0 14px;border:1px solid var(--bd);border-radius:9px;background:transparent;font-size:13px;color:var(--tx);cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif">Cancel</button>
+              </div>
+            </div>
+
+            <div style="border:1px solid var(--bd);background:var(--surf);border-radius:12px;padding:18px">
+              <h3 style="{{ h3 }}">Defaults</h3>
+              <div style="height:10px"></div>
+              <div style="display:flex;flex-direction:column;gap:14px">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <button role="switch" aria-checked="true" onClick="{{ noop }}" style="width:36px;height:20px;border-radius:99px;background:var(--acc);border:none;display:flex;align-items:center;justify-content:flex-end;padding:0 3px;cursor:pointer;flex:0 0 36px"><span style="width:14px;height:14px;border-radius:99px;background:var(--accInk);display:block"></span></button>
+                  <span>
+                    <span style="display:block;font-size:13.5px;font-weight:500;color:var(--tx)">Object versioning</span>
+                    <span style="display:block;font-size:12.5px;color:var(--tx2);margin-top:2px">Keep prior versions for 90 days after an overwrite</span>
+                  </span>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px">
+                  <button role="switch" aria-checked="false" onClick="{{ noop }}" style="width:36px;height:20px;border-radius:99px;background:var(--surf3);border:1px solid var(--bd2);display:flex;align-items:center;padding:0 3px;cursor:pointer;flex:0 0 36px"><span style="width:14px;height:14px;border-radius:99px;background:var(--tx3);display:block"></span></button>
+                  <span>
+                    <span style="display:block;font-size:13.5px;font-weight:500;color:var(--tx)">Auto-expire agent scratch files</span>
+                    <span style="display:block;font-size:12.5px;color:var(--tx2);margin-top:2px">Delete anything under <span style="font-family:'IBM Plex Mono',monospace">/tmp/*</span> after 24 hours</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div style="border:1px solid var(--dngrBd);background:var(--surf);border-radius:12px;padding:18px">
+              <h3 style="margin:0 0 6px;font-family:'Outfit',system-ui,sans-serif;font-size:15px;font-weight:600;color:var(--dngrTx)">Delete this workspace</h3>
+              <p style="margin:0 0 14px;font-size:13px;line-height:1.55;color:var(--tx2)">Removes 39.1 GB of objects, 4 agent identities and 7 keys. Agents will start receiving <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px">401</span> immediately. This cannot be undone.</p>
+              <button style="height:36px;padding:0 14px;border:1px solid var(--dngrBd);border-radius:9px;background:var(--dngrSoft);font-size:13px;font-weight:600;color:var(--dngrTx);cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif">Delete workspace…</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ subOther }}" hint-placeholder-val="{{ false }}">
+          <div style="max-width:660px;border:1px solid var(--bd);background:var(--surf);border-radius:12px;padding:18px">
+            <h3 style="{{ h3 }}">{{ subLabel }}</h3>
+            <div style="height:12px"></div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <sc-for list="{{ subRows }}" as="r" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--bd)">
+                  <span style="flex:1;min-width:0">
+                    <span style="display:block;font-size:13.5px;font-weight:500;color:var(--tx)">{{ r.title }}</span>
+                    <span style="display:block;font-size:12.5px;color:var(--tx2);margin-top:2px">{{ r.body }}</span>
+                  </span>
+                  <span style="{{ r.tagStyle }}">{{ r.tag }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+  </main>
+
+  <!-- ══ DRAWER — file detail ══ -->
+  <sc-if value="{{ drawerOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:60;display:flex;justify-content:flex-end">
+      <div onClick="{{ closeDrawer }}" style="position:absolute;inset:0;background:var(--scrim);animation:overlayIn .14s ease"></div>
+      <aside role="dialog" aria-label="File details" style="position:relative;width:min(400px,100%);height:100%;background:var(--surf);border-left:1px solid var(--bd2);box-shadow:-16px 0 44px var(--shadow);animation:drawerIn .18s ease;overflow-y:auto">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--bd);position:sticky;top:0;background:var(--surf)">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.11em;color:var(--tx3)">OBJECT DETAIL</span>
+          <button onClick="{{ closeDrawer }}" aria-label="Close" style="width:28px;height:28px;border:1px solid var(--bd);border-radius:7px;background:var(--surf2);display:flex;align-items:center;justify-content:center;cursor:pointer">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--tx2)" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+          </button>
+        </div>
+        <div style="padding:18px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+            <span style="{{ drawer.iconStyle }}">{{ drawer.ext }}</span>
+            <span style="min-width:0">
+              <span style="display:block;font-size:15px;font-weight:600;color:var(--tx);overflow:hidden;text-overflow:ellipsis">{{ drawer.name }}</span>
+              <span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--tx3);margin-top:3px">{{ drawer.size }} · {{ drawer.type }}</span>
+            </span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0;margin-bottom:20px">
+            <sc-for list="{{ drawerMeta }}" as="m" hint-placeholder-count="6">
+              <div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--bd)">
+                <span style="width:104px;flex:0 0 104px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.09em;color:var(--tx3);padding-top:2px">{{ m.k }}</span>
+                <span style="flex:1;min-width:0;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--tx);word-break:break-all">{{ m.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button style="height:38px;border:none;border-radius:9px;background:var(--acc);color:var(--accInk);font-size:13px;font-weight:600;cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif">Download</button>
+            <button style="height:38px;border:1px solid var(--bd);border-radius:9px;background:transparent;font-size:13px;color:var(--tx);cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif">Copy signed URL</button>
+            <button style="height:38px;border:1px solid var(--dngrBd);border-radius:9px;background:transparent;font-size:13px;font-weight:600;color:var(--dngrTx);cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif">Delete object</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </sc-if>
+
+  <!-- ══ MODAL — key created ══ -->
+  <sc-if value="{{ modalOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;padding:20px">
+      <div onClick="{{ closeModal }}" style="position:absolute;inset:0;background:var(--scrim);animation:overlayIn .14s ease"></div>
+      <div role="dialog" aria-modal="true" aria-label="API key created" style="position:relative;width:min(520px,100%);background:var(--surf);border:1px solid var(--bd2);border-radius:14px;padding:24px;box-shadow:0 28px 70px var(--shadow);animation:toastIn .18s ease">
+        <div style="display:flex;align-items:flex-start;gap:13px;margin-bottom:18px">
+          <span style="width:34px;height:34px;border-radius:9px;background:var(--okSoft);border:1px solid var(--okBd);display:flex;align-items:center;justify-content:center;flex:0 0 34px">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--okTx)" stroke-width="2.8" stroke-linecap="round"><path d="M4 12.5 9 17.5 20 6.5"></path></svg>
+          </span>
+          <span style="flex:1;min-width:0">
+            <span style="display:block;font-family:'Outfit',system-ui,sans-serif;font-size:19px;font-weight:600;color:var(--tx);letter-spacing:-0.01em">Key created</span>
+            <span style="display:block;font-size:13px;color:var(--tx2);margin-top:3px">Copy it now. AgentDisk stores only the last four characters.</span>
+          </span>
+          <button onClick="{{ closeModal }}" aria-label="Close" style="width:28px;height:28px;border:1px solid var(--bd);border-radius:7px;background:var(--surf2);display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 28px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--tx2)" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+          </button>
+        </div>
+        <div style="border:1px solid var(--bd2);background:var(--code);border-radius:10px;padding:13px;display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <span style="flex:1;min-width:0;font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--codeTx);word-break:break-all">adk_live_7Qm2XtRb9vKpN4sLzE1yHc8wJfD6aUgT</span>
+          <button onClick="{{ copyKey }}" style="height:30px;padding:0 12px;border:none;border-radius:7px;background:var(--acc);color:var(--accInk);font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.06em;font-weight:600;cursor:pointer;flex:0 0 auto">COPY</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;border:1px solid var(--warnBd);background:var(--warnSoft);border-radius:9px;padding:11px 13px;margin-bottom:18px">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="2.4" stroke-linecap="round" style="flex:0 0 15px"><path d="M12 4v9M12 17v.01"></path><circle cx="12" cy="12" r="9.2"></circle></svg>
+          <span style="font-size:12.5px;line-height:1.5;color:var(--warnTx)">Scoped to <span style="font-family:'IBM Plex Mono',monospace">read, write, list</span> on <span style="font-family:'IBM Plex Mono',monospace">/projects/*</span></span>
+        </div>
+        <div style="display:flex;gap:9px;justify-content:flex-end">
+          <button onClick="{{ closeModal }}" style="height:38px;padding:0 15px;border:1px solid var(--bd);border-radius:9px;background:transparent;font-size:13px;color:var(--tx);cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif">Done</button>
+          <button onClick="{{ goMcp }}" style="height:38px;padding:0 16px;border:none;border-radius:9px;background:var(--acc);color:var(--accInk);font-size:13px;font-weight:600;cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif">Use it in MCP setup</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ══ TOAST ══ -->
+  <sc-if value="{{ toastOpen }}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="position:absolute;bottom:22px;left:50%;transform:translateX(-50%);z-index:80;display:flex;align-items:center;gap:10px;background:var(--surf);border:1px solid var(--bd2);border-radius:10px;padding:11px 15px;box-shadow:0 14px 38px var(--shadow);animation:toastIn .18s ease">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--okTx)" stroke-width="2.8" stroke-linecap="round" style="flex:0 0 15px"><path d="M4 12.5 9 17.5 20 6.5"></path></svg>
+      <span style="font-size:13px;font-weight:500;color:var(--tx)">{{ toast }}</span>
+    </div>
+  </sc-if>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;initialTab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;overview&quot;,&quot;files&quot;,&quot;activity&quot;,&quot;agents&quot;,&quot;keys&quot;,&quot;mcp&quot;,&quot;webhooks&quot;,&quot;usage&quot;,&quot;settings&quot;],&quot;default&quot;:&quot;overview&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;State&quot;},&quot;frame&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Desktop&quot;,&quot;Tablet&quot;,&quot;Mobile&quot;],&quot;default&quot;:&quot;Desktop&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;State&quot;},&quot;colourMode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Theme&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;options&quot;:[&quot;#7C3AED&quot;,&quot;#4F46E5&quot;,&quot;#2563EB&quot;,&quot;#0D9488&quot;],&quot;default&quot;:&quot;#7C3AED&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Theme&quot;}}">
+const DARK = {
+  "--bg": "#0B0D11", "--surf": "#12151B", "--surf2": "#171B22", "--surf3": "#1F242D",
+  "--bd": "#252B35", "--bd2": "#343C49", "--tx": "#E9ECF1", "--tx2": "#9AA3B2", "--tx3": "#909AA8",
+  "--acc": "#8B98FF", "--accSoft": "#181C33", "--accBd": "#333C6B", "--accInk": "#0B0D11",
+  "--ok": "#34D399", "--okSoft": "#0E251C", "--okBd": "#1F4D3B", "--okTx": "#4ADE9B",
+  "--warn": "#FBBF24", "--warnSoft": "#271E0B", "--warnBd": "#544015", "--warnTx": "#FCD34D",
+  "--dngr": "#F87171", "--dngrSoft": "#2A1315", "--dngrBd": "#5A2A2C", "--dngrTx": "#FCA5A5",
+  "--code": "#0E1116", "--codeTx": "#C6CEDB", "--scrim": "rgba(5,6,9,.68)", "--shadow": "rgba(0,0,0,.55)"
+};
+const LIGHT = {
+  "--bg": "#F6F7F9", "--surf": "#FFFFFF", "--surf2": "#F4F6F9", "--surf3": "#EBEEF3",
+  "--bd": "#E2E6EC", "--bd2": "#C9D0DA", "--tx": "#111621", "--tx2": "#525C6B", "--tx3": "#5F6875",
+  "--acc": "#4F46E5", "--accSoft": "#EEF0FE", "--accBd": "#C6CCFA", "--accInk": "#FFFFFF",
+  "--ok": "#15803D", "--okSoft": "#ECFDF3", "--okBd": "#B7E4C7", "--okTx": "#166534",
+  "--warn": "#B45309", "--warnSoft": "#FEF6E7", "--warnBd": "#F0D9A8", "--warnTx": "#92400E",
+  "--dngr": "#DC2626", "--dngrSoft": "#FEF1F1", "--dngrBd": "#F3C4C4", "--dngrTx": "#B42318",
+  "--code": "#F7F8FB", "--codeTx": "#1E2530", "--scrim": "rgba(17,22,33,.42)", "--shadow": "rgba(17,22,33,.14)"
+};
+
+const TABS = [
+  ["overview", "Overview"], ["files", "Files"], ["activity", "Activity"],
+  ["agents", "Agent identities"], ["keys", "API keys"], ["mcp", "MCP connection"],
+  ["webhooks", "Webhooks"], ["usage", "Usage"], ["settings", "Settings"]
+];
+
+const WORKSPACES = [
+  { name: "Kessler Labs", id: "ws_8f3ac21d9e4b", plan: "TEAM", initial: "KL" },
+  { name: "Nightshift Research", id: "ws_2b71ce40af18", plan: "PRO", initial: "NR" },
+  { name: "Personal sandbox", id: "ws_5d09fa3b7c62", plan: "FREE", initial: "PS" }
+];
+
+const FILES = [
+  { name: "corpus-2026-q3.parquet", path: "/projects/research-agent/corpus-2026-q3.parquet", ext: "PQT", size: "812 MB", type: "application/parquet", by: "research-agent", human: false, modified: "12 min ago", sortSize: 812 },
+  { name: "interview-notes.md", path: "/projects/research-agent/interview-notes.md", ext: "MD", size: "44 KB", type: "text/markdown", by: "Rina Kessler", human: true, modified: "1 h ago", sortSize: 0.044 },
+  { name: "embeddings.index", path: "/projects/research-agent/embeddings.index", ext: "IDX", size: "504 MB", type: "application/octet-stream", by: "indexer-agent", human: false, modified: "3 h ago", sortSize: 504 },
+  { name: "run-manifest.json", path: "/projects/research-agent/run-manifest.json", ext: "JSON", size: "18 KB", type: "application/json", by: "research-agent", human: false, modified: "3 h ago", sortSize: 0.018 },
+  { name: "sources.csv", path: "/projects/research-agent/sources.csv", ext: "CSV", size: "2.1 MB", type: "text/csv", by: "Dov Almeida", human: true, modified: "Yesterday", sortSize: 2.1 },
+  { name: "scratch", path: "/projects/research-agent/scratch/", ext: "DIR", size: "96 MB", type: "folder", by: "research-agent", human: false, modified: "Yesterday", sortSize: 96 }
+];
+
+const SNIPPETS = {
+  "Claude Desktop": { file: "claude_desktop_config.json", code: '{\n  "mcpServers": {\n    "agentdisk": {\n      "command": "npx",\n      "args": ["-y", "@agentdisk/mcp"],\n      "env": {\n        "AGENTDISK_KEY": "adk_live_••••4aUgT",\n        "AGENTDISK_WORKSPACE": "ws_8f3ac21d9e4b"\n      }\n    }\n  }\n}' },
+  "VS Code": { file: ".vscode/mcp.json", code: '{\n  "servers": {\n    "agentdisk": {\n      "type": "stdio",\n      "command": "npx",\n      "args": ["-y", "@agentdisk/mcp"],\n      "env": { "AGENTDISK_KEY": "${input:adk_key}" }\n    }\n  }\n}' },
+  "CLI": { file: "shell", code: '$ npm i -g @agentdisk/cli\n$ adk auth login --key adk_live_••••4aUgT\n  ✓ authenticated as research-agent\n$ adk mcp serve --workspace ws_8f3ac21d9e4b\n  → listening on stdio · 5 tools registered' }
+};
+
+const SUB_ROWS = {
+  Security: [
+    { title: "Two-factor authentication", body: "Required for all human members of this workspace", tag: "Enforced", ok: true },
+    { title: "IP allowlist", body: "3 CIDR ranges may present workspace keys", tag: "3 ranges", ok: false },
+    { title: "Key rotation reminder", body: "Warn owners when a key passes 90 days of age", tag: "On", ok: true },
+    { title: "Session length", body: "Human dashboard sessions expire after inactivity", tag: "12 hours", ok: false }
+  ],
+  Members: [
+    { title: "Rina Kessler", body: "rina@kesslerlabs.dev · joined Feb 2026", tag: "Owner", ok: true },
+    { title: "Dov Almeida", body: "dov@kesslerlabs.dev · joined Apr 2026", tag: "Admin", ok: false },
+    { title: "Priya Raman", body: "priya@kesslerlabs.dev · joined Jul 2026", tag: "Developer", ok: false },
+    { title: "ci@kesslerlabs.dev", body: "Invitation sent 2 days ago", tag: "Pending", ok: false }
+  ],
+  Billing: [
+    { title: "Team plan", body: "$49 / month · 50 GB storage, 1M requests included", tag: "Active", ok: true },
+    { title: "Payment method", body: "Visa ending 4417 · expires 09/28", tag: "Valid", ok: true },
+    { title: "Overage rate", body: "$0.09 per GB and $0.40 per 100K requests", tag: "Metered", ok: false },
+    { title: "Next invoice", body: "1 October 2026 · estimated $61.40", tag: "Estimated", ok: false }
+  ],
+  Privacy: [
+    { title: "Object encryption", body: "AES-256 at rest, TLS 1.3 in transit", tag: "Always on", ok: true },
+    { title: "Agent content in training", body: "Never used to train any model", tag: "Excluded", ok: true },
+    { title: "Audit log retention", body: "Activity records are kept then purged", tag: "24 months", ok: false },
+    { title: "Data export", body: "Full workspace export as a signed archive", tag: "Request", ok: false }
+  ]
+};
+
+class Component extends DCLogic {
+  state = {
+    theme: this.props.colourMode ?? "dark", tab: this.props.initialTab ?? "files",
+    wsIdx: 0, wsOpen: false, profOpen: false,
+    frame: this.props.frame ?? "Desktop",
+    sub: "General", sel: [], sortKey: "name", sortDir: "asc",
+    drawer: null, modal: false, toast: null, actFilter: "All", actLoading: false,
+    mcpClient: "Claude Desktop", infoOpen: false, w: 1280
+  };
+
+  componentDidMount() {
+    this._r = () => this.setState({ w: window.innerWidth });
+    this._k = (e) => { if (e.key === "Escape") this.setState({ wsOpen: false, profOpen: false, drawer: null, modal: false }); };
+    window.addEventListener("resize", this._r);
+    window.addEventListener("keydown", this._k);
+    this._r();
+  }
+  componentWillUnmount() {
+    window.removeEventListener("resize", this._r);
+    window.removeEventListener("keydown", this._k);
+    clearTimeout(this._t); clearTimeout(this._a);
+  }
+
+  sheetW() { return ({ Desktop: 1180, Tablet: 834, Mobile: 390 })[this.state.frame] || 1180; }
+  bp() { const w = this.sheetW(); return w < 700 ? "mobile" : w < 1080 ? "tablet" : "desktop"; }
+
+  fire(msg) {
+    clearTimeout(this._t);
+    this.setState({ toast: msg });
+    this._t = setTimeout(() => this.setState({ toast: null }), 2200);
+  }
+
+  renderVals() {
+    const s = this.state, bp = this.bp(), mob = bp === "mobile", tab = bp === "tablet";
+    const ACCENTS = {
+      "#4F46E5": { light: "#4F46E5", soft: "#EEF0FE", bd: "#C6CCFA", dark: "#8B98FF", darkSoft: "#181C33", darkBd: "#333C6B" },
+      "#0D9488": { light: "#0D7A70", soft: "#E9F8F6", bd: "#A9DFD8", dark: "#5EDBCB", darkSoft: "#0C2321", darkBd: "#1F4F49" },
+      "#2563EB": { light: "#2563EB", soft: "#EBF1FE", bd: "#BBD1FB", dark: "#7EA8FF", darkSoft: "#0F1B33", darkBd: "#2A3E6E" },
+      "#7C3AED": { light: "#7C3AED", soft: "#F3EDFE", bd: "#D7C4FB", dark: "#B592FF", darkSoft: "#1E1533", darkBd: "#452F6E" }
+    };
+    ACCENTS["#7C3AED"] = { light: "#6D28D9", soft: "#F3EDFE", bd: "#D7C4FB", dark: "#B592FF", darkSoft: "#1E1533", darkBd: "#452F6E" };
+    const a = ACCENTS[this.props.accent] || ACCENTS["#7C3AED"];
+    const base = s.theme === "dark" ? DARK : LIGHT;
+    const T = Object.assign({}, base, s.theme === "dark"
+      ? { "--acc": a.dark, "--accSoft": a.darkSoft, "--accBd": a.darkBd }
+      : { "--acc": a.light, "--accSoft": a.soft, "--accBd": a.bd });
+    const W = this.sheetW();
+    const pad = mob ? "16px" : tab ? "24px" : "32px";
+    const wrap = (extra) => Object.assign({ margin: "0 auto", paddingLeft: pad, paddingRight: pad }, extra || {});
+    const frameBtn = (active) => ({
+      height: "24px", padding: "0 9px", border: "none", borderRadius: "6px", cursor: "pointer",
+      fontFamily: "'IBM Plex Mono',monospace", fontSize: "10px", letterSpacing: "0.05em",
+      fontWeight: 600, color: active ? "#0B0D11" : "#9BA3B2", background: active ? "#B592FF" : "transparent"
+    });
+
+    const th = { fontFamily: "'IBM Plex Mono',monospace", fontSize: "9.5px", letterSpacing: "0.1em", color: "var(--tx3)", textTransform: "uppercase" };
+    const thBtn = (active) => Object.assign({}, th, { display: "flex", alignItems: "center", gap: "4px", background: "transparent", border: "none", padding: 0, cursor: "pointer", color: active ? "var(--tx)" : "var(--tx3)" });
+
+    // ── stat tiles
+    const mkStat = (label, value, unit, pct, limit, tone, delta) => {
+      const col = pct == null ? null : pct >= 90 ? "var(--dngr)" : pct >= 75 ? "var(--warn)" : "var(--acc)";
+      return {
+        label, value, unit, limit,
+        hasBar: pct != null, noBar: pct == null,
+        pctLabel: pct != null ? pct + "% USED" : "",
+        delta,
+        flagged: !!tone, flag: tone,
+        flagStyle: {
+          fontFamily: "'IBM Plex Mono',monospace", fontSize: "9px", fontWeight: 600, letterSpacing: "0.07em",
+          padding: "2px 5px", borderRadius: "4px",
+          color: pct >= 90 ? "var(--dngrTx)" : "var(--warnTx)",
+          background: pct >= 90 ? "var(--dngrSoft)" : "var(--warnSoft)",
+          border: "1px solid " + (pct >= 90 ? "var(--dngrBd)" : "var(--warnBd)")
+        },
+        numStyle: { fontFamily: "'Outfit',system-ui,sans-serif", fontSize: mob ? "30px" : "34px", fontWeight: 600, letterSpacing: "-0.03em", color: "var(--tx)", lineHeight: 1 },
+        barStyle: { height: "100%", width: Math.min(100, pct || 0) + "%", background: col, borderRadius: "99px" },
+        cardStyle: {
+          background: "var(--surf)", border: "1px solid var(--bd)", borderRadius: "12px",
+          padding: mob ? "14px" : "16px", minWidth: mob ? "196px" : 0, flex: mob ? "0 0 196px" : "initial"
+        }
+      };
+    };
+    const stats = [
+      mkStat("STORAGE", "39.1", "GB", 78, "50 GB", "78%"),
+      mkStat("FILES", "12,481", "objects", null, null, null, "+1,204 this period"),
+      mkStat("AGENTS", "4", "identities", null, null, null, "7 active keys"),
+      mkStat("REQUESTS THIS PERIOD", "1.94", "M", 97, "2 M", "97%")
+    ];
+
+    // ── tabs
+    const tabs = TABS.map(([k, label]) => {
+      const active = s.tab === k;
+      return {
+        label, panelId: "panel-" + k, active, tabIndex: active ? 0 : -1,
+        pick: () => this.setState({ tab: k, wsOpen: false, profOpen: false }),
+        style: {
+          height: "42px", padding: "0 13px", border: "none", background: "transparent", cursor: "pointer",
+          whiteSpace: "nowrap", fontFamily: "'IBM Plex Sans',system-ui,sans-serif",
+          fontSize: "13.5px", fontWeight: active ? 600 : 500,
+          color: active ? "var(--acc)" : "var(--tx2)",
+          boxShadow: active ? "inset 0 -2px 0 0 var(--acc)" : "none"
+        }
+      };
+    });
+
+    // ── files
+    const dir = s.sortDir === "asc" ? 1 : -1;
+    const files = FILES.slice().sort((a, b) =>
+      s.sortKey === "size" ? (a.sortSize - b.sortSize) * dir : a.name.localeCompare(b.name) * dir
+    ).map(f => {
+      const checked = s.sel.includes(f.name);
+      return {
+        ...f, checked,
+        toggle: () => this.setState(st => ({ sel: st.sel.includes(f.name) ? st.sel.filter(x => x !== f.name) : st.sel.concat(f.name) })),
+        open: () => this.setState({ drawer: f.name }),
+        rowStyle: { display: "grid", gridTemplateColumns: "38px 1fr 92px 108px 150px 104px 40px", gap: "10px", alignItems: "center", padding: "11px 14px", borderBottom: "1px solid var(--bd)", background: checked ? "var(--accSoft)" : "transparent" },
+        checkStyle: { width: "17px", height: "17px", borderRadius: "5px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: checked ? "var(--acc)" : "transparent", border: "1.5px solid " + (checked ? "var(--acc)" : "var(--bd2)") },
+        iconStyle: { width: "30px", height: "30px", borderRadius: "7px", flex: "0 0 30px", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'IBM Plex Mono',monospace", fontSize: "8.5px", fontWeight: 600, letterSpacing: "0.02em", background: f.ext === "DIR" ? "var(--accSoft)" : "var(--surf3)", border: "1px solid " + (f.ext === "DIR" ? "var(--accBd)" : "var(--bd)"), color: f.ext === "DIR" ? "var(--acc)" : "var(--tx2)" },
+        byStyle: { display: "flex", alignItems: "center", gap: "6px", minWidth: 0, fontSize: "12px", color: "var(--tx2)" },
+        byDot: { width: "6px", height: "6px", borderRadius: f.human ? "99px" : "2px", flex: "0 0 6px", background: f.human ? "var(--tx3)" : "var(--acc)" }
+      };
+    });
+
+    // ── activity
+    const ACT = [
+      { time: "14:02:11", actor: "research-agent", human: false, action: "Wrote object", target: "/projects/research-agent/corpus-2026-q3.parquet", ip: "34.89.201.7" },
+      { time: "13:58:44", actor: "research-agent", human: false, action: "Listed prefix", target: "/projects/research-agent/*", ip: "34.89.201.7" },
+      { time: "13:41:02", actor: "Rina Kessler", human: true, action: "Created API key", target: "adk_live_••••4aUgT", ip: "82.14.6.190" },
+      { time: "12:20:37", actor: "indexer-agent", human: false, action: "Wrote object", target: "/projects/research-agent/embeddings.index", ip: "34.89.201.9" },
+      { time: "11:04:19", actor: "Dov Almeida", human: true, action: "Uploaded file", target: "/projects/research-agent/sources.csv", ip: "77.102.88.4" },
+      { time: "10:47:55", actor: "cleanup-agent", human: false, action: "Deleted 41 objects", target: "/tmp/*", ip: "34.89.201.4" },
+      { time: "09:12:08", actor: "research-agent", human: false, action: "Denied — scope", target: "DELETE /projects/*", ip: "34.89.201.7" }
+    ];
+    const actorPill = (human) => ({ display: "flex", alignItems: "center", gap: "6px", minWidth: 0, fontSize: "12.5px", fontWeight: 500, color: human ? "var(--tx)" : "var(--acc)" });
+    const activity = ACT.filter(a => s.actFilter === "All" || (s.actFilter === "Humans") === a.human).map(a => ({
+      ...a, actorStyle: actorPill(a.human),
+      dot: { width: "7px", height: "7px", flex: "0 0 7px", borderRadius: a.human ? "99px" : "2px", background: a.human ? "var(--tx3)" : "var(--acc)" }
+    }));
+    const chip = (active) => ({ height: "30px", padding: "0 12px", borderRadius: "8px", cursor: "pointer", fontFamily: "'IBM Plex Sans',system-ui,sans-serif", fontSize: "12.5px", fontWeight: active ? 600 : 500, color: active ? "var(--acc)" : "var(--tx2)", background: active ? "var(--accSoft)" : "var(--surf)", border: "1px solid " + (active ? "var(--accBd)" : "var(--bd)") });
+
+    // ── agents
+    const AG = [
+      { name: "research-agent", id: "agt_4c1f8a", status: "Active", tone: "ok", keys: 3, requests: "1.2M", seen: "12 min ago" },
+      { name: "indexer-agent", id: "agt_9b02de", status: "Active", tone: "ok", keys: 2, requests: "612K", seen: "3 h ago" },
+      { name: "cleanup-agent", id: "agt_71ea35", status: "Active", tone: "ok", keys: 1, requests: "94K", seen: "6 h ago" },
+      { name: "eval-harness", id: "agt_5d7c40", status: "Idle 14d", tone: "warn", keys: 1, requests: "0", seen: "14 days ago" }
+    ];
+    const agents = AG.map(g => ({
+      ...g,
+      cardStyle: { border: "1px solid var(--bd)", background: "var(--surf)", borderRadius: "12px", padding: "16px" },
+      dot: { width: "8px", height: "8px", borderRadius: "2px", flex: "0 0 8px", background: g.tone === "ok" ? "var(--ok)" : "var(--warn)" },
+      badge: { marginLeft: "auto", flex: "0 0 auto", fontFamily: "'IBM Plex Mono',monospace", fontSize: "9px", fontWeight: 600, letterSpacing: "0.07em", padding: "2px 6px", borderRadius: "4px", color: g.tone === "ok" ? "var(--okTx)" : "var(--warnTx)", background: g.tone === "ok" ? "var(--okSoft)" : "var(--warnSoft)", border: "1px solid " + (g.tone === "ok" ? "var(--okBd)" : "var(--warnBd)") }
+    }));
+
+    // ── keys
+    const scopeStyle = (n) => ({ fontFamily: "'IBM Plex Mono',monospace", fontSize: "9.5px", fontWeight: 600, letterSpacing: "0.05em", padding: "2px 5px", borderRadius: "4px", color: n === "delete" ? "var(--dngrTx)" : "var(--tx2)", background: n === "delete" ? "var(--dngrSoft)" : "var(--surf3)", border: "1px solid " + (n === "delete" ? "var(--dngrBd)" : "var(--bd)") });
+    const keys = [
+      { label: "research-agent · prod", agent: "agt_4c1f8a", masked: "adk_live_••••4aUgT", scopes: ["read", "write", "list"], prefix: "/projects/*", used: "12 min ago" },
+      { label: "indexer-agent · prod", agent: "agt_9b02de", masked: "adk_live_••••Kp2Nb", scopes: ["read", "write"], prefix: "/projects/*", used: "3 h ago" },
+      { label: "cleanup-agent · prod", agent: "agt_71ea35", masked: "adk_live_••••9wLmQ", scopes: ["list", "delete"], prefix: "/tmp/*", used: "6 h ago" },
+      { label: "local dev", agent: "Rina Kessler", masked: "adk_test_••••3xVpR", scopes: ["read"], prefix: "/sandbox/*", used: "Never" }
+    ].map(k => ({ ...k, scopes: k.scopes.map(n => ({ name: n, style: scopeStyle(n) })) }));
+
+    // ── webhooks
+    const hooks = [
+      { url: "https://hooks.kesslerlabs.dev/agentdisk", events: ["file.created", "file.deleted"], status: "Healthy", ok: true, last: "2 min ago" },
+      { url: "https://ci.kesslerlabs.dev/rebuild-index", events: ["file.created"], status: "Healthy", ok: true, last: "18 min ago" },
+      { url: "https://legacy.internal/notify", events: ["file.deleted"], status: "Failing", ok: false, last: "6 retries" }
+    ].map(h => ({
+      ...h, events: h.events.map(n => ({ name: n })),
+      statusStyle: { display: "flex", alignItems: "center", gap: "6px", fontSize: "12.5px", fontWeight: 500, color: h.ok ? "var(--okTx)" : "var(--dngrTx)" },
+      dot: { width: "7px", height: "7px", borderRadius: "99px", flex: "0 0 7px", background: h.ok ? "var(--ok)" : "var(--dngr)" }
+    }));
+
+    // ── usage
+    const mkQuota = (label, detail, pct, tag, note) => ({
+      label, detail, tag, note,
+      barStyle: { height: "100%", width: Math.min(100, pct) + "%", borderRadius: "99px", background: pct >= 90 ? "var(--dngr)" : pct >= 75 ? "var(--warn)" : "var(--acc)" },
+      tagStyle: { fontFamily: "'IBM Plex Mono',monospace", fontSize: "9px", fontWeight: 600, letterSpacing: "0.07em", padding: "2px 5px", borderRadius: "4px", color: pct >= 90 ? "var(--dngrTx)" : pct >= 75 ? "var(--warnTx)" : "var(--tx2)", background: pct >= 90 ? "var(--dngrSoft)" : pct >= 75 ? "var(--warnSoft)" : "var(--surf3)", border: "1px solid " + (pct >= 90 ? "var(--dngrBd)" : pct >= 75 ? "var(--warnBd)" : "var(--bd)") }
+    });
+    const quotas = [
+      mkQuota("Storage", "39.1 GB of 50 GB", 78, "78%", "Overage billed at $0.09/GB"),
+      mkQuota("API requests", "1,942,410 of 2,000,000", 97, "97%", "57,590 remaining this period"),
+      mkQuota("Egress", "212 GB of 500 GB", 42, "42%", "Signed-URL downloads included"),
+      mkQuota("Agent identities", "4 of 25", 16, "16%", "Keys are unlimited per identity")
+    ];
+    const heights = [42, 55, 48, 61, 74, 69, 58, 77, 88, 82, 91, 100, 96, 71];
+    const chart = heights.map((h, i) => ({
+      day: i === 0 ? "27" : i === 13 ? "09" : i % 3 === 0 ? String(27 + i).slice(-2) : "",
+      barStyle: { width: "100%", height: h + "%", borderRadius: "4px 4px 2px 2px", background: h >= 96 ? "var(--warn)" : "var(--acc)", opacity: h >= 96 ? 1 : 0.55 + (h / 100) * 0.45 }
+    }));
+
+    // ── settings sub-tabs
+    const subNames = ["General", "Security", "Members", "Billing", "Privacy"];
+    const subTabs = subNames.map(label => {
+      const active = s.sub === label;
+      return {
+        label, pick: () => this.setState({ sub: label }),
+        style: { height: "38px", padding: "0 13px", border: "none", background: "transparent", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'IBM Plex Sans',system-ui,sans-serif", fontSize: "13px", fontWeight: active ? 600 : 500, color: active ? "var(--acc)" : "var(--tx2)", boxShadow: active ? "inset 0 -2px 0 0 var(--acc)" : "none" }
+      };
+    });
+    const subRows = (SUB_ROWS[s.sub] || []).map(r => ({
+      ...r,
+      tagStyle: { flex: "0 0 auto", fontFamily: "'IBM Plex Mono',monospace", fontSize: "9.5px", fontWeight: 600, letterSpacing: "0.06em", padding: "3px 7px", borderRadius: "5px", color: r.ok ? "var(--okTx)" : "var(--tx2)", background: r.ok ? "var(--okSoft)" : "var(--surf3)", border: "1px solid " + (r.ok ? "var(--okBd)" : "var(--bd)") }
+    }));
+
+    const dFile = FILES.find(f => f.name === s.drawer) || FILES[0];
+
+    return {
+      stageStyle: { display: "block", padding: mob ? "28px 18px" : "36px 24px", overflowX: "auto" },
+      frames: ["Desktop", "Tablet", "Mobile"].map(label => ({ label: label.slice(0, 3).toUpperCase(), pick: () => this.setState({ frame: label, wsOpen: false, profOpen: false }), style: frameBtn(s.frame === label) })),
+      rootStyle: Object.assign({}, T, {
+        width: W + "px", margin: "0 auto", minHeight: "820px", position: "relative",
+        background: "var(--bg)", fontFamily: "'IBM Plex Sans',system-ui,sans-serif", color: "var(--tx)",
+        border: "1px solid #2A2A3A", borderRadius: "14px", overflow: "hidden",
+        boxShadow: "0 24px 70px rgba(0,0,0,.45)"
+      }),
+      isDark: s.theme === "dark", isLight: s.theme !== "dark",
+      toggleTheme: () => this.setState(st => ({ theme: st.theme === "dark" ? "light" : "dark" })),
+
+      barInner: wrap({ height: "56px", display: "flex", alignItems: "center", gap: "8px" }),
+      stripInner: wrap({ minHeight: "38px", display: "flex", alignItems: "center", gap: mob ? "8px" : "14px", flexWrap: "wrap", paddingTop: mob ? "9px" : 0, paddingBottom: mob ? "9px" : 0 }),
+      statsOuter: wrap({ paddingTop: "16px", paddingBottom: "16px" }),
+      statsGrid: mob
+        ? { display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "4px" }
+        : { display: "grid", gridTemplateColumns: tab ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,1fr))", gap: "12px" },
+      tabsOuter: wrap({}),
+      contentOuter: wrap({ paddingTop: mob ? "20px" : "28px", paddingBottom: "64px" }),
+
+      showWordmark: !mob, showDocsLink: !mob, showProfName: bp === "desktop",
+      stripExpanded: !mob || s.infoOpen, stripCollapsed: mob && !s.infoOpen,
+      infoOpen: s.infoOpen, toggleStrip: () => this.setState(st => ({ infoOpen: !st.infoOpen })),
+
+      ws: WORKSPACES[s.wsIdx],
+      wsOpen: s.wsOpen, profOpen: s.profOpen,
+      toggleWs: () => this.setState(st => ({ wsOpen: !st.wsOpen, profOpen: false })),
+      toggleProf: () => this.setState(st => ({ profOpen: !st.profOpen, wsOpen: false })),
+      workspaces: WORKSPACES.map((w, i) => ({
+        ...w, current: i === s.wsIdx,
+        pick: () => { this.setState({ wsIdx: i, wsOpen: false, sel: [] }); this.fire("Switched to " + w.name); },
+        rowStyle: { display: "flex", alignItems: "center", gap: "10px", width: "100%", padding: "9px", border: "none", borderRadius: "8px", cursor: "pointer", background: i === s.wsIdx ? "var(--surf2)" : "transparent", fontFamily: "'IBM Plex Sans',system-ui,sans-serif" }
+      })),
+      profileItems: [["Account", "account"], ["Billing", "billing"], ["Contact Support", "support"], ["Sign Out", null]].map(([label, key]) => ({
+        label, external: label === "Contact Support",
+        pick: key ? () => this.setState({ tab: key, profOpen: false }) : () => { this.setState({ profOpen: false }); this.fire("Signed out"); },
+        style: { display: "flex", alignItems: "center", gap: "8px", width: "100%", padding: "9px", border: "none", background: "transparent", borderRadius: "8px", cursor: "pointer", fontFamily: "'IBM Plex Sans',system-ui,sans-serif", fontSize: "13.5px", fontWeight: 500, color: label === "Sign Out" ? "var(--dngrTx)" : "var(--tx)" }
+      })),
+      inAccountArea: ["account", "billing", "support"].includes(s.tab),
+      accountLabel: { account: "Account", billing: "Billing", support: "Contact Support" }[s.tab] || "",
+      backToWorkspace: () => this.setState({ tab: "overview" }),
+      tabAccount: s.tab === "account", tabBilling: s.tab === "billing", tabSupport: s.tab === "support",
+      accountRows: [
+        { k: "FULL NAME", v: "Rina Kessler", editable: true },
+        { k: "EMAIL", v: "rina@kesslerlabs.dev", editable: false, tag: "VERIFIED" },
+        { k: "ROLE", v: "Owner · Kessler Labs", editable: false },
+        { k: "TIME ZONE", v: "Europe / Berlin (GMT+2)", editable: true },
+        { k: "USER ID", v: "usr_31c8fa0e77", editable: false }
+      ],
+      sessions: [
+        { device: "MacBook Pro · Chrome 141", where: "Berlin, DE · 82.14.6.190", when: "Active now", current: true },
+        { device: "iPhone 17 · Safari", where: "Berlin, DE · 82.14.6.190", when: "2 hours ago", current: false },
+        { device: "adk CLI 3.1.0", where: "34.89.201.7 · headless", when: "Yesterday", current: false }
+      ].map(x => ({
+        ...x, tag: x.current ? "THIS DEVICE" : "REVOKE",
+        tagStyle: { fontFamily: "'IBM Plex Mono',monospace", fontSize: "9px", fontWeight: 600, letterSpacing: "0.07em", padding: "2px 6px", borderRadius: "4px", flex: "0 0 auto", color: x.current ? "var(--okTx)" : "var(--tx2)", background: x.current ? "var(--okSoft)" : "var(--surf3)", border: "1px solid " + (x.current ? "var(--okBd)" : "var(--bd)") }
+      })),
+      invoices: [
+        { date: "1 Sep 2026", amount: "$61.40", status: "Paid", ok: true, detail: "Team plan + 11.4 GB overage" },
+        { date: "1 Aug 2026", amount: "$54.10", status: "Paid", ok: true, detail: "Team plan + 5.7 GB overage" },
+        { date: "1 Jul 2026", amount: "$49.00", status: "Paid", ok: true, detail: "Team plan" },
+        { date: "1 Jun 2026", amount: "$49.00", status: "Refunded", ok: false, detail: "Team plan · partial credit" }
+      ].map(x => ({
+        ...x,
+        statusStyle: { fontFamily: "'IBM Plex Mono',monospace", fontSize: "9.5px", fontWeight: 600, letterSpacing: "0.06em", padding: "2px 6px", borderRadius: "4px", flex: "0 0 auto", color: x.ok ? "var(--okTx)" : "var(--tx2)", background: x.ok ? "var(--okSoft)" : "var(--surf3)", border: "1px solid " + (x.ok ? "var(--okBd)" : "var(--bd)") }
+      })),
+      supportTopics: [
+        { label: "Billing or invoices", note: "Replies within one business day" },
+        { label: "Key or scope problem", note: "Replies within 4 hours" },
+        { label: "Agent hitting 5xx", note: "Priority · replies within 1 hour" },
+        { label: "Something else", note: "Replies within one business day" }
+      ].map((t, i) => ({
+        ...t, active: i === 2,
+        style: { display: "flex", alignItems: "center", gap: "11px", width: "100%", padding: "12px 13px", borderRadius: "10px", cursor: "pointer", textAlign: "left", fontFamily: "'IBM Plex Sans',system-ui,sans-serif", background: i === 2 ? "var(--accSoft)" : "var(--surf)", border: "1px solid " + (i === 2 ? "var(--accBd)" : "var(--bd)") },
+        radioStyle: { width: "15px", height: "15px", flex: "0 0 15px", borderRadius: "99px", background: i === 2 ? "var(--surf)" : "transparent", border: i === 2 ? "4.5px solid var(--acc)" : "1.5px solid var(--bd2)" }
+      })),
+      copyId: () => this.fire("Workspace ID copied"),
+
+      stats, tabs, th,
+      h2: { margin: "0 0 6px", fontFamily: "'Outfit',system-ui,sans-serif", fontSize: mob ? "21px" : "24px", fontWeight: 600, letterSpacing: "-0.025em", color: "var(--tx)" },
+      h3: { margin: 0, fontFamily: "'Outfit',system-ui,sans-serif", fontSize: "15px", fontWeight: 600, letterSpacing: "-0.01em", color: "var(--tx)" },
+      twoCol: { display: "grid", gridTemplateColumns: bp === "desktop" ? "minmax(0,1fr) minmax(0,1fr)" : "minmax(0,1fr)", gap: "16px" },
+      quickGrid: { display: "grid", gridTemplateColumns: mob ? "minmax(0,1fr)" : "repeat(3,minmax(0,1fr))", gap: "12px" },
+      agentGrid: { display: "grid", gridTemplateColumns: mob ? "minmax(0,1fr)" : "repeat(2,minmax(0,1fr))", gap: "12px" },
+      fileToolbar: { display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px", flexWrap: "wrap" },
+
+      tabOverview: s.tab === "overview", tabFiles: s.tab === "files", tabActivity: s.tab === "activity",
+      tabAgents: s.tab === "agents", tabKeys: s.tab === "keys", tabMcp: s.tab === "mcp",
+      tabHooks: s.tab === "webhooks", tabUsage: s.tab === "usage", tabSettings: s.tab === "settings",
+
+      quickStart: [
+        { n: "1", title: "Create a scoped key", body: "Read, write, list or delete — optionally locked to one path prefix.", cta: "Create key" },
+        { n: "2", title: "Connect over MCP", body: "Paste one config block into Claude Desktop, VS Code or the CLI.", cta: "View setup" },
+        { n: "3", title: "Give an agent a folder", body: "Scope it to /projects/* and watch the audit log fill in.", cta: "Open Files" }
+      ],
+      storageBreakdown: [
+        { label: "Datasets (.parquet)", size: "18.4 GB", barStyle: { height: "100%", width: "47%", borderRadius: "99px", background: "var(--acc)" } },
+        { label: "Vector indexes", size: "11.2 GB", barStyle: { height: "100%", width: "29%", borderRadius: "99px", background: "var(--acc)", opacity: 0.78 } },
+        { label: "Agent scratch", size: "6.1 GB", barStyle: { height: "100%", width: "16%", borderRadius: "99px", background: "var(--acc)", opacity: 0.56 } },
+        { label: "Documents", size: "2.8 GB", barStyle: { height: "100%", width: "7%", borderRadius: "99px", background: "var(--acc)", opacity: 0.4 } },
+        { label: "Other", size: "0.6 GB", barStyle: { height: "100%", width: "3%", borderRadius: "99px", background: "var(--tx3)" } }
+      ],
+      recentActivity: ACT.slice(0, 5).map(a => ({
+        text: a.actor + " · " + a.action, target: a.target, ago: a.time,
+        dotStyle: { width: "7px", height: "7px", flex: "0 0 7px", borderRadius: a.human ? "99px" : "2px", background: a.human ? "var(--tx3)" : "var(--acc)" }
+      })),
+      goActivity: () => this.setState({ tab: "activity" }),
+      goKeys: () => this.setState({ tab: "keys" }),
+      goMcp: () => this.setState({ tab: "mcp", modal: false }),
+
+      files, isDesktopTable: !mob, isCardTable: mob,
+      hasSelection: s.sel.length > 0, selCount: s.sel.length,
+      clearSel: () => this.setState({ sel: [] }),
+      sortByName: () => this.setState(st => ({ sortKey: "name", sortDir: st.sortKey === "name" && st.sortDir === "asc" ? "desc" : "asc" })),
+      sortBySize: () => this.setState(st => ({ sortKey: "size", sortDir: st.sortKey === "size" && st.sortDir === "asc" ? "desc" : "asc" })),
+      thName: thBtn(s.sortKey === "name"), thSize: thBtn(s.sortKey === "size"),
+      sortIconStyle: { transform: s.sortDir === "asc" ? "rotate(0deg)" : "rotate(180deg)", opacity: s.sortKey === "name" ? 1 : 0 },
+
+      activity, activityLoading: s.actLoading, activityReady: !s.actLoading,
+      skeletons: [1, 2, 3, 4, 5].map(n => ({ n })),
+      actorFilters: ["All", "Humans", "Agents"].map(label => ({ label, style: chip(s.actFilter === label), pick: () => this.setState({ actFilter: label }) })),
+      refreshActivity: () => { this.setState({ actLoading: true }); clearTimeout(this._a); this._a = setTimeout(() => this.setState({ actLoading: false }), 900); },
+
+      agents, keys, hooks, quotas, chart,
+      openKeyModal: () => this.setState({ modal: true }),
+      modalOpen: s.modal, closeModal: () => this.setState({ modal: false }),
+      copyKey: () => this.fire("Key copied to clipboard"),
+
+      mcpClients: Object.keys(SNIPPETS).map(label => {
+        const active = s.mcpClient === label;
+        return { label, pick: () => this.setState({ mcpClient: label }), style: { height: "34px", padding: "0 12px", border: "none", background: "transparent", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'IBM Plex Sans',system-ui,sans-serif", fontSize: "12.5px", fontWeight: active ? 600 : 500, color: active ? "var(--acc)" : "var(--tx2)", boxShadow: active ? "inset 0 -2px 0 0 var(--acc)" : "none" } };
+      }),
+      snippet: SNIPPETS[s.mcpClient],
+      copySnippet: () => this.fire("Config copied"),
+
+      subTabs, subGeneral: s.sub === "General", subOther: s.sub !== "General", subLabel: s.sub, subRows,
+      noop: () => {},
+
+      drawerOpen: !!s.drawer, closeDrawer: () => this.setState({ drawer: null }),
+      drawer: {
+        name: dFile.name, ext: dFile.ext, size: dFile.size, type: dFile.type,
+        iconStyle: { width: "40px", height: "40px", borderRadius: "9px", flex: "0 0 40px", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'IBM Plex Mono',monospace", fontSize: "10px", fontWeight: 600, background: "var(--surf3)", border: "1px solid var(--bd)", color: "var(--tx2)" }
+      },
+      drawerMeta: [
+        { k: "PATH", v: dFile.path },
+        { k: "SIZE", v: dFile.size },
+        { k: "CONTENT TYPE", v: dFile.type },
+        { k: "CHECKSUM", v: "sha256:9f2c41ab7de0" },
+        { k: "CREATED BY", v: dFile.by },
+        { k: "MODIFIED", v: dFile.modified },
+        { k: "VERSIONS", v: "3 retained" }
+      ],
+
+      toastOpen: !!s.toast, toast: s.toast
+    };
+  }
+}
+</script>
+</body>
+</html>

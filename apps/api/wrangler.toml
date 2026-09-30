@@ -1,4 +1,4 @@
-# AgentDrive API Worker.
+# AgentDisk API Worker.
 #
 # Resource IDs below are placeholders. They are NOT secrets — they are
 # Terraform-owned identifiers, injected at deploy time by
@@ -6,19 +6,58 @@
 # stays the single source of truth for infrastructure and this file never
 # drifts from it. Never paste real IDs here by hand.
 #
-# Secrets (DATABASE_ENCRYPTION_KEY, SESSION_SIGNING_KEY) are deliberately absent:
-# they are pushed with `wrangler secret put` in CI from GitHub Environment
-# secrets. See docs/design/12-deployment-roadmap-agentdisk-io.md step 18.
+# Secrets (DATABASE_ENCRYPTION_KEY, SESSION_SIGNING_KEY, STRIPE_*,
+# FIREBASE_SERVICE_ACCOUNT_JSON) are deliberately absent:
+# they are pushed with `wrangler secret put` in CI from GitHub secrets. See
+# docs/design/12-deployment-roadmap-agentdisk-io.md step 18.
+#
+# FIREBASE_SERVICE_ACCOUNT_JSON is the one to be most careful with. It sits next
+# to the public FIREBASE_PROJECT_ID in the vars above and looks like more of the
+# same, but it can mint a password-reset link for any account in the project.
 
 name = "agentdisk-api"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"
 compatibility_flags = ["nodejs_compat"]
 
+# The custom domains Terraform creates (api./mcp.) are the only intended entry
+# points. Left unset, Wrangler enables workers.dev and Preview URLs by default,
+# which publishes the Worker on a second, unversioned public hostname that
+# bypasses those domains entirely - and on prod would expose customer data on a
+# URL nobody is watching.
+workers_dev = false
+preview_urls = false
+
 # ---------------------------------------------------------------- dev ---
 [env.dev]
 name = "agentdisk-dev-api"
-vars = { ENVIRONMENT = "dev" }
+# TURNSTILE_ALLOWED_HOSTNAMES pins which hostname a Turnstile challenge may have
+# been solved on. Public configuration, not a secret - the secret half is pushed
+# separately by CI. Left empty the check is skipped.
+vars = { ENVIRONMENT = "dev", TURNSTILE_ALLOWED_HOSTNAMES = "app-dev.agentdisk.io,api-dev.agentdisk.io", R2_ACCOUNT_ID = "TF_OUTPUT_account_id", R2_BUCKET_NAME = "TF_OUTPUT_r2_bucket_name", FIREBASE_PROJECT_ID = "agentdisk-dev", CORS_ALLOWED_ORIGINS = "https://app-dev.agentdisk.io,https://securepanel-dev.agentdisk.io,http://localhost:5173,http://localhost:5174", DASHBOARD_URL = "https://app-dev.agentdisk.io", SANDBOX_EXPIRY_ENABLED = "true", PENDING_DELETION_ENABLED = "true" }
+
+# Smart Placement. Every authenticated request walks the authorization chain in
+# middleware/auth.ts before a handler runs, and that chain is three sequential D1
+# reads - the user, their membership, the workspace. D1 lives in one region; the
+# Worker, left alone, runs in whichever colo the caller reached, so each of those
+# reads is a full round trip across that distance, paid one after another - and
+# the dashboard opens five such requests at once.
+#
+# Smart Placement moves the isolate next to D1, so the distance is paid once by
+# the caller instead of three times by the chain. It changes no behaviour and
+# caches nothing, which is why it came before any of the caching also on the
+# table: there is no staleness to reason about.
+#
+# Declared per environment rather than once at the top. `placement` is an
+# inheritable key, so a top-level block would reach both - but every other
+# binding here is already written out per environment, and a reader checking
+# what prod runs should not have to know which keys inherit.
+#
+# Placed after `vars` deliberately: in TOML every bare key below a table header
+# belongs to that table, so putting this above `vars` would file the whole vars
+# map under placement.
+[env.dev.placement]
+mode = "smart"
 
 [[env.dev.d1_databases]]
 binding = "DB"
@@ -33,6 +72,15 @@ bucket_name = "agentdisk-dev-files"
 binding = "CACHE"
 id = "TF_OUTPUT_kv_namespace_id"
 
+# Cloudflare Email Sending. No credential: the binding is the authorization,
+# and agentdisk.io is onboarded on this account. Not pinned to one sender,
+# because the console's compose screen lets an operator choose the local part;
+# Cloudflare refuses any domain not onboarded, and the compose route refuses
+# anything off agentdisk.io before it gets that far (lib/email.ts
+# SENDING_DOMAIN).
+[[env.dev.send_email]]
+name = "EMAIL"
+
 [[env.dev.queues.producers]]
 binding = "JOBS"
 queue = "agentdisk-dev-jobs"
@@ -43,10 +91,21 @@ max_batch_size = 10
 max_retries = 5
 dead_letter_queue = "agentdisk-dev-jobs-dlq"
 
+# Hourly, at :17 rather than :00. Every Worker on the platform scheduled at the
+# hour fires at the same instant; an off-minute avoids that thundering herd for
+# no cost. The purge only acts on files past their 24-hour grace period, so the
+# exact minute is irrelevant to correctness.
+[env.dev.triggers]
+crons = ["17 * * * *"]
+
 # --------------------------------------------------------------- prod ---
 [env.prod]
 name = "agentdisk-prod-api"
-vars = { ENVIRONMENT = "prod" }
+vars = { ENVIRONMENT = "prod", TURNSTILE_ALLOWED_HOSTNAMES = "app.agentdisk.io,api.agentdisk.io", R2_ACCOUNT_ID = "TF_OUTPUT_account_id", R2_BUCKET_NAME = "TF_OUTPUT_r2_bucket_name", FIREBASE_PROJECT_ID = "agentdisk", CORS_ALLOWED_ORIGINS = "https://app.agentdisk.io,https://securepanel.agentdisk.io", DASHBOARD_URL = "https://app.agentdisk.io", SANDBOX_EXPIRY_ENABLED = "false" }
+
+# See the note under [env.dev.placement].
+[env.prod.placement]
+mode = "smart"
 
 [[env.prod.d1_databases]]
 binding = "DB"
@@ -61,6 +120,10 @@ bucket_name = "agentdisk-prod-files"
 binding = "CACHE"
 id = "TF_OUTPUT_kv_namespace_id"
 
+# See the note under [[env.dev.send_email]].
+[[env.prod.send_email]]
+name = "EMAIL"
+
 [[env.prod.queues.producers]]
 binding = "JOBS"
 queue = "agentdisk-prod-jobs"
@@ -70,3 +133,6 @@ queue = "agentdisk-prod-jobs"
 max_batch_size = 10
 max_retries = 5
 dead_letter_queue = "agentdisk-prod-jobs-dlq"
+
+[env.prod.triggers]
+crons = ["17 * * * *"]

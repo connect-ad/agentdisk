@@ -1,0 +1,17 @@
+-- The "Last delivery" column had nothing behind it.
+--
+-- The dashboard has always read `lastDeliveryAt` off each webhook, and no part
+-- of this system has ever produced that field: not this table, not the API's
+-- resource shape, not the delivery job. So the column read "Never" for every
+-- endpoint forever, including ones delivering successfully every few minutes -
+-- the same class of defect as backlog/023, a screen reporting on work it
+-- cannot see.
+--
+-- `handleDelivery` already knows the answer. It computes a full DeliveryOutcome
+-- and, until now, used it only to decide whether to ack the queue message.
+--
+-- NULL means no delivery has ever succeeded, which is what every existing row
+-- honestly is: nothing has been recorded until this migration, so backfilling a
+-- guess would be inventing history. Those rows keep saying "Never" until their
+-- next successful delivery, which is the first moment we actually know.
+ALTER TABLE webhooks ADD COLUMN last_delivery_at INTEGER;

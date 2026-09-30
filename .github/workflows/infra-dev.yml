@@ -1,0 +1,37 @@
+name: Infrastructure dev
+
+# Terraform apply for the dev workspace. The only pipeline that writes
+# state; backend.yml and frontend.yml read it.
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/infra.yml"
+      - ".github/workflows/infra-dev.yml"
+  # Every caller is dispatchable, so any one area can be redeployed on its own
+  # without an empty commit. deploy-all-dev.yml drives all three in order.
+  workflow_dispatch:
+
+# Serialise deploys within an area, and never cancel one mid-flight: an
+# interrupted run can leave Terraform state locked or a deploy half-applied.
+#
+# Each area has its OWN group rather than one shared group. GitHub keeps only
+# one pending run per group, so sharing would let a burst of pushes silently
+# drop a queued deploy - and a deploy that vanishes without failing is the
+# outcome these pipelines exist to prevent.
+concurrency:
+  group: infra-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  run:
+    uses: ./.github/workflows/infra.yml
+    with:
+      environment: dev
+    secrets: inherit

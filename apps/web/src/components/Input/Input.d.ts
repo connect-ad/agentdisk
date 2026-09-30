@@ -7,7 +7,7 @@ export interface InputProps {
   error?: string;
   optional?: boolean;
   required?: boolean;
-  /** Static text glued to the left, e.g. "agentdrive.ai/". */
+  /** Static text glued to the left, e.g. "agentdisk.io/". */
   prefix?: ReactNode;
   suffix?: ReactNode;
   leadingIcon?: ReactNode;

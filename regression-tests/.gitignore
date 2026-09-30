@@ -1,0 +1,11 @@
+# Real credentials for the dev test account. Never commit.
+.env
+
+# Playwright's saved session (a live bearer token for the test account).
+.auth/
+
+# Run output. The baseline JSONs are deliberately NOT ignored: they are the
+# reference a later run is compared against, so they belong in history.
+test-results/
+playwright-report/
+node_modules/

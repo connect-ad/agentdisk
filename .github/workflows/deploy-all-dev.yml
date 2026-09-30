@@ -1,0 +1,74 @@
+name: Deploy all (dev)
+
+# Deploys every area to dev, in the right order, from one button.
+#
+# Splitting the pipelines by area removed something that used to be free: a
+# single push to dev deployed everything. That was mostly a bug - a CSS change
+# had no business applying Terraform - but the ability itself is worth keeping
+# for the cases where it is genuinely what you want: bringing a rebuilt
+# environment up, or landing an infrastructure change and the app changes that
+# depend on it.
+#
+# The ordering is the point. Infrastructure applies first and everything else
+# waits for it, so the app pipelines read outputs that are already current.
+# That is the sanctioned answer to the race described in infra.yml: when a push
+# touches both infra and an app, the two pipelines run in parallel and the app
+# may read pre-apply outputs. Run this instead and they cannot.
+#
+# Dispatch only, and dev only. Prod deploys go through a PR into main, where
+# the path filters decide what actually needs to move and the Production
+# environment's required reviewers gate each one. A one-click "deploy
+# everything to prod" is exactly the button that should not exist.
+
+on:
+  workflow_dispatch:
+
+# Its own group. The per-area callers keep theirs, so a dispatch here and a
+# push to dev can both be in flight; only infrastructure applies, and two
+# applies contending are handled loudly by -lock-timeout rather than silently.
+concurrency:
+  group: deploy-all-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  infra:
+    name: Infrastructure
+    uses: ./.github/workflows/infra.yml
+    with:
+      environment: dev
+    secrets: inherit
+
+  # All three wait on infra and then run in parallel - they touch different
+  # Workers and take no state lock, so there is nothing to serialise between
+  # them.
+  backend:
+    name: Backend
+    needs: infra
+    uses: ./.github/workflows/backend.yml
+    with:
+      environment: dev
+    secrets: inherit
+
+  web:
+    name: Dashboard
+    needs: infra
+    uses: ./.github/workflows/frontend.yml
+    with:
+      app: web
+      environment: dev
+      label: Dashboard
+    secrets: inherit
+
+  admin:
+    name: Console
+    needs: infra
+    uses: ./.github/workflows/frontend.yml
+    with:
+      app: admin
+      environment: dev
+      label: Console
+    secrets: inherit

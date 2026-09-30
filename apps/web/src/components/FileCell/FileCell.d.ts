@@ -6,7 +6,7 @@ export interface FileCellProps {
   meta?: ReactNode;
   /** Override the extension chip, e.g. for files with no suffix. */
   ext?: string;
-  /** Marks objects an agent created — the core AgentDrive provenance signal. */
+  /** Marks objects an agent created — the core AgentDisk provenance signal. */
   agentWritten?: boolean;
 }
 export declare function FileCell(props: FileCellProps): JSX.Element;

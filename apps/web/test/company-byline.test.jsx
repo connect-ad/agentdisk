@@ -42,7 +42,13 @@ describe('the company byline', () => {
     expect(by.querySelector('img')).toBeNull();
     // A sibling of the brand link, never inside it: nested anchors are invalid.
     expect(by.closest('a.mk__brand')).toBeNull();
-    expect(screen.getByRole('link', { name: /AgentDisk/ }).getAttribute('href')).toBe('/');
+    const brand = screen.getByRole('link', { name: /AgentDisk/ });
+    expect(brand.getAttribute('href')).toBe('/');
+    // Under the wordmark, not beside it: the two share one lockup block, with
+    // the byline as the row after the brand link (30 Sept 2026).
+    expect(by.parentElement).toBe(brand.parentElement);
+    expect(by.parentElement.classList.contains('mk__lockup')).toBe(true);
+    expect(brand.nextElementSibling).toBe(by);
   });
 
   it('gives the footer the legal name in the copyright line and the byline in the about column', () => {
@@ -51,7 +57,8 @@ describe('the company byline', () => {
     const base = foot.querySelector('.mk__footbase');
     expect(base.textContent).toMatch(new RegExp(`© ${new Date().getFullYear()} ${COMPANY_LEGAL_NAME.replace('.', '\.')}`));
     expect(within(base).getByRole('link', { name: COMPANY_LEGAL_NAME }).getAttribute('href')).toBe(COMPANY_URL);
-    expect(foot.querySelector('.mk__footabout .byline')).not.toBeNull();
+    // Inside the footer's brand lockup, under the wordmark.
+    expect(foot.querySelector('.mk__footbrand .byline')).not.toBeNull();
     // AgentDisk stays the brand: the wordmark is still there, above the company.
     expect(foot.querySelector('.mk__footmark').textContent).toBe('AgentDisk');
   });

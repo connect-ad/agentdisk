@@ -440,11 +440,21 @@
   border-bottom:1px solid var(--line);
   background:color-mix(in srgb,var(--surface) 82%,transparent);
   backdrop-filter:blur(0.5rem)}
-.mk__brand{display:flex;align-items:center;gap:var(--s-4);flex:none;
-  text-decoration:none}
+/* The lockup is a two-column grid: the logo tile in the first column
+   spanning both rows, the wordmark and the company byline stacked in the
+   second. The brand link is `display:contents` so that its two children
+   take grid cells of their own and the byline, which is a sibling of the
+   link, can sit under the wordmark rather than under the whole link. The
+   link stays focusable and clickable: `contents` removes only its box. */
+.mk__lockup{display:grid;grid-template-columns:auto auto;
+  grid-template-rows:auto auto;column-gap:var(--s-4);row-gap:0;
+  align-items:center;flex:none}
+.mk__brand{display:contents;text-decoration:none}
 .mk__brand:hover{text-decoration:none}
+.mk__brand .logo{grid-row:1 / span 2;grid-column:1;align-self:center}
 .mk__wordmark{font-family:var(--font-display);font-size:var(--t-16);
-  font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink)}
+  font-weight:var(--w-semi);letter-spacing:var(--tr-snug);color:var(--ink);
+  grid-column:2;grid-row:1;align-self:end;line-height:1.1}
 /* The company byline, "A project by KERNELV5". Text, because Kernelv5 has no
    logo: the lead is a quiet caption and the name is set in the mono caps the
    site already uses for its small labels, so it reads as a mark beside the
@@ -457,8 +467,7 @@
 .byline__lead{font-size:var(--t-12)}
 .byline__mark{font-family:var(--font-mono);font-size:var(--t-11);font-weight:var(--w-semi);
   letter-spacing:var(--tr-caps);text-transform:uppercase;color:var(--ink-2)}
-.mk__by{margin-left:calc(var(--s-4) * -1);padding-left:var(--s-4);
-  border-left:1px solid var(--line);line-height:1}
+.mk__by{grid-column:2;grid-row:2;align-self:start;line-height:1;margin-top:var(--s-1)}
 .mk__navlinks{display:flex;align-items:center;gap:var(--s-7);margin-left:auto}
 /* The three page links sit in their own group at the design's tight 2px gap,
    because each one is a pill with its own padding -- the 20px above would put
@@ -751,16 +760,20 @@
 .mk__footgrid{display:grid;grid-template-columns:minmax(0,1.5fr) repeat(3,minmax(0,1fr));
   gap:var(--s-8) var(--s-9);padding-bottom:var(--s-8);border-bottom:1px solid var(--line)}
 .mk__footabout{min-width:0}
-.mk__footbrand{display:flex;align-items:center;gap:var(--s-4);min-width:0}
+/* The same lockup as the header, at the footer's size. */
+.mk__footbrand{display:grid;grid-template-columns:auto auto;grid-template-rows:auto auto;
+  column-gap:var(--s-4);align-items:center;justify-content:start;min-width:0}
+.mk__footbrand .logo{grid-row:1 / span 2;grid-column:1}
 .mk__footmark{font-family:var(--font-display);font-size:var(--t-14);
-  font-weight:var(--w-semi);color:var(--ink)}
+  font-weight:var(--w-semi);color:var(--ink);grid-column:2;grid-row:1;
+  align-self:end;line-height:1.1}
 .mk__footblurb{margin:var(--s-5) 0 0;font-size:var(--t-13);line-height:var(--lh-loose);
   color:var(--ink-2);max-width:36ch;text-wrap:pretty}
 .mk__footfacts{display:flex;flex-wrap:wrap;gap:var(--s-3);margin-top:var(--s-5)}
 .mk__footfact{font-family:var(--font-mono);font-size:var(--t-10);letter-spacing:var(--tr-caps);
   color:var(--ink-3);border:1px solid var(--line);border-radius:var(--r-1);
   padding:var(--s-1) var(--s-3);white-space:nowrap}
-.mk__footby{margin-top:var(--s-6)}
+.mk__footby{grid-column:2;grid-row:2;align-self:start;line-height:1;margin-top:var(--s-1)}
 .mk__footcol{min-width:0}
 .mk__foothead{margin:0 0 var(--s-4);font-family:var(--font-mono);font-size:var(--t-10);
   font-weight:var(--w-reg);letter-spacing:var(--tr-caps);text-transform:uppercase;
@@ -2089,9 +2102,6 @@ button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
     border:1px solid var(--line-2);border-radius:var(--r-2);
     background:var(--surface);color:var(--ink);cursor:pointer}
   .mk__burger:hover{background:var(--surface-2)}
-  /* The company byline leaves the bar: at 360px the brand and the burger
-     are the whole row, and the footer carries the same line. */
-  .mk__by{display:none}
   .mk__navlinks{display:none;position:absolute;top:100%;left:0;right:0;
     flex-direction:column;align-items:stretch;gap:var(--s-2);margin:0;
     padding:var(--s-4) var(--gutter) var(--s-6);

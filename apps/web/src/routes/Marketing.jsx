@@ -161,15 +161,19 @@ export function Nav() {
   return (
     <>
     <nav className={menuOpen ? 'mk__nav is-open' : 'mk__nav'}>
-      <Link to="/" className="mk__brand">
-        <Logo size={28} />
-        <span className="mk__wordmark">AgentDisk</span>
-      </Link>
-      {/* The company, beside the brand. A sibling of the brand link, not a
-          child: it goes somewhere else (kernelv5.com), and an anchor inside
-          an anchor is invalid. Hidden under 875px, where the bar has no room
-          and the footer says the same thing. */}
-      <Byline className="mk__by" />
+      {/* The lockup: the logo at the left, and beside it two lines, the
+          wordmark over the company byline. The byline is a sibling of the
+          brand link, not a child: it goes somewhere else (kernelv5.com), and
+          an anchor inside an anchor is invalid. The grid puts the logo in
+          the first column spanning both rows, so the link's two children and
+          the byline lay out as one block (`display:contents` on the link). */}
+      <span className="mk__lockup">
+        <Link to="/" className="mk__brand">
+          <Logo size={34} />
+          <span className="mk__wordmark">AgentDisk</span>
+        </Link>
+        <Byline className="mk__by" />
+      </span>
       <button
         type="button"
         className="mk__burger"
@@ -275,8 +279,9 @@ export function Footer() {
         <div className="mk__footgrid">
           <div className="mk__footabout">
             <span className="mk__footbrand">
-              <Logo size={22} alt="" />
+              <Logo size={30} alt="" />
               <span className="mk__footmark">AgentDisk</span>
+              <Byline className="mk__footby" />
             </span>
             <p className="mk__footblurb">
               A scoped, persistent workspace for every AI agent: files, folders and
@@ -285,7 +290,6 @@ export function Footer() {
             <div className="mk__footfacts" aria-label="In short">
               {HERO_TAGS.map(t => <span key={t} className="mk__footfact">{t}</span>)}
             </div>
-            <Byline className="mk__footby" />
           </div>
           {FOOT_COLUMNS.map(col => (
             <div key={col.head} className="mk__footcol">

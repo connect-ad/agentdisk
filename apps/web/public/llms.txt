@@ -97,4 +97,4 @@ Each tool's description says when to use it.
 
 ## 7. Full documentation
 
-https://app.agentdisk.io/docs
+https://agentdisk.io/docs

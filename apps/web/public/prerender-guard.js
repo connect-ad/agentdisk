@@ -18,7 +18,12 @@
   var meta = document.querySelector('meta[name="agentdisk:prerendered"]');
   if (!meta) return;
   var path = location.pathname.replace(/\/+$/, '') || '/';
-  if (path !== meta.content) {
+  // The homepage on the app host is a redirect into the app (App.jsx `Home`),
+  // so its prerendered markup would only flash. `agentdisk:site-host` is
+  // written by the build when the bundle is split across two hostnames.
+  var site = document.querySelector('meta[name="agentdisk:site-host"]');
+  var elsewhere = site && path === '/' && location.hostname !== site.content;
+  if (path !== meta.content || elsewhere) {
     document.documentElement.setAttribute('data-prerender', 'skip');
   }
 })();

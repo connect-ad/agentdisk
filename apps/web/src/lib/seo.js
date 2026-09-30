@@ -15,10 +15,14 @@
  * `SITE_ORIGIN` is production, in every environment. Only prod may be
  * indexed (see `scripts/security-headers.js`), and a staging page whose
  * canonical points at production is the standard way to say "the real one
- * is over there" if a crawler ever gets past the noindex.
+ * is over there" if a crawler ever gets past the noindex. It is the brand
+ * domain, not the app host: since 30 Sept 2026 the marketing pages live on
+ * agentdisk.io and the app on app.agentdisk.io (see lib/hosts.js), and the
+ * app host serves these same pages with a noindex, so the canonical is what
+ * tells a crawler which copy is the real one.
  */
 
-export const SITE_ORIGIN = 'https://app.agentdisk.io';
+export const SITE_ORIGIN = 'https://agentdisk.io';
 export const SITE_NAME = 'AgentDisk';
 
 /** The one image the site has. A 1200×630 social card would be better; this is what exists. */

@@ -58,6 +58,16 @@ output "web_url" {
   value       = "https://${local.web_hostname}"
 }
 
+output "site_url" {
+  description = "Base URL of the marketing site (landing, pricing, docs), served by the same Worker as the dashboard."
+  value       = "https://${cloudflare_workers_custom_domain.site.hostname}"
+}
+
+output "www_url" {
+  description = "The www. alias that redirects to site_url, or an empty string where there is none. A string rather than null so `terraform output -raw` can read it."
+  value       = local.www_hostname == null ? "" : "https://${local.www_hostname}"
+}
+
 # --- Credentials. Unlike everything above, these ARE secrets. ---
 #
 # They exist as outputs because CI pushes them to the Worker with

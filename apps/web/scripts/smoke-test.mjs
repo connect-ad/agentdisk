@@ -19,6 +19,10 @@
  * env:   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID (for the workers.dev check)
  *        ENVIRONMENT_NAME (which side of the indexing check applies; unset is
  *        treated as not prod, matching the build)
+ *        SITE_URL  the marketing hostname the same Worker answers on; when
+ *                  set, section 7 checks the split and the indexing check
+ *                  applies to the site rather than the app
+ *        WWW_URL   the www. alias, when the environment has one
  */
 import { REQUIRED_HEADERS, ROBOTS_NOINDEX, isIndexable } from "./security-headers.js";
 
@@ -391,35 +395,106 @@ console.log("\n[5] Security headers");
 }
 
 // --- 6. Indexing ----------------------------------------------------------
-// Only prod may be indexed. Three mechanisms are built (header, robots.txt,
-// meta tag) and the two a crawler meets first are checked here, in the
-// direction the environment demands: dev missing its noindex is the defect
-// this section was written for, and prod *carrying* one would be worse.
+// Only prod may be indexed, and only the marketing site. Three mechanisms are
+// built (header, robots.txt, meta tag) and the two a crawler meets first are
+// checked here, in the direction the environment demands: dev missing its
+// noindex is the defect this section was written for, and prod *carrying*
+// one would be worse. When the deploy is split across two hostnames the
+// indexable surface is the site, and the app host must say noindex in every
+// environment - the Worker adds that itself (worker.js), so a build that
+// lost it would look fine in dist/ and be wrong on the wire.
+const siteUrl = process.env.SITE_URL?.replace(/\/$/, "") || null;
+const wwwUrl = process.env.WWW_URL?.replace(/\/$/, "") || null;
 console.log("\n[6] Indexing");
 {
   const environment = process.env.ENVIRONMENT_NAME;
   const indexable = isIndexable(environment);
-  const rootResponse = await fetchWithRetry(`${baseUrl}/`, "indexing");
+  const surface = siteUrl ?? baseUrl;
+  const rootResponse = await fetchWithRetry(`${surface}/`, "indexing");
   const robotsTag = rootResponse ? rootResponse.headers.get("X-Robots-Tag") : null;
   if (!rootResponse) {
-    fail("GET / did not answer, so the indexing header could not be checked");
+    fail(`GET ${surface}/ did not answer, so the indexing header could not be checked`);
   } else if (indexable && robotsTag) {
-    fail(`${environment} is indexable but GET / carries X-Robots-Tag: ${robotsTag}`);
+    fail(`${environment} is indexable but GET ${surface}/ carries X-Robots-Tag: ${robotsTag}`);
   } else if (!indexable && robotsTag !== ROBOTS_NOINDEX) {
-    fail(`GET / should carry X-Robots-Tag: ${ROBOTS_NOINDEX} outside prod, got ${robotsTag ?? "nothing"}`);
+    fail(`GET ${surface}/ should carry X-Robots-Tag: ${ROBOTS_NOINDEX} outside prod, got ${robotsTag ?? "nothing"}`);
   } else {
-    pass(`X-Robots-Tag is ${robotsTag ?? "absent"}, correct for ${environment ?? "an unnamed environment"}`);
+    pass(`X-Robots-Tag is ${robotsTag ?? "absent"} on ${surface}, correct for ${environment ?? "an unnamed environment"}`);
   }
 
   // The body, not the status: with no file in dist/, the SPA fallback answers
   // this path with index.html and 200, which a crawler reads as "no rules" —
   // and so does a file that has not propagated yet, hence the retry.
-  const robotsBody = await fetchRobotsUntilLive(`${baseUrl}/robots.txt`);
+  const robotsBody = await fetchRobotsUntilLive(`${surface}/robots.txt`);
   const expectedRule = indexable ? "Allow: /" : "Disallow: /";
   if (!robotsBody.startsWith("User-agent: *") || !robotsBody.includes(expectedRule)) {
-    fail(`GET /robots.txt should say "${expectedRule}"; got: ${robotsBody.slice(0, 80).replace(/\n/g, "\\n")}`);
+    fail(`GET ${surface}/robots.txt should say "${expectedRule}"; got: ${robotsBody.slice(0, 80).replace(/\n/g, "\\n")}`);
   } else {
-    pass(`robots.txt says ${expectedRule}`);
+    pass(`robots.txt on ${surface} says ${expectedRule}`);
+  }
+
+  if (siteUrl) {
+    const appRoot = await fetchWithRetry(`${baseUrl}/`, "app indexing");
+    const appTag = appRoot ? appRoot.headers.get("X-Robots-Tag") : null;
+    if (appTag !== ROBOTS_NOINDEX) {
+      fail(`the app host must never be indexed: GET ${baseUrl}/ should carry X-Robots-Tag: ${ROBOTS_NOINDEX}, got ${appTag ?? "nothing"}`);
+    } else {
+      pass(`X-Robots-Tag is ${appTag} on the app host`);
+    }
+    const appRobots = await fetchRobotsUntilLive(`${baseUrl}/robots.txt`);
+    if (!appRobots.startsWith("User-agent: *") || !appRobots.includes("Disallow: /")) {
+      fail(`GET ${baseUrl}/robots.txt should say "Disallow: /" on the app host; got: ${appRobots.slice(0, 80).replace(/\n/g, "\\n")}`);
+    } else {
+      pass("robots.txt on the app host says Disallow: /");
+    }
+  }
+}
+
+// --- 7. The marketing host ------------------------------------------------
+// The same Worker answers on the site hostname (agentdisk.io, dev.agentdisk.io)
+// and serves the marketing routes there, redirecting every app path to the app
+// host. worker.js decides; this proves the decision reached the wire, with the
+// security headers intact through the ASSETS binding.
+if (siteUrl) {
+  console.log("\n[7] Marketing host");
+  const siteRoot = await fetchWithRetry(`${siteUrl}/`, "site root");
+  if (!siteRoot) {
+    fail(`GET ${siteUrl}/ did not answer`);
+  } else {
+    const html = await siteRoot.text();
+    if (siteRoot.status !== 200) fail(`GET ${siteUrl}/ returned HTTP ${siteRoot.status}, expected 200`);
+    if (!html.includes('name="agentdisk:prerendered" content="/"')) fail(`${siteUrl}/ is not the prerendered landing page`);
+    else pass(`${siteUrl}/ is the prerendered landing page`);
+    const missing = REQUIRED_HEADERS.filter((name) => !siteRoot.headers.get(name));
+    if (missing.length > 0) fail(`${siteUrl}/ is missing: ${missing.join(", ")}`);
+    else pass("site root carries all five security headers");
+  }
+
+  const pricing = await fetchWithRetry(`${siteUrl}/pricing`, "site pricing");
+  if (pricing && pricing.status === 200 && (await pricing.text()).includes('name="agentdisk:prerendered" content="/pricing"')) {
+    pass(`${siteUrl}/pricing is the prerendered pricing page`);
+  } else {
+    fail(`${siteUrl}/pricing should be the prerendered pricing page`);
+  }
+
+  for (const path of ["/login", "/w/acme-research/files"]) {
+    const res = await fetch(`${siteUrl}${path}`, { redirect: "manual" });
+    const location = res.headers.get("location");
+    if (res.status === 302 && location === `${baseUrl}${path}`) {
+      pass(`${siteUrl}${path} -> 302 ${location}`);
+    } else {
+      fail(`${siteUrl}${path} should redirect (302) to ${baseUrl}${path}; got HTTP ${res.status} ${location ?? ""}`);
+    }
+  }
+
+  if (wwwUrl) {
+    const res = await fetch(`${wwwUrl}/pricing`, { redirect: "manual" });
+    const location = res.headers.get("location");
+    if (res.status === 301 && location === `${siteUrl}/pricing`) {
+      pass(`${wwwUrl}/pricing -> 301 ${location}`);
+    } else {
+      fail(`${wwwUrl}/pricing should redirect (301) to ${siteUrl}/pricing; got HTTP ${res.status} ${location ?? ""}`);
+    }
   }
 }
 
@@ -431,4 +506,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`Smoke test passed: ${baseUrl} is serving the dashboard, deep links fall back to the SPA, no bypass hostname is open, and every response carries its security headers.`);
+console.log(`Smoke test passed: ${baseUrl} is serving the dashboard${siteUrl ? ` and ${siteUrl} the site` : ""}, deep links fall back to the SPA, no bypass hostname is open, and every response carries its security headers.`);

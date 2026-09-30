@@ -19,11 +19,15 @@
 name = "agentdisk-web"
 compatibility_date = "2026-08-01"
 
-# Assets-only: there is deliberately no `main`. With no Worker entrypoint, every
-# request is answered directly from Cloudflare's asset store, which means no
-# Worker invocation to pay for and no request-path code that could fail. Adding
-# a `main` later (say, to inject headers) is a one-line change; not having it is
-# the cheaper and safer default while the SPA is purely static.
+# One small Worker in front of the assets: worker.js. Until 30 Sept 2026 there
+# was deliberately no `main` - assets only, nothing on the request path that
+# could fail. The marketing site moving to its own hostname (agentdisk.io,
+# dev.agentdisk.io) while the app stayed on app.<domain> needed something that
+# sees the hostname before a file is served: the www redirect, and the rule
+# that /login on the site is a redirect to the app rather than a copy of it.
+# That is all the Worker does; the assets, `_headers` and the SPA fallback are
+# untouched. With no SITE_HOST var it is a pass-through.
+main = "worker.js"
 
 # The custom domains Terraform creates (app.) are the only intended entry
 # points. Left unset, Wrangler enables workers.dev and Preview URLs by default,
@@ -35,6 +39,11 @@ preview_urls = false
 
 [assets]
 directory = "./dist"
+# The Worker reaches the asset store through this binding.
+binding = "ASSETS"
+# Every request runs the Worker, including hashed assets, because the www
+# redirect and the site-host allowlist must see requests for files too.
+run_worker_first = true
 
 # The dashboard is a client-side-routed SPA: /login, /w/:ws/files and friends
 # exist only in the React Router table, not as files on disk. Without this,
@@ -58,12 +67,22 @@ preview_urls = false
 
 [env.dev.assets]
 directory = "./dist"
+binding = "ASSETS"
+run_worker_first = true
 not_found_handling = "single-page-application"
 
+# The two hostnames this deploy answers on. Literal, like the script name
+# above, and asserted by CI against the environment's SITE_DOMAIN and
+# WEB_DOMAIN before deploying. Change these and the Terraform custom domains
+# together. No WWW_HOST in dev: www.dev.<domain> is not a hostname anybody
+# types, and it would need a paid certificate.
+[env.dev.vars]
+SITE_HOST = "dev.agentdisk.io"
+APP_HOST = "app-dev.agentdisk.io"
+
 # --------------------------------------------------------------- prod ---
-# Never applied yet: the prod Terraform workspace is empty and gated behind a PR
-# into main plus required-reviewer approval. Declared so the shape is already
-# right when that day comes, not because anything here deploys it.
+# First applied 30 Sept 2026. Deploys run from main only, behind the prod
+# environment's required-reviewer approval.
 [env.prod]
 name = "agentdisk-prod-web"
 workers_dev = false
@@ -71,4 +90,11 @@ preview_urls = false
 
 [env.prod.assets]
 directory = "./dist"
+binding = "ASSETS"
+run_worker_first = true
 not_found_handling = "single-page-application"
+
+[env.prod.vars]
+SITE_HOST = "agentdisk.io"
+APP_HOST = "app.agentdisk.io"
+WWW_HOST = "www.agentdisk.io"

@@ -38,6 +38,23 @@ variable "zone_id" {
   }
 }
 
+variable "site_prefix" {
+  description = <<-DESC
+    Label of the marketing hostname: "dev" for dev.<root_domain>, "" for the
+    zone apex. The landing page, pricing and docs live here; everything that
+    needs a sign-in stays on app<subdomain_suffix>.<root_domain>. Flat, like
+    the other hostnames, so the free Universal SSL wildcard covers it. Only
+    the apex gets a www. alias, because www.dev.<root_domain> would need a
+    paid certificate and nobody types it.
+  DESC
+  type        = string
+
+  validation {
+    condition     = contains(["dev", ""], var.site_prefix)
+    error_message = "site_prefix must be \"dev\" or the empty string."
+  }
+}
+
 variable "root_domain" {
   description = "Registrable domain the API and MCP hostnames hang off."
   type        = string

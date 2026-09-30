@@ -29,7 +29,7 @@ task.
 | `infra/terraform/` | All infrastructure as code | One root config, one module, **one workspace per environment** (`dev`, `prod`). No `environments/` directories — see the workspace note below. |
 | `.github/workflows/` | CI and deployment pipelines | **Three areas, split by what they own: `infra`, `backend`, `frontend`.** Each is one reusable engine plus thin per-environment callers, so prod can never drift from dev. Path filters mean an `apps/web` push moves nothing else. `frontend.yml` is called once per app (dashboard, console). `ci.yml` gates PRs and covers all three apps. `deploy-all-dev.yml` is the ordered manual full deploy. |
 | `apps/admin/` | The internal admin console, at `securepanel-dev.agentdisk.io` | Its own origin, though no longer for the reason 14 PART 27.2 gives: that doc scopes a admin session cookie to this host so a admin and a customer credential cannot reach each other in a browser, and migration `0014_admin_firebase_sso.sql` deleted that cookie. Admin sign in with the same Firebase identity as customers and one token now reaches both surfaces; the separate origin survives as a way to tell the two apps apart, not as an isolation boundary. **The boundary is the `admin_users` lookup on every request** — see the rule below. Deliberately does not import `design-system/` — looking different from the customer dashboard is how a support engineer knows which one they are in; it carries its own palette in `src/app.css`, from the AgentDisk Admin design file, and those tokens must not be reconciled with the dashboard's. Nine screens under `src/screens/`, one shell, routing by the History API rather than a router library. |
-| `apps/web/` | The dashboard SPA, live at `app-dev.agentdisk.io` | `src/components/` is vendored from `design-system/`; `src/components/index.js` is generated. Hand-written code lives in `src/routes/` and `src/components-local/`. Two vendored files deliberately diverge, all awaiting the same upstream trip: `src/components/AppShell.jsx` for four reasons — `backlog/015`, `backlog/016`, `backlog/026`, and the company byline under the wordmark (30 Sept 2026), which imports `components-local/Byline.jsx` — `src/components/Modal/Modal.jsx` plus `src/components/Button/Button.jsx`, which together gain Enter-to-submit, the one part of the modal contract that cannot be done from `app.css` — `Button` has to default to `type="button"` or an untyped Cancel inside the new `<form>` submits the dialog it exists to dismiss (`backlog/031`); and `src/components/ApiKeyDisplay/ApiKeyDisplay.jsx`, twice: its `prefix` defaulted to `ad_live` — a prefix this API has never issued — and its revealed-state note said "stored only as a hash, so we cannot show it again", which stopped being true when migration 0022 kept keys. Deployed as a Workers static-assets Worker, not Pages — see `backlog/013`. **`harness/` renders every route in a real Chrome at phone, tablet and desktop widths with the API mocked and sign-in stubbed** — the only way to see a layout, since jsdom computes none; how to run it is in `Skill/1 Build.md`. The responsive rules live in one section at the end of `src/app.css`, every one under a `max-width` query, and `test/responsive.test.jsx` keeps it that way. **The three public routes are prerendered at build** — `/`, `/pricing`, `/docs` become `dist/index.html`, `pricing.html`, `docs.html` via `src/entry-prerender.jsx` and `scripts/prerender.mjs`; see the rule below. |
+| `apps/web/` | The dashboard SPA, live at `app-dev.agentdisk.io`, and the marketing site at `dev.agentdisk.io` — one bundle, one Worker, two hostnames; see the rule below | `src/components/` is vendored from `design-system/`; `src/components/index.js` is generated. Hand-written code lives in `src/routes/` and `src/components-local/`. Two vendored files deliberately diverge, all awaiting the same upstream trip: `src/components/AppShell.jsx` for four reasons — `backlog/015`, `backlog/016`, `backlog/026`, and the company byline under the wordmark (30 Sept 2026), which imports `components-local/Byline.jsx` — `src/components/Modal/Modal.jsx` plus `src/components/Button/Button.jsx`, which together gain Enter-to-submit, the one part of the modal contract that cannot be done from `app.css` — `Button` has to default to `type="button"` or an untyped Cancel inside the new `<form>` submits the dialog it exists to dismiss (`backlog/031`); and `src/components/ApiKeyDisplay/ApiKeyDisplay.jsx`, twice: its `prefix` defaulted to `ad_live` — a prefix this API has never issued — and its revealed-state note said "stored only as a hash, so we cannot show it again", which stopped being true when migration 0022 kept keys. Deployed as a Workers static-assets Worker, not Pages — see `backlog/013`. **`harness/` renders every route in a real Chrome at phone, tablet and desktop widths with the API mocked and sign-in stubbed** — the only way to see a layout, since jsdom computes none; how to run it is in `Skill/1 Build.md`. The responsive rules live in one section at the end of `src/app.css`, every one under a `max-width` query, and `test/responsive.test.jsx` keeps it that way. **The three public routes are prerendered at build** — `/`, `/pricing`, `/docs` become `dist/index.html`, `pricing.html`, `docs.html` via `src/entry-prerender.jsx` and `scripts/prerender.mjs`; see the rule below. |
 | `Skill/` | Reusable how-to knowledge, `<N> <Name>.md` | Procedures, commands and their calibration. Not the specification — that is `docs/design/`. |
 | `backlog/` | Outstanding tasks, `NNN-<slug>.md` | **Three items: the billing module, the admin panel built on top of it, and one small Firebase fix.** The previous 31 were deleted 18 Sept 2026 and live at the tag `pre-billing-module`. Status lives in each file. |
 | `docs/superpowers/specs/` | The design rebuild's specs, `YYYY-MM-DD-<slug>.md` | Replaced `.design-sync/`, which described the old vendored mirror and lost its subject when that mirror went. The `.dc.html` artboards in `design-system/` are hand-exported from Claude Design; when a design file has no local copy, record its numbers in a spec here and ask for the export — never reconstruct one from a transcript. |
@@ -170,6 +170,36 @@ were not touched. See `backlog/002`.
   the standard way to say so. That file is imported by Node outside Vite, so
   it stays plain JavaScript with no `import.meta.env`. The social image is
   the logo; a 1200×630 card does not exist yet.
+- **One bundle, two hostnames: the site is `agentdisk.io`, the app is
+  `app.agentdisk.io`.** Since 30 Sept 2026 (dev: `dev.agentdisk.io` and
+  `app-dev.agentdisk.io`). Both are custom domains on the same dashboard
+  Worker, so the two can never be at different versions, and
+  `apps/web/worker.js` — the first Worker code this app has had, run
+  before the assets — decides by hostname: `www.` is a 301 to the site;
+  on the site only `/`, `/pricing`, `/docs`, `/sandbox`, `/terms`,
+  `/privacy` and files are served, and every other path is a 302 to the
+  same path on the app host; on the app host everything is served, with
+  `X-Robots-Tag: noindex` and a `Disallow: /` robots.txt, in every
+  environment. The SPA makes the matching decisions after it loads
+  (`src/lib/hosts.js`): `/` on the app host goes to `/app`, and the
+  `AppHostOnly` layout route in `App.jsx` hard-navigates an app route
+  opened on the site host — the Worker's `SITE_ROUTES` and that route
+  group are the same list in two files, and must stay so. Both hostnames
+  are baked in at build (`VITE_SITE_HOST`, `VITE_APP_HOST`) from the
+  environment's `SITE_DOMAIN` and `WEB_DOMAIN`, which CI asserts against
+  Terraform's `site_url` and `web_url`, and which `[env.<ws>.vars]` in
+  `apps/web/wrangler.toml` restates for the Worker. **Unset means the
+  single-host product**: `npm run dev`, the tests, the harness and the
+  prerender all see one host and behave as before; `test/host-split.test.jsx`
+  and `test/site-worker.test.js` cover the split. The landing page and the
+  docs open the sandbox dialog, so the site hostname is also in the
+  Turnstile widget's `domains`, in `TURNSTILE_ALLOWED_HOSTNAMES` and in
+  `CORS_ALLOWED_ORIGINS` — four places, changed together. `SITE_ORIGIN` in
+  `lib/seo.js` is the brand domain now, so the canonical on the app host's
+  copy of `/pricing` names the site. Prod's apex carried a site-builder
+  placeholder and a `www` record before this; both had to be deleted by
+  hand, because a Workers custom domain refuses a hostname that already
+  has a DNS record.
 - **Only prod may be indexed, and "not named prod" means not prod.** Until
   28 Sept 2026 `app-dev` was fully indexable: no `robots.txt`, no
   `X-Robots-Tag`, no meta tag, every route 200 through the SPA fallback. The
@@ -891,11 +921,21 @@ Worker      226 KiB gzipped, against Cloudflare's 1 MB limit
 **Roadmap step 27 is met**: a 2 MB file round-tripped through
 `agentdisk-dev-files` via a presigned PUT and GET, SHA-256 identical in and out.
 
-Live on three hostnames: `api-dev.agentdisk.io` (REST + MCP at `/mcp`),
-`mcp-dev.agentdisk.io`, `app-dev.agentdisk.io`. The full loop runs unattended:
-push to `dev` → verify → `terraform apply` → migrations → `wrangler deploy` →
-smoke test. **Prod has never been applied** — the `prod` workspace is empty,
-gated behind a PR into `main` plus required-reviewer approval.
+Live on four hostnames: `api-dev.agentdisk.io` (REST + MCP at `/mcp`),
+`mcp-dev.agentdisk.io`, `app-dev.agentdisk.io` and `dev.agentdisk.io`. The
+full loop runs unattended: push to `dev` → verify → `terraform apply` →
+migrations → `wrangler deploy` → smoke test. **Prod was first applied on
+30 Sept 2026**: fifteen resources, all migrations, the API, the dashboard and
+the console, from PR #4 (`dev` → `main`) with every prod job approved by
+hand. `main` now requires a PR (admins included) and the `prod` environment
+deploys from `main` alone, with no admin bypass. The prod prerequisites live
+outside the repo and were set up 28–30 Sept: the live Stripe catalogue (four
+products copied from the sandbox, one webhook, keys in the prod environment),
+the `agentdisk` Firebase project (four providers, SMTP through Cloudflare,
+one service-account key per environment) and the R2 signing token for
+`agentdisk-prod-files`. Not yet done in prod: the first console sign-in and
+the plan sync that links the four `plans` rows to their live Stripe IDs —
+until that runs, nothing can be bought.
 
 ### What exists
 
@@ -966,7 +1006,7 @@ purges expired share links, and reconciles the usage counters against the rows.
 - **Full-text search inside files.** Search covers names, paths, captions and
   tags, and the response names the fields it looked at.
 - **`openapi.yaml`**, and the generated docs site.
-- **Production.**
+- **Production's first sale.** The stack is deployed; the plan catalogue is not yet linked to live Stripe (see Status).
 
 A second category, found by the 8 Sept 2026 audit ([summary.md](summary.md)):
 things that *appear* built and are not connected. Several declared limits are

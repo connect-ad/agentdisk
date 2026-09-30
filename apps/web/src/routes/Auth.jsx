@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { siteUrl } from '../lib/hosts.js';
 import { Icon, Alert } from '../components/index.js';
 import { useAuth, describeAuthError } from '../lib/auth.jsx';
 import { PASSWORD_RULES, checkPassword, strengthOf } from '../lib/password.js';
@@ -117,15 +118,29 @@ function Platter() {
  * a click that only changed local state would leave the address bar describing
  * the wrong screen and break the back button.
  */
+function BrandLink() {
+  const home = siteUrl('/');
+  const inner = (
+    <>
+      <Logo size={30} />
+      <span className="auth__wordmark">AgentDisk</span>
+    </>
+  );
+  return home === '/' ? (
+    <Link to="/" className="auth__brand">{inner}</Link>
+  ) : (
+    <a href={home} className="auth__brand">{inner}</a>
+  );
+}
+
 function AuthSheet({ tab, children }) {
   return (
     <div className="auth">
       <Platter />
       <div className="auth__sheet">
-        <Link to="/" className="auth__brand">
-          <Logo size={30} />
-          <span className="auth__wordmark">AgentDisk</span>
-        </Link>
+        {/* On the app host `/` is the app's own front door, which for a person
+            on this sheet is this sheet again; the brand leads to the site. */}
+        <BrandLink />
         <Byline className="auth__by" />
 
         <div className="auth__card">

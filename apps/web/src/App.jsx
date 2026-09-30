@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet, useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import { applyPageMeta } from './lib/seo.js';
+import { onAppHost, onSiteHost, splitHosts } from './lib/hosts.js';
 import { trackPageView } from './lib/analytics.js';
 import { AppShell, Badge, Button, Icon } from './components/index.js';
 
@@ -378,12 +379,63 @@ function PageMeta() {
   return null;
 }
 
+/**
+ * `/` is the landing page on the marketing host and the front door of the
+ * app on the app host.
+ *
+ * The two hosts are one bundle (see worker.js and lib/hosts.js), so this is
+ * where the same route means two things. On app.agentdisk.io a person who
+ * arrives at the root is either signed in, and wants their workspace, or is
+ * not, and wants to sign in; the landing page is on agentdisk.io. Sending
+ * them through /app rather than deciding here reuses RequireAuth's handling
+ * of the restoring-session race (REG-01) instead of reproducing it.
+ *
+ * Single-host builds, the prerender (no window) and localhost render the
+ * landing page, as they always did.
+ */
+export function Home() {
+  if (onAppHost()) return <Navigate to="/app" replace />;
+  return <Landing />;
+}
+
+const hardNavigate = url => window.location.replace(url);
+
+/**
+ * Layout route that keeps every app screen off the marketing host.
+ *
+ * The Worker already redirects a direct request for /login on the site host
+ * before any HTML is served; this covers the other way there - a click on
+ * "Sign in" in the marketing nav, which is a client-side navigation the
+ * Worker never sees. The route group under it is the complement of the
+ * SITE_ROUTES list in worker.js, and the two must agree. In single-host
+ * mode, and on the app host, it is an Outlet and nothing more.
+ *
+ * `leave` is a prop only so the test can observe the navigation; jsdom does
+ * not implement it.
+ */
+export function AppHostOnly({ leave = hardNavigate }) {
+  const { pathname, search, hash } = useLocation();
+  const here = onSiteHost();
+  useEffect(() => {
+    if (here) leave(`${splitHosts().appOrigin}${pathname}${search}${hash}`);
+  }, [here, leave, pathname, search, hash]);
+  if (!here) return <Outlet />;
+  return (
+    <div style={{ display: 'grid', placeItems: 'center', minHeight: '60vh', padding: 'var(--s-8)' }}>
+      <p className="ad-meta" aria-live="polite">Taking you to the app…</p>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <>
     <PageMeta />
     <Routes>
-      <Route path="/" element={<Landing />} />
+      {/* The marketing routes: everything from here to /sandbox renders on
+          the site host (agentdisk.io) as well as the app host. worker.js
+          carries the same list as SITE_ROUTES; keep them together. */}
+      <Route path="/" element={<Home />} />
       <Route path="/pricing" element={<Pricing />} />
       <Route path="/docs" element={<Docs />} />
       {/* `/docs/<section>` deep-links into the one page; the component reads
@@ -394,6 +446,15 @@ export default function App() {
           wild. */}
       <Route path="/terms" element={<Navigate to="/docs#terms" replace />} />
       <Route path="/privacy" element={<Navigate to="/docs#privacy" replace />} />
+      {/* The docs at the Quick start with the sandbox dialog already open. The
+          dialog talks to the real API, unlike every other screen here: it is
+          the one way to obtain a first credential (05 PART 13's
+          Turnstile-gated POST /v1/workspaces). A marketing route, because it
+          is where a visitor with no account starts. */}
+      <Route path="/sandbox" element={<Docs sandbox />} />
+
+      {/* Everything below belongs to the app host. See AppHostOnly. */}
+      <Route element={<AppHostOnly />}>
       {/* Public on purpose: the preview half of this page works with no
           account, because the claim token in the URL is the only thing that can
           name the workspace. The page itself gates the act of claiming behind
@@ -436,11 +497,6 @@ export default function App() {
       </Route>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
-      {/* The docs at the Quick start with the sandbox dialog already open. The
-          dialog talks to the real API, unlike every other screen here: it is
-          the one way to obtain a first credential (05 PART 13's
-          Turnstile-gated POST /v1/workspaces). */}
-      <Route path="/sandbox" element={<Docs sandbox />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
@@ -463,6 +519,7 @@ export default function App() {
       <Route path="/429" element={<RateLimited />} />
       <Route path="/500" element={<ServerError onRetry={() => window.location.reload()} />} />
       <Route path="/maintenance" element={<Maintenance />} />
+      </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>
     </>

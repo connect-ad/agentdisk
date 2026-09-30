@@ -136,6 +136,8 @@ jobs:
       # environment and would read repository scope instead.
       WEB_DOMAIN: ${{ vars.WEB_DOMAIN }}
       WEB_WORKER_NAME: ${{ vars.WEB_WORKER_NAME }}
+      # The marketing hostname the dashboard's Worker also answers on.
+      SITE_DOMAIN: ${{ vars.SITE_DOMAIN }}
       ADMIN_DOMAIN: ${{ vars.ADMIN_DOMAIN }}
       ADMIN_WORKER_NAME: ${{ vars.ADMIN_WORKER_NAME }}
 
@@ -179,6 +181,11 @@ jobs:
           missing=""
           [ -z "$domain" ] && missing="$missing $dvar"
           [ -z "$worker" ] && missing="$missing $wvar"
+          # The dashboard answers on a second hostname, the marketing site
+          # (agentdisk.io / dev.agentdisk.io), served by the same Worker.
+          if [ "$APP" = "web" ] && [ -z "${SITE_DOMAIN:-}" ]; then
+            missing="$missing SITE_DOMAIN"
+          fi
           for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID TF_VAR_zone_id TF_VAR_root_domain TFSTATE_BUCKET AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
             [ -z "${!name:-}" ] && missing="$missing $name"
           done
@@ -189,7 +196,12 @@ jobs:
 
           echo "EXPECTED_DOMAIN=$domain" >> "$GITHUB_ENV"
           echo "EXPECTED_WORKER=$worker" >> "$GITHUB_ENV"
-          echo "$LABEL on $ENVIRONMENT_NAME expects $worker at $domain."
+          if [ "$APP" = "web" ]; then
+            echo "EXPECTED_SITE_DOMAIN=$SITE_DOMAIN" >> "$GITHUB_ENV"
+            echo "$LABEL on $ENVIRONMENT_NAME expects $worker at $domain, with the site at $SITE_DOMAIN."
+          else
+            echo "$LABEL on $ENVIRONMENT_NAME expects $worker at $domain."
+          fi
 
       - name: Write Terraform backend config
         working-directory: infra/terraform
@@ -265,6 +277,22 @@ jobs:
           echo "APP_URL=$app_url" >> "$GITHUB_ENV"
           echo "APP_WORKER=$app_worker" >> "$GITHUB_ENV"
 
+          # The marketing hostname rides the same Worker. Asserted against the
+          # environment's SITE_DOMAIN exactly like the app hostname above, and
+          # then baked into the bundle: the SPA needs both hostnames to know
+          # which one it is on and where the other side's pages are.
+          if [ "$APP" = "web" ]; then
+            site_url="$(terraform output -raw site_url)"
+            if [ "$site_url" != "https://$EXPECTED_SITE_DOMAIN" ]; then
+              echo "::error::Terraform routed the marketing site to '$site_url' but the $ENVIRONMENT_NAME environment expects 'https://$EXPECTED_SITE_DOMAIN'."
+              exit 1
+            fi
+            echo "SITE_URL=$site_url" >> "$GITHUB_ENV"
+            echo "WWW_URL=$(terraform output -raw www_url)" >> "$GITHUB_ENV"
+            echo "VITE_SITE_HOST=$EXPECTED_SITE_DOMAIN" >> "$GITHUB_ENV"
+            echo "VITE_APP_HOST=$EXPECTED_DOMAIN" >> "$GITHUB_ENV"
+          fi
+
           # The API base comes from `terraform output`, not a literal, so an app
           # can never be built pointing at an API this stack did not create.
           echo "VITE_API_BASE=$(terraform output -raw api_url)" >> "$GITHUB_ENV"
@@ -297,6 +325,9 @@ jobs:
         env:
           VITE_API_BASE: ${{ env.VITE_API_BASE }}
           VITE_TURNSTILE_SITE_KEY: ${{ env.VITE_TURNSTILE_SITE_KEY }}
+          # Empty for the console, which has one hostname; see apps/web/src/lib/hosts.js.
+          VITE_SITE_HOST: ${{ env.VITE_SITE_HOST }}
+          VITE_APP_HOST: ${{ env.VITE_APP_HOST }}
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
@@ -369,6 +400,19 @@ jobs:
             exit 1
           fi
           echo "wrangler.toml declares $APP_WORKER."
+
+          # The dashboard's Worker reads its two hostnames from [env.<ws>.vars]
+          # (apps/web/worker.js). Literal there, like the script name, so they
+          # are held to the same environment variables the custom domains are.
+          if [ "$APP" = "web" ]; then
+            for pair in "SITE_HOST = \"$EXPECTED_SITE_DOMAIN\"" "APP_HOST = \"$EXPECTED_DOMAIN\""; do
+              if ! grep -q "^$pair\$" wrangler.toml; then
+                echo "::error::wrangler.toml does not declare '$pair' for $WORKSPACE; the Worker would split the wrong hostnames."
+                exit 1
+              fi
+            done
+            echo "wrangler.toml splits $EXPECTED_SITE_DOMAIN from $EXPECTED_DOMAIN."
+          fi
 
       # No `wrangler secret put` step, and that is not an omission: a static
       # bundle is public by definition, so anything secret here would be

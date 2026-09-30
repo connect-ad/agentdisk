@@ -39,8 +39,15 @@ function securityHeadersFile(env) {
     // that read neither robots.txt nor response headers.
     transformIndexHtml() {
       const tag = robotsMetaTag(options);
+      // Which hostname the prerendered landing page belongs to, for the
+      // guard below: on the app host `/` is a redirect into the app, and the
+      // homepage must not paint first. Absent in a single-host build.
+      const siteHost = env.VITE_SITE_HOST
+        ? [{ tag: 'meta', attrs: { name: 'agentdisk:site-host', content: env.VITE_SITE_HOST }, injectTo: 'head' }]
+        : [];
       return [
         ...(tag ? [tag] : []),
+        ...siteHost,
         // Synchronous, from <head>, ahead of the body: it hides prerendered
         // markup that belongs to another route before anything paints. See
         // public/prerender-guard.js and scripts/prerender.mjs.

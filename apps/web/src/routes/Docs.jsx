@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Icon } from '../components/index.js';
 import { Nav, Footer } from './Marketing.jsx';
 import { SandboxDialog } from '../components-local/SandboxDialog.jsx';
+import { SITE_ORIGIN } from '../lib/seo.js';
 
 /**
  * The documentation — one page, nine sections, written from the code.
@@ -758,7 +759,7 @@ function guideSteps(goal, chosen) {
               lead: 'Paste this to your agent:',
               caption: 'PROMPT · CREATE A SANDBOX',
               wrap: true,
-              code: `Create me a sandbox workspace on AgentDisk. Read ${typeof window === 'undefined' ? 'https://app.agentdisk.io' : window.location.origin}/llms.txt and follow it. Keep the API key in your own config and give me the claim link.`,
+              code: `Create me a sandbox workspace on AgentDisk. Read ${typeof window === 'undefined' ? SITE_ORIGIN : window.location.origin}/llms.txt and follow it. Keep the API key in your own config and give me the claim link.`,
               after: 'The agent does the rest and hands you the claim link.',
             },
           ],

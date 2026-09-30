@@ -51,6 +51,16 @@ output "web_url" {
   value       = module.stack.web_url
 }
 
+output "site_url" {
+  description = "Base URL of the marketing site. CI asserts it against the environment's SITE_DOMAIN and bakes it into the dashboard build."
+  value       = module.stack.site_url
+}
+
+output "www_url" {
+  description = "The www. alias of the marketing site, or an empty string."
+  value       = module.stack.www_url
+}
+
 output "account_id" {
   description = <<-DESC
     Cloudflare account ID, injected into wrangler.toml as R2_ACCOUNT_ID.

@@ -14,10 +14,12 @@ locals {
     dev = {
       environment      = "dev"
       subdomain_suffix = "-dev"
+      site_prefix      = "dev" # dev.agentdisk.io
     }
     prod = {
       environment      = "prod"
       subdomain_suffix = ""
+      site_prefix      = "" # the apex, agentdisk.io, plus www.
     }
   }
 
@@ -59,6 +61,7 @@ module "stack" {
 
   environment      = local.config.environment
   subdomain_suffix = local.config.subdomain_suffix
+  site_prefix      = local.config.site_prefix
 
   account_id  = var.account_id
   zone_id     = var.zone_id

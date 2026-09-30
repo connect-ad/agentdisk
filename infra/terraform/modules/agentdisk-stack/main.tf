@@ -17,6 +17,14 @@ locals {
   # would need paid Advanced Certificate Manager. Doc 12's subdomain table.
   web_hostname = "app${var.subdomain_suffix}.${var.root_domain}"
 
+  # The marketing site: landing, pricing, docs, sandbox. Same Worker and the
+  # same bundle as the dashboard - the Worker in front of the assets
+  # (apps/web/worker.js) decides by hostname what each may serve, and the
+  # SPA decides by hostname where its links go. Two hostnames, one deploy,
+  # so the site and the app can never be at different versions.
+  site_hostname = var.site_prefix == "" ? var.root_domain : "${var.site_prefix}.${var.root_domain}"
+  www_hostname  = var.site_prefix == "" ? "www.${var.root_domain}" : null
+
   # The internal admin console (14 PART 28.1). Its own origin, deliberately -
   # a admin session cookie and a customer session cookie can then never share a
   # cookie scope, which makes "these cannot be confused" true at the browser
@@ -272,6 +280,29 @@ resource "cloudflare_workers_custom_domain" "web" {
   service    = cloudflare_workers_script.web.script_name
 }
 
+# The marketing hostname, bound to the SAME script as the dashboard. On prod
+# this is the zone apex, and Cloudflare refuses to attach a custom domain to a
+# hostname that already carries a DNS record - the apex used to point at a
+# site-builder placeholder, which had to be deleted by hand before the first
+# apply. A "record already exists" error here means that record is back.
+resource "cloudflare_workers_custom_domain" "site" {
+  account_id = var.account_id
+  zone_id    = var.zone_id
+  hostname   = local.site_hostname
+  service    = cloudflare_workers_script.web.script_name
+}
+
+# www. exists only to redirect to the apex; the Worker answers it with a 301
+# before touching an asset. Apex environments only - see var.site_prefix.
+resource "cloudflare_workers_custom_domain" "www" {
+  count = local.www_hostname == null ? 0 : 1
+
+  account_id = var.account_id
+  zone_id    = var.zone_id
+  hostname   = local.www_hostname
+  service    = cloudflare_workers_script.web.script_name
+}
+
 # The admin console (apps/admin), same shape as the dashboard above: an
 # assets-only Worker on its own hostname.
 #
@@ -357,8 +388,12 @@ resource "cloudflare_turnstile_widget" "bootstrap" {
   # only reason nothing broke is that CI pushes the secret to the Worker after
   # the apply. Sorting makes config and API agree, so an apply that changes
   # nothing plans nothing.
+  # The marketing hostname is here because the landing page and the docs
+  # open the sandbox dialog, which is where the widget is solved. Change this
+  # list and TURNSTILE_ALLOWED_HOSTNAMES in apps/api/wrangler.toml together.
   domains = sort([
     local.web_hostname,
+    local.site_hostname,
     local.api_hostname,
   ])
 }

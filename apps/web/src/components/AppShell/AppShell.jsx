@@ -1,3 +1,4 @@
+import Byline from '../../components-local/Byline.jsx';
 import React from 'react';
 import { Icon } from '../Icon/Icon.jsx';
 
@@ -52,6 +53,11 @@ export function AppShell({
               is decorative. */}
           <img className="shell__logo" src="/agentdisk-logo.png" alt="" aria-hidden="true" />
           <span className="shell__wordmark">AgentDisk</span>
+          {/* Local divergence (30 Sept 2026): the company byline under the
+              wordmark, the same lockup the marketing header draws. app.css
+              turns .shell__brand into the two-column grid; this file only
+              adds the element. Hidden with the wordmark below 1125px. */}
+          <Byline className="shell__by" />
         </div>
 
         <span className="shell__rule" aria-hidden="true" />

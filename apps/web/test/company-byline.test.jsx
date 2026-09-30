@@ -17,6 +17,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { COMPANY_LEGAL_NAME, COMPANY_NAME, COMPANY_URL } from '../src/lib/company.js';
+import { AppShell } from '../src/components/AppShell/AppShell.jsx';
 
 vi.mock('../src/lib/auth.jsx', () => ({
   useAuth: () => ({ user: null, loading: false }),
@@ -51,16 +52,28 @@ describe('the company byline', () => {
     expect(brand.nextElementSibling).toBe(by);
   });
 
-  it('gives the footer the legal name in the copyright line and the byline in the about column', () => {
+  it("gives the footer the owner's copyright sentence and the byline in the about column", () => {
     at('/', <Footer />);
     const foot = screen.getByRole('contentinfo');
     const base = foot.querySelector('.mk__footbase');
-    expect(base.textContent).toMatch(new RegExp(`© ${new Date().getFullYear()} ${COMPANY_LEGAL_NAME.replace('.', '\.')}`));
-    expect(within(base).getByRole('link', { name: COMPANY_LEGAL_NAME }).getAttribute('href')).toBe(COMPANY_URL);
+    // Exact wording, 30 Sept 2026: "© <year> Kernelv5. AgentDisk™ is a product by Kernelv5."
+    expect(base.textContent).toContain(`© ${new Date().getFullYear()} ${COMPANY_NAME}. AgentDisk™ is a product by ${COMPANY_NAME}.`);
+    expect(within(base).getByRole('link', { name: COMPANY_NAME }).getAttribute('href')).toBe(COMPANY_URL);
     // Inside the footer's brand lockup, under the wordmark.
     expect(foot.querySelector('.mk__footbrand .byline')).not.toBeNull();
     // AgentDisk stays the brand: the wordmark is still there, above the company.
     expect(foot.querySelector('.mk__footmark').textContent).toBe('AgentDisk');
+  });
+});
+
+describe('the dashboard shell', () => {
+  it('draws the same lockup: the byline directly under the wordmark, inside the brand block', () => {
+    render(<AppShell nav={[]} active="overview"><p>page</p></AppShell>);
+    const [by] = bylines();
+    const brand = by.closest('.shell__brand');
+    expect(brand).not.toBeNull();
+    expect(brand.querySelector('.shell__wordmark').nextElementSibling).toBe(by);
+    expect(by.getAttribute('href')).toBe(COMPANY_URL);
   });
 });
 

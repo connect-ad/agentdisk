@@ -7,7 +7,7 @@ import {
 } from '../lib/pricing.js';
 import Logo from '../components-local/Logo.jsx';
 import Byline from '../components-local/Byline.jsx';
-import { COMPANY_LEGAL_NAME, COMPANY_URL } from '../lib/company.js';
+import { COMPANY_NAME, COMPANY_URL } from '../lib/company.js';
 import { SupportDialog } from '../components-local/SupportDialog.jsx';
 import ThemeToggle from '../components-local/ThemeToggle.jsx';
 
@@ -307,13 +307,14 @@ export function Footer() {
           ))}
         </div>
         <div className="mk__footbase">
-          {/* The legal name, because it is the one on the card statement:
-              somebody who sees "Kernelv5 Inc." on a bank statement must be
-              able to find those words on this site. AgentDisk stays the
-              brand everywhere above this line. */}
+          {/* Owner's wording, 30 Sept 2026. The company is named so that
+              somebody who sees "Kernelv5" on a card statement can find the
+              word on this site; the legal "Inc." lives in the Terms and on
+              the billing page, where the statement match matters. */}
           <span>
             © {new Date().getFullYear()}{' '}
-            <a href={COMPANY_URL} target="_blank" rel="noopener noreferrer">{COMPANY_LEGAL_NAME}</a>
+            <a href={COMPANY_URL} target="_blank" rel="noopener noreferrer">{COMPANY_NAME}</a>.
+            {' '}AgentDisk&trade; is a product by {COMPANY_NAME}.
           </span>
           <span>Files your agents can reason about.</span>
         </div>

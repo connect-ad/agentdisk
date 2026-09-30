@@ -56,8 +56,8 @@ describe('the company byline', () => {
     at('/', <Footer />);
     const foot = screen.getByRole('contentinfo');
     const base = foot.querySelector('.mk__footbase');
-    // Exact wording, 30 Sept 2026: "© <year> Kernelv5. AgentDisk™ is a product by Kernelv5."
-    expect(base.textContent).toContain(`© ${new Date().getFullYear()} ${COMPANY_NAME}. AgentDisk™ is a product by ${COMPANY_NAME}.`);
+    // Exact wording, 30 Sept 2026: "© <year> Kernelv5. AgentDisk is a product by Kernelv5."
+    expect(base.textContent).toContain(`© ${new Date().getFullYear()} ${COMPANY_NAME}. AgentDisk is a product by ${COMPANY_NAME}.`);
     expect(within(base).getByRole('link', { name: COMPANY_NAME }).getAttribute('href')).toBe(COMPANY_URL);
     // Inside the footer's brand lockup, under the wordmark.
     expect(foot.querySelector('.mk__footbrand .byline')).not.toBeNull();

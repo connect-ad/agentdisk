@@ -136,6 +136,8 @@ jobs:
       # environment and would read repository scope instead.
       WEB_DOMAIN: ${{ vars.WEB_DOMAIN }}
       WEB_WORKER_NAME: ${{ vars.WEB_WORKER_NAME }}
+      # The marketing hostname the dashboard's Worker also answers on.
+      SITE_DOMAIN: ${{ vars.SITE_DOMAIN }}
       ADMIN_DOMAIN: ${{ vars.ADMIN_DOMAIN }}
       ADMIN_WORKER_NAME: ${{ vars.ADMIN_WORKER_NAME }}
 

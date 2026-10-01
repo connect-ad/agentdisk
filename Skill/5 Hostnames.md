@@ -76,6 +76,13 @@ describe a different backend than the app calls. COOP is absent and
 `style-src` allows `'unsafe-inline'` for reasons recorded in the script's
 header.
 
+Two headers the build does not emit, `Permissions-Policy` and
+`Cross-Origin-Opener-Policy: same-origin-allow-popups`, are added at the edge
+by a Cloudflare Transform Rule on the site and app hostnames since
+30 September 2026. The rule, and the SEO findings against the prerendered
+pages (soft 404s, missing sitemap, four routes not prerendered), are in
+[12 Hardening](12%20Hardening.md).
+
 ## The public pages are static HTML
 
 `npm run build` ends with `scripts/prerender.mjs`, which renders `/`,

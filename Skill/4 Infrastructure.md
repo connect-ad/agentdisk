@@ -115,6 +115,12 @@ why the original rule counted nothing. The path-only rule also counts the
 dashboard's `GET /v1/workspaces`, so its threshold must stay well above one
 page load.
 
+The 30 September 2026 audit reported no edge limit on that path, which
+contradicts this section; verify in the dashboard before trusting either.
+That audit also changed six zone settings by hand, including DNSSEC, which is
+pending a DS record at the registrar. All of it is in
+[12 Hardening](12%20Hardening.md).
+
 ## Testing anything per-IP from this machine
 
 The development machine sits behind a VPN that hands every TCP connection a

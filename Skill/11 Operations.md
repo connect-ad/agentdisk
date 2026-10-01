@@ -25,6 +25,10 @@ nothing in CI can see it:
 4. **R2 signing token** scoped to `agentdisk-prod-files`.
 5. **DNS**: the GoDaddy A records and the `www` CNAME on the apex deleted so
    Terraform could attach the Worker.
+6. **Zone hardening, 30 September 2026**: Always Use HTTPS, minimum TLS 1.2,
+   DNSSEC (pending the DS record at the registrar), a Transform Rule that
+   adds `Permissions-Policy` and COOP at the edge, CT monitoring and Crawler
+   Hints, all set in the dashboard. See [12 Hardening](12%20Hardening.md).
 
 Dev is the same shape on `dev.`, `app-dev.`, `api-dev.`, `mcp-dev.` and
 `securepanel-dev.`, deployed on every push to `dev`.
@@ -73,6 +77,7 @@ a live hostname; see [1 Build](1%20Build.md).
 | Every purchase fails, suite green | The Checkout Session's parameters; a live session is the only proof Stripe accepts them |
 | Mail stopped | [2 Email](2%20Email.md), and remember Worker mail and Firebase mail share one quota |
 | Sign-in fails with `unauthorized-domain` | The Firebase project's authorized domains, which `firebase deploy` does not set |
+| Google sign-in popup opens and never completes | The edge COOP header from the hardening Transform Rule; it must stay `same-origin-allow-popups`. [12 Hardening](12%20Hardening.md) |
 | Email-link sign-in stopped after a Firebase deploy | `passwordRequired` was reset; re-assert it |
 | A plan edit appears to work then reverts | The `product.updated` webhook round-tripped stale metadata; check `metadataForPlan` against the decoder |
 | The pricing page shows nothing purchasable | The `plans` rows have no Stripe price IDs; run Sync from the console |

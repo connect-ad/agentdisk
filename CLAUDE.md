@@ -51,6 +51,7 @@ document gets corrected.**
 | 9 | [Admin Console](Skill/9%20Admin%20Console.md) | Roles, audit, deletion, routing, what the console refuses to render |
 | 10 | [Dashboard](Skill/10%20Dashboard.md) | Vendored components, tokens, overlays, focus, the resource cache, route groups |
 | 11 | [Operations](Skill/11%20Operations.md) | What is live, what was set up by hand, known gaps, what to check when something stops |
+| 12 | [Hardening](Skill/12%20Hardening.md) | The 30 September 2026 zone audit: Cloudflare settings changed by hand, the edge header rule, DNSSEC, SEO and agent-readiness findings, the open list |
 
 ## Rules that apply everywhere
 

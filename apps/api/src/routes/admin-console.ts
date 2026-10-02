@@ -25,7 +25,12 @@ import { z } from "zod";
 import { ApiError, validationError } from "../lib/errors";
 import { json, requireAdmin, type AdminDeps } from "./admin";
 import { AdminScopedAccess, type AdminUser } from "../admin/access";
-import { AdminUserAccess } from "../admin/users-access";
+import {
+  AdminUserAccess,
+  USER_LIST_STATUSES,
+  USER_PAGE_SIZES,
+  type UserListStatus,
+} from "../admin/users-access";
 import { AdminDeletionsAccess } from "../admin/deletions-access";
 import { AdminPlanAccess } from "../admin/plans-access";
 import { AdminBillingAccess } from "../admin/billing-access";
@@ -81,12 +86,41 @@ function stripeOf(deps: AdminDeps) {
 
 /* --------------------------------- users --------------------------------- */
 
+/**
+ * `GET /v1/admin/users`. With `email`, the exact-match lookup that answers one
+ * account and its memberships. Without it, one page of the customer list:
+ * `q` (address substring or exact user ID), `status`, `limit` (10, 20, 50 or
+ * 100) and `offset`. Values outside those sets are refused, not coerced, so a
+ * typo never answers a different question than the one asked.
+ */
 export async function adminFindUser(request: Request, deps: AdminDeps): Promise<Response> {
   const admin = await requireAdmin(request, deps);
-  const email = new URL(request.url).searchParams.get("email");
-  if (email === null) throw validationError("An email address is required.");
-
+  const params = new URL(request.url).searchParams;
+  const email = params.get("email");
   const users = area(AdminUserAccess, admin, deps);
+
+  if (email === null) {
+    const status = params.get("status") ?? "all";
+    if (!(USER_LIST_STATUSES as readonly string[]).includes(status)) {
+      throw validationError(`status must be one of ${USER_LIST_STATUSES.join(", ")}.`);
+    }
+    const limit = Number(params.get("limit") ?? "20");
+    if (!(USER_PAGE_SIZES as readonly number[]).includes(limit)) {
+      throw validationError(`limit must be one of ${USER_PAGE_SIZES.join(", ")}.`);
+    }
+    const offset = Number(params.get("offset") ?? "0");
+    if (!Number.isInteger(offset) || offset < 0) {
+      throw validationError("offset must be a whole number, zero or more.");
+    }
+    const search = params.get("q");
+    if (search !== null && search.length > 200) {
+      throw validationError("q is limited to 200 characters.");
+    }
+    return json(
+      await users.list({ search, status: status as UserListStatus, limit, offset })
+    );
+  }
+
   const user = await users.findByEmail(email);
   if (user === null) return json({ user: null, memberships: [] });
 

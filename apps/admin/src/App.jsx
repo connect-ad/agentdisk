@@ -8,7 +8,7 @@ import { ToastDock } from './components/Overlay.jsx';
 import { Login } from './screens/Login.jsx';
 import { Overview } from './screens/Overview.jsx';
 import { WorkspaceDetail, WorkspaceList } from './screens/Workspaces.jsx';
-import { Users } from './screens/Users.jsx';
+import { UserDetail, Users } from './screens/Users.jsx';
 import { Billing } from './screens/Billing.jsx';
 import { Plans, SyncHistory } from './screens/Plans.jsx';
 import { Promos } from './screens/Promos.jsx';
@@ -94,8 +94,11 @@ function describe(path) {
     return {
       key: 'users',
       title: 'Users',
-      subtitle: 'Exact-match lookup by email. Returns the account and its memberships.'
+      subtitle: 'Every customer account, newest first. Each page you read is recorded in the audit log.'
     };
+  }
+  if (path.startsWith('/users/')) {
+    return { key: 'users', title: 'User', subtitle: null };
   }
   if (path === '/billing') {
     return {
@@ -147,8 +150,15 @@ function describe(path) {
   return { key: 'overview', title: 'Not found', subtitle: null };
 }
 
-/** The minimum role a route needs, mirrored from the server's own gates. */
-const ROUTE_ROLE = { admin: 'super_admin' };
+/**
+ * The minimum role a route needs, mirrored from the server's own gates.
+ *
+ * Empty since the server collapsed to one role. Admin Accounts asked for
+ * `super_admin` here long after nobody could hold it, so the screen refused
+ * every operator while the endpoints behind it answered 200. Restoring a tier
+ * is adding an entry here and a rank in `Shell.jsx`.
+ */
+const ROUTE_ROLE = {};
 
 export default function App() {
   const [admin, setAdmin] = useState(null);
@@ -308,7 +318,16 @@ export default function App() {
         />
       );
     }
-    if (path === '/users') return <Users role={admin.role} onNavigate={navigate} onToast={toast} />;
+    if (path === '/users') return <Users onNavigate={navigate} />;
+    if (path.startsWith('/users/')) {
+      return (
+        <UserDetail
+          userId={path.slice('/users/'.length)}
+          onNavigate={navigate}
+          onToast={toast}
+        />
+      );
+    }
     if (path === '/billing') return <Billing filter="all" />;
     if (path === '/billing/past-due') return <Billing filter="past_due" />;
     if (path === '/billing/canceled') return <Billing filter="canceled" />;

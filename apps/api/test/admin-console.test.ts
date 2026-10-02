@@ -253,6 +253,93 @@ describe("looking a customer up", () => {
   });
 });
 
+describe("listing customers", () => {
+  // Twelve people on their own domain, so the filter isolates them from
+  // whatever else the seed holds, plus one sandbox placeholder.
+  async function seedPeople(): Promise<void> {
+    await env.DB.prepare(`DELETE FROM users WHERE email LIKE '%@listing.example'`).run();
+    for (let i = 1; i <= 12; i += 1) {
+      const n = String(i).padStart(2, "0");
+      await env.DB.prepare(
+        `INSERT INTO users (id, email, email_verified_at, disabled_at, deleted_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+        .bind(
+          `usr_LIST${n}`,
+          `person${n}@listing.example`,
+          i === 12 ? null : NOW,
+          i === 3 ? NOW : null,
+          i === 4 ? NOW : null,
+          NOW + i,
+          NOW
+        )
+        .run();
+    }
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO users (id, email, is_provisional, created_at, updated_at)
+       VALUES ('usr_LISTSBX', 'unclaimed-usr_LISTSBX@agentdisk.invalid', 1, ?, ?)`
+    )
+      .bind(NOW, NOW)
+      .run();
+  }
+
+  type Page = { users: { id: string; email: string }[]; total: number; limit: number; offset: number };
+  const page = async (query: string): Promise<Page> => {
+    const res = await call("GET", `/v1/admin/users?${query}`, admin);
+    expect(res.status).toBe(200);
+    return (await res.json()) as Page;
+  };
+
+  it("pages newest first, with the total behind the page", async () => {
+    await seedPeople();
+    const first = await page("q=listing.example&limit=10&offset=0");
+    expect(first.total).toBe(12);
+    expect(first.users).toHaveLength(10);
+    expect(first.users[0]?.email).toBe("person12@listing.example");
+
+    const second = await page("q=listing.example&limit=10&offset=10");
+    expect(second.users.map(u => u.email)).toEqual([
+      "person02@listing.example",
+      "person01@listing.example",
+    ]);
+  });
+
+  it("filters by status, and keeps sandbox placeholders out of every other view", async () => {
+    await seedPeople();
+    expect((await page("q=listing.example&status=disabled&limit=10")).users.map(u => u.id)).toEqual(["usr_LIST03"]);
+    expect((await page("q=listing.example&status=deleted&limit=10")).users.map(u => u.id)).toEqual(["usr_LIST04"]);
+    expect((await page("q=listing.example&status=unverified&limit=10")).users.map(u => u.id)).toEqual(["usr_LIST12"]);
+    expect((await page("q=listing.example&status=active&limit=10")).total).toBe(10);
+
+    expect((await page("q=usr_LISTSBX&limit=10")).total).toBe(0);
+    expect((await page("q=usr_LISTSBX&status=sandbox&limit=10")).users.map(u => u.id)).toEqual(["usr_LISTSBX"]);
+  });
+
+  it("matches LIKE wildcards in the search literally", async () => {
+    await seedPeople();
+    expect((await page("q=person%25&limit=10")).total).toBe(0);
+    expect((await page("q=person_1&limit=10")).total).toBe(0);
+  });
+
+  it("refuses a page size, status or offset outside the offered set", async () => {
+    expect((await call("GET", "/v1/admin/users?limit=25", admin)).status).toBe(400);
+    expect((await call("GET", "/v1/admin/users?limit=1000", admin)).status).toBe(400);
+    expect((await call("GET", "/v1/admin/users?status=everyone", admin)).status).toBe(400);
+    expect((await call("GET", "/v1/admin/users?offset=-1", admin)).status).toBe(400);
+  });
+
+  it("writes every page read to the audit log with its filter", async () => {
+    await seedPeople();
+    await page("q=listing.example&status=active&limit=20&offset=0");
+    const row = await env.DB.prepare(
+      `SELECT actor_id, metadata FROM admin_actions WHERE action = 'user.list'`
+    ).first<{ actor_id: string; metadata: string }>();
+    expect(row?.actor_id).toBe("stf_ADMIN");
+    const metadata = JSON.parse(row?.metadata ?? "{}");
+    expect(metadata).toMatchObject({ search: "listing.example", status: "active", limit: 20, offset: 0, returned: 10 });
+  });
+});
+
 /* ------------------------------- deletions ------------------------------- */
 
 describe("deleting a workspace", () => {

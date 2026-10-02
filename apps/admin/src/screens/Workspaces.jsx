@@ -274,7 +274,7 @@ export function WorkspaceDetail({ workspaceId, role, onNavigate, onToast }) {
   if (!workspace) return <ErrorState error={resource.error} onRetry={resource.refresh} />;
 
   const canSuspend = holds(role, 'admin');
-  const canDelete = holds(role, 'super_admin');
+  const canDelete = holds(role, 'admin');
   const suspended = workspace.status === 'suspended';
   const deleted = workspace.status === 'deleted';
   const planRow = (plans.data?.plans ?? []).find(p => p.id === workspace.plan);

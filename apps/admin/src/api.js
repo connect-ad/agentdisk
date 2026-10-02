@@ -136,6 +136,9 @@ export const adminApi = {
 
   /* --------------------------------- users ------------------------------- */
   findUser: email => request(`/v1/admin/users${query({ email })}`),
+  /** One page of customers: `{ q, status, limit, offset }`. Audited per page. */
+  listUsers: ({ q, status, limit, offset }) =>
+    request(`/v1/admin/users${query({ q, status, limit, offset })}`),
   getUser: id => request(`/v1/admin/users/${id}`),
   setUserDisabled: (id, disabled, reason) =>
     request(`/v1/admin/users/${id}/disable`, { method: 'PATCH', body: { disabled, reason } }),

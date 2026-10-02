@@ -29,6 +29,29 @@ to `RANK`. `admin-plans.test.ts` asserts that no `admin.denied` row is ever
 written, so the day a tier comes back that test failing is the reminder the
 denial path is live again.
 
+The console mirrors this in `ROUTE_ROLE` in `App.jsx` and `RANK` in
+`Shell.jsx`. Both must name only roles the server can hand out. Until
+2 October 2026 `ROUTE_ROLE` still asked for `super_admin` on Admin Accounts,
+and `holds` gated workspace delete and plan creation the same way, so every
+operator saw "Your role cannot open this screen" while the endpoints answered
+200. The add-admin dialog sends `admin` and offers no role picker.
+
+## Users is a browsable list, audited per page
+
+`GET /v1/admin/users` without `email` returns one page of customers, newest
+first: `q` matches part of an address or a whole user ID, `status` is one of
+`all`, `active`, `disabled`, `deleted`, `unverified` or `sandbox`, and `limit`
+must be 10, 20, 50 or 100. Anything else is refused with 400 rather than
+coerced. Sandbox placeholders are hidden from every status but their own.
+With `email` it is still the exact-match lookup.
+
+This replaced exact-match-only lookup at the owner's request on 2 October
+2026. The old rule existed so the console could not enumerate the customer
+base. What stands in for it now is the audit log: every page read writes a
+`user.list` row with the filter, page size, offset and row count. A user's
+detail lives at `/users/:id`, and the list remembers its filter and page for
+the rest of the tab.
+
 ## Audit discipline is inherited
 
 `AuditedAdminAccess` holds `record`, `recordFleet` and `requireRole` as

@@ -59,7 +59,7 @@ Plan limits shaped several decisions below.
 | F17 | Email | The prod zone carries TXT `firebase=agentdisk-dev`, which says the prod email domain is verified to the **dev** Firebase project | Open |
 | F18 | Email | DMARC `rua` points at `dmarc_rua@onsecureserver.net`, a third party | Open |
 | F19 | Agents | `api.agentdisk.io` has no discovery: `GET /` is a JSON 404; no `openapi.json`, `/.well-known/api-catalog` or OAuth metadata | Open, code drafted |
-| F20 | Agents | Cloudflare Agent Readiness: Level 1 **2/5** (missing Sitemap, Content Signals, Markdown negotiation); Level 2 **0/3** (API Catalog, Link headers, Auth.md); Level 3 **0/8** (OAuth Discovery, OAuth Protected Resource, A2A Agent Card, Skills Index, MCP Server Card, Web Bot Auth, WebMCP, DNS-AID) | Open |
+| F20 | Agents | Cloudflare Agent Readiness: Level 1 **2/5** (missing Sitemap, Content Signals, Markdown negotiation); Level 2 **0/3** (API Catalog, Link headers, Auth.md); Level 3 **0/8** (OAuth Discovery, OAuth Protected Resource, A2A Agent Card, Skills Index, MCP Server Card, Web Bot Auth, WebMCP, DNS-AID) | Open. The isitagentready.com scan of 4 Oct 2026 passes Sitemap, Content Signals, robots AI rules and Link headers; Markdown negotiation **fixed 4 Oct 2026** in `worker.js` (zone-level Markdown for Agents needs Pro; the zone is Free) |
 | F21 | Agents | Bot Preference Sync is on, but the Worker serves its own `robots.txt`, so Cloudflare's managed robots rules are never prepended. Robots and Content Signals must come from the Worker | **Fixed 3 Oct 2026**: the generated robots.txt carries Content Signals and the training-crawler group |
 
 **Note on F14.** [4 Infrastructure](4%20Infrastructure.md) records a WAF
@@ -184,8 +184,8 @@ SEO and agent improvements:
 13. JSON-LD `Organization` (Kernelv5, logo, `sameAs`) and `offers` with the
     free tier at price 0 (F6).
 14. Split `/docs` into one page per topic (F6).
-15. Markdown for docs: `/llms-full.txt`, or `Accept: text/markdown`
-    negotiation (F20).
+15. ~~Markdown for docs: `Accept: text/markdown` negotiation (F20).~~ Done
+    4 Oct 2026; `/llms-full.txt` remains unbuilt.
 16. OAuth metadata for MCP (`/.well-known/oauth-protected-resource` plus
     authorization-server metadata) so the Claude and ChatGPT connectors can
     use OAuth instead of pasted keys (F19, F20).

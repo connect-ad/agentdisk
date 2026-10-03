@@ -3,7 +3,7 @@
  * hostname. See worker.js's header for the rules; each rule has a case here.
  */
 import { describe, expect, it } from 'vitest';
-import worker, { HOMEPAGE_LINKS, decide, isFilePath, isSitePath } from '../worker.js';
+import worker, { HOMEPAGE_LINKS, decide, isFilePath, isSitePath, prefersMarkdown } from '../worker.js';
 
 const env = {
   SITE_HOST: 'dev.agentdisk.io',
@@ -199,5 +199,86 @@ describe('the homepage Link header', () => {
     expect(pricing.headers.get('link')).toBeNull();
     const app = await worker.fetch(new Request('https://app-dev.agentdisk.io/'), filesEnv);
     expect(app.headers.get('link')).toBeNull();
+  });
+});
+
+/* ------------------------- markdown for agents ------------------------- */
+
+// An asset server holding the HTML pages and their markdown twins.
+const mdEnv = {
+  ...env,
+  ASSETS: {
+    fetch: async request => {
+      const path = new URL(request.url).pathname;
+      const files = {
+        '/index.md': ['---\ntitle: "AgentDisk"\n---\n\n# Home\n', 'text/markdown'],
+        '/pricing.md': ['# Pricing\n', 'text/markdown'],
+        '/docs.md': ['# Docs\n', 'text/markdown'],
+        '/pricing': ['<html>pricing</html>', 'text/html; charset=utf-8']
+      };
+      const [body, type] = files[path] ?? ['<!doctype html><title>home</title>', 'text/html; charset=utf-8'];
+      return new Response(body, { status: 200, headers: { 'content-type': type, 'x-frame-options': 'DENY' } });
+    }
+  }
+};
+const get = (path, accept, host = 'dev.agentdisk.io') =>
+  worker.fetch(new Request(`https://${host}${path}`, accept ? { headers: { accept } } : {}), mdEnv);
+
+describe('prefersMarkdown', () => {
+  it('is true for an agent that names text/markdown', () => {
+    for (const a of ['text/markdown', 'text/markdown, text/html;q=0.9', 'text/html;q=0.5, text/markdown', 'text/markdown, */*']) {
+      expect(prefersMarkdown(a), a).toBe(true);
+    }
+  });
+  it('is false for a browser, for */*, and when HTML is preferred', () => {
+    for (const a of [
+      '',
+      null,
+      '*/*',
+      'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'text/html, text/markdown;q=0.5',
+      'text/markdown;q=0'
+    ]) {
+      expect(prefersMarkdown(a), String(a)).toBe(false);
+    }
+  });
+});
+
+describe('content negotiation on the site pages', () => {
+  it('answers markdown, with its content type, Vary and a token estimate', async () => {
+    for (const [path, body] of [['/', '# Home'], ['/pricing', '# Pricing'], ['/docs/', '# Docs']]) {
+      const res = await get(path, 'text/markdown');
+      expect(`${path} ${res.status}`).toBe(`${path} 200`);
+      expect(res.headers.get('content-type')).toBe('text/markdown; charset=utf-8');
+      expect(res.headers.get('vary')).toBe('Accept');
+      expect(Number(res.headers.get('x-markdown-tokens'))).toBeGreaterThan(0);
+      expect(res.headers.get('x-frame-options')).toBe('DENY');
+      expect(await res.text()).toContain(body);
+    }
+  });
+
+  it('keeps HTML the default, and says the URL varies by Accept', async () => {
+    const home = await get('/', 'text/html,*/*;q=0.8');
+    expect(home.headers.get('content-type')).toContain('text/html');
+    expect(home.headers.get('vary')).toBe('Accept');
+    expect(home.headers.get('link')).toBe(HOMEPAGE_LINKS);
+    const pricing = await get('/pricing');
+    expect(await pricing.text()).toBe('<html>pricing</html>');
+    expect(pricing.headers.get('vary')).toBe('Accept');
+  });
+
+  it('serves HTML when the build has no markdown twin', async () => {
+    const bare = { ...env };
+    const res = await worker.fetch(new Request('https://dev.agentdisk.io/pricing', { headers: { accept: 'text/markdown' } }), bare);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/html');
+  });
+
+  it('touches nothing else: other site paths, the app host, single-host mode', async () => {
+    expect(decide(at('dev.agentdisk.io', '/sandbox'), env, 'text/markdown')).toEqual({ kind: 'assets' });
+    expect(decide(at('app-dev.agentdisk.io', '/pricing'), env, 'text/markdown')).toEqual({ kind: 'app-assets' });
+    expect(decide(at('localhost', '/'), { ASSETS: env.ASSETS }, 'text/markdown')).toEqual({ kind: 'assets' });
+    const app = await get('/pricing', 'text/markdown', 'app-dev.agentdisk.io');
+    expect(app.headers.get('content-type')).toContain('text/html');
   });
 });

@@ -18,6 +18,9 @@
  *                  and a crawler sees a redirect rather than a copy.
  *                  A file that does not exist is a real 404, and `/` carries
  *                  a Link header naming llms.txt and the docs (3 Oct 2026).
+ *                  `/`, `/pricing` and `/docs` asked for with
+ *                  `Accept: text/markdown` answer their markdown twin from
+ *                  the build (4 Oct 2026); HTML stays the default.
  *   anything else  The app: every path is served, and the response says
  *                  noindex. The app host is never indexed once the site
  *                  exists; the canonical URLs in the marketing pages already
@@ -44,6 +47,14 @@
  * request, so the two lists must agree.
  */
 const SITE_ROUTES = new Set(['/', '/pricing', '/docs', '/sandbox', '/terms', '/privacy']);
+
+/**
+ * The site pages that have a markdown twin in `dist/`, written beside the
+ * HTML by scripts/prerender.mjs from the same rendered markup. Cloudflare's
+ * zone-level Markdown for Agents would convert at the edge, but it needs the
+ * Pro plan; the zone is on Free.
+ */
+export const MARKDOWN_PAGES = { '/': '/index.md', '/pricing': '/pricing.md', '/docs': '/docs.md' };
 
 /** The robots.txt the app host always answers. */
 const APP_ROBOTS = 'User-agent: *\nDisallow: /\n';
@@ -89,6 +100,26 @@ export const HOMEPAGE_LINKS = [
 ].join(', ');
 
 /**
+ * True when an Accept header asks for markdown at least as strongly as for
+ * HTML. A browser never names text/markdown, so it always gets HTML; an
+ * agent sending `Accept: text/markdown` gets markdown. `*\/*` counts for
+ * neither, since it expresses no preference between the two.
+ */
+export function prefersMarkdown(accept) {
+  if (!accept) return false;
+  let markdown = 0;
+  let html = 0;
+  for (const part of accept.split(',')) {
+    const [type, ...params] = part.trim().toLowerCase().split(';');
+    const q = params.map(p => p.trim()).find(p => p.startsWith('q='));
+    const weight = q ? Number(q.slice(2)) || 0 : 1;
+    if (type.trim() === 'text/markdown') markdown = Math.max(markdown, weight);
+    if (type.trim() === 'text/html') html = Math.max(html, weight);
+  }
+  return markdown > 0 && markdown >= html;
+}
+
+/**
  * True when the asset server answered a file path with the SPA shell: the
  * `not_found_handling` fallback, which returns index.html with 200 for any
  * path it has no file for. A real .html file is the one HTML answer that is
@@ -107,12 +138,14 @@ export function isSpaFallback(pathname, response) {
  * Returns one of:
  *   { kind: 'assets' }       serve from the assets as-is
  *   { kind: 'site-home' }    the site's `/`, with the Link header added
+ *   { kind: 'site-page' }    a site page that also has a markdown twin
+ *   { kind: 'site-markdown', file }  that twin, for an agent that asked
  *   { kind: 'site-file' }    a file on the site host: the asset, or a 404
  *   { kind: 'app-assets' }   serve from the assets, marked noindex
  *   { kind: 'robots' }       the app host's own robots.txt
  *   { kind: 'redirect', status, location }
  */
-export function decide(url, env) {
+export function decide(url, env, accept = '') {
   const site = env.SITE_HOST;
   if (!site) return { kind: 'assets' };
 
@@ -124,7 +157,10 @@ export function decide(url, env) {
   }
 
   if (host === site) {
+    const markdown = MARKDOWN_PAGES[path];
+    if (markdown && prefersMarkdown(accept)) return { kind: 'site-markdown', file: markdown };
     if (path === '/') return { kind: 'site-home' };
+    if (markdown) return { kind: 'site-page' };
     if (isFilePath(path)) return { kind: 'site-file' };
     if (isSitePath(path)) return { kind: 'assets' };
     return { kind: 'redirect', status: 302, location: `https://${env.APP_HOST}${url.pathname}${url.search}` };
@@ -134,10 +170,24 @@ export function decide(url, env) {
   return { kind: 'app-assets' };
 }
 
+/** Headers on a fetched Response are immutable; copy, then say the URL negotiates. */
+function withVary(response) {
+  const varied = new Response(response.body, response);
+  varied.headers.set('vary', 'Accept');
+  return varied;
+}
+
+/** The HTML of a page with a markdown twin, with the homepage's Link header on `/`. */
+async function htmlPage(request, env, home) {
+  const page = withVary(await env.ASSETS.fetch(request));
+  if (home) page.headers.set('link', HOMEPAGE_LINKS);
+  return page;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const action = decide(url, env);
+    const action = decide(url, env, request.headers.get('accept'));
 
     switch (action.kind) {
       case 'redirect':
@@ -147,11 +197,27 @@ export default {
           status: 200,
           headers: { 'content-type': 'text/plain; charset=utf-8', 'x-robots-tag': ROBOTS_NOINDEX }
         });
-      case 'site-home': {
-        const response = await env.ASSETS.fetch(request);
-        const linked = new Response(response.body, response);
-        linked.headers.set('link', HOMEPAGE_LINKS);
-        return linked;
+      case 'site-home':
+      case 'site-page':
+        return htmlPage(request, env, action.kind === 'site-home');
+      case 'site-markdown': {
+        // Method and headers carry over, so HEAD and If-None-Match still work.
+        const twin = new Request(new URL(action.file, url), { method: request.method, headers: request.headers });
+        const response = await env.ASSETS.fetch(twin);
+        if (response.status === 304) return withVary(response);
+        // A build without the twin falls back to the page, never a 404.
+        if (!response.ok || isSpaFallback(action.file, response)) {
+          return htmlPage(request, env, normalize(url.pathname) === '/');
+        }
+        const text = await response.text();
+        const headers = new Headers(response.headers);
+        headers.set('content-type', 'text/markdown; charset=utf-8');
+        headers.set('vary', 'Accept');
+        headers.delete('content-length');
+        // An estimate, at four characters a token: enough to size a context
+        // window or a chunking strategy, which is what the header is for.
+        if (text) headers.set('x-markdown-tokens', String(Math.ceil(text.length / 4)));
+        return new Response(request.method === 'HEAD' ? null : text, { status: response.status, headers });
       }
       case 'site-file': {
         const response = await env.ASSETS.fetch(request);

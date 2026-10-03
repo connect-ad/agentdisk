@@ -19,6 +19,11 @@
  * decide whether the markup belongs to the URL being viewed. The smoke test
  * reads the same tag to prove the deployed site carries prerendered routes.
  *
+ * Beside each page goes its markdown twin, `index.md`, `pricing.md` and
+ * `docs.md`, converted from the same rendered markup by
+ * `scripts/page-markdown.mjs`. `worker.js` serves it on the site host to a
+ * request that asks for `text/markdown` (4 Oct 2026).
+ *
  * Every failure throws: a build that quietly shipped the empty shell would be
  * the defect this script exists to remove.
  */
@@ -28,6 +33,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'vite';
 import { headTags } from '../src/lib/seo.js';
+import { markdownFileFor, pageMarkdown } from './page-markdown.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
@@ -81,6 +87,11 @@ for (const route of PRERENDERED_ROUTES) {
   const file = route === '/' ? 'index.html' : `${route.slice(1)}.html`;
   writeFileSync(join(dist, file), page, 'utf8');
   console.log(`prerendered ${route} -> dist/${file} (${page.length} bytes)`);
+
+  const markdown = pageMarkdown(route, html);
+  const mdFile = markdownFileFor(route);
+  writeFileSync(join(dist, mdFile), markdown, 'utf8');
+  console.log(`prerendered ${route} -> dist/${mdFile} (${markdown.length} bytes)`);
 }
 
 rmSync(ssrDir, { recursive: true, force: true });

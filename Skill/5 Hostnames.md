@@ -68,6 +68,25 @@ from the prerendered route list. On the site host the Worker answers a
 missing file with a real 404 rather than the SPA fallback. Both are in
 [12 Hardening](12%20Hardening.md).
 
+## Markdown for agents
+
+`/`, `/pricing` and `/docs` on the site host negotiate: a request whose
+`Accept` names `text/markdown` at least as strongly as `text/html` gets
+`index.md`, `pricing.md` or `docs.md` with `Content-Type: text/markdown`,
+`Vary: Accept` and an `x-markdown-tokens` estimate (characters ÷ 4). Every
+other request, every browser included, gets the HTML, which also carries
+`Vary: Accept`. The `.md` files are written by `scripts/prerender.mjs` from
+the same rendered markup as the HTML, through `scripts/page-markdown.mjs`
+(`node-html-markdown`, a build-only dependency). The nav, icons, buttons and
+form controls are dropped; title, description and canonical URL go in front
+matter. The files are also reachable by name (`/docs.md`).
+
+Cloudflare's zone-level Markdown for Agents would do this at the edge with no
+code, but it needs the Pro plan and the zone is Free. **A route added to
+`PRERENDERED_ROUTES` needs its entry in `MARKDOWN_PAGES` in `worker.js`**;
+`test/prerender.test.jsx` fails until the two agree. The app host and
+single-host mode never negotiate.
+
 The API Worker and the admin console refuse indexing in every environment;
 neither has a prod in which being found would be right.
 

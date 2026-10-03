@@ -26,7 +26,6 @@ date was a build; this page and the skills describe the product as it runs.
 | `.github/workflows/` | Three areas, `infra`, `backend`, `frontend`, each one reusable engine plus thin per-environment callers. `ci.yml` gates PRs. |
 | `Skill/` | How this project is built, deployed and operated, by topic. **Read the skill for the area before touching it.** |
 | `design-system/` | Four hand-exported Claude Design artboards and the logo. Read-only; the source of truth is the Claude Design project `d311bfd0-9751-4a9b-84f4-b33e7a09378e`. |
-| `docs/` | `USER_TESTING_GUIDE.md`, the walkthrough a person follows, and `ui-layering.md`, which owns the overlay scale. |
 | `regression-tests/` | Playwright against a live hostname. |
 | `.claude/commands/` | `cpack`, which persists session knowledge into these documents. |
 
@@ -52,6 +51,7 @@ document gets corrected.**
 | 10 | [Dashboard](Skill/10%20Dashboard.md) | Vendored components, tokens, overlays, focus, the resource cache, route groups |
 | 11 | [Operations](Skill/11%20Operations.md) | What is live, what was set up by hand, known gaps, what to check when something stops |
 | 12 | [Hardening](Skill/12%20Hardening.md) | The 30 September 2026 zone audit: Cloudflare settings changed by hand, the edge header rule, DNSSEC, SEO and agent-readiness findings, the open list |
+| 13 | [UI Layering](Skill/13%20UI%20Layering.md) | The overlay ladder and the modal contract shared by the dashboard and the console; cited by section number from both apps |
 
 ## Rules that apply everywhere
 

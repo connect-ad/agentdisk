@@ -554,7 +554,7 @@ export default function FileBrowser() {
         full-screen scrim wherever it sits in the tree — it is not a portal —
         so nesting it inside the drawer would cap its stacking context at the
         drawer's own, the same class of bug that once buried a confirmation
-        dialog under the file drawer (docs/ui-layering.md).
+        dialog under the file drawer (Skill/13 UI Layering.md).
       */}
       <ShareModal
         open={shareOpen}

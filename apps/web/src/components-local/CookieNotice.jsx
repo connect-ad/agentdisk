@@ -40,7 +40,7 @@ import { applyAnalyticsConsent } from '../lib/analytics.js';
  * its canvas placeholder and was never this product's domain.
  *
  * ── Layering ──────────────────────────────────────────────────────────────
- * The bar sits on the `--z-nav` rung (docs/ui-layering.md §1): it is sticky
+ * The bar sits on the `--z-nav` rung (Skill/13 UI Layering.md §1): it is sticky
  * chrome, and it must fall behind a drawer and a dialog, both of which ask a
  * question that has to be answered first. Its two dialogs are rendered as
  * siblings of the bar from `main.jsx`, outside `<App>` — never inside another

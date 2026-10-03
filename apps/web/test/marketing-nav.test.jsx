@@ -230,7 +230,7 @@ describe('the Support item', () => {
     const dialog = screen.getByRole('dialog');
     // .mk__nav is sticky with z-index 30 and is therefore a stacking context.
     // A scrim inside it is capped by that context whatever its own z-index --
-    // the trap docs/ui-layering.md §1 records against .wsx__menu.
+    // the trap Skill/13 UI Layering.md §1 records against .wsx__menu.
     expect(nav.contains(dialog)).toBe(false);
   });
 

@@ -7,7 +7,7 @@
  * this size.
  *
  * The ladder is the exception, because it is the one thing that must agree with
- * a *different application*. `docs/ui-layering.md` is the agreement; the numbers
+ * a *different application*. `Skill/13 UI Layering.md` is the agreement; the numbers
  * below are the same numbers `apps/web/src/app.css` declares, deliberately
  * duplicated rather than imported.
  *
@@ -16,7 +16,7 @@
  * how a support engineer knows which console they are typing into, per
  * CLAUDE.md and coordination/DEFERRED.md X-02. Sharing a stylesheet to keep
  * seven integers in step would reintroduce exactly the coupling that separation
- * exists to prevent. If a rung moves, it moves in ui-layering.md first and in
+ * exists to prevent. If a rung moves, it moves in Skill/13 UI Layering.md first and in
  * both apps after.
  *
  * The rule, in one line: **a modal always covers a drawer, and a toast always

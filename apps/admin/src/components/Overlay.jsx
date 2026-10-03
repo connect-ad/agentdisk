@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 /**
  * The admin console's own dialog primitives.
  *
- * Written here rather than imported from `apps/web`, per docs/ui-layering.md §3
+ * Written here rather than imported from `apps/web`, per Skill/13 UI Layering.md §3
  * and coordination/DEFERRED.md X-02: the console does not take the customer
  * design system, because looking different is how a support engineer knows
  * which app they are in. The *ladder* and the *contract* are shared; the
@@ -580,7 +580,7 @@ export function ConfirmModal({
  *
  * One element carrying `--z-toast`, rather than the inline `zIndex: 90` repeated
  * across eight route files in the customer app — a set of copies nothing keeps
- * in step. ui-layering.md asks both tracks not to add a ninth.
+ * in step. Skill/13 UI Layering.md asks both tracks not to add a ninth.
  */
 export function ToastDock({ toasts = [], onDismiss }) {
   if (toasts.length === 0) return null;

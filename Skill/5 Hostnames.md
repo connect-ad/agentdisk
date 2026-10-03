@@ -87,6 +87,25 @@ code, but it needs the Pro plan and the zone is Free. **A route added to
 `test/prerender.test.jsx` fails until the two agree. The app host and
 single-host mode never negotiate.
 
+## Agent discovery documents
+
+The build also writes the documents the Cloudflare Agent Readiness checks
+look for, from `scripts/agent-discovery.js` in the same plugin that writes
+robots.txt: `/auth.md`, `/openapi.json`, `/.well-known/api-catalog`,
+`/.well-known/mcp/server-card.json`, `/.well-known/agent-skills/index.json`
+with its `SKILL.md` (llms.txt with front matter, digest computed at build),
+and `/.well-known/ai-catalog.json`. Every URL in them comes from
+`VITE_API_BASE`, `VITE_SITE_HOST` and `VITE_APP_HOST`, so dev's documents
+name dev; a build missing any of the three writes none. The Worker serves
+them with `Access-Control-Allow-Origin: *`, and the API catalog as
+`application/linkset+json`, which the asset server cannot infer from a file
+with no extension. The homepage `Link` header names the catalog.
+
+The OpenAPI document lists the agent-facing routes only, and **the MCP server
+card restates `SERVER_INFO` and `PROTOCOL_VERSION` from
+`apps/api/src/mcp/server.ts`**: `test/agent-discovery.test.js` fails when the
+API's version moves and the card does not.
+
 The API Worker and the admin console refuse indexing in every environment;
 neither has a prod in which being found would be right.
 

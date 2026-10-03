@@ -282,3 +282,55 @@ describe('content negotiation on the site pages', () => {
     expect(app.headers.get('content-type')).toContain('text/html');
   });
 });
+
+/* ------------------------- agent discovery documents ------------------------- */
+
+describe('the discovery documents on the site host', () => {
+  // An asset server holding the documents, typed the way it infers types: by
+  // extension, and octet-stream for a file that has none.
+  const discoveryEnv = {
+    ...env,
+    ASSETS: {
+      fetch: async request => {
+        const path = new URL(request.url).pathname;
+        const files = {
+          '/.well-known/api-catalog': ['{"linkset":[]}', 'application/octet-stream'],
+          '/.well-known/ai-catalog.json': ['{}', 'application/json'],
+          '/auth.md': ['# AgentDisk auth.md\n', 'text/markdown']
+        };
+        const [body, type] = files[path] ?? ['<!doctype html>', 'text/html; charset=utf-8'];
+        return new Response(body, { status: 200, headers: { 'content-type': type, 'x-frame-options': 'DENY' } });
+      }
+    }
+  };
+  const fetchDoc = path => worker.fetch(new Request(`https://dev.agentdisk.io${path}`), discoveryEnv);
+
+  it('serves the API catalog as application/linkset+json, readable from any origin', async () => {
+    const res = await fetchDoc('/.well-known/api-catalog');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('application/linkset+json');
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+    expect(res.headers.get('x-frame-options')).toBe('DENY');
+  });
+
+  it('keeps the inferred type of the others and adds the same CORS header', async () => {
+    const ai = await fetchDoc('/.well-known/ai-catalog.json');
+    expect(ai.headers.get('content-type')).toBe('application/json');
+    expect(ai.headers.get('access-control-allow-origin')).toBe('*');
+    const auth = await fetchDoc('/auth.md');
+    expect(auth.headers.get('content-type')).toBe('text/markdown');
+    expect(auth.headers.get('access-control-allow-origin')).toBe('*');
+  });
+
+  it('still answers 404 for a document the build did not write, and adds nothing to other files', async () => {
+    const missing = await fetchDoc('/.well-known/mcp/server-card.json');
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get('access-control-allow-origin')).toBeNull();
+    const robots = await worker.fetch(new Request('https://dev.agentdisk.io/robots.txt'), filesEnv);
+    expect(robots.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('is named from the homepage Link header', () => {
+    expect(HOMEPAGE_LINKS).toContain('</.well-known/api-catalog>; rel="api-catalog"');
+  });
+});

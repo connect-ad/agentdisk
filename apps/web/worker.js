@@ -20,7 +20,9 @@
  *                  a Link header naming llms.txt and the docs (3 Oct 2026).
  *                  `/`, `/pricing` and `/docs` asked for with
  *                  `Accept: text/markdown` answer their markdown twin from
- *                  the build (4 Oct 2026); HTML stays the default.
+ *                  the build (4 Oct 2026); HTML stays the default. The
+ *                  agent discovery documents (auth.md, the API catalog, the
+ *                  MCP server card...) are served readable from any origin.
  *   anything else  The app: every path is served, and the response says
  *                  noindex. The app host is never indexed once the site
  *                  exists; the canonical URLs in the marketing pages already
@@ -96,8 +98,25 @@ export function isFilePath(pathname) {
  */
 export const HOMEPAGE_LINKS = [
   '</llms.txt>; rel="describedby"; type="text/plain"',
-  '</docs>; rel="service-doc"; type="text/html"'
+  '</docs>; rel="service-doc"; type="text/html"',
+  '</.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json"'
 ].join(', ');
+
+/**
+ * The agent discovery documents written by scripts/agent-discovery.js. Each is
+ * public and carries no credential, so any origin may read it (the ARD check
+ * requires `Access-Control-Allow-Origin: *`). The API catalog has no file
+ * extension, so the asset server cannot infer the media type RFC 9727 names.
+ */
+export const DISCOVERY_TYPES = {
+  '/.well-known/api-catalog': 'application/linkset+json',
+  '/.well-known/ai-catalog.json': null,
+  '/.well-known/mcp/server-card.json': null,
+  '/.well-known/agent-skills/index.json': null,
+  '/.well-known/agent-skills/agentdisk/SKILL.md': null,
+  '/openapi.json': null,
+  '/auth.md': null
+};
 
 /**
  * True when an Accept header asks for markdown at least as strongly as for
@@ -221,7 +240,14 @@ export default {
       }
       case 'site-file': {
         const response = await env.ASSETS.fetch(request);
-        if (!isSpaFallback(url.pathname, response)) return response;
+        if (!isSpaFallback(url.pathname, response)) {
+          const path = normalize(url.pathname);
+          if (!(path in DISCOVERY_TYPES)) return response;
+          const shared = new Response(response.body, response);
+          shared.headers.set('access-control-allow-origin', '*');
+          if (DISCOVERY_TYPES[path]) shared.headers.set('content-type', DISCOVERY_TYPES[path]);
+          return shared;
+        }
         // A miss. Keep the asset server's headers (the security headers from
         // _headers) and replace the homepage it sent with a plain 404, so a
         // crawler probing /sitemap.xml or /.well-known/* learns the truth.

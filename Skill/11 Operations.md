@@ -32,9 +32,12 @@ nothing in CI can see it:
 7. **Cloudflare Access app "AgentDisk Protected Zone"**, made by hand on
    30 September 2026: `securepanel.`, `securepanel-dev.` and `app-dev.` sit
    behind a login that admits members of the Cloudflare account only. The
-   deploy smoke tests carry no Access credential, so since then every console
-   deploy and every web dev deploy reports failure even though the upload
-   succeeded. The site checks in the web smoke test still run and pass.
+   deploy smoke tests carry no Access credential. Since 4 October 2026 they
+   recognise the 302 to the Access login as correct and skip only the checks
+   that need the page behind it; the workers.dev and marketing-site checks
+   always run. Store an Access service token as `CF_ACCESS_CLIENT_ID` and
+   `CF_ACCESS_CLIENT_SECRET` in GitHub and every check runs again; a token
+   that is set but refused fails the deploy.
 
 Dev is the same shape on `dev.`, `app-dev.`, `api-dev.`, `mcp-dev.` and
 `securepanel-dev.`, deployed on every push to `dev`.
@@ -64,14 +67,12 @@ Dev is the same shape on `dev.`, `app-dev.`, `api-dev.`, `mcp-dev.` and
 
 ## Walking the product
 
-The customer walkthrough is [docs/USER_TESTING_GUIDE.md](../docs/USER_TESTING_GUIDE.md):
-sign up, create an agent, mint a key, upload from the browser and the API,
-invite a colleague, connect an MCP client, buy a plan, close the account, and
-the console as the operator. Its own tail says which steps were verified by a
-machine and which need a human with a browser.
-
-The regression suite in `regression-tests/` covers the same journeys against
-a live hostname; see [1 Build](1%20Build.md).
+The customer-facing walkthrough is the live `/docs` page: sign up, create an
+agent, mint a key, upload from the browser and the API, invite a colleague,
+connect an MCP client, buy a plan. The console's own screens cover the operator
+side. `regression-tests/` drives the same journeys against a live hostname; see
+[1 Build](1%20Build.md). Every error response carries a `requestId`, which is
+what to ask for when somebody reports a failure.
 
 ## When something stops
 
@@ -89,7 +90,7 @@ a live hostname; see [1 Build](1%20Build.md).
 | The pricing page shows nothing purchasable | The `plans` rows have no Stripe price IDs; run Sync from the console |
 | A per-IP limit never fires from this machine | The VPN rotates addresses per connection; test over one keep-alive connection |
 | R2 answers `AccessDenied` | The token's permissions or scope changed, not its secret |
-| A console or web dev deploy fails its smoke test with `GET / returned HTTP 302` | Cloudflare Access is in front of that host; the deploy itself went out. The fix is an Access service token sent by the smoke test, not removing Access |
+| A smoke test says a host "is behind Cloudflare Access" and skips its page checks | Expected for the console and app-dev. To run those checks, store an Access service token as `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` |
 
 ## Data resets, when wanted
 

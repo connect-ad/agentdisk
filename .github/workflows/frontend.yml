@@ -426,6 +426,11 @@ jobs:
       # no workers.dev hostname bypasses the custom domain.
       - name: Smoke test
         working-directory: apps/${{ inputs.app }}
+        # Optional. Empty until an Access service token is stored; the smoke
+        # test then recognises the Access login and skips the page checks.
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: node scripts/smoke-test.mjs "$APP_URL" "$APP_WORKER"
 
       - name: Report result

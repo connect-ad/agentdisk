@@ -23,6 +23,8 @@
  *                  set, section 7 checks the split and the indexing check
  *                  applies to the site rather than the app
  *        WWW_URL   the www. alias, when the environment has one
+ *        CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET  optional Access
+ *                  service token, for an app host behind Cloudflare Access
  */
 import { REQUIRED_HEADERS, ROBOTS_NOINDEX, isIndexable } from "./security-headers.js";
 
@@ -50,6 +52,57 @@ function pass(message) {
 }
 
 /**
+ * Cloudflare Access. Since 30 Sept 2026 the console hosts and app-dev sit
+ * behind an Access login (Skill 11), which answers every request from this
+ * job with a 302 to *.cloudflareaccess.com. That redirect is the intended
+ * state, not a broken deploy, so it is recognised and passed, and only the
+ * checks that need to see the page behind the login are skipped.
+ *
+ * Set CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET (an Access service
+ * token admitted by the Access policy) and the headers below are sent, the
+ * login is passed, and every check runs again. A token that is set but
+ * refused is a failure, never a skip.
+ */
+const ACCESS_ID = process.env.CF_ACCESS_CLIENT_ID || "";
+const ACCESS_SECRET = process.env.CF_ACCESS_CLIENT_SECRET || "";
+const ACCESS_HEADERS =
+  ACCESS_ID && ACCESS_SECRET
+    ? { "CF-Access-Client-Id": ACCESS_ID, "CF-Access-Client-Secret": ACCESS_SECRET }
+    : {};
+
+/** fetch() for the deployed hostnames: carries the Access token when one is set. */
+function fetchHost(url, init = {}) {
+  return fetch(url, { ...init, headers: { ...ACCESS_HEADERS, ...(init.headers ?? {}) } });
+}
+
+/** True for a redirect to the Cloudflare Access login page. */
+function isAccessLogin(response) {
+  if (![301, 302, 303, 307, 308].includes(response.status)) return false;
+  try {
+    return new URL(response.headers.get("location") ?? "", "https://invalid.example").hostname.endsWith(
+      ".cloudflareaccess.com"
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Decide, from the first response, whether the page checks can run. Returns
+ * true when they must be skipped.
+ */
+function behindAccessLogin(response, host) {
+  if (!isAccessLogin(response)) return false;
+  if (ACCESS_ID) {
+    fail(`${host} still redirects to the Cloudflare Access login with CF_ACCESS_CLIENT_ID set; the policy does not admit that service token`);
+    return true;
+  }
+  pass(`${host} is behind Cloudflare Access (302 to the login page)`);
+  console.log("  note: no CF_ACCESS_CLIENT_ID set, so the checks that need the page behind the login are skipped");
+  return true;
+}
+
+/**
  * A fresh deploy plus custom-domain routing can take a few seconds to
  * propagate. Retry only the FIRST fetch — once the origin answers at all,
  * later assertions are about *content*, which arrives with the response, and
@@ -62,7 +115,7 @@ async function fetchWithRetry(url, label) {
   let lastFailure = "no attempt made";
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
     try {
-      const response = await fetch(url, { redirect: "manual" });
+      const response = await fetchHost(url, { redirect: "manual" });
       return response;
     } catch (error) {
       lastFailure = error instanceof Error ? error.message : String(error);
@@ -94,7 +147,7 @@ async function fetchWithRetry(url, label) {
  * still a hard failure.
  */
 async function fetchUntilHeaders(url, label) {
-  let response = await fetch(url, { redirect: "manual" });
+  let response = await fetchHost(url, { redirect: "manual" });
   for (let attempt = 1; attempt <= HEADER_ATTEMPTS; attempt++) {
     const missing = REQUIRED_HEADERS.filter((name) => !response.headers.get(name));
     if (missing.length === 0) return response;
@@ -104,7 +157,7 @@ async function fetchUntilHeaders(url, label) {
         `(attempt ${attempt}/${HEADER_ATTEMPTS}); retrying in ${HEADER_RETRY_MS / 1000}s`
     );
     await sleep(HEADER_RETRY_MS);
-    response = await fetch(url, { redirect: "manual" });
+    response = await fetchHost(url, { redirect: "manual" });
   }
   return response;
 }
@@ -124,7 +177,7 @@ async function fetchUntilHeaders(url, label) {
 async function fetchRobotsUntilLive(url) {
   let body = "";
   for (let attempt = 1; attempt <= HEADER_ATTEMPTS; attempt++) {
-    const response = await fetch(url, { redirect: "manual" });
+    const response = await fetchHost(url, { redirect: "manual" });
     body = await response.text();
     if (body.startsWith("User-agent:")) return body;
     if (attempt === HEADER_ATTEMPTS) break;
@@ -143,132 +196,136 @@ console.log(`Smoke-testing ${baseUrl} (worker: ${workerName})`);
 console.log("\n[1] Document root");
 const rootResponse = await fetchWithRetry(`${baseUrl}/`, "root");
 const rootBody = await rootResponse.text();
+const appBehindAccess = behindAccessLogin(rootResponse, baseUrl);
 
-if (rootResponse.status !== 200) {
-  fail(`GET / returned HTTP ${rootResponse.status}, expected 200`);
-} else {
-  pass("GET / returned 200");
-}
+if (!appBehindAccess) {
 
-// The placeholder Worker answers 503 with JSON. If we see it, Terraform's
-// bootstrap script is still live and the Wrangler deploy did not land.
-if (rootBody.includes('"status": "provisioned"') || rootBody.includes('"provisioned"')) {
-  fail("root is still serving the Terraform placeholder Worker — the Wrangler deploy did not take effect");
-}
-
-if (!rootBody.includes('<div id="root">')) {
-  fail("root HTML has no <div id=\"root\"> mount point — this is not the built SPA shell");
-} else {
-  pass("root HTML contains the SPA mount point");
-}
-
-// Vite emits hashed asset filenames; their presence proves this is a real
-// production build rather than an index.html served from somewhere else.
-const scriptMatch = rootBody.match(/src="(\/assets\/index-[^"]+\.js)"/);
-if (!scriptMatch) {
-  fail("root HTML references no hashed /assets/index-*.js bundle");
-} else {
-  pass(`root HTML references ${scriptMatch[1]}`);
-}
-
-// --- 2. Hashed assets actually resolve -----------------------------------
-console.log("\n[2] Static asset");
-if (scriptMatch) {
-  const assetResponse = await fetch(`${baseUrl}${scriptMatch[1]}`);
-  if (assetResponse.status !== 200) {
-    fail(`GET ${scriptMatch[1]} returned HTTP ${assetResponse.status}, expected 200`);
+  if (rootResponse.status !== 200) {
+    fail(`GET / returned HTTP ${rootResponse.status}, expected 200`);
   } else {
-    const contentType = assetResponse.headers.get("content-type") ?? "";
-    if (!contentType.includes("javascript")) {
-      fail(`asset served with content-type "${contentType}", expected JavaScript`);
+    pass("GET / returned 200");
+  }
+
+  // The placeholder Worker answers 503 with JSON. If we see it, Terraform's
+  // bootstrap script is still live and the Wrangler deploy did not land.
+  if (rootBody.includes('"status": "provisioned"') || rootBody.includes('"provisioned"')) {
+    fail("root is still serving the Terraform placeholder Worker — the Wrangler deploy did not take effect");
+  }
+
+  if (!rootBody.includes('<div id="root">')) {
+    fail("root HTML has no <div id=\"root\"> mount point — this is not the built SPA shell");
+  } else {
+    pass("root HTML contains the SPA mount point");
+  }
+
+  // Vite emits hashed asset filenames; their presence proves this is a real
+  // production build rather than an index.html served from somewhere else.
+  const scriptMatch = rootBody.match(/src="(\/assets\/index-[^"]+\.js)"/);
+  if (!scriptMatch) {
+    fail("root HTML references no hashed /assets/index-*.js bundle");
+  } else {
+    pass(`root HTML references ${scriptMatch[1]}`);
+  }
+
+  // --- 2. Hashed assets actually resolve -----------------------------------
+  console.log("\n[2] Static asset");
+  if (scriptMatch) {
+    const assetResponse = await fetchHost(`${baseUrl}${scriptMatch[1]}`);
+    if (assetResponse.status !== 200) {
+      fail(`GET ${scriptMatch[1]} returned HTTP ${assetResponse.status}, expected 200`);
     } else {
-      pass(`bundle served as ${contentType}`);
+      const contentType = assetResponse.headers.get("content-type") ?? "";
+      if (!contentType.includes("javascript")) {
+        fail(`asset served with content-type "${contentType}", expected JavaScript`);
+      } else {
+        pass(`bundle served as ${contentType}`);
+      }
     }
   }
-}
 
-// --- 3. SPA fallback: deep links return the app, not a 404 ---------------
-// These paths exist ONLY in the React Router table (App.jsx), never as files on
-// disk, so each one is a direct test of not_found_handling.
-console.log("\n[3] SPA deep-link fallback");
-for (const path of ["/login", "/signup", "/w/acme-research/files"]) {
-  const response = await fetch(`${baseUrl}${path}`, { redirect: "manual" });
-  const body = await response.text();
+  // --- 3. SPA fallback: deep links return the app, not a 404 ---------------
+  // These paths exist ONLY in the React Router table (App.jsx), never as files on
+  // disk, so each one is a direct test of not_found_handling.
+  console.log("\n[3] SPA deep-link fallback");
+  for (const path of ["/login", "/signup", "/w/acme-research/files"]) {
+    const response = await fetchHost(`${baseUrl}${path}`, { redirect: "manual" });
+    const body = await response.text();
 
-  if (response.status !== 200) {
-    fail(`GET ${path} returned HTTP ${response.status}, expected 200 (SPA fallback not configured?)`);
-  } else if (!body.includes('<div id="root">')) {
-    fail(`GET ${path} returned 200 but not the SPA shell`);
-  } else {
-    pass(`${path} -> 200, SPA shell`);
+    if (response.status !== 200) {
+      fail(`GET ${path} returned HTTP ${response.status}, expected 200 (SPA fallback not configured?)`);
+    } else if (!body.includes('<div id="root">')) {
+      fail(`GET ${path} returned 200 but not the SPA shell`);
+    } else {
+      pass(`${path} -> 200, SPA shell`);
+    }
   }
-}
 
-// --- 3b. The marketing routes are prerendered ----------------------------
-// Each of these is written as a static page at build time (scripts/prerender.mjs)
-// and carries a marker naming the route it holds. The empty SPA shell here
-// means the prerender step did not run, or the asset server is not serving
-// pricing.html / docs.html for the extensionless path.
-//
-// Retried on the body, like robots.txt: on the deploy that first shipped
-// these pages (Fixing_feedback_12, 28 Sept 2026) all three answered with the
-// previous build's empty shell for a few seconds after the root had already
-// passed, and were correct by the time anyone looked by hand.
-console.log("\n[3b] Prerendered marketing routes");
-/** The root body as served once the new asset list has propagated. */
-let propagatedRoot = rootBody;
-for (const path of ["/", "/pricing", "/docs"]) {
-  const marker = `<meta name="agentdisk:prerendered" content="${path}"`;
-  let response;
-  let body = "";
-  for (let attempt = 1; attempt <= HEADER_ATTEMPTS; attempt++) {
-    response = await fetch(`${baseUrl}${path}`, { redirect: "manual" });
-    body = await response.text();
-    if (body.includes(marker) || attempt === HEADER_ATTEMPTS) break;
-    console.log(
-      `  ${path}: prerendered page not live yet ` +
-        `(attempt ${attempt}/${HEADER_ATTEMPTS}); retrying in ${HEADER_RETRY_MS / 1000}s`
-    );
-    await sleep(HEADER_RETRY_MS);
+  // --- 3b. The marketing routes are prerendered ----------------------------
+  // Each of these is written as a static page at build time (scripts/prerender.mjs)
+  // and carries a marker naming the route it holds. The empty SPA shell here
+  // means the prerender step did not run, or the asset server is not serving
+  // pricing.html / docs.html for the extensionless path.
+  //
+  // Retried on the body, like robots.txt: on the deploy that first shipped
+  // these pages (Fixing_feedback_12, 28 Sept 2026) all three answered with the
+  // previous build's empty shell for a few seconds after the root had already
+  // passed, and were correct by the time anyone looked by hand.
+  console.log("\n[3b] Prerendered marketing routes");
+  /** The root body as served once the new asset list has propagated. */
+  let propagatedRoot = rootBody;
+  for (const path of ["/", "/pricing", "/docs"]) {
+    const marker = `<meta name="agentdisk:prerendered" content="${path}"`;
+    let response;
+    let body = "";
+    for (let attempt = 1; attempt <= HEADER_ATTEMPTS; attempt++) {
+      response = await fetchHost(`${baseUrl}${path}`, { redirect: "manual" });
+      body = await response.text();
+      if (body.includes(marker) || attempt === HEADER_ATTEMPTS) break;
+      console.log(
+        `  ${path}: prerendered page not live yet ` +
+          `(attempt ${attempt}/${HEADER_ATTEMPTS}); retrying in ${HEADER_RETRY_MS / 1000}s`
+      );
+      await sleep(HEADER_RETRY_MS);
+    }
+    if (path === "/") propagatedRoot = body;
+
+    if (response.status !== 200) {
+      fail(`GET ${path} returned HTTP ${response.status}, expected 200`);
+    } else if (!body.includes(marker) || !body.includes("data-prerendered=")) {
+      fail(`GET ${path} is the empty SPA shell, not the prerendered page`);
+    } else if (!body.includes('<link rel="canonical"') || body.includes("<title>AgentDisk</title>")) {
+      fail(`GET ${path} is prerendered but carries no per-page metadata (lib/seo.js)`);
+    } else {
+      pass(`${path} -> prerendered (${body.length} bytes)`);
+    }
   }
-  if (path === "/") propagatedRoot = body;
 
-  if (response.status !== 200) {
-    fail(`GET ${path} returned HTTP ${response.status}, expected 200`);
-  } else if (!body.includes(marker) || !body.includes("data-prerendered=")) {
-    fail(`GET ${path} is the empty SPA shell, not the prerendered page`);
-  } else if (!body.includes('<link rel="canonical"') || body.includes("<title>AgentDisk</title>")) {
-    fail(`GET ${path} is prerendered but carries no per-page metadata (lib/seo.js)`);
+  // --- 3c. No source map beside the bundle ---------------------------------
+  // `sourcemap: false` in vite.config.js. A map is the original source with its
+  // comments, served to anyone who asks; this is the check that the setting is
+  // still off and that nothing else put a map in dist.
+  //
+  // After 3b on purpose, and against the bundle the *propagated* root names:
+  // the first run of this check read the root before the new asset list had
+  // landed, found the previous build's bundle, and correctly reported that
+  // build's map — which was real, and already gone.
+  //
+  // The status alone says nothing here: not_found_handling answers every unknown
+  // path with index.html and 200, so an absent map looks like a served one until
+  // the content type is read. A real map is application/json; the fallback is
+  // text/html.
+  console.log("\n[3c] Source map");
+  const liveScript = propagatedRoot.match(/src="(\/assets\/index-[^"]+\.js)"/);
+  if (!liveScript) {
+    fail("propagated root HTML references no hashed /assets/index-*.js bundle");
   } else {
-    pass(`${path} -> prerendered (${body.length} bytes)`);
-  }
-}
-
-// --- 3c. No source map beside the bundle ---------------------------------
-// `sourcemap: false` in vite.config.js. A map is the original source with its
-// comments, served to anyone who asks; this is the check that the setting is
-// still off and that nothing else put a map in dist.
-//
-// After 3b on purpose, and against the bundle the *propagated* root names:
-// the first run of this check read the root before the new asset list had
-// landed, found the previous build's bundle, and correctly reported that
-// build's map — which was real, and already gone.
-//
-// The status alone says nothing here: not_found_handling answers every unknown
-// path with index.html and 200, so an absent map looks like a served one until
-// the content type is read. A real map is application/json; the fallback is
-// text/html.
-console.log("\n[3c] Source map");
-const liveScript = propagatedRoot.match(/src="(\/assets\/index-[^"]+\.js)"/);
-if (!liveScript) {
-  fail("propagated root HTML references no hashed /assets/index-*.js bundle");
-} else {
-  const mapResponse = await fetch(`${baseUrl}${liveScript[1]}.map`, { redirect: "manual" });
-  const mapType = mapResponse.headers.get("content-type") ?? "";
-  if (mapResponse.status === 200 && !mapType.startsWith("text/html")) {
-    fail(`${liveScript[1]}.map is served (HTTP 200, ${mapType}) — the bundle's source map is public`);
-  } else {
-    pass(`${liveScript[1]}.map -> HTTP ${mapResponse.status} ${mapType || "no content-type"} (not a map)`);
+    const mapResponse = await fetchHost(`${baseUrl}${liveScript[1]}.map`, { redirect: "manual" });
+    const mapType = mapResponse.headers.get("content-type") ?? "";
+    if (mapResponse.status === 200 && !mapType.startsWith("text/html")) {
+      fail(`${liveScript[1]}.map is served (HTTP 200, ${mapType}) — the bundle's source map is public`);
+    } else {
+      pass(`${liveScript[1]}.map -> HTTP ${mapResponse.status} ${mapType || "no content-type"} (not a map)`);
+    }
   }
 }
 
@@ -350,7 +407,9 @@ if (!apiToken || !accountId) {
 // still succeeds, the deploy still succeeds, and every header silently
 // vanishes. This is the assertion that turns that into a red pipeline.
 console.log("\n[5] Security headers");
-{
+if (appBehindAccess) {
+  console.log("  note: skipped, the app host is behind Cloudflare Access");
+} else {
   const headerResponse = await fetchUntilHeaders(`${baseUrl}/`, "headers");
   for (const name of REQUIRED_HEADERS) {
     const value = headerResponse.headers.get(name);
@@ -433,7 +492,7 @@ console.log("\n[6] Indexing");
     pass(`robots.txt on ${surface} says ${expectedRule}`);
   }
 
-  if (siteUrl) {
+  if (siteUrl && !appBehindAccess) {
     const appRoot = await fetchWithRetry(`${baseUrl}/`, "app indexing");
     const appTag = appRoot ? appRoot.headers.get("X-Robots-Tag") : null;
     if (appTag !== ROBOTS_NOINDEX) {

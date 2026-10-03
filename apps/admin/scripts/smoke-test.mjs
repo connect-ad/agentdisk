@@ -14,6 +14,8 @@
  * usage: smoke-test.mjs <base-url> <worker-name>
  * env:   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID (for the workers.dev check)
  *        VITE_API_BASE (for the baked-in origin check)
+ *        CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET (optional; an Access
+ *        service token, so the page checks can pass the Access login)
  */
 const baseUrl = process.argv[2]?.replace(/\/$/, "");
 const workerName = process.argv[3];
@@ -36,6 +38,57 @@ function pass(message) {
 }
 
 /**
+ * Cloudflare Access. Since 30 Sept 2026 the console hosts and app-dev sit
+ * behind an Access login (Skill 11), which answers every request from this
+ * job with a 302 to *.cloudflareaccess.com. That redirect is the intended
+ * state, not a broken deploy, so it is recognised and passed, and only the
+ * checks that need to see the page behind the login are skipped.
+ *
+ * Set CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET (an Access service
+ * token admitted by the Access policy) and the headers below are sent, the
+ * login is passed, and every check runs again. A token that is set but
+ * refused is a failure, never a skip.
+ */
+const ACCESS_ID = process.env.CF_ACCESS_CLIENT_ID || "";
+const ACCESS_SECRET = process.env.CF_ACCESS_CLIENT_SECRET || "";
+const ACCESS_HEADERS =
+  ACCESS_ID && ACCESS_SECRET
+    ? { "CF-Access-Client-Id": ACCESS_ID, "CF-Access-Client-Secret": ACCESS_SECRET }
+    : {};
+
+/** fetch() for the deployed hostnames: carries the Access token when one is set. */
+function fetchHost(url, init = {}) {
+  return fetch(url, { ...init, headers: { ...ACCESS_HEADERS, ...(init.headers ?? {}) } });
+}
+
+/** True for a redirect to the Cloudflare Access login page. */
+function isAccessLogin(response) {
+  if (![301, 302, 303, 307, 308].includes(response.status)) return false;
+  try {
+    return new URL(response.headers.get("location") ?? "", "https://invalid.example").hostname.endsWith(
+      ".cloudflareaccess.com"
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Decide, from the first response, whether the page checks can run. Returns
+ * true when they must be skipped.
+ */
+function behindAccessLogin(response, host) {
+  if (!isAccessLogin(response)) return false;
+  if (ACCESS_ID) {
+    fail(`${host} still redirects to the Cloudflare Access login with CF_ACCESS_CLIENT_ID set; the policy does not admit that service token`);
+    return true;
+  }
+  pass(`${host} is behind Cloudflare Access (302 to the login page)`);
+  console.log("  note: no CF_ACCESS_CLIENT_ID set, so the checks that need the page behind the login are skipped");
+  return true;
+}
+
+/**
  * Retry only the FIRST fetch. Once the origin answers at all, later assertions
  * are about content rather than propagation, and retrying those would mask a
  * real bug behind a slower red build.
@@ -44,7 +97,7 @@ async function fetchWithRetry(url, label) {
   let lastFailure = "no attempt made";
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
     try {
-      return await fetch(url, { redirect: "manual" });
+      return await fetchHost(url, { redirect: "manual" });
     } catch (error) {
       lastFailure = error instanceof Error ? error.message : String(error);
     }
@@ -64,89 +117,93 @@ console.log(`Smoke-testing ${baseUrl} (worker: ${workerName})`);
 console.log("\n[1] Document root");
 const rootResponse = await fetchWithRetry(`${baseUrl}/`, "root");
 const rootBody = await rootResponse.text();
+const consoleBehindAccess = behindAccessLogin(rootResponse, baseUrl);
 
-if (rootResponse.status !== 200) {
-  fail(`GET / returned HTTP ${rootResponse.status}, expected 200`);
-} else {
-  pass("GET / returned 200");
-}
+if (!consoleBehindAccess) {
 
-// The Terraform bootstrap Worker answers with JSON. Seeing it here means the
-// Wrangler deploy never landed and the hostname is still on the placeholder.
-if (rootBody.includes('"provisioned"')) {
-  fail("root is still serving the Terraform placeholder Worker — the Wrangler deploy did not take effect");
-}
-
-if (!rootBody.includes('<div id="root">')) {
-  fail('root HTML has no <div id="root"> mount point — this is not the built console');
-} else {
-  pass("root HTML contains the SPA mount point");
-}
-
-// Staff tooling must stay out of search results. The meta tag lives in
-// index.html, so a careless edit there is the way this silently regresses —
-// and a console that has been indexed cannot be un-indexed retroactively.
-if (!/name="robots"[^>]*noindex/i.test(rootBody)) {
-  fail("root HTML has no noindex robots meta — the staff console would be indexable");
-} else {
-  pass("robots noindex present");
-}
-
-const scriptMatch = rootBody.match(/src="(\/assets\/index-[^"]+\.js)"/);
-if (!scriptMatch) {
-  fail("root HTML references no hashed /assets/index-*.js bundle");
-} else {
-  pass(`root HTML references ${scriptMatch[1]}`);
-}
-
-// --- 2. The bundle resolves, and talks to the right API -------------------
-console.log("\n[2] Static asset and baked-in API origin");
-if (scriptMatch) {
-  const assetResponse = await fetch(`${baseUrl}${scriptMatch[1]}`);
-  if (assetResponse.status !== 200) {
-    fail(`GET ${scriptMatch[1]} returned HTTP ${assetResponse.status}, expected 200`);
+  if (rootResponse.status !== 200) {
+    fail(`GET / returned HTTP ${rootResponse.status}, expected 200`);
   } else {
-    const contentType = assetResponse.headers.get("content-type") ?? "";
-    if (!contentType.includes("javascript")) {
-      fail(`asset served with content-type "${contentType}", expected JavaScript`);
-    } else {
-      pass(`bundle served as ${contentType}`);
-    }
+    pass("GET / returned 200");
+  }
 
-    // VITE_API_BASE is substituted at build time, so the origin is a literal in
-    // the shipped bundle. Checking it here closes the gap between "the workflow
-    // read the right value from terraform output" and "the deployed bytes
-    // actually contain it" — a stale dist/ would pass every other assertion.
-    const expectedApi = process.env.VITE_API_BASE?.replace(/\/$/, "");
-    if (!expectedApi) {
-      console.log("  note: VITE_API_BASE not set in this environment; skipping the origin check");
+  // The Terraform bootstrap Worker answers with JSON. Seeing it here means the
+  // Wrangler deploy never landed and the hostname is still on the placeholder.
+  if (rootBody.includes('"provisioned"')) {
+    fail("root is still serving the Terraform placeholder Worker — the Wrangler deploy did not take effect");
+  }
+
+  if (!rootBody.includes('<div id="root">')) {
+    fail('root HTML has no <div id="root"> mount point — this is not the built console');
+  } else {
+    pass("root HTML contains the SPA mount point");
+  }
+
+  // Staff tooling must stay out of search results. The meta tag lives in
+  // index.html, so a careless edit there is the way this silently regresses —
+  // and a console that has been indexed cannot be un-indexed retroactively.
+  if (!/name="robots"[^>]*noindex/i.test(rootBody)) {
+    fail("root HTML has no noindex robots meta — the staff console would be indexable");
+  } else {
+    pass("robots noindex present");
+  }
+
+  const scriptMatch = rootBody.match(/src="(\/assets\/index-[^"]+\.js)"/);
+  if (!scriptMatch) {
+    fail("root HTML references no hashed /assets/index-*.js bundle");
+  } else {
+    pass(`root HTML references ${scriptMatch[1]}`);
+  }
+
+  // --- 2. The bundle resolves, and talks to the right API -------------------
+  console.log("\n[2] Static asset and baked-in API origin");
+  if (scriptMatch) {
+    const assetResponse = await fetchHost(`${baseUrl}${scriptMatch[1]}`);
+    if (assetResponse.status !== 200) {
+      fail(`GET ${scriptMatch[1]} returned HTTP ${assetResponse.status}, expected 200`);
     } else {
-      const bundle = await assetResponse.text();
-      if (!bundle.includes(expectedApi)) {
-        fail(`bundle does not reference ${expectedApi} — the console was built against a different API`);
+      const contentType = assetResponse.headers.get("content-type") ?? "";
+      if (!contentType.includes("javascript")) {
+        fail(`asset served with content-type "${contentType}", expected JavaScript`);
       } else {
-        pass(`bundle targets ${expectedApi}`);
+        pass(`bundle served as ${contentType}`);
+      }
+
+      // VITE_API_BASE is substituted at build time, so the origin is a literal in
+      // the shipped bundle. Checking it here closes the gap between "the workflow
+      // read the right value from terraform output" and "the deployed bytes
+      // actually contain it" — a stale dist/ would pass every other assertion.
+      const expectedApi = process.env.VITE_API_BASE?.replace(/\/$/, "");
+      if (!expectedApi) {
+        console.log("  note: VITE_API_BASE not set in this environment; skipping the origin check");
+      } else {
+        const bundle = await assetResponse.text();
+        if (!bundle.includes(expectedApi)) {
+          fail(`bundle does not reference ${expectedApi} — the console was built against a different API`);
+        } else {
+          pass(`bundle targets ${expectedApi}`);
+        }
       }
     }
   }
-}
 
-// --- 3. SPA fallback ------------------------------------------------------
-// The console has no router: it switches screens in component state, so every
-// URL below the root must return the shell rather than a 404. One arbitrary
-// path proves not_found_handling is set; enumerating names would only assert
-// something this app does not have.
-console.log("\n[3] SPA fallback");
-for (const path of ["/plans", "/some/path/that/is/not/a/file"]) {
-  const response = await fetch(`${baseUrl}${path}`, { redirect: "manual" });
-  const body = await response.text();
+  // --- 3. SPA fallback ------------------------------------------------------
+  // The console has no router: it switches screens in component state, so every
+  // URL below the root must return the shell rather than a 404. One arbitrary
+  // path proves not_found_handling is set; enumerating names would only assert
+  // something this app does not have.
+  console.log("\n[3] SPA fallback");
+  for (const path of ["/plans", "/some/path/that/is/not/a/file"]) {
+    const response = await fetchHost(`${baseUrl}${path}`, { redirect: "manual" });
+    const body = await response.text();
 
-  if (response.status !== 200) {
-    fail(`GET ${path} returned HTTP ${response.status}, expected 200 (not_found_handling not set?)`);
-  } else if (!body.includes('<div id="root">')) {
-    fail(`GET ${path} returned 200 but not the console shell`);
-  } else {
-    pass(`${path} -> 200, console shell`);
+    if (response.status !== 200) {
+      fail(`GET ${path} returned HTTP ${response.status}, expected 200 (not_found_handling not set?)`);
+    } else if (!body.includes('<div id="root">')) {
+      fail(`GET ${path} returned 200 but not the console shell`);
+    } else {
+      pass(`${path} -> 200, console shell`);
+    }
   }
 }
 
@@ -226,4 +283,8 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`Smoke test passed: ${baseUrl} serves the staff console, stays noindex, targets the right API, and opens no bypass hostname.`);
+console.log(
+  consoleBehindAccess
+    ? `Smoke test passed: ${baseUrl} is behind Cloudflare Access and opens no bypass hostname. The page checks were skipped; set an Access service token to run them.`
+    : `Smoke test passed: ${baseUrl} serves the staff console, stays noindex, targets the right API, and opens no bypass hostname.`
+);

@@ -32,7 +32,7 @@ nowhere else.
 ## Rules that bite
 
 - **One overlay ladder, and a dialog always outranks a drawer.**
-  `docs/ui-layering.md` owns the scale and `app.css` defines it as `--z-*`
+  `Skill/13 UI Layering.md` owns the scale and `app.css` defines it as `--z-*`
   tokens. A `z-index` only ranks siblings within the nearest stacking context,
   so modals stay siblings of the drawer, never children. The local `app.css`
   wins over the vendored sheet because `main.jsx` imports it second.

@@ -237,7 +237,7 @@ export function Nav() {
         z-index 30, which makes it a stacking context: a scrim rendered inside
         it is ranked *within* that context and cannot paint above anything the
         bar itself sits below, whatever number it carries. That is the trap
-        docs/ui-layering.md §1 records against .wsx__menu, and the reason
+        Skill/13 UI Layering.md §1 records against .wsx__menu, and the reason
         FileBrowser.jsx keeps its dialogs as siblings of the drawer rather than
         children. .mk is a static flex column, so out here the scrim's 80
         competes globally as intended. */}

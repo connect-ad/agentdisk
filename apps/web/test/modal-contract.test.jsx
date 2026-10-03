@@ -1,5 +1,5 @@
 /**
- * The modal contract from docs/ui-layering.md §2.
+ * The modal contract from Skill/13 UI Layering.md §2.
  *
  * At a 684px-tall viewport the Create API key dialog's footer fell below the
  * fold, its body did not scroll, and Enter did nothing — so minting a key, step
@@ -32,7 +32,7 @@ const app = readFileSync(resolve(process.cwd(), 'src/app.css'), 'utf8');
 /** Strip comments so a rule quoted in prose cannot satisfy an assertion. */
 const rules = app.replace(/\/\*[\s\S]*?\*\//g, '');
 
-describe('modal scroll contract (docs/ui-layering.md §2)', () => {
+describe('modal scroll contract (Skill/13 UI Layering.md §2)', () => {
   it('bounds the dialog by sizing the scrim row from the window, not from the dialog', () => {
     // Point 1 was recorded as already met by max-height:100% and was not: a
     // percentage resolves against the grid row, an auto row grows to fit its

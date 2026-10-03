@@ -1,4 +1,7 @@
-# UI layering and the modal contract
+# 13 · UI Layering
+
+The overlay ladder and the modal contract, shared by `apps/web` and `apps/admin`.
+Source comments and tests cite this file by section number; keep the numbering.
 
 Both apps stack overlays. `apps/web` and `apps/admin` are built by different
 tracks and must not invent separate ladders, because the two are read side by

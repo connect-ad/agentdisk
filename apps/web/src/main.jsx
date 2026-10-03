@@ -25,7 +25,7 @@ createRoot(document.getElementById('root')).render(
               the consent question belongs to the origin, not to a route, so it
               must survive navigation — and its two dialogs have to be siblings
               of every other overlay rather than children of one.
-              See docs/ui-layering.md §1. */}
+              See Skill/13 UI Layering.md §1. */}
           <CookieNotice />
         </WorkspaceProvider>
       </AuthProvider>

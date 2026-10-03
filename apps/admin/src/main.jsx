@@ -1,7 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
-// The overlay ladder, agreed with apps/web in docs/ui-layering.md. Imported
+// The overlay ladder, agreed with apps/web in Skill/13 UI Layering.md. Imported
 // here so the tokens exist before anything that reads them renders.
 import './app.css';
 

@@ -1,5 +1,5 @@
 /**
- * The console's dialog primitives — docs/ui-layering.md, and Amendment 1 of the
+ * The console's dialog primitives — Skill/13 UI Layering.md, and Amendment 1 of the
  * Track B brief.
  *
  * These assert the three bugs the customer app shipped, from the outside, in

@@ -5,7 +5,7 @@ import { IconButton } from '../Button/IconButton.jsx';
 const FOCUSABLE = 'input,select,textarea,button,[href],[tabindex]:not([tabindex="-1"])';
 
 /**
- * `onSubmit` is point 4 of the modal contract (docs/ui-layering.md §2), and the
+ * `onSubmit` is point 4 of the modal contract (Skill/13 UI Layering.md §2), and the
  * one part that cannot be done in CSS -- which is why this vendored component
  * diverges from its reference. See backlog/031.
  *

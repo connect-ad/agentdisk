@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "AgentDisk staff console (Workers static assets). Screens per docs/design/14 PART 28.",
+  "description": "AgentDisk staff console (Workers static assets). See Skill/9 Admin Console.md.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

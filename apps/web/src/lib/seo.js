@@ -52,6 +52,31 @@ export const PAGE_META = {
   }
 };
 
+/**
+ * The routes that get a static file at build, and therefore their own title
+ * and canonical URL. The prerender renders exactly these, and the sitemap
+ * lists exactly these: a route whose canonical points at `/` does not belong
+ * in a sitemap, so the two lists must be one list.
+ */
+export const PRERENDERED_ROUTES = ['/', '/pricing', '/docs'];
+
+/**
+ * The `sitemap.xml` body, written to `dist/` at build. Production URLs in
+ * every environment, for the same reason as `SITE_ORIGIN`. No `lastmod`: the
+ * build does not know when a page's content last changed, and a date that is
+ * really the deploy time is a date a crawler learns to ignore.
+ */
+export function renderSitemapFile(routes = PRERENDERED_ROUTES) {
+  const urls = routes.map(route => `  <url><loc>${SITE_ORIGIN}${route}</loc></url>`);
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ...urls,
+    '</urlset>',
+    ''
+  ].join('\n');
+}
+
 /** The table entry for a pathname, or the default for anything not listed. */
 export function metaFor(pathname) {
   const path = (pathname || '/').replace(/\/+$/, '') || '/';

@@ -5,7 +5,7 @@
       "emailPassword": true,
       "googleSignIn": {
         "oAuthBrandDisplayName": "AgentDisk",
-        "supportEmail": "connect@amardrive.com"
+        "supportEmail": "connect@agentdisk.io"
       }
     }
   }

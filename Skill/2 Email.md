@@ -33,6 +33,11 @@ the `cf-bounce.` subdomain and a DMARC record at `_dmarc.agentdisk.io` — a
 domain has exactly one DMARC record, so anything else that wants one has to
 share it.
 
+Three open DNS findings from the 30 September 2026 audit: SPF lacks
+`include:_spf.firebasemail.com` although Firebase sends as `agentdisk.io`, the
+prod zone's `firebase=` TXT names the dev project, and DMARC reports go to a
+third party. See [12 Hardening](12%20Hardening.md), findings F16 to F18.
+
 ```bash
 cd apps/api
 npx wrangler email sending list        # agentdisk.io should say enabled: yes
@@ -167,7 +172,7 @@ own, because bounces cost sender reputation.
 The binding needs no secret and nothing in CI pushes one; `wrangler deploy`
 declares it from `wrangler.toml`, and the deploy log lists
 `env.EMAIL … Send Email`. The CI deploy token needed no extra permission for
-it. Prod carries the same block and has never been applied.
+it. Prod carries the same block and was first deployed on 30 September 2026.
 
 ---
 

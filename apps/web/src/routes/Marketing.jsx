@@ -314,7 +314,7 @@ export function Footer() {
           <span>
             © {new Date().getFullYear()}{' '}
             <a href={COMPANY_URL} target="_blank" rel="noopener noreferrer">{COMPANY_NAME}</a>.
-            {' '}AgentDisk&trade; is a product by {COMPANY_NAME}.
+            {' '}AgentDisk is a product by {COMPANY_NAME}.
           </span>
           <span>Files your agents can reason about.</span>
         </div>

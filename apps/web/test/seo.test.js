@@ -86,3 +86,20 @@ describe('applyPageMeta', () => {
     expect(document.head.querySelector('link[rel="canonical"]').href).toBe(`${SITE_ORIGIN}/`);
   });
 });
+
+describe('the sitemap', () => {
+  it('lists exactly the prerendered routes, at production URLs', async () => {
+    const { PRERENDERED_ROUTES, renderSitemapFile } = await import('../src/lib/seo.js');
+    const xml = renderSitemapFile();
+    expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>')).toBe(true);
+    const locs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]);
+    expect(locs).toEqual(PRERENDERED_ROUTES.map(route => `https://agentdisk.io${route}`));
+  });
+
+  it('is the same list the prerender renders', async () => {
+    // One list, not two that must agree: a route whose canonical points at /
+    // must never appear in the sitemap.
+    const seo = await import('../src/lib/seo.js');
+    expect(seo.PRERENDERED_ROUTES).toEqual(['/', '/pricing', '/docs']);
+  });
+});

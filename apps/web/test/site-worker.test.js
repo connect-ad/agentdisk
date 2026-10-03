@@ -3,7 +3,7 @@
  * hostname. See worker.js's header for the rules; each rule has a case here.
  */
 import { describe, expect, it } from 'vitest';
-import worker, { decide, isSitePath } from '../worker.js';
+import worker, { HOMEPAGE_LINKS, decide, isFilePath, isSitePath } from '../worker.js';
 
 const env = {
   SITE_HOST: 'dev.agentdisk.io',
@@ -40,9 +40,10 @@ describe('isSitePath', () => {
 
 describe('decide', () => {
   it('serves marketing routes on the site host', () => {
-    expect(decide(at('dev.agentdisk.io', '/'), env)).toEqual({ kind: 'assets' });
+    expect(decide(at('dev.agentdisk.io', '/'), env)).toEqual({ kind: 'site-home' });
     expect(decide(at('dev.agentdisk.io', '/docs/api'), env)).toEqual({ kind: 'assets' });
-    expect(decide(at('dev.agentdisk.io', '/assets/index-x.js'), env)).toEqual({ kind: 'assets' });
+    expect(decide(at('dev.agentdisk.io', '/assets/index-x.js'), env)).toEqual({ kind: 'site-file' });
+    expect(decide(at('dev.agentdisk.io', '/.well-known/api-catalog'), env)).toEqual({ kind: 'site-file' });
   });
 
   it('sends app paths on the site host to the app host, keeping path and query', () => {
@@ -118,5 +119,85 @@ describe('fetch', () => {
     const res = await worker.fetch(new Request('http://localhost:8787/login'), { ASSETS: env.ASSETS });
     expect(await res.text()).toBe('asset:/login');
     expect(res.headers.get('x-robots-tag')).toBeNull();
+  });
+});
+
+/* ------------------------- files on the site host ------------------------- */
+
+// An asset server that knows three files and answers everything else the way
+// not_found_handling = "single-page-application" does: index.html, 200.
+const filesEnv = {
+  ...env,
+  ASSETS: {
+    fetch: async request => {
+      const path = new URL(request.url).pathname;
+      const files = {
+        '/robots.txt': ['User-agent: *\n', 'text/plain'],
+        '/sitemap.xml': ['<?xml version="1.0"?>', 'application/xml'],
+        '/pricing.html': ['<html>pricing</html>', 'text/html; charset=utf-8']
+      };
+      const [body, type] = files[path] ?? ['<!doctype html><title>home</title>', 'text/html; charset=utf-8'];
+      return new Response(body, {
+        status: 200,
+        headers: { 'content-type': type, 'x-frame-options': 'DENY', 'content-security-policy': "default-src 'self'" }
+      });
+    }
+  }
+};
+
+describe('isFilePath', () => {
+  it('names files, bundles and well-known paths, never pages', () => {
+    for (const p of ['/sitemap.xml', '/auth.md', '/assets/x.js', '/.well-known/api-catalog', '/.well-known/mcp.json']) {
+      expect(isFilePath(p), p).toBe(true);
+    }
+    for (const p of ['/', '/pricing', '/docs/quickstart', '/login']) {
+      expect(isFilePath(p), p).toBe(false);
+    }
+  });
+});
+
+describe('a missing file on the site host', () => {
+  it('answers 404, not the homepage, and keeps the security headers', async () => {
+    for (const path of ['/llms-full.txt', '/.well-known/security.txt', '/.well-known/api-catalog', '/assets/gone.js', '/nope.json']) {
+      const res = await worker.fetch(new Request(`https://dev.agentdisk.io${path}`), filesEnv);
+      expect(`${path} ${res.status}`).toBe(`${path} 404`);
+      expect(res.headers.get('content-type')).toBe('text/plain; charset=utf-8');
+      expect(res.headers.get('x-robots-tag')).toBe('noindex, nofollow');
+      expect(res.headers.get('content-security-policy')).toBe("default-src 'self'");
+    }
+  });
+
+  it('serves a file that exists, whatever its type, including a real .html file', async () => {
+    for (const [path, status] of [['/robots.txt', 200], ['/sitemap.xml', 200], ['/pricing.html', 200]]) {
+      const res = await worker.fetch(new Request(`https://dev.agentdisk.io${path}`), filesEnv);
+      expect(`${path} ${res.status}`).toBe(`${path} ${status}`);
+    }
+  });
+
+  it('keeps .well-known on the site instead of redirecting it to the app', () => {
+    expect(isSitePath('/.well-known/oauth-authorization-server')).toBe(true);
+  });
+
+  it('leaves the app host alone, where a deep link may end in a file name', async () => {
+    const res = await worker.fetch(new Request('https://app-dev.agentdisk.io/w/acme/files/report.pdf'), filesEnv);
+    expect(res.status).toBe(200);
+  });
+});
+
+describe('the homepage Link header', () => {
+  it('names llms.txt and the docs on the site root', async () => {
+    const res = await worker.fetch(new Request('https://dev.agentdisk.io/'), filesEnv);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('link')).toBe(HOMEPAGE_LINKS);
+    expect(HOMEPAGE_LINKS).toContain('</llms.txt>; rel="describedby"');
+    expect(HOMEPAGE_LINKS).toContain('</docs>; rel="service-doc"');
+    expect(res.headers.get('x-frame-options')).toBe('DENY');
+  });
+
+  it('is not added to other pages or to the app host', async () => {
+    const pricing = await worker.fetch(new Request('https://dev.agentdisk.io/pricing'), filesEnv);
+    expect(pricing.headers.get('link')).toBeNull();
+    const app = await worker.fetch(new Request('https://app-dev.agentdisk.io/'), filesEnv);
+    expect(app.headers.get('link')).toBeNull();
   });
 });

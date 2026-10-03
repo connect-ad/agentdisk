@@ -1,32 +1,35 @@
 import React, { useState } from 'react';
 import { adminApi } from '../api.js';
+import { useResource } from '../lib/useResource.js';
 import { ConfirmModal, Modal } from '../components/Overlay.jsx';
-import { EmptyState, ErrorState, NotTracked } from '../components/States.jsx';
-import { holds } from '../components/Shell.jsx';
+import { EmptyState, ErrorState, NotTracked, Skeleton } from '../components/States.jsx';
 import { count, date, dateTime } from '../lib/format.js';
 import {
   card,
   dataRow,
   disabledBtn,
   ellipsis,
+  headRow,
   input,
   label,
   mono,
   paneIn,
   pills,
-  primaryBtn,
-  secondaryBtn
+  secondaryBtn,
+  th,
+  thR
 } from '../lib/ui.js';
 
 /**
  * Customer accounts.
  *
- * ── Exact-match lookup, deliberately ───────────────────────────────────────
- * No prefix or partial search. The design file's own note says so and it is a
- * better privacy posture than the spec had, so it is the actual behaviour: a
- * admin tool that can search `%@gmail.com` is a admin tool that can enumerate
- * the customer base, and every real support request starts from an address
- * somebody already has.
+ * ── A browsable list, audited per page ─────────────────────────────────────
+ * This screen used to be exact-match lookup only, so the console could not
+ * enumerate the customer base. On 2 October 2026 the owner asked for a full
+ * list with a filter and page sizes of 10, 20, 50 and 100. The server writes
+ * every page read to the audit log as `user.list`, with the filter that
+ * produced it, so browsing is possible but never invisible. Sandbox
+ * placeholders are hidden except under their own filter.
  *
  * ── No geography ───────────────────────────────────────────────────────────
  * The design shows "LAST ACTIVE … Berlin, DE". We do not store location. Last
@@ -63,37 +66,18 @@ function Fact({ name, children }) {
   );
 }
 
-export function Users({ role, onNavigate, onToast }) {
-  const [email, setEmail] = useState('');
-  const [result, setResult] = useState(null);
-  const [searched, setSearched] = useState(false);
+export function UserDetail({ userId, onNavigate, onToast }) {
+  const resource = useResource(() => adminApi.getUser(userId), [userId]);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [dialog, setDialog] = useState(null);
   const [check, setCheck] = useState(null);
 
+  const result = resource.data;
   const user = result?.user ?? null;
-  const canDelete = holds(role, 'super_admin');
-
-  async function search(event) {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    setCheck(null);
-    try {
-      setResult(await adminApi.findUser(email.trim()));
-      setSearched(true);
-    } catch (err) {
-      setError(err);
-      setResult(null);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function reload() {
-    if (!user) return;
-    setResult(await adminApi.getUser(user.id));
+    await resource.refresh();
   }
 
   async function act(fn, message) {
@@ -124,30 +108,36 @@ export function Users({ role, onNavigate, onToast }) {
     }
   }
 
+  if (resource.loading) return <Skeleton rows={6} />;
+
   return (
     <div style={paneIn}>
-      <form onSubmit={search} style={{ ...card, padding: '15px', marginBottom: '14px' }}>
-        <label htmlFor="user-email" style={label}>
-          Search by email
-        </label>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <input
-            id="user-email"
-            type="email"
-            required
-            value={email}
-            onChange={event => setEmail(event.target.value)}
-            placeholder="person@example.com"
-            style={{ ...input, ...mono, flex: 1, minWidth: '220px' }}
-          />
-          <button type="submit" style={primaryBtn} disabled={busy}>
-            {busy ? 'Searching…' : 'Search'}
-          </button>
+      <button
+        type="button"
+        onClick={() => onNavigate('/users')}
+        style={{
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          marginBottom: '14px',
+          color: 'var(--acc)',
+          cursor: 'pointer',
+          fontSize: '12.5px',
+          fontFamily: 'var(--font)'
+        }}
+      >
+        Back to all users
+      </button>
+
+      {resource.error && !result && (
+        <div style={{ marginBottom: '14px' }}>
+          <ErrorState error={resource.error} onRetry={resource.refresh} />
         </div>
-        <p style={{ margin: '10px 0 0', fontSize: '11.5px', color: 'var(--tx3)' }}>
-          Exact match only. Partial email search is deliberately unavailable to admin.
-        </p>
-      </form>
+      )}
+
+      {!resource.error && !user && (
+        <EmptyState title="No such user" detail="Nothing has this ID. It may have been purged." />
+      )}
 
       {error && (
         <div style={{ marginBottom: '14px' }}>
@@ -155,12 +145,6 @@ export function Users({ role, onNavigate, onToast }) {
         </div>
       )}
 
-      {searched && !user && !error && (
-        <EmptyState
-          title="No account with that address"
-          detail="The address has to match exactly, including the domain. An invited colleague who has never signed in still has a row, so a miss here means there is genuinely no account."
-        />
-      )}
 
       {user && (
         <>
@@ -295,19 +279,14 @@ export function Users({ role, onNavigate, onToast }) {
               ) : (
                 <button
                   type="button"
-                  style={canDelete ? secondaryBtn : disabledBtn}
-                  disabled={!canDelete || busy}
+                  style={busy ? disabledBtn : secondaryBtn}
+                  disabled={busy}
                   onClick={openDelete}
                 >
                   Delete account
                 </button>
               )}
             </div>
-            {!canDelete && (
-              <p style={{ margin: '12px 0 0', fontSize: '11.5px', color: 'var(--tx2)' }}>
-                Deleting or restoring an account needs super_admin.
-              </p>
-            )}
           </div>
 
           {/* ---------------------------- dialogs ---------------------------- */}
@@ -401,6 +380,240 @@ export function Users({ role, onNavigate, onToast }) {
             }
           />
         </>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------- the list -------------------------------- */
+
+export const PAGE_SIZES = [10, 20, 50, 100];
+
+const STATUS_FILTERS = [
+  { value: 'all', label: 'All users' },
+  { value: 'active', label: 'Active' },
+  { value: 'disabled', label: 'Disabled' },
+  { value: 'unverified', label: 'Email not verified' },
+  { value: 'deleted', label: 'Deleted' },
+  { value: 'sandbox', label: 'Sandbox placeholders' }
+];
+
+const LIST_COLS = 'minmax(0,1.8fr) 120px 110px 100px 110px';
+
+/**
+ * Where the operator was, kept across a visit to a user and back. Module
+ * scope, not storage: it lasts for the tab and goes when the console reloads.
+ */
+let remembered = { search: '', status: 'all', limit: 20, offset: 0 };
+
+/** Back to the first page of everyone. Used by the tests. */
+export function resetUserListFilter() {
+  remembered = { search: '', status: 'all', limit: 20, offset: 0 };
+}
+
+function statusOf(user) {
+  if (user.isProvisional) return { text: 'sandbox', style: pills.neutral };
+  if (user.deletedAt) return { text: 'deleted', style: pills.danger };
+  if (user.disabledAt) return { text: 'disabled', style: pills.warn };
+  return { text: 'active', style: pills.ok };
+}
+
+export function Users({ onNavigate }) {
+  const [draft, setDraft] = useState(remembered.search);
+  const [filter, setFilterState] = useState(remembered);
+
+  function setFilter(next) {
+    remembered = next;
+    setFilterState(next);
+  }
+
+  const resource = useResource(
+    () =>
+      adminApi.listUsers({
+        q: filter.search || undefined,
+        status: filter.status,
+        limit: filter.limit,
+        offset: filter.offset
+      }),
+    [filter.search, filter.status, filter.limit, filter.offset]
+  );
+
+  const users = resource.data?.users ?? [];
+  const total = resource.data?.total ?? 0;
+  const first = total === 0 ? 0 : filter.offset + 1;
+  const last = Math.min(filter.offset + users.length, total);
+  const page = Math.floor(filter.offset / filter.limit) + 1;
+  const pages = Math.max(1, Math.ceil(total / filter.limit));
+  const filtered = filter.search !== '' || filter.status !== 'all';
+
+  return (
+    <div style={paneIn}>
+      <form
+        onSubmit={event => {
+          event.preventDefault();
+          setFilter({ ...filter, search: draft.trim(), offset: 0 });
+        }}
+        style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap', alignItems: 'center' }}
+      >
+        <input
+          aria-label="Filter users"
+          placeholder="Email or user ID"
+          value={draft}
+          onChange={event => setDraft(event.target.value)}
+          style={{ ...input, flex: 1, minWidth: '220px', maxWidth: '360px', height: '32px' }}
+        />
+        <select
+          aria-label="Status"
+          value={filter.status}
+          onChange={event => setFilter({ ...filter, status: event.target.value, offset: 0 })}
+          style={{ ...input, width: 'auto', height: '32px' }}
+        >
+          {STATUS_FILTERS.map(option => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <button type="submit" style={secondaryBtn}>
+          Filter
+        </button>
+        {filtered && (
+          <button
+            type="button"
+            style={secondaryBtn}
+            onClick={() => {
+              setDraft('');
+              setFilter({ ...filter, search: '', status: 'all', offset: 0 });
+            }}
+          >
+            Clear
+          </button>
+        )}
+      </form>
+
+      {resource.error && (
+        <div style={{ marginBottom: '12px' }}>
+          <ErrorState error={resource.error} onRetry={resource.refresh} />
+        </div>
+      )}
+
+      {resource.loading && !resource.data ? (
+        <Skeleton />
+      ) : users.length === 0 && !resource.error ? (
+        <EmptyState
+          title={filtered ? 'No users match this filter' : 'No users yet'}
+          detail={
+            filtered
+              ? 'The filter matches part of an address, or a whole user ID.'
+              : 'Accounts appear here once somebody signs up.'
+          }
+        />
+      ) : (
+        <div style={card}>
+          <div style={{ overflowX: 'auto' }}>
+            <div style={{ minWidth: '720px' }}>
+              <div style={headRow(LIST_COLS)}>
+                <span style={th}>User</span>
+                <span style={th}>Status</span>
+                <span style={th}>Email</span>
+                <span style={thR}>Memberships</span>
+                <span style={thR}>Joined</span>
+              </div>
+              {users.map(user => {
+                const status = statusOf(user);
+                return (
+                  <button
+                    key={user.id}
+                    type="button"
+                    onClick={() => onNavigate(`/users/${user.id}`)}
+                    style={{ ...dataRow(LIST_COLS, true), cursor: 'pointer', width: '100%', textAlign: 'left' }}
+                  >
+                    <span style={{ minWidth: 0 }}>
+                      <span
+                        style={{
+                          display: 'block',
+                          fontSize: '12.5px',
+                          fontWeight: 500,
+                          color: 'var(--tx)',
+                          ...ellipsis
+                        }}
+                      >
+                        {user.email}
+                      </span>
+                      <span style={{ ...mono, display: 'block', fontSize: '10.5px', color: 'var(--tx3)', ...ellipsis }}>
+                        {user.id}
+                      </span>
+                    </span>
+                    <span>
+                      <span style={status.style}>{status.text}</span>
+                    </span>
+                    <span style={{ fontSize: '12px', color: user.emailVerifiedAt ? 'var(--tx2)' : 'var(--warnTx)' }}>
+                      {user.emailVerifiedAt ? 'verified' : 'not verified'}
+                    </span>
+                    <span style={{ ...mono, fontSize: '12px', color: 'var(--tx2)', textAlign: 'right' }}>
+                      {count(user.memberships)}
+                    </span>
+                    <span style={{ fontSize: '12px', color: 'var(--tx2)', textAlign: 'right' }}>
+                      {date(user.createdAt)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              flexWrap: 'wrap',
+              padding: '10px 14px',
+              background: 'var(--surf2)',
+              borderTop: '1px solid var(--bd)',
+              fontSize: '12px',
+              color: 'var(--tx2)'
+            }}
+          >
+            <label htmlFor="users-page-size" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              Rows per page
+              <select
+                id="users-page-size"
+                value={filter.limit}
+                onChange={event => setFilter({ ...filter, limit: Number(event.target.value), offset: 0 })}
+                style={{ ...input, width: 'auto', height: '28px', padding: '0 8px' }}
+              >
+                {PAGE_SIZES.map(size => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span style={{ marginLeft: 'auto' }}>
+              {count(first)}–{count(last)} of {count(total)}
+            </span>
+            <span style={{ color: 'var(--tx3)' }}>
+              Page {count(page)} of {count(pages)}
+            </span>
+            <button
+              type="button"
+              style={filter.offset === 0 || resource.busy ? disabledBtn : secondaryBtn}
+              disabled={filter.offset === 0 || resource.busy}
+              onClick={() => setFilter({ ...filter, offset: Math.max(0, filter.offset - filter.limit) })}
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              style={last >= total || resource.busy ? disabledBtn : secondaryBtn}
+              disabled={last >= total || resource.busy}
+              onClick={() => setFilter({ ...filter, offset: filter.offset + filter.limit })}
+            >
+              Next
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

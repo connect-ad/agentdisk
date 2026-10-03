@@ -487,6 +487,32 @@ if (siteUrl) {
     }
   }
 
+  // Agent readiness, 3 Oct 2026. Before this, every file path on the site
+  // answered the homepage with 200, so a scanner saw a sitemap, a
+  // security.txt and an MCP card that did not exist.
+  {
+    // Retried on the body: a file new to the asset store answers through the
+    // SPA fallback until it propagates, the same race as robots.txt.
+    let sitemap = "";
+    for (let attempt = 1; attempt <= HEADER_ATTEMPTS; attempt++) {
+      sitemap = await (await fetch(`${siteUrl}/sitemap.xml`, { redirect: "manual" })).text();
+      if (sitemap.startsWith("<?xml") || attempt === HEADER_ATTEMPTS) break;
+      console.log(`  sitemap.xml: not live yet (attempt ${attempt}/${HEADER_ATTEMPTS}); retrying in ${HEADER_RETRY_MS / 1000}s`);
+      await sleep(HEADER_RETRY_MS);
+    }
+    if (sitemap.startsWith("<?xml") && sitemap.includes("<urlset")) pass(`${siteUrl}/sitemap.xml is a sitemap`);
+    else fail(`${siteUrl}/sitemap.xml should be XML; got: ${sitemap.slice(0, 60).replace(/\n/g, "\\n")}`);
+
+    const missing = await fetch(`${siteUrl}/.well-known/smoke-test-${Date.now()}.json`, { redirect: "manual" });
+    if (missing.status === 404) pass("a missing file on the site answers 404");
+    else fail(`a missing file on the site should answer 404, got HTTP ${missing.status}`);
+
+    const home = await fetch(`${siteUrl}/`, { redirect: "manual" });
+    const link = home.headers.get("link") ?? "";
+    if (link.includes('</llms.txt>; rel="describedby"')) pass("the site root carries the Link header");
+    else fail(`GET ${siteUrl}/ should carry a Link header naming /llms.txt, got ${link || "nothing"}`);
+  }
+
   if (wwwUrl) {
     const res = await fetch(`${wwwUrl}/pricing`, { redirect: "manual" });
     const location = res.headers.get("location");

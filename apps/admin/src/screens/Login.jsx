@@ -151,7 +151,7 @@ export function Login({ notAdmin = null, error: upstreamError = null, onSignedIn
             >
               <strong>{notAdmin}</strong> is signed in, but has no admin access.
               <div style={{ marginTop: '6px' }}>
-                Ask a super_admin to add this address under Admin Accounts, or sign in with a
+                Ask an existing admin to add this address under Admin Accounts, or sign in with a
                 different one.
               </div>
             </div>

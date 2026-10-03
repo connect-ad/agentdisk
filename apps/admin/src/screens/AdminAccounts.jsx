@@ -20,7 +20,12 @@ import {
 } from '../lib/ui.js';
 
 /**
- * Admin accounts. super_admin only, all of it.
+ * Admin accounts: every console operator, and adding another.
+ *
+ * ── One role ───────────────────────────────────────────────────────────────
+ * The server has one role, `admin`, and refuses any other value. Every
+ * operator can open this screen and add somebody; there is nothing to pick
+ * and nothing to change, so the invite sends `admin` and the row shows it.
  *
  * ── An account is an address and a role ────────────────────────────────────
  * Nothing secret is created here, so nothing is shown once. Adding somebody
@@ -28,7 +33,7 @@ import {
  * and the API reads this row to decide what they may do. That also means a row
  * can exist for an address that has never signed in — which is how you onboard
  * somebody before their first day, and equally how you could grant access to an
- * address you do not control. Hence super_admin only, and audited.
+ * address you do not control. Hence the reason field, and the audit row.
  *
  * ── No 2FA column ──────────────────────────────────────────────────────────
  * The design has one. Firebase owns authentication now, so whether a admin
@@ -57,6 +62,7 @@ export function AdminAccounts({ currentAdminId, onToast }) {
     try {
       await fn();
       setDialog(null);
+      setCreating(false);
       onToast?.(message);
       await resource.refresh();
     } catch (err) {
@@ -75,7 +81,7 @@ export function AdminAccounts({ currentAdminId, onToast }) {
     <div style={paneIn}>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '14px' }}>
         <button type="button" style={primaryBtn} onClick={() => setCreating(true)}>
-          Invite admin
+          Add admin
         </button>
       </div>
 
@@ -129,23 +135,6 @@ export function AdminAccounts({ currentAdminId, onToast }) {
                     <span style={{ display: 'flex', gap: '8px' }}>
                       <button
                         type="button"
-                        disabled={self}
-                        onClick={() => setDialog({ kind: 'role', account })}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          padding: 0,
-                          color: self ? 'var(--tx3)' : 'var(--acc)',
-                          cursor: self ? 'not-allowed' : 'pointer',
-                          fontSize: '12px',
-                          fontFamily: 'var(--font)'
-                        }}
-                        title={self ? 'You cannot change your own role.' : undefined}
-                      >
-                        Role
-                      </button>
-                      <button
-                        type="button"
                         disabled={self && !account.disabledAt}
                         onClick={() => setDialog({ kind: 'disable', account })}
                         style={{
@@ -194,7 +183,7 @@ export function AdminAccounts({ currentAdminId, onToast }) {
           setError(null);
         }}
         onSubmit={(email, role, reason) =>
-          act(() => adminApi.createAccount(email, role, reason), `${email} can now sign in as ${role}.`)
+          act(() => adminApi.createAccount(email, role, reason), `${email} can now sign in to the console.`)
         }
       />
 
@@ -208,7 +197,7 @@ export function AdminAccounts({ currentAdminId, onToast }) {
         }
         description={
           dialog?.account?.disabledAt
-            ? 'They can sign in again with the same password and TOTP.'
+            ? 'They can sign in to the console again with Google.'
             : 'Every live session for this account ends immediately — without that, a disabled admin member keeps cross-tenant reach for the remaining hours of a session already open.'
         }
         requireReason
@@ -223,33 +212,21 @@ export function AdminAccounts({ currentAdminId, onToast }) {
           )
         }
       />
-
-      <RoleDialog
-        open={dialog?.kind === 'role'}
-        account={dialog?.account}
-        busy={busy}
-        error={error}
-        onCancel={() => setDialog(null)}
-        onSubmit={(role, reason) =>
-          act(() => adminApi.setAccountRole(dialog.account.id, role, reason), 'Role changed.')
-        }
-      />
     </div>
   );
 }
 
 function InviteDialog({ open, busy, error, onCancel, onSubmit }) {
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState('support');
   const [reason, setReason] = useState('');
 
   return (
     <Modal
       open={open}
-      title="Invite a admin member"
-      description="Grants an email address a admin role. They sign in with Google like everybody else — there is no invitation to send and no credential to deliver."
+      title="Add an admin"
+      description="Gives an email address full access to this console. They sign in with Google like everybody else; there is no invitation to send and no credential to deliver."
       onClose={onCancel}
-      onSubmit={() => onSubmit(email.trim(), role, reason.trim())}
+      onSubmit={() => onSubmit(email.trim(), 'admin', reason.trim())}
       submitLabel="Grant access"
       submitDisabled={!email.includes('@') || reason.trim().length < 3}
       destructive={false}
@@ -266,81 +243,12 @@ function InviteDialog({ open, busy, error, onCancel, onSubmit }) {
         style={{ ...input, marginBottom: '12px' }}
       />
 
-      <label htmlFor="invite-role" style={label}>
-        Role
-      </label>
-      <select
-        id="invite-role"
-        value={role}
-        onChange={event => setRole(event.target.value)}
-        style={{ ...input, marginBottom: '12px' }}
-      >
-        <option value="support">support — read everything, act on agents and keys</option>
-        <option value="admin">admin — also suspend, override quotas, edit plans</option>
-        <option value="super_admin">super_admin — also delete, and manage admin</option>
-      </select>
 
       <label htmlFor="invite-reason" style={label}>
         Reason (recorded in the audit log)
       </label>
       <input
         id="invite-reason"
-        value={reason}
-        onChange={event => setReason(event.target.value)}
-        style={input}
-      />
-
-      {error && (
-        <div style={{ marginTop: '14px' }}>
-          <ErrorState error={error} />
-        </div>
-      )}
-    </Modal>
-  );
-}
-
-function RoleDialog({ open, account, busy, error, onCancel, onSubmit }) {
-  const [role, setRole] = useState(account?.role ?? 'support');
-  const [reason, setReason] = useState('');
-  const [seeded, setSeeded] = useState(null);
-
-  if (open && seeded !== account?.id) {
-    setSeeded(account?.id ?? null);
-    setRole(account?.role ?? 'support');
-    setReason('');
-  }
-
-  return (
-    <Modal
-      open={open}
-      title={`Change the role of ${account?.email}`}
-      description="Takes effect on their next request. Their current session keeps working; the role it carries is re-read from the row."
-      onClose={onCancel}
-      onSubmit={() => onSubmit(role, reason.trim())}
-      submitLabel="Change role"
-      submitDisabled={reason.trim().length < 3 || role === account?.role}
-      destructive={false}
-      busy={busy}
-    >
-      <label htmlFor="role-select" style={label}>
-        Role
-      </label>
-      <select
-        id="role-select"
-        value={role}
-        onChange={event => setRole(event.target.value)}
-        style={{ ...input, marginBottom: '12px' }}
-      >
-        <option value="support">support</option>
-        <option value="admin">admin</option>
-        <option value="super_admin">super_admin</option>
-      </select>
-
-      <label htmlFor="role-reason" style={label}>
-        Reason (recorded in the audit log)
-      </label>
-      <input
-        id="role-reason"
         value={reason}
         onChange={event => setReason(event.target.value)}
         style={input}

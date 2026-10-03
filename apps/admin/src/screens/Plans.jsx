@@ -129,7 +129,7 @@ export function Plans({ role, onToast }) {
   const [actionError, setActionError] = useState(null);
 
   const canEdit = holds(role, 'admin');
-  const canCreate = holds(role, 'super_admin');
+  const canCreate = holds(role, 'admin');
   const plans = resource.data?.plans ?? [];
 
   async function act(fn, message) {

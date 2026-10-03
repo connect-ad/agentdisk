@@ -32,8 +32,8 @@ import { AuthProvider } from './lib/auth.jsx';
 import { ThemeProvider } from './lib/theme.jsx';
 import { WorkspaceProvider } from './lib/workspace.jsx';
 
-/** The routes that get a static file. Everything else stays the SPA shell. */
-export const PRERENDERED_ROUTES = ['/', '/pricing', '/docs'];
+/** The routes that get a static file, from the one list the sitemap also reads. */
+export { PRERENDERED_ROUTES } from './lib/seo.js';
 
 export function render(url) {
   return renderToString(

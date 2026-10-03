@@ -251,7 +251,24 @@ describe('search-engine indexing', () => {
   it('renders a robots.txt that disallows everything outside prod', () => {
     expect(renderRobotsFile({ environment: 'dev' })).toBe('User-agent: *\nDisallow: /\n');
     expect(renderRobotsFile({})).toBe('User-agent: *\nDisallow: /\n');
-    expect(renderRobotsFile({ environment: 'prod' })).toBe('User-agent: *\nAllow: /\n');
+    const prod = renderRobotsFile({ environment: 'prod' });
+    // The smoke test reads exactly this much: the first group, and Allow.
+    expect(prod.startsWith('User-agent: *\n')).toBe(true);
+    expect(prod).toMatch(/^Allow: \/$/m);
+  });
+
+  it('tells crawlers the AI-use policy and where the sitemap is, in prod only', () => {
+    const prod = renderRobotsFile({ environment: 'prod' });
+    expect(prod).toContain('Content-Signal: search=yes, ai-input=yes, ai-train=no');
+    expect(prod).toContain('Sitemap: https://agentdisk.io/sitemap.xml');
+    // Training crawlers are refused as one group...
+    expect(prod).toMatch(/User-agent: GPTBot\n(User-agent: [^\n]+\n)*Disallow: \/\n/);
+    expect(prod).toMatch(/User-agent: ClaudeBot\n/);
+    // ...and assistants and AI search are not in it.
+    for (const agent of ['ChatGPT-User', 'Claude-User', 'OAI-SearchBot', 'Claude-SearchBot']) {
+      expect(prod).not.toContain(agent);
+    }
+    expect(renderRobotsFile({ environment: 'dev' })).not.toContain('Sitemap:');
   });
 
   it('injects a robots meta tag into the document outside prod', () => {

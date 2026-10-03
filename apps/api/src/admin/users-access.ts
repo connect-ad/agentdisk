@@ -74,7 +74,114 @@ export interface DeletionCheck {
   cascadingOrgs: { orgId: string; orgName: string; workspaces: number }[];
 }
 
+/**
+ * The status filter on the user list. `all` means every real person: sandbox
+ * placeholders (`is_provisional = 1`, an `unclaimed-…@agentdisk.invalid`
+ * address) outnumber real accounts once agents start provisioning, so they are
+ * left out of every view except their own.
+ */
+export const USER_LIST_STATUSES = ["all", "active", "disabled", "deleted", "unverified", "sandbox"] as const;
+export type UserListStatus = (typeof USER_LIST_STATUSES)[number];
+
+/** The page sizes the console offers. Anything else is refused, not clamped. */
+export const USER_PAGE_SIZES = [10, 20, 50, 100] as const;
+
+export interface AdminUserListRow {
+  id: string;
+  email: string;
+  emailVerifiedAt: number | null;
+  isProvisional: number;
+  deletedAt: number | null;
+  disabledAt: number | null;
+  createdAt: number;
+  /** Organization and workspace memberships, counted together. */
+  memberships: number;
+}
+
+export interface AdminUserListPage {
+  users: AdminUserListRow[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+const STATUS_WHERE: Record<UserListStatus, string> = {
+  all: "u.is_provisional = 0",
+  active: "u.is_provisional = 0 AND u.deleted_at IS NULL AND u.disabled_at IS NULL",
+  disabled: "u.is_provisional = 0 AND u.deleted_at IS NULL AND u.disabled_at IS NOT NULL",
+  deleted: "u.is_provisional = 0 AND u.deleted_at IS NOT NULL",
+  unverified: "u.is_provisional = 0 AND u.deleted_at IS NULL AND u.email_verified_at IS NULL",
+  sandbox: "u.is_provisional = 1",
+};
+
 export class AdminUserAccess extends AuditedAdminAccess {
+  /**
+   * Every customer account, newest first, one page at a time.
+   *
+   * This reverses the exact-match-only rule below for browsing: on 2 October
+   * 2026 the owner asked for a full list with a filter. What keeps it honest is
+   * that every page read is written to the audit log with the filter that
+   * produced it, so enumerating the customer base is possible but never
+   * invisible.
+   */
+  async list(options: {
+    search: string | null;
+    status: UserListStatus;
+    limit: number;
+    offset: number;
+  }): Promise<AdminUserListPage> {
+    const where = [STATUS_WHERE[options.status]];
+    const binds: unknown[] = [];
+    const search = options.search?.trim().toLowerCase() ?? "";
+    if (search !== "") {
+      // LIKE wildcards in the operator's text are matched literally.
+      const escaped = search.replace(/[\\%_]/g, char => `\\${char}`);
+      where.push("(u.email LIKE ? ESCAPE '\\' OR u.id = ?)");
+      binds.push(`%${escaped}%`, options.search?.trim() ?? "");
+    }
+    const clause = where.join(" AND ");
+
+    const [rows, total] = await Promise.all([
+      this.db
+        .prepare(
+          `SELECT u.id, u.email, u.email_verified_at AS emailVerifiedAt,
+                  u.is_provisional AS isProvisional, u.deleted_at AS deletedAt,
+                  u.disabled_at AS disabledAt, u.created_at AS createdAt,
+                  (SELECT COUNT(*) FROM memberships m WHERE m.user_id = u.id) AS memberships
+             FROM users u
+            WHERE ${clause}
+            ORDER BY u.created_at DESC, u.id DESC
+            LIMIT ? OFFSET ?`
+        )
+        .bind(...binds, options.limit, options.offset)
+        .all<AdminUserListRow>(),
+      this.db
+        .prepare(`SELECT COUNT(*) AS n FROM users u WHERE ${clause}`)
+        .bind(...binds)
+        .first<{ n: number }>(),
+    ]);
+
+    await this.recordFleet({
+      action: "user.list",
+      targetType: "user",
+      targetId: null,
+      metadata: {
+        search: search === "" ? null : search,
+        status: options.status,
+        limit: options.limit,
+        offset: options.offset,
+        returned: rows.results?.length ?? 0,
+      },
+    });
+
+    return {
+      users: rows.results ?? [],
+      total: total?.n ?? 0,
+      limit: options.limit,
+      offset: options.offset,
+    };
+  }
+
   /**
    * Exact match only, and deliberately so.
    *
@@ -82,7 +189,8 @@ export class AdminUserAccess extends AuditedAdminAccess {
    * `%@gmail.com` is a admin tool that can enumerate the customer base, and the
    * support workflow this exists for always starts from an address somebody
    * already has. The design file's own note says as much; this is that note
-   * made into the behaviour.
+   * made into the behaviour. Browsing now goes through `list` above, which is
+   * audited per page.
    */
   async findByEmail(email: string): Promise<AdminUserRecord | null> {
     const normalised = email.trim().toLowerCase();

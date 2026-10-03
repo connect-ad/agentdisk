@@ -503,12 +503,27 @@ if (siteUrl) {
     if (sitemap.startsWith("<?xml") && sitemap.includes("<urlset")) pass(`${siteUrl}/sitemap.xml is a sitemap`);
     else fail(`${siteUrl}/sitemap.xml should be XML; got: ${sitemap.slice(0, 60).replace(/\n/g, "\\n")}`);
 
-    const missing = await fetch(`${siteUrl}/.well-known/smoke-test-${Date.now()}.json`, { redirect: "manual" });
-    if (missing.status === 404) pass("a missing file on the site answers 404");
-    else fail(`a missing file on the site should answer 404, got HTTP ${missing.status}`);
+    let missingStatus = 0;
+    for (let attempt = 1; attempt <= HEADER_ATTEMPTS; attempt++) {
+      missingStatus = (await fetch(`${siteUrl}/.well-known/smoke-test-${Date.now()}.json`, { redirect: "manual" })).status;
+      if (missingStatus === 404 || attempt === HEADER_ATTEMPTS) break;
+      console.log(`  missing file: HTTP ${missingStatus}, not live yet (attempt ${attempt}/${HEADER_ATTEMPTS}); retrying in ${HEADER_RETRY_MS / 1000}s`);
+      await sleep(HEADER_RETRY_MS);
+    }
+    if (missingStatus === 404) pass("a missing file on the site answers 404");
+    else fail(`a missing file on the site should answer 404, got HTTP ${missingStatus}`);
 
-    const home = await fetch(`${siteUrl}/`, { redirect: "manual" });
-    const link = home.headers.get("link") ?? "";
+    // Retried too. The first prod deploy that shipped this (3 Oct 2026) was
+    // answered by the previous Worker version for a few seconds after the
+    // upload, failed here, and served the header correctly a minute later.
+    let link = "";
+    for (let attempt = 1; attempt <= HEADER_ATTEMPTS; attempt++) {
+      const home = await fetch(`${siteUrl}/`, { redirect: "manual" });
+      link = home.headers.get("link") ?? "";
+      if (link.includes('</llms.txt>; rel="describedby"') || attempt === HEADER_ATTEMPTS) break;
+      console.log(`  Link header: not live yet (attempt ${attempt}/${HEADER_ATTEMPTS}); retrying in ${HEADER_RETRY_MS / 1000}s`);
+      await sleep(HEADER_RETRY_MS);
+    }
     if (link.includes('</llms.txt>; rel="describedby"')) pass("the site root carries the Link header");
     else fail(`GET ${siteUrl}/ should carry a Link header naming /llms.txt, got ${link || "nothing"}`);
   }

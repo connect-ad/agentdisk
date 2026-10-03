@@ -16,6 +16,8 @@
  *                  workspace deep link - is a 302 to the same path on the
  *                  app host, so a link that predates the split keeps working
  *                  and a crawler sees a redirect rather than a copy.
+ *                  A file that does not exist is a real 404, and `/` carries
+ *                  a Link header naming llms.txt and the docs (3 Oct 2026).
  *   anything else  The app: every path is served, and the response says
  *                  noindex. The app host is never indexed once the site
  *                  exists; the canonical URLs in the marketing pages already
@@ -61,8 +63,41 @@ export function isSitePath(pathname) {
   // Hashed bundles, and any file by name: robots.txt, llms.txt, the logo,
   // the prerender guard, pricing.html itself. A route never has an extension.
   if (path.startsWith('/assets/')) return true;
+  if (path.startsWith('/.well-known/')) return true;
   if (/\.[a-z0-9]+$/i.test(path)) return true;
   return false;
+}
+
+/**
+ * True for a path that names a file rather than a page: anything with an
+ * extension, anything under /assets/ or /.well-known/. On the site host these
+ * must answer 404 when the file is missing.
+ */
+export function isFilePath(pathname) {
+  const path = normalize(pathname);
+  if (path.startsWith('/assets/') || path.startsWith('/.well-known/')) return true;
+  return /\.[a-z0-9]+$/i.test(path);
+}
+
+/**
+ * The homepage's Link header (RFC 8288), for agents that read headers before
+ * bodies. Only files that exist on every deploy are named.
+ */
+export const HOMEPAGE_LINKS = [
+  '</llms.txt>; rel="describedby"; type="text/plain"',
+  '</docs>; rel="service-doc"; type="text/html"'
+].join(', ');
+
+/**
+ * True when the asset server answered a file path with the SPA shell: the
+ * `not_found_handling` fallback, which returns index.html with 200 for any
+ * path it has no file for. A real .html file is the one HTML answer that is
+ * not a miss.
+ */
+export function isSpaFallback(pathname, response) {
+  if (/\.html?$/i.test(pathname)) return false;
+  const type = response.headers.get('content-type') || '';
+  return type.toLowerCase().startsWith('text/html');
 }
 
 /**
@@ -71,6 +106,8 @@ export function isSitePath(pathname) {
  *
  * Returns one of:
  *   { kind: 'assets' }       serve from the assets as-is
+ *   { kind: 'site-home' }    the site's `/`, with the Link header added
+ *   { kind: 'site-file' }    a file on the site host: the asset, or a 404
  *   { kind: 'app-assets' }   serve from the assets, marked noindex
  *   { kind: 'robots' }       the app host's own robots.txt
  *   { kind: 'redirect', status, location }
@@ -87,6 +124,8 @@ export function decide(url, env) {
   }
 
   if (host === site) {
+    if (path === '/') return { kind: 'site-home' };
+    if (isFilePath(path)) return { kind: 'site-file' };
     if (isSitePath(path)) return { kind: 'assets' };
     return { kind: 'redirect', status: 302, location: `https://${env.APP_HOST}${url.pathname}${url.search}` };
   }
@@ -108,6 +147,25 @@ export default {
           status: 200,
           headers: { 'content-type': 'text/plain; charset=utf-8', 'x-robots-tag': ROBOTS_NOINDEX }
         });
+      case 'site-home': {
+        const response = await env.ASSETS.fetch(request);
+        const linked = new Response(response.body, response);
+        linked.headers.set('link', HOMEPAGE_LINKS);
+        return linked;
+      }
+      case 'site-file': {
+        const response = await env.ASSETS.fetch(request);
+        if (!isSpaFallback(url.pathname, response)) return response;
+        // A miss. Keep the asset server's headers (the security headers from
+        // _headers) and replace the homepage it sent with a plain 404, so a
+        // crawler probing /sitemap.xml or /.well-known/* learns the truth.
+        const headers = new Headers(response.headers);
+        headers.set('content-type', 'text/plain; charset=utf-8');
+        headers.set('x-robots-tag', ROBOTS_NOINDEX);
+        headers.delete('content-length');
+        headers.delete('etag');
+        return new Response('Not found\n', { status: 404, headers });
+      }
       case 'app-assets': {
         const response = await env.ASSETS.fetch(request);
         // Headers on a fetched Response are immutable; copy before setting.

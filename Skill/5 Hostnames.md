@@ -62,6 +62,12 @@ which a crawler reads as "no rules"), and a `<meta name="robots">` injected at
 build. The smoke test checks the direction the environment demands, so a prod
 carrying noindex fails too.
 
+Prod's robots.txt also carries a Content Signals line, a group refusing
+training crawlers and a `Sitemap:` line, and the build writes `sitemap.xml`
+from the prerendered route list. On the site host the Worker answers a
+missing file with a real 404 rather than the SPA fallback. Both are in
+[12 Hardening](12%20Hardening.md).
+
 The API Worker and the admin console refuse indexing in every environment;
 neither has a prod in which being found would be right.
 

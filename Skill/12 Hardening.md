@@ -40,10 +40,10 @@ Plan limits shaped several decisions below.
 
 | # | Area | Finding | Status |
 |---|---|---|---|
-| F1 | SEO, agents | Unknown **file** paths on the site answer the homepage HTML with 200 (soft 404): `/sitemap.xml`, `/favicon.ico`, `/.well-known/security.txt`, `/.well-known/mcp.json`, `/openapi.json`, `/llms-full.txt`, `/site.webmanifest` | Open, code drafted |
+| F1 | SEO, agents | Unknown **file** paths on the site answer the homepage HTML with 200 (soft 404): `/sitemap.xml`, `/favicon.ico`, `/.well-known/security.txt`, `/.well-known/mcp.json`, `/openapi.json`, `/llms-full.txt`, `/site.webmanifest` | **Fixed 3 Oct 2026**, in `worker.js` |
 | F2 | SEO | Unknown **page** paths such as `/does-not-exist` redirect to `app.agentdisk.io`, which shows its own 404 | Open, code drafted |
 | F3 | SEO | `/privacy`, `/terms`, `/sandbox` and `/docs/quickstart` are not prerendered; they ship the homepage title and `canonical=/`, so Google treats them as duplicates of the homepage | Open |
-| F4 | SEO | No sitemap, and `robots.txt` has no `Sitemap:` line | Open, code drafted |
+| F4 | SEO | No sitemap, and `robots.txt` has no `Sitemap:` line | **Fixed 3 Oct 2026**, generated at build |
 | F5 | SEO | No real `favicon.ico` or manifest; the social image is the logo with `twitter:card=summary` | Open |
 | F6 | SEO | JSON-LD lacks `Organization` (Kernelv5) and `offers`; `/docs` is one page of about 100 KB | Open |
 | F7 | Security | Always Use HTTPS was off, with about 1,010 plain-HTTP requests in the previous 24 hours | **Fixed, C1** |
@@ -60,7 +60,7 @@ Plan limits shaped several decisions below.
 | F18 | Email | DMARC `rua` points at `dmarc_rua@onsecureserver.net`, a third party | Open |
 | F19 | Agents | `api.agentdisk.io` has no discovery: `GET /` is a JSON 404; no `openapi.json`, `/.well-known/api-catalog` or OAuth metadata | Open, code drafted |
 | F20 | Agents | Cloudflare Agent Readiness: Level 1 **2/5** (missing Sitemap, Content Signals, Markdown negotiation); Level 2 **0/3** (API Catalog, Link headers, Auth.md); Level 3 **0/8** (OAuth Discovery, OAuth Protected Resource, A2A Agent Card, Skills Index, MCP Server Card, Web Bot Auth, WebMCP, DNS-AID) | Open |
-| F21 | Agents | Bot Preference Sync is on, but the Worker serves its own `robots.txt`, so Cloudflare's managed robots rules are never prepended. Robots and Content Signals must come from the Worker | Open, code drafted |
+| F21 | Agents | Bot Preference Sync is on, but the Worker serves its own `robots.txt`, so Cloudflare's managed robots rules are never prepended. Robots and Content Signals must come from the Worker | **Fixed 3 Oct 2026**: the generated robots.txt carries Content Signals and the training-crawler group |
 
 **Note on F14.** [4 Infrastructure](4%20Infrastructure.md) records a WAF
 rate-limiting rule on `/v1/workspaces` made on 28 September. The audit two
@@ -154,7 +154,9 @@ High priority:
    flags 257 (KSK).
 2. **Test Google sign-in on `app.agentdisk.io` once** to confirm the COOP
    header did not break the popup.
-3. **Land the drafted Worker code** (F1, F2, F4, F11, F19).
+3. **Land the drafted Worker code** (F2, F11, F19). F1, F4, F21 and the
+   homepage Link header were built into the existing web build and Worker on
+   3 October 2026 instead; see "Built on 3 October" below.
 4. **Prerender `/privacy`, `/terms`, `/sandbox` and `/docs/quickstart`**,
    each with its own title, description and canonical (F3).
 
@@ -199,7 +201,31 @@ SEO and agent improvements:
 
 ---
 
-## 5. Re-checking later
+## Built on 3 October 2026
+
+Four items from this page, built into the code that already existed rather
+than the separate draft file, and verified first on `dev.agentdisk.io`:
+
+- **robots.txt** (`renderRobotsFile` in `scripts/security-headers.js`). Prod
+  now carries `Content-Signal: search=yes, ai-input=yes, ai-train=no`, one
+  group refusing training crawlers (GPTBot, ClaudeBot, Google-Extended,
+  Applebot-Extended, CCBot, Bytespider, meta-externalagent), and a `Sitemap:`
+  line. Assistants and AI search crawlers are deliberately not in that group.
+  This is what makes the zone's "Training: disallow" setting reach crawlers.
+- **sitemap.xml**, written at build from `PRERENDERED_ROUTES` in
+  `src/lib/seo.js`, the same list the prerender renders, so a page whose
+  canonical points at `/` can never be listed.
+- **Real 404s** for any missing file on the site host: a path with an
+  extension, or under `/assets/` or `/.well-known/`. The Worker spots the SPA
+  fallback (HTML answering a non-HTML path) and replaces it with a plain 404
+  that keeps the security headers. The app host is untouched, because a deep
+  link there may end in a file name.
+- **A Link header on `/`** naming `/llms.txt` (describedby) and `/docs`
+  (service-doc).
+
+The deploy smoke test asserts all four on the site host.
+
+
 
 ```bash
 curl -sI https://agentdisk.io/                       # HSTS, CSP, Permissions-Policy, COOP

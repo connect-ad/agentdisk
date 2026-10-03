@@ -21,6 +21,8 @@
  * decision, not by oversight.
  */
 
+import { SITE_ORIGIN } from "../src/lib/seo.js";
+
 /** The API this build talks to. Matches `lib/api.js`'s own default. */
 const DEFAULT_API_BASE = "https://api-dev.agentdisk.io";
 
@@ -234,9 +236,45 @@ export function renderHeadersFile(options = {}) {
  * "no rules" — the smoke test checks the body, not the status, for that reason.
  */
 export function renderRobotsFile(options = {}) {
-  const rule = isIndexable(options.environment) ? "Allow: /" : "Disallow: /";
-  return `User-agent: *\n${rule}\n`;
+  if (!isIndexable(options.environment)) return "User-agent: *\nDisallow: /\n";
+  return [
+    "User-agent: *",
+    `Content-Signal: ${CONTENT_SIGNAL}`,
+    "Allow: /",
+    "",
+    "# Crawlers that collect model training data. Search and answer bots",
+    "# are welcome under the group above; these are not.",
+    ...AI_TRAINING_CRAWLERS.map((agent) => `User-agent: ${agent}`),
+    "Disallow: /",
+    "",
+    `Sitemap: ${SITE_ORIGIN}/sitemap.xml`,
+    "",
+  ].join("\n");
 }
+
+/**
+ * The Content Signals line (contentsignals.org): appear in search, be used to
+ * answer a question in the moment, never be trained on. It matches the zone's
+ * own AI bot settings in Cloudflare (Search allow, Agent allow, Training
+ * disallow), which never reached crawlers before 3 October 2026: the Worker
+ * serves this file, so Cloudflare's managed robots.txt is not prepended.
+ */
+export const CONTENT_SIGNAL = "search=yes, ai-input=yes, ai-train=no";
+
+/**
+ * User agents that crawl to build training sets, and only that. Assistants
+ * fetching a page for a person (ChatGPT-User, Claude-User) and AI search
+ * crawlers (OAI-SearchBot, Claude-SearchBot) are deliberately absent.
+ */
+export const AI_TRAINING_CRAWLERS = [
+  "GPTBot",
+  "ClaudeBot",
+  "Google-Extended",
+  "Applebot-Extended",
+  "CCBot",
+  "Bytespider",
+  "meta-externalagent",
+];
 
 /**
  * The `<meta name="robots">` tag for `index.html`, or nothing.

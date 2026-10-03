@@ -29,6 +29,12 @@ nothing in CI can see it:
    DNSSEC (pending the DS record at the registrar), a Transform Rule that
    adds `Permissions-Policy` and COOP at the edge, CT monitoring and Crawler
    Hints, all set in the dashboard. See [12 Hardening](12%20Hardening.md).
+7. **Cloudflare Access app "AgentDisk Protected Zone"**, made by hand on
+   30 September 2026: `securepanel.`, `securepanel-dev.` and `app-dev.` sit
+   behind a login that admits members of the Cloudflare account only. The
+   deploy smoke tests carry no Access credential, so since then every console
+   deploy and every web dev deploy reports failure even though the upload
+   succeeded. The site checks in the web smoke test still run and pass.
 
 Dev is the same shape on `dev.`, `app-dev.`, `api-dev.`, `mcp-dev.` and
 `securepanel-dev.`, deployed on every push to `dev`.
@@ -83,6 +89,7 @@ a live hostname; see [1 Build](1%20Build.md).
 | The pricing page shows nothing purchasable | The `plans` rows have no Stripe price IDs; run Sync from the console |
 | A per-IP limit never fires from this machine | The VPN rotates addresses per connection; test over one keep-alive connection |
 | R2 answers `AccessDenied` | The token's permissions or scope changed, not its secret |
+| A console or web dev deploy fails its smoke test with `GET / returned HTTP 302` | Cloudflare Access is in front of that host; the deploy itself went out. The fix is an Access service token sent by the smoke test, not removing Access |
 
 ## Data resets, when wanted
 

@@ -16,6 +16,7 @@ import { useWorkspace } from '../lib/workspace.jsx';
 // price at all.
 import { COUNTING_NOTE, PLANS } from '../lib/pricing.js';
 import { COMPANY_LEGAL_NAME } from '../lib/company.js';
+import { trackEvent } from '../lib/analytics.js';
 
 /**
  * 8.22 Members · 8.24 Privacy · 8.25 Billing — MVP-1 settings tabs.
@@ -662,9 +663,11 @@ export function BillingTab() {
 
   const startCheckout = async planId => {
     const result = await act(planId, () => api.createCheckoutSession(workspaceId, planId, interval));
+    if (result === null) return;
+    trackEvent('begin_checkout', { plan: planId, interval });
     // Same tab, matching openPortal: this is a checkout-shaped flow and a
     // blocked popup here reads as a broken button.
-    if (result !== null) window.location.assign(result.url);
+    window.location.assign(result.url);
   };
 
   const applyChange = async planId => {

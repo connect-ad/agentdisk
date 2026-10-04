@@ -1,8 +1,9 @@
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import { discoveryFiles } from './scripts/agent-discovery.js';
 import { renderHeadersFile, renderRobotsFile, robotsMetaTag } from './scripts/security-headers.js';
 import { renderSitemapFile } from './src/lib/seo.js';
 
@@ -61,6 +62,23 @@ function securityHeadersFile(env) {
       // Every environment: the URLs are production's, and dev's robots.txt
       // disallows everything anyway. Without it /sitemap.xml was the homepage.
       writeFileSync(join(here, 'dist', 'sitemap.xml'), renderSitemapFile(), 'utf8');
+      // The agent discovery documents (auth.md, openapi.json, the API catalog,
+      // the MCP server card, the skills index, the ARD manifest), naming this
+      // environment's API and site. Only a build that knows both hostnames
+      // can write them; a single-host local build goes without.
+      if (env.VITE_API_BASE && env.VITE_SITE_HOST && env.VITE_APP_HOST) {
+        const files = discoveryFiles({
+          apiBase: env.VITE_API_BASE,
+          siteHost: env.VITE_SITE_HOST,
+          appHost: env.VITE_APP_HOST,
+          llmsTxt: readFileSync(join(here, 'public', 'llms.txt'), 'utf8')
+        });
+        for (const [path, contents] of Object.entries(files)) {
+          const file = join(here, 'dist', ...path.split('/').filter(Boolean));
+          mkdirSync(dirname(file), { recursive: true });
+          writeFileSync(file, contents, 'utf8');
+        }
+      }
     }
   };
 }

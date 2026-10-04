@@ -33,7 +33,7 @@ function renderAt(path) {
 }
 
 const SECTION_IDS = [
-  'overview', 'quickstart', 'features', 'data-security',
+  'overview', 'quickstart', 'api', 'features', 'data-security',
   'deleting-data', 'deleting-account', 'privacy', 'terms', 'safety', 'reference',
 ];
 
@@ -75,6 +75,33 @@ describe('docs page', () => {
     expect(code).toContain('ask_live_');
     expect(code).not.toContain('adk_live');
     expect(code).toContain('/mcp');
+  });
+
+  it('documents the API with the field names and ID prefixes the handlers use', async () => {
+    const { container } = renderAt('/docs');
+    const section = container.querySelector('section#api');
+    const code = [...section.querySelectorAll('.doc__codebody')].map(el => el.textContent).join('\n');
+
+    // `routes/files.ts` refuses unknown fields, so a wrong name here is a 400.
+    expect(code).toContain('"mimeType"');
+    expect(code).not.toContain('contentType');
+    // `lib/ids.ts`: files are fil_, never file_.
+    expect(code).toContain('fil_');
+    expect(code).not.toMatch(/"file_/);
+    // Every area a key can operate has a worked example.
+    for (const route of ['/v1/whoami', '/v1/files', '/v1/search', '/v1/folders', '/v1/agents', '/v1/keys', '/v1/shares', '/v1/webhooks', '/v1/activity']) {
+      expect(code, route).toContain(route);
+    }
+    // The upload is three steps: declare, PUT, complete.
+    expect(code).toContain('"sizeBytes"');
+    expect(code).toContain('/complete');
+    expect(code).toContain('recursive=true');
+
+    const script = within(section).getAllByRole('tablist').at(-1);
+    expect(within(script).getAllByRole('tab').map(t => t.textContent)).toEqual(['Python', 'Node', 'Bash + jq']);
+    await userEvent.click(within(script).getByRole('tab', { name: 'Node' }));
+    const panels = within(section).getAllByRole('tabpanel');
+    expect(panels.at(-1).textContent).toContain('process.env.AGENTDISK_KEY');
   });
 
   it('offers the Claude Code command per shell, Bash first, and swaps the block on click', async () => {

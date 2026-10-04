@@ -8,7 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  GA_MEASUREMENT_ID, analyticsPath, applyAnalyticsConsent, resetAnalyticsForTests, trackPageView
+  GA_MEASUREMENT_ID, analyticsPath, applyAnalyticsConsent, resetAnalyticsForTests, trackEvent, trackPageView
 } from '../src/lib/analytics.js';
 import { saveConsent } from '../src/lib/consent.js';
 
@@ -16,10 +16,12 @@ const gaScripts = () => document.head.querySelectorAll('script[src*="googletagma
 /** The dataLayer entries as plain arrays, so they can be matched. */
 const calls = () => (window.dataLayer || []).map(args => Array.from(args));
 const pageViews = () => calls().filter(c => c[0] === 'event' && c[1] === 'page_view');
+const events = name => calls().filter(c => c[0] === 'event' && c[1] === name);
 
 beforeEach(() => {
-  // gtag is a no-op on the dev server; this is the deployed build.
+  // gtag is a no-op on the dev server and in dev's build; this is prod's.
   vi.stubEnv('DEV', false);
+  vi.stubEnv('VITE_ANALYTICS', 'on');
   window.localStorage.clear();
 });
 
@@ -61,6 +63,19 @@ describe('without consent', () => {
     expect(gaScripts()).toHaveLength(0);
   });
 
+  it("loads nothing in a build that is not prod's, even with a yes", () => {
+    vi.stubEnv('VITE_ANALYTICS', 'off');
+    saveConsent({ analytics: true });
+    trackPageView('/pricing');
+    expect(gaScripts()).toHaveLength(0);
+  });
+
+  it('sends no event', () => {
+    trackPageView('/signup');
+    trackEvent('sign_up', { method: 'password' });
+    expect(window.dataLayer).toBeUndefined();
+  });
+
   it('loads nothing on the dev server, even with a yes', () => {
     vi.stubEnv('DEV', true);
     saveConsent({ analytics: true });
@@ -99,6 +114,22 @@ describe('with consent', () => {
     expect(sent).not.toContain('oobCode');
     expect(pageViews()[0][2].page_location).toBe(`${window.location.origin}/claim/:token`);
     window.history.pushState({}, '', '/');
+  });
+});
+
+describe('events', () => {
+  it('sends a named event once collection is on', () => {
+    saveConsent({ analytics: true });
+    trackPageView('/signup');
+    trackEvent('sign_up', { method: 'google' });
+    expect(events('sign_up')).toEqual([['event', 'sign_up', { method: 'google' }]]);
+  });
+
+  it('sends nothing after a no', () => {
+    applyAnalyticsConsent(saveConsent({ analytics: true }));
+    applyAnalyticsConsent(saveConsent({ analytics: false }));
+    trackEvent('login', { method: 'password' });
+    expect(events('login')).toHaveLength(0);
   });
 });
 

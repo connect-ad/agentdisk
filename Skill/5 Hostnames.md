@@ -68,6 +68,44 @@ from the prerendered route list. On the site host the Worker answers a
 missing file with a real 404 rather than the SPA fallback. Both are in
 [12 Hardening](12%20Hardening.md).
 
+## Markdown for agents
+
+`/`, `/pricing` and `/docs` on the site host negotiate: a request whose
+`Accept` names `text/markdown` at least as strongly as `text/html` gets
+`index.md`, `pricing.md` or `docs.md` with `Content-Type: text/markdown`,
+`Vary: Accept` and an `x-markdown-tokens` estimate (characters ÷ 4). Every
+other request, every browser included, gets the HTML, which also carries
+`Vary: Accept`. The `.md` files are written by `scripts/prerender.mjs` from
+the same rendered markup as the HTML, through `scripts/page-markdown.mjs`
+(`node-html-markdown`, a build-only dependency). The nav, icons, buttons and
+form controls are dropped; title, description and canonical URL go in front
+matter. The files are also reachable by name (`/docs.md`).
+
+Cloudflare's zone-level Markdown for Agents would do this at the edge with no
+code, but it needs the Pro plan and the zone is Free. **A route added to
+`PRERENDERED_ROUTES` needs its entry in `MARKDOWN_PAGES` in `worker.js`**;
+`test/prerender.test.jsx` fails until the two agree. The app host and
+single-host mode never negotiate.
+
+## Agent discovery documents
+
+The build also writes the documents the Cloudflare Agent Readiness checks
+look for, from `scripts/agent-discovery.js` in the same plugin that writes
+robots.txt: `/auth.md`, `/openapi.json`, `/.well-known/api-catalog`,
+`/.well-known/mcp/server-card.json`, `/.well-known/agent-skills/index.json`
+with its `SKILL.md` (llms.txt with front matter, digest computed at build),
+and `/.well-known/ai-catalog.json`. Every URL in them comes from
+`VITE_API_BASE`, `VITE_SITE_HOST` and `VITE_APP_HOST`, so dev's documents
+name dev; a build missing any of the three writes none. The Worker serves
+them with `Access-Control-Allow-Origin: *`, and the API catalog as
+`application/linkset+json`, which the asset server cannot infer from a file
+with no extension. The homepage `Link` header names the catalog.
+
+The OpenAPI document lists the agent-facing routes only, and **the MCP server
+card restates `SERVER_INFO` and `PROTOCOL_VERSION` from
+`apps/api/src/mcp/server.ts`**: `test/agent-discovery.test.js` fails when the
+API's version moves and the card does not.
+
 The API Worker and the admin console refuse indexing in every environment;
 neither has a prod in which being found would be right.
 

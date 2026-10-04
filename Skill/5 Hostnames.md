@@ -108,6 +108,14 @@ card restates `SERVER_INFO` and `PROTOCOL_VERSION` from
 `apps/api/src/mcp/server.ts`**: `test/agent-discovery.test.js` fails when the
 API's version moves and the card does not.
 
+The one discovery document that is not a document is DNS. Terraform declares
+two HTTPS records under the reserved `_agents` label of each site hostname,
+`_index._agents.<site>` for the site and `_mcp._agents.<site>` for the MCP
+hostname, so an agent can find the MCP endpoint from the domain alone (DNS
+for AI Discovery, [12 Hardening](12%20Hardening.md) F20). On dev that is
+`_mcp._agents.dev.agentdisk.io` pointing at `mcp-dev.agentdisk.io`. They
+live in the stack module, not in the build, because they are zone data.
+
 The API Worker and the admin console refuse indexing in every environment;
 neither has a prod in which being found would be right.
 

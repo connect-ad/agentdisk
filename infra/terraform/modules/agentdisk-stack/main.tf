@@ -303,6 +303,55 @@ resource "cloudflare_workers_custom_domain" "www" {
   service    = cloudflare_workers_script.web.script_name
 }
 
+# ----------------------------------------------------------- DNS-AID ---
+# DNS for AI Discovery (draft-mozleywilliams-dnsop-dnsaid): HTTPS records
+# under the reserved _agents label, so an agent can find the MCP endpoint
+# from the domain alone, before any HTTP request. These are the ONLY DNS
+# records this module declares directly - every hostname record is owned by
+# its custom domain above - and they are safe to declare here because the
+# _agents names carry nothing else.
+#
+# Two records, both ServiceMode (priority 1) as the Cloudflare Agent
+# Readiness scanner requires:
+#   _index._agents.<site>  the well-known entry point, pointing at the site
+#   _mcp._agents.<site>    the MCP server, pointing at the mcp. hostname
+# There is deliberately no _a2a: AgentDisk is a tool server, not an agent
+# (12 Hardening, F20). alpn names the transport actually served (h2);
+# mandatory tells a client it may not use the record without understanding
+# both alpn and port. Record value syntax is the Cloudflare API's SvcParams
+# string, not zone-file text, hence no trailing dot on the target.
+#
+# The scanner reports these as "warn" rather than "pass" until the zone's
+# DNSSEC chain is complete, which is the DS record at the registrar (12
+# Hardening, open action 1) - nothing here can finish that.
+resource "cloudflare_dns_record" "agents_index" {
+  zone_id = var.zone_id
+  name    = "_index._agents.${local.site_hostname}"
+  type    = "HTTPS"
+  ttl     = 3600
+  comment = "DNS-AID entry point (Terraform, agentdisk-stack)"
+
+  data = {
+    priority = 1
+    target   = local.site_hostname
+    value    = "alpn=\"h2\" port=443"
+  }
+}
+
+resource "cloudflare_dns_record" "agents_mcp" {
+  zone_id = var.zone_id
+  name    = "_mcp._agents.${local.site_hostname}"
+  type    = "HTTPS"
+  ttl     = 3600
+  comment = "DNS-AID MCP endpoint (Terraform, agentdisk-stack)"
+
+  data = {
+    priority = 1
+    target   = local.mcp_hostname
+    value    = "alpn=\"h2\" port=443 mandatory=\"alpn,port\""
+  }
+}
+
 # The admin console (apps/admin), same shape as the dashboard above: an
 # assets-only Worker on its own hostname.
 #

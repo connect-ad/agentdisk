@@ -63,7 +63,9 @@ environment, rather than through Terraform.
 ## Custom domains and DNS
 
 A Workers custom domain **creates its own DNS record**. There is deliberately
-no `cloudflare_dns_record` beside it: declaring both races, and Cloudflare
+no `cloudflare_dns_record` beside it (the only records the module declares
+itself are the two DNS-AID `_agents` HTTPS records, names that carry nothing
+else): declaring both races, and Cloudflare
 refuses to attach a domain to a hostname that already carries a record. That is
 why the first prod apply of the site needed two GoDaddy A records and a `www`
 CNAME deleted by hand first, and why a "record already exists" error on a

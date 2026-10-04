@@ -44,6 +44,9 @@ import { isSlugConflict, uniqueWorkspaceSlug } from "../lib/slug";
 import { listWorkspacesForUser } from "../db/user-lookup";
 import { deleteWorkspaceCascade } from "../db/workspace-cascade";
 import type { UserRow } from "../db/user-lookup";
+import { OrgCounts } from "../db/org-counts";
+import { assertCountWithinPlan } from "../lib/count-gate";
+import { limitsForPlan, loadCatalogue } from "../billing/catalogue";
 
 /** 30 days, matching the reset the sandbox bootstrap uses. */
 const PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
@@ -106,15 +109,28 @@ export async function createWorkspaceForUser(
   }
 
   const org = await db
-    .prepare(`SELECT id FROM organizations WHERE owner_user_id = ?`)
+    .prepare(`SELECT id, plan, plan_override FROM organizations WHERE owner_user_id = ?`)
     .bind(user.id)
-    .first<{ id: string }>();
+    .first<{ id: string; plan: string; plan_override: string | null }>();
 
   if (org === null) {
     // Someone invited into a workspace, who owns no billing account of their
     // own. Nothing to create against, and nothing they can do about it here.
     throw forbidden("Only an account owner can create a workspace.");
   }
+
+  // The plan's workspace allowance. This route carries no AuthContext - a
+  // person, not a key, and no workspace yet - so the limits are resolved here
+  // from the organization row through the same catalogue the middleware uses.
+  // A workspace created from the dashboard is never a sandbox, so the claim
+  // state handed to the gate is "claimed".
+  const limits = limitsForPlan(await loadCatalogue(db, now), org.plan_override, org.plan);
+  await assertCountWithinPlan(new OrgCounts(db, org.id), "workspaces", limits, {
+    claimed_at: now,
+    claim_token_hash: null,
+    org_plan: org.plan,
+    org_plan_override: org.plan_override,
+  });
 
   const workspaceId = newId("workspace", now);
 

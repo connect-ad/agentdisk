@@ -37,6 +37,7 @@ import { normalizePrefix } from "../auth/scopes";
 import type { AuthContext } from "../middleware/auth";
 import type { ApiKeyRow } from "../db/types";
 import { audit } from "../lib/audit";
+import { assertCountWithinPlan } from "../lib/count-gate";
 import { openSecret, sealSecret } from "../lib/secretbox";
 
 /**
@@ -239,6 +240,13 @@ export async function createKey(ctx: AuthContext, request: Request): Promise<Res
   if (body.expiresAt !== undefined && body.expiresAt <= ctx.now) {
     throw validationError("That expiry is already in the past.");
   }
+
+  // The plan's key allowance, counted across the whole account and checked
+  // after every validation above: a request refused for its shape should hear
+  // about its shape, and a request refused for the plan should have nothing
+  // else wrong with it. Before the secret is generated, so nothing is minted
+  // that cannot be stored.
+  await assertCountWithinPlan(ctx.orgCounts, "apiKeys", ctx.limits, ctx.workspace);
 
   const mode: KeyMode = body.mode === "test" ? "test" : "live";
   const generated = await generateApiKey(mode);

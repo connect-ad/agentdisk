@@ -130,10 +130,39 @@ session proves.
 - `assertBillingAllowsWrite` is on every write path; `past_due` and
   `expired` each carry their own message.
 
+## Count gates (4 Oct 2026)
+
+`PLAN_LIMITS.workspaces`, `.agents`, `.apiKeys` and `.members` are enforced
+on their create paths, shaped like the share-link gate: count the live rows,
+compare, refuse with **403 FORBIDDEN** and `details: { limit, used, allowed }`.
+403 rather than 429 because a plan ceiling does not clear with time.
+
+- **Account-wide.** `db/org-counts.ts` is the one module that reads across
+  every workspace on the bill, and it reads nothing but counts. It is bound
+  to the organization in the middleware as `ctx.orgCounts`; the
+  user-authenticated `POST /v1/workspaces` builds its own from the org row
+  and resolves limits through `limitsForPlan`, the same catalogue the
+  middleware uses.
+- **Live rows, not counters.** Deleting a workspace or an agent, revoking a
+  key or removing a member frees the slot on the next request. Disabled
+  agents and disabled keys still count: they keep their slot until deleted.
+- **The owner is not a member.** Their org-wide row comes with paying for
+  the account. The member allowance is how many other people may be invited,
+  counted once per person however many workspaces they are invited to.
+- **Validation first.** The gate runs after the body is validated and after
+  duplicate checks, so a malformed request hears about its shape and "already
+  a member" wins over "plan is full".
+- **Sandboxes** are held to `SANDBOX_LIMITS` (one agent, one key) with a
+  message that says to claim the workspace rather than to upgrade.
+- The gate is a pricing boundary, not a security one: two creates racing
+  past the same ceiling can both land, and that is accepted.
+
+Tests: `test/count-gates.test.ts`. Fixtures that mint freely put the test
+organization on Team with `setOrgPlan` from `test/helpers.ts`.
+
 ## What is not built
 
-Customer-side promo validation (see above), invoice PDFs of our own,
-multi-currency (USD only, every money column in minor units), and the
-agent/key/member/workspace count gates: `PLAN_LIMITS.agents`, `.apiKeys`,
-`.members` and `.workspaces` are read by nothing on a write path, so only
-`shareLinks` is enforced. That is the one open piece of the billing module.
+Customer-side promo validation (see above), invoice PDFs of our own, and
+multi-currency (USD only, every money column in minor units). The dashboard
+does not yet show "used / allowed" for the four counted limits; it surfaces
+the refusal message from the API as the form error.

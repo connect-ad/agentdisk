@@ -21,7 +21,7 @@ import {
   listWorkspaceMembers,
   removeWorkspaceMember,
 } from "../src/routes/members";
-import { NOW, WORKSPACE_A, seedApiKey, seedTwoWorkspaces } from "./helpers";
+import { NOW, WORKSPACE_A, seedApiKey, seedTwoWorkspaces, setOrgPlan } from "./helpers";
 
 const PROJECT_ID = "agentdisk-dev";
 const KID = "members-test-key";
@@ -135,6 +135,8 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await seedTwoWorkspaces();
+  // Room to invite freely; the count gates have their own file.
+  await setOrgPlan("team");
   await env.DB.prepare(`DELETE FROM api_keys`).run();
   await env.DB.prepare(`DELETE FROM memberships WHERE user_id != 'usr_TESTUSER'`).run();
   await env.DB.prepare(`DELETE FROM users WHERE id != 'usr_TESTUSER'`).run();

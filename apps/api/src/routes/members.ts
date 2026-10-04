@@ -18,6 +18,7 @@ import { assertCanInvite, isMemberRole, MEMBER_ROLES } from "../auth/roles";
 import type { MemberRecord } from "../db/members";
 import type { AuthContext } from "../middleware/auth";
 import { audit } from "../lib/audit";
+import { assertCountWithinPlan } from "../lib/count-gate";
 
 /**
  * The owner's own row is not grantable — it comes with paying for the account.
@@ -119,6 +120,15 @@ export async function inviteMember(ctx: AuthContext, request: Request): Promise<
         : "That person is already a member of this workspace."
     );
   }
+
+  // The plan's member allowance. The owner is not a member - their org-wide
+  // row comes with paying for the account - and somebody already invited to
+  // a sibling workspace on this bill is not a second member, hence the
+  // exclusion. After the duplicate check so "already a member" wins over
+  // "plan is full" for the same person.
+  await assertCountWithinPlan(ctx.orgCounts, "members", ctx.limits, ctx.workspace, {
+    excludeUserId: user.id,
+  });
 
   const added = await ctx.members.add(user.id, body.role, ctx.now);
   if (added === null) throw new ApiError("NOT_FOUND", "No such workspace.");

@@ -44,9 +44,6 @@ Dev is the same shape on `dev.`, `app-dev.`, `api-dev.`, `mcp-dev.` and
 
 ## Known gaps
 
-- **Count gates.** `PLAN_LIMITS.agents`, `.apiKeys`, `.members` and
-  `.workspaces` are read by nothing on a write path; only share links are
-  enforced.
 - **No rate limiting on the authenticated surface or on MCP**, beyond the
   auth-failure throttle and the sandbox limits.
 - **No alerting, no error reporting, no declared log retention.** Every error

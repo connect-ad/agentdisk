@@ -21,6 +21,7 @@ import { newId } from "../lib/ids";
 import type { AuthContext } from "../middleware/auth";
 import type { AgentRow } from "../db/types";
 import { audit } from "../lib/audit";
+import { assertCountWithinPlan } from "../lib/count-gate";
 import { generateApiKey, TEST_PREFIX, type KeyMode } from "../lib/keys";
 import { sealSecret } from "../lib/secretbox";
 import { NAME_MAX } from "./keys";
@@ -85,6 +86,10 @@ export async function listAgents(ctx: AuthContext): Promise<Response> {
 
 export async function createAgent(ctx: AuthContext, request: Request): Promise<Response> {
   const body = await parse(request, createSchema);
+
+  // The plan's agent allowance, counted across the whole account. Before the
+  // insert, so a refusal leaves no row behind.
+  await assertCountWithinPlan(ctx.orgCounts, "agents", ctx.limits, ctx.workspace);
 
   const row: AgentRow = {
     id: newId("agent", ctx.now),

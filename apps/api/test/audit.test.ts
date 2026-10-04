@@ -15,7 +15,7 @@
 
 import { SELF, env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { WORKSPACE_A, WORKSPACE_B, bearer, seedAgent, seedApiKey, seedTwoWorkspaces } from "./helpers";
+import { WORKSPACE_A, WORKSPACE_B, bearer, seedAgent, seedApiKey, seedTwoWorkspaces, setOrgPlan } from "./helpers";
 
 const URL_BASE = "https://api-dev.agentdisk.io";
 
@@ -42,6 +42,8 @@ function post(path: string, token: string, body: unknown): Promise<Response> {
 
 beforeEach(async () => {
   await seedTwoWorkspaces();
+  // Room to mint freely; the count gates have their own file.
+  await setOrgPlan("team");
   for (const table of ["audit_events", "api_keys", "agents", "files"]) {
     await env.DB.prepare(`DELETE FROM ${table}`).run();
   }

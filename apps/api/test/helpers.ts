@@ -33,6 +33,16 @@ export async function seedTwoWorkspaces(): Promise<void> {
   }
 }
 
+/**
+ * Put the fixture organization on a plan. The seed leaves it on Free, whose
+ * count gates (1 agent, 2 keys, 1 member, 1 workspace) are exactly what a test
+ * about keys, agents or members would trip over while proving something else.
+ * Tests about the gates themselves set the plan they mean to test.
+ */
+export async function setOrgPlan(plan: string, orgId: string = ORG_ID): Promise<void> {
+  await env.DB.prepare(`UPDATE organizations SET plan = ? WHERE id = ?`).bind(plan, orgId).run();
+}
+
 /** Remove all workspace-owned rows between tests. */
 export async function resetTenantData(): Promise<void> {
   for (const table of ["pending_deletions", "job_runs", "share_links", "file_tags", "files", "folders", "api_keys", "agents", "audit_events"]) {

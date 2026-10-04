@@ -6,7 +6,7 @@ import { SandboxDialog } from '../components-local/SandboxDialog.jsx';
 import { SITE_ORIGIN } from '../lib/seo.js';
 
 /**
- * The documentation — one page, nine sections, written from the code.
+ * The documentation — one page, eleven sections, written from the code.
  *
  * Rebuilt 26 September 2026. The previous page was a single MCP quickstart
  * whose sidebar named eight pages that did not exist, and whose key placeholder
@@ -50,6 +50,8 @@ const SECTIONS = [
     subs: ['What AgentDisk is', 'How it fits together', 'The entity model', 'Two surfaces, one authorization chain'] },
   { id: 'quickstart', label: 'Quick start', group: 'START HERE',
     subs: ['Let me guide', 'Before you begin', '1. Get a workspace', '2. Create an agent and a key', '3. Connect your AI tool', '4. Verify the connection', '5. Use the REST API', 'Troubleshooting'] },
+  { id: 'api', label: 'Using the API', group: 'API',
+    subs: ['Without the dashboard', 'Base URL and authentication', 'Request conventions', 'Get a key by API', 'Check the key', 'Upload a file', 'List, search and read', 'Download a file', 'Update, move and copy', 'Work with folders', 'Delete files and folders', 'Manage agents and keys', 'Share links by API', 'Webhooks by API', 'Read the activity log', 'A complete script'] },
   { id: 'features', label: 'Features', group: 'PRODUCT',
     subs: ['Files and folders', 'Agents and scoped keys', 'The MCP server', 'Workspaces and claiming', 'Members', 'Share links', 'Webhooks', 'Activity log', 'Usage, plans and billing', 'The dashboard'] },
   { id: 'data-security', label: 'Data security', group: 'TRUST',
@@ -121,7 +123,7 @@ const ROUTES = [
     ['GET', '/v1/files', 'List under a path (default 50, max 200 per page)'],
     ['POST', '/v1/files', 'Create: inline base64 up to 1 MB, or declare sizeBytes for a presigned PUT'],
     ['POST', '/v1/files/:id/complete', 'Confirm a presigned upload; the size is re-read from storage'],
-    ['GET', '/v1/files/:id', 'Metadata and a one-hour download URL'],
+    ['GET', '/v1/files/:id', 'Metadata only, free of egress'],
     ['GET', '/v1/files/:id/content', 'The bytes inline, up to 1 MB: UTF-8 text or base64, counted as egress'],
     ['GET', '/v1/files/:id/download', 'A one-hour presigned GET, counted as egress'],
     ['PATCH', '/v1/files/:id', 'Caption, tags, custom metadata'],
@@ -133,7 +135,7 @@ const ROUTES = [
   ['Folders', [
     ['GET', '/v1/folders', 'List folders'],
     ['POST', '/v1/folders', 'Create, including missing parents'],
-    ['DELETE', '/v1/folders/:id', 'Delete an empty folder (emptiness is decided by path)'],
+    ['DELETE', '/v1/folders/:id', 'Delete an empty folder (emptiness is decided by path), or everything in it with ?recursive=true'],
   ]],
   ['Agents and keys', [
     ['GET', '/v1/agents', 'List agents'],
@@ -456,7 +458,7 @@ curl -X POST ${API_BASE}/v1/files \\
   -H "Authorization: Bearer $AGENTDISK_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"path":"/reports/q3.pdf","mimeType":"application/pdf","sizeBytes":8421376}'
-# → { "file": { "id": "file_…", "status": "pending" },
+# → { "file": { "id": "fil_…", "status": "pending" },
 #     "upload": { "method": "PUT", "url": "https://…", "expiresAt": "…" } }
 
 # 2. Send the bytes straight to storage. The API is not in this path.
@@ -469,7 +471,7 @@ curl -X POST ${API_BASE}/v1/files/$FILE_ID/complete \\
 
 const REST_READ = `curl ${API_BASE}/v1/files/$FILE_ID/content \\
   -H "Authorization: Bearer $AGENTDISK_KEY"
-# → { "file": { "id": "file_…", "path": "/notes/hello.txt", … },
+# → { "file": { "id": "fil_…", "path": "/notes/hello.txt", … },
 #     "encoding": "utf-8", "content": "hello from an agent", "sizeBytes": 19 }`;
 
 const REST_DOWNLOAD = `curl ${API_BASE}/v1/files/$FILE_ID/download \\
@@ -489,9 +491,379 @@ curl ${API_BASE}/v1/files \\
 
 const REST_DELETE = `curl -X DELETE ${API_BASE}/v1/files/$FILE_ID \\
   -H "Authorization: Bearer $AGENTDISK_KEY"
-# → { "id": "file_…", "status": "deleted", "permanent": true }`;
+# → { "id": "fil_…", "status": "deleted", "permanent": true }`;
 
-const REST_DELETE_WORKSPACE = `curl -X DELETE ${API_BASE}/v1/workspaces/$WORKSPACE_ID \\
+/* ── "Using the API" ───────────────────────────────────────────────────────
+   One section for somebody who wants to run AgentDisk with no dashboard at
+   all. Request bodies, response shapes and scope requirements are read from
+   `routes/files.ts`, `routes/folders.ts`, `routes/agents.ts`, `routes/keys.ts`,
+   `routes/shares.ts`, `routes/webhooks.ts`, `routes/activity.ts`,
+   `routes/whoami.ts`, `routes/create-workspace.ts` and the router in
+   `index.ts`. IDs carry the prefixes in `lib/ids.ts` (fil_, fld_, agt_, key_,
+   shr_, whk_, evt_, ws_). */
+
+/** What a key can do with no dashboard involved, and the scope op each needs. */
+const API_CAPABILITIES = [
+  ['Files', 'Upload, list, search, read inline, download, tag, move, copy, delete', 'write · list · read · delete'],
+  ['Folders', 'Create with missing parents, list, delete empty or recursively', 'write · list · delete'],
+  ['Agents', 'Create, rename, disable, delete', 'write · list · read · delete'],
+  ['API keys', 'Mint, disable, re-enable with a new secret, delete', 'keys:create (listing needs list)'],
+  ['Share links', 'Create for a file or a folder, list, revoke', 'share (listing needs list)'],
+  ['Webhooks', 'Register, change events, pause, remove', 'write (listing needs list)'],
+  ['Activity', 'Read the audit trail', 'list'],
+  ['Usage', 'Plan, quota used and left, when the period resets', 'any valid key'],
+];
+
+const API_AUTH = `curl ${API_BASE}/v1/whoami \\
+  -H "Authorization: Bearer $AGENTDISK_KEY"`;
+
+const API_ERROR = `HTTP/1.1 403 Forbidden
+{
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "This key isn't allowed to list that path.",
+    "requestId": "…",
+    "details": { "pathPrefix": "/agents/research-bot/*" }
+  }
+}`;
+
+const API_PAGINATE = `curl "${API_BASE}/v1/files?path=/reports&limit=200" \\
+  -H "Authorization: Bearer $AGENTDISK_KEY"
+# → { "files": [ … ], "nextCursor": "fil_…" }      null on the last page
+
+curl "${API_BASE}/v1/files?path=/reports&limit=200&cursor=fil_…" \\
+  -H "Authorization: Bearer $AGENTDISK_KEY"`;
+
+const API_SANDBOX = `curl -X POST ${API_BASE}/v1/workspaces \\
+  -H "Content-Type: application/json" \\
+  -d '{"name":"research","agentName":"research-bot"}'
+# → 201 {
+#     "workspace": { "id": "ws_…", "plan": "sandbox", "claimed": false,
+#                    "deleteAfter": "…", "limits": { … } },
+#     "agent":     { "id": "agt_…", "name": "research-bot" },
+#     "apiKey":    { "id": "key_…", "token": "ask_live_…", "expiresAt": null,
+#                    "scopes": { "ops": ["read","write","delete","list"], "pathPrefix": "/*" } },
+#     "claim":     { "url": "https://…", "expiresAt": "…" },
+#     "nextSteps": [ … ]
+#   }`;
+
+const API_WHOAMI_RESPONSE = `{
+  "actor": { "type": "agent", "id": "agt_…" },
+  "credential": "api_key",
+  "key": {
+    "id": "key_…", "mode": "live", "prefix": "…", "lastFour": "…",
+    "scopes": { "ops": ["read", "list"], "pathPrefix": "/agents/research-bot/*" }
+  },
+  "user": null,
+  "workspace": { "id": "ws_…", "name": "Research", "plan": "pro" },
+  "usage": {
+    "storageBytes":  { "used": 1048576, "max": 53687091200 },
+    "files":         { "used": 12, "max": 1000000 },
+    "egressBytes":   { "used": 0, "max": … },
+    "requests":      { "used": 340, "max": … },
+    "shareLinks":    { "used": 0, "max": 100 },
+    "periodResetAt": "…"
+  }
+}`;
+
+const API_UPLOAD_INLINE = `curl -X POST ${API_BASE}/v1/files \\
+  -H "Authorization: Bearer $AGENTDISK_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "path": "/notes/hello.txt",
+    "mimeType": "text/plain",
+    "content": "'"$(printf 'hello from an agent' | base64)"'",
+    "caption": "First note",
+    "tags": ["notes", "demo"],
+    "metadata": { "source": "nightly-run" }
+  }'
+# → 201 { "file": { "id": "fil_…", "path": "/notes/hello.txt", "sizeBytes": 19,
+#                   "status": "active", "tags": ["notes", "demo"], … } }`;
+
+const API_UPLOAD_PRESIGNED = `# 1. Declare the file and its size. Nothing is booked yet.
+curl -X POST ${API_BASE}/v1/files \\
+  -H "Authorization: Bearer $AGENTDISK_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"path":"/reports/q3.pdf","mimeType":"application/pdf","sizeBytes":8421376}'
+# → 201 {
+#     "file":   { "id": "fil_…", "status": "pending", "sizeBytes": 0, … },
+#     "upload": { "method": "PUT", "url": "https://…",
+#                 "headers": { "content-type": "application/pdf" },
+#                 "expiresAt": "…" },
+#     "next":   "POST /v1/files/fil_…/complete once the PUT succeeds"
+#   }
+
+# 2. PUT the bytes to upload.url with exactly upload.headers, within 15 minutes.
+#    No Authorization header: the URL is the credential, for this one file only.
+curl -X PUT "$UPLOAD_URL" -H "content-type: application/pdf" --data-binary @q3.pdf
+
+# 3. Complete. The size is read from storage, checked against your quota and booked.
+curl -X POST ${API_BASE}/v1/files/$FILE_ID/complete \\
+  -H "Authorization: Bearer $AGENTDISK_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"sizeBytes":8421376}'
+# → { "file": { "id": "fil_…", "status": "active", "sizeBytes": 8421376, … } }`;
+
+const API_LIST_READ = `# Everything under a path, 50 per page by default, 200 at most
+curl "${API_BASE}/v1/files?path=/notes" -H "Authorization: Bearer $AGENTDISK_KEY"
+# → { "files": [ { "id": "fil_…", "path": "/notes/hello.txt", … } ], "nextCursor": null }
+
+# Substring match on name, path, caption and tags. Never the contents.
+curl "${API_BASE}/v1/search?q=invoice" -H "Authorization: Bearer $AGENTDISK_KEY"
+# → { "files": [ … ], "nextCursor": null, "searchedFields": ["name","path","caption","tags"] }
+
+# One file's metadata. Free of egress.
+curl ${API_BASE}/v1/files/$FILE_ID -H "Authorization: Bearer $AGENTDISK_KEY"
+# → { "file": { "id": "fil_…", "path": "…", "mimeType": "…", "sizeBytes": 19,
+#               "checksumSha256": "…", "caption": "…", "tags": [ … ], "metadata": { … }, … } }
+
+# The bytes inline, up to 1 MB. Text as UTF-8, anything else as base64.
+curl ${API_BASE}/v1/files/$FILE_ID/content -H "Authorization: Bearer $AGENTDISK_KEY"
+# → { "file": { … }, "encoding": "utf-8", "content": "hello from an agent", "sizeBytes": 19 }`;
+
+const API_DOWNLOAD = `curl ${API_BASE}/v1/files/$FILE_ID/download \\
+  -H "Authorization: Bearer $AGENTDISK_KEY"
+# → { "url": "https://…", "method": "GET", "expiresAt": "…", "sizeBytes": 8421376 }
+
+# Fetch it within the hour. No Authorization header: the URL is the credential.
+curl -o q3.pdf "$DOWNLOAD_URL"`;
+
+const API_UPDATE_MOVE_COPY = `# Caption, tags and custom metadata. Tags and metadata replace the whole set;
+# "caption": null clears it. The bytes cannot be changed.
+curl -X PATCH ${API_BASE}/v1/files/$FILE_ID \\
+  -H "Authorization: Bearer $AGENTDISK_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"caption":"Q3 board pack","tags":["finance","q3"],"metadata":{"owner":"cfo"}}'
+
+# Move or rename. Same ID, no bytes move.
+curl -X POST ${API_BASE}/v1/files/$FILE_ID/move \\
+  -H "Authorization: Bearer $AGENTDISK_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"path":"/archive/2026/q3.pdf"}'
+# → { "file": { "id": "fil_…", "path": "/archive/2026/q3.pdf", "name": "q3.pdf",
+#               "previousPath": "/reports/q3.pdf" } }
+
+# Copy. A new file with a new ID and its own bytes.
+curl -X POST ${API_BASE}/v1/files/$FILE_ID/copy \\
+  -H "Authorization: Bearer $AGENTDISK_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"path":"/shared/q3.pdf"}'
+# → 201 { "file": { "id": "fil_…", "path": "/shared/q3.pdf", "name": "q3.pdf", "sizeBytes": 8421376 } }`;
+
+const API_FOLDERS = `# Creates every missing parent too
+curl -X POST ${API_BASE}/v1/folders \\
+  -H "Authorization: Bearer $AGENTDISK_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"path":"/projects/acme/drafts"}'
+# → 201 { "folder": { "id": "fld_…", "path": "/projects/acme/drafts", "name": "drafts",
+#                     "parentFolderId": "fld_…", … } }
+
+curl "${API_BASE}/v1/folders?path=/projects" -H "Authorization: Bearer $AGENTDISK_KEY"
+# → { "folders": [ … ] }`;
+
+const API_DELETE = `# One file. Permanent: the bytes and the record go in this request.
+curl -X DELETE ${API_BASE}/v1/files/$FILE_ID -H "Authorization: Bearer $AGENTDISK_KEY"
+# → { "id": "fil_…", "status": "deleted", "deletedAt": "…", "permanent": true }
+
+# An empty folder. Refused with 409 CONFLICT if any file's path is inside it.
+curl -X DELETE ${API_BASE}/v1/folders/$FOLDER_ID -H "Authorization: Bearer $AGENTDISK_KEY"
+# → { "id": "fld_…", "deleted": true, "files": 0 }
+
+# A folder and everything in it. Every file is destroyed, permanently.
+curl -X DELETE "${API_BASE}/v1/folders/$FOLDER_ID?recursive=true" \\
+  -H "Authorization: Bearer $AGENTDISK_KEY"
+# → { "id": "fld_…", "deleted": true, "files": 14, "bytes": 52428800 }`;
+
+const API_AGENTS_KEYS = `# 1. An agent identity (needs write)
+curl -X POST ${API_BASE}/v1/agents \\
+  -H "Authorization: Bearer $AGENTDISK_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"name":"research-bot","description":"Files research notes"}'
+# → 201 { "agent": { "id": "agt_…", "name": "research-bot", "status": "active", … } }
+
+# 2. A key that acts as it (needs keys:create, and never more than the minting key holds)
+curl -X POST ${API_BASE}/v1/keys \\
+  -H "Authorization: Bearer $AGENTDISK_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"name":"research-ro","agentId":"agt_…","ops":["read","list"],
+       "pathPrefix":"/agents/research-bot"}'
+# → 201 { "key": { "id": "key_…", "name": "research-ro", "status": "active", … },
+#         "secret": "ask_live_…", "secretRetrievable": true }`;
+
+const API_KEY_LIFECYCLE = `# Switch a key off. It stops working on the next request.
+curl -X PATCH ${API_BASE}/v1/keys/$KEY_ID \\
+  -H "Authorization: Bearer $AGENTDISK_KEY" \\
+  -H "Content-Type: application/json" -d '{"status":"disabled"}'
+
+# Switch it back on. This issues a NEW secret; the old one never works again.
+curl -X PATCH ${API_BASE}/v1/keys/$KEY_ID \\
+  -H "Authorization: Bearer $AGENTDISK_KEY" \\
+  -H "Content-Type: application/json" -d '{"status":"active"}'
+# → { "key": { … }, "secret": "ask_live_…", "secretRetrievable": true, "rotated": true }
+
+# Disable an agent, and with it every key it holds
+curl -X PATCH ${API_BASE}/v1/agents/$AGENT_ID \\
+  -H "Authorization: Bearer $AGENTDISK_KEY" \\
+  -H "Content-Type: application/json" -d '{"status":"disabled"}'
+
+# Remove a key for good
+curl -X DELETE ${API_BASE}/v1/keys/$KEY_ID -H "Authorization: Bearer $AGENTDISK_KEY"
+# → { "deleted": true }`;
+
+const API_SHARES = `# A file (fileId) or a folder (path), never both. Password optional.
+curl -X POST ${API_BASE}/v1/shares \\
+  -H "Authorization: Bearer $AGENTDISK_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"fileId":"fil_…","password":"correct horse"}'
+# → 201 { "share": { "id": "shr_…", "kind": "file", "expiresAt": "…",
+#                    "passwordProtected": true, "url": "https://…" },
+#         "url": "https://…" }
+
+curl ${API_BASE}/v1/shares -H "Authorization: Bearer $AGENTDISK_KEY"
+# → { "shares": [ … ] }
+
+curl -X DELETE ${API_BASE}/v1/shares/$SHARE_ID -H "Authorization: Bearer $AGENTDISK_KEY"
+# → { "revoked": true }`;
+
+const API_WEBHOOKS = `curl -X POST ${API_BASE}/v1/webhooks \\
+  -H "Authorization: Bearer $AGENTDISK_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"url":"https://example.com/agentdisk","events":["file.created","file.deleted"]}'
+# → 201 { "webhook": { "id": "whk_…", "url": "…", "events": [ … ], "status": "active",
+#                      "lastDeliveryAt": null, … },
+#         "secret": "whsec_…", "secretShownOnce": true }
+
+# Pause it, or change what it hears
+curl -X PATCH ${API_BASE}/v1/webhooks/$WEBHOOK_ID \\
+  -H "Authorization: Bearer $AGENTDISK_KEY" \\
+  -H "Content-Type: application/json" -d '{"status":"paused"}'
+
+curl -X DELETE ${API_BASE}/v1/webhooks/$WEBHOOK_ID -H "Authorization: Bearer $AGENTDISK_KEY"
+# → { "deleted": true }`;
+
+const API_ACTIVITY = `curl "${API_BASE}/v1/activity?limit=100" \\
+  -H "Authorization: Bearer $AGENTDISK_KEY"
+# → { "events": [ {
+#       "id": "evt_…", "action": "file.created",
+#       "actor": { "type": "agent", "id": "agt_…" },
+#       "resource": { "type": "file", "id": "fil_…" },
+#       "result": "ok", "requestId": "…", "session": "nightly-report #42",
+#       "metadata": { "path": "/notes/hello.txt", "sizeBytes": 19, "mode": "inline" },
+#       "at": "…" } ],
+#     "limit": 100 }`;
+
+const API_SCRIPT_PYTHON = `import os
+import requests  # pip install requests
+
+API = "${API_BASE}"
+HEADERS = {"Authorization": f"Bearer {os.environ['AGENTDISK_KEY']}"}
+
+
+def call(method, path, **kwargs):
+    r = requests.request(method, API + path, headers=HEADERS, **kwargs)
+    if not r.ok:
+        err = r.json()["error"]
+        raise RuntimeError(f"{err['code']}: {err['message']} (requestId {err['requestId']})")
+    return r.json()
+
+
+print(call("GET", "/v1/whoami")["workspace"])
+
+# Upload a file of any size: declare it, PUT the bytes, complete.
+size = os.path.getsize("q3.pdf")
+created = call("POST", "/v1/files", json={
+    "path": "/reports/q3.pdf", "mimeType": "application/pdf", "sizeBytes": size,
+})
+upload = created["upload"]
+with open("q3.pdf", "rb") as f:
+    requests.put(upload["url"], data=f, headers=upload["headers"]).raise_for_status()
+done = call("POST", f"/v1/files/{created['file']['id']}/complete", json={})
+print(done["file"]["status"], done["file"]["sizeBytes"])
+
+# Walk everything under /reports, a page at a time.
+cursor = None
+while True:
+    params = {"path": "/reports", "limit": 200}
+    if cursor:
+        params["cursor"] = cursor
+    page = call("GET", "/v1/files", params=params)
+    for f in page["files"]:
+        print(f["path"], f["sizeBytes"])
+    cursor = page["nextCursor"]
+    if not cursor:
+        break`;
+
+const API_SCRIPT_NODE = `// Node 18 or later, as an ES module (save as agentdisk.mjs)
+import { readFile } from 'node:fs/promises';
+
+const API = '${API_BASE}';
+const AUTH = { Authorization: \`Bearer \${process.env.AGENTDISK_KEY}\` };
+
+async function call(method, path, body) {
+  const res = await fetch(API + path, {
+    method,
+    headers: body ? { ...AUTH, 'Content-Type': 'application/json' } : AUTH,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    const e = json.error;
+    throw new Error(\`\${e.code}: \${e.message} (requestId \${e.requestId})\`);
+  }
+  return json;
+}
+
+console.log((await call('GET', '/v1/whoami')).workspace);
+
+// Upload a file of any size: declare it, PUT the bytes, complete.
+const bytes = await readFile('q3.pdf');
+const created = await call('POST', '/v1/files', {
+  path: '/reports/q3.pdf', mimeType: 'application/pdf', sizeBytes: bytes.length,
+});
+const put = await fetch(created.upload.url, {
+  method: 'PUT', headers: created.upload.headers, body: bytes,
+});
+if (!put.ok) throw new Error(\`upload failed: \${put.status}\`);
+const done = await call('POST', \`/v1/files/\${created.file.id}/complete\`, {});
+console.log(done.file.status, done.file.sizeBytes);
+
+// Walk everything under /reports, a page at a time.
+let cursor = null;
+do {
+  const q = new URLSearchParams({ path: '/reports', limit: '200' });
+  if (cursor) q.set('cursor', cursor);
+  const page = await call('GET', \`/v1/files?\${q}\`);
+  for (const f of page.files) console.log(f.path, f.sizeBytes);
+  cursor = page.nextCursor;
+} while (cursor);`;
+
+const API_SCRIPT_SHELL = `#!/usr/bin/env bash
+# Needs curl and jq. Uploads one file of any size, then lists its folder.
+set -euo pipefail
+API=${API_BASE}
+AUTH="Authorization: Bearer $AGENTDISK_KEY"
+FILE=q3.pdf
+DEST=/reports/q3.pdf
+
+SIZE=$(wc -c < "$FILE" | tr -d ' ')
+CREATED=$(curl -sf -X POST "$API/v1/files" -H "$AUTH" -H "Content-Type: application/json" \\
+  -d "{\\"path\\":\\"$DEST\\",\\"mimeType\\":\\"application/pdf\\",\\"sizeBytes\\":$SIZE}")
+FILE_ID=$(echo "$CREATED" | jq -r .file.id)
+UPLOAD_URL=$(echo "$CREATED" | jq -r .upload.url)
+
+curl -sf -X PUT "$UPLOAD_URL" -H "content-type: application/pdf" --data-binary @"$FILE"
+curl -sf -X POST "$API/v1/files/$FILE_ID/complete" -H "$AUTH" \\
+  -H "Content-Type: application/json" -d '{}' | jq .file
+
+curl -sf "$API/v1/files?path=/reports" -H "$AUTH" | jq -r '.files[] | "\\(.path)\\t\\(.sizeBytes)"'`;
+
+const API_SCRIPTS = [
+  { label: 'Python', code: API_SCRIPT_PYTHON },
+  { label: 'Node', code: API_SCRIPT_NODE },
+  { label: 'Bash + jq', code: API_SCRIPT_SHELL },
+];
+
+const REST_DELETE_WORKSPACE =`curl -X DELETE ${API_BASE}/v1/workspaces/$WORKSPACE_ID \\
   -H "Authorization: Bearer $FIREBASE_ID_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"name":"exact workspace name"}'`;
@@ -1280,7 +1652,9 @@ export function Docs({ sandbox = false }) {
               <Code caption="DOWNLOAD">{REST_DOWNLOAD}</Code>
               <Code caption="DELETE — PERMANENT">{REST_DELETE}</Code>
               <P>
-                The full route table is in the <a href="#reference">Reference</a>.
+                Every operation, with its request and response, is in{' '}
+                <a href="#api">Using the API</a>. The full route table is in the{' '}
+                <a href="#reference">Reference</a>.
               </P>
 
               <H3 id={slug('Troubleshooting')}>Troubleshooting</H3>
@@ -1294,6 +1668,206 @@ export function Docs({ sandbox = false }) {
                 <><strong>429 LIMIT_EXCEEDED.</strong> A quota (the body's <code>details.limit</code> says which: storage, files, egress) or a rate limit. Free space, upgrade, or wait for the window. If the message says <em>too many failed authentication attempts</em>, your address sent thirty bad credentials in fifteen minutes, usually a stale key in one client's config, and every call from that address is refused until the window ends. Fix the key, then wait.</>,
                 <><strong>Every write fails with a billing message.</strong> The account is past due or expired. Fix the card under Billing; reads keep working throughout.</>,
               ]} />
+            </section>
+
+            {/* ═════════════════════ USING THE API ═════════════════════ */}
+            <section id="api" className="doc__section">
+              <H2 id="api-heading">Using the API</H2>
+              <P>
+                Everything the dashboard does with files, folders, agents and keys, a script can do
+                with an API key and plain HTTPS. The dashboard is a client of this same API, so
+                nothing on this page is a second-class path. This section walks through each
+                operation with its request, its response, and the scope it needs.
+              </P>
+
+              <H3 id={slug('Without the dashboard')}>Without the dashboard</H3>
+              <P>A key can do all of this, each operation limited by the scope the key was given:</P>
+              <Table
+                head={['Area', 'What you can do', 'Scope it needs']}
+                rows={API_CAPABILITIES.map(([area, does, scope]) => [<strong>{area}</strong>, does, <code>{scope}</code>])}
+              />
+              <P>
+                A few things belong to the person who owns the account, and an API key is refused
+                for them by design. They use the same routes, but with a signed-in session instead
+                of a key, which is what the dashboard sends:
+              </P>
+              <List items={[
+                <>Signing up, and so the first key on an account. Or skip the account: a <a href="#get-a-key-by-api">sandbox</a> gives you a workspace and a key from one call.</>,
+                <>Adding, renaming or deleting a workspace. A key belongs to exactly one workspace.</>,
+                <>Members: inviting, changing a role, removing. Owner only.</>,
+                <>Billing: checkout, plan changes, cancellation, the billing portal. Owner only; the payment itself is always on Stripe's page.</>,
+                <>Viewing a kept key's secret again, closing the account, and signing out every session.</>,
+              ]} />
+
+              <H3 id={slug('Base URL and authentication')}>Base URL and authentication</H3>
+              <P>
+                Base URL <code>{API_BASE}</code>. Every call carries the key as a Bearer token in the{' '}
+                <code>Authorization</code> header. The key decides the workspace, so no call names one.
+              </P>
+              <Code caption="SET THE KEY ONCE" variants={EXPORT_KEY_SHELLS} />
+              <Code caption="EVERY CALL">{API_AUTH}</Code>
+              <Note tone="warn">
+                Never put a key in a URL. Query strings land in logs, proxies and shell history, and
+                the API refuses a key sent that way. Keep keys in environment variables or a secrets
+                manager, and give each script its own key scoped to the paths it needs, so a leak
+                is bounded and can be switched off on its own.
+              </Note>
+
+              <H3 id={slug('Request conventions')}>Request conventions</H3>
+              <List items={[
+                <><strong>JSON in, JSON out.</strong> Send <code>Content-Type: application/json</code> with a body. Unknown fields in a file create are refused rather than ignored, so a typo such as <code>contentType</code> for <code>mimeType</code> fails loudly with a 400.</>,
+                <><strong>Paths are how you name things.</strong> They start with <code>/</code>, like <code>/reports/q3.pdf</code>. IDs are how you act on them: <code>fil_…</code> for files, <code>fld_…</code> for folders, <code>agt_…</code>, <code>key_…</code>, <code>shr_…</code>, <code>whk_…</code>.</>,
+                <><strong>Pagination is by cursor.</strong> Lists return <code>nextCursor</code>; pass it back as <code>cursor</code> until it is <code>null</code>. <code>limit</code> is 50 by default and 200 at most.</>,
+                <><strong>Errors have one shape.</strong> A status code, a stable <code>code</code> to branch on, a <code>message</code> for people, and a <code>requestId</code> to quote to support. All codes are in the <a href="#error-codes">Reference</a>.</>,
+                <><strong>Label your runs.</strong> Send <code>X-AgentDisk-Session: nightly-report #42</code> and every Activity row the call writes carries that label.</>,
+                <><strong>Bad keys are throttled.</strong> Thirty failed authentications from one address in fifteen minutes block that address until the window ends. A script looping on a stale key locks itself out.</>,
+              ]} />
+              <Code caption="AN ERROR">{API_ERROR}</Code>
+              <Code caption="PAGINATION">{API_PAGINATE}</Code>
+
+              <H3 id={slug('Get a key by API')}>Get a key by API</H3>
+              <P>
+                With an account, the first key comes from the dashboard (Quick start, step 2). Mint
+                that one with <code>keys:create</code> and it can mint narrower keys for every other
+                agent and script from then on, with no dashboard involved. See{' '}
+                <a href="#manage-agents-and-keys">Manage agents and keys</a>.
+              </P>
+              <P>
+                With no account at all, one unauthenticated POST creates a sandbox workspace, an agent
+                and a key that can read, write, delete and list. The sandbox has a small allowance and
+                is deleted after three days unless a person claims it with the link in the response.
+                Claiming keeps every file, and the key keeps working.
+              </P>
+              <Code caption="A SANDBOX, NO ACCOUNT">{API_SANDBOX}</Code>
+              <Note tone="warn">
+                <code>apiKey.token</code> and <code>claim.url</code> are both shown once. Store the
+                key in your own config, never inside the workspace. Give the claim link to the person
+                who should own the workspace: whoever opens it signed in takes ownership.
+              </Note>
+
+              <H3 id={slug('Check the key')}>Check the key</H3>
+              <P>
+                <code>GET /v1/whoami</code> works with any valid key. It returns who the key acts as,
+                what it may do and where, and how much of the account's allowance is left. Storage
+                and file counts are the account's totals, because that is what an upload is checked
+                against.
+              </P>
+              <Code caption="GET /v1/whoami">{API_WHOAMI_RESPONSE}</Code>
+
+              <H3 id={slug('Upload a file')}>Upload a file</H3>
+              <P>
+                There are two ways to upload, and both need <code>write</code> on the path. Files
+                up to 1 MB go inline: base64 in the JSON body, one call, and the file is active when
+                the call returns.
+              </P>
+              <Code caption="INLINE, UP TO 1 MB">{API_UPLOAD_INLINE}</Code>
+              <P>
+                To upload a file from disk, encode it with no line breaks, since the API refuses
+                wrapped base64: <code>base64 -w0 notes.txt</code> on Linux,{' '}
+                <code>base64 -i notes.txt</code> on macOS.
+              </P>
+              <P>
+                Anything larger, up to your plan's per-file cap, takes three calls. The bytes go
+                straight to storage, never through the API.
+              </P>
+              <Code caption="PRESIGNED, ANY SIZE">{API_UPLOAD_PRESIGNED}</Code>
+              <List items={[
+                <><strong>Send <code>content</code> or <code>sizeBytes</code>, never both.</strong> Which one you send picks the path.</>,
+                <><strong>Files are not overwritten.</strong> A path that already holds a file answers 409 CONFLICT. To replace a file, delete it and upload again, or upload to a new path and move it.</>,
+                <><strong>Sizes are checked twice.</strong> The declared size gets a quota decision up front. <code>complete</code> then reads the real size from storage. If the real size breaks the per-file cap or the quota, the bytes are deleted and the error is returned.</>,
+                <><strong>A pending file holds its path.</strong> If the upload URL expires or a complete fails, delete that file ID before declaring the path again.</>,
+                <><strong>Checksums.</strong> Send <code>checksumSha256</code> as lowercase hex. Storage verifies it on an inline upload and refuses bytes that do not match. On a presigned upload it is recorded, not verified.</>,
+                <><strong>Metadata.</strong> <code>caption</code> up to 1,024 characters, up to 32 <code>tags</code> of 64 characters each, and <code>metadata</code> as string pairs (keys up to 64 characters, values up to 1,024).</>,
+              ]} />
+
+              <H3 id={slug('List, search and read')}>List, search and read</H3>
+              <P>
+                Listing and search need <code>list</code>; metadata and contents need{' '}
+                <code>read</code>. A key restricted to a path only ever sees what is under that path.
+                Ask for something wider and the listing narrows to the key's own path rather than
+                failing.
+              </P>
+              <Code caption="LIST, SEARCH, METADATA, CONTENTS">{API_LIST_READ}</Code>
+
+              <H3 id={slug('Download a file')}>Download a file</H3>
+              <P>
+                For files over 1 MB, or whenever you want the raw bytes, ask for a download URL. It
+                is valid for one hour. Egress counts when the URL is issued, so ask for one only when
+                you are about to fetch.
+              </P>
+              <Code caption="DOWNLOAD">{API_DOWNLOAD}</Code>
+
+              <H3 id={slug('Update, move and copy')}>Update, move and copy</H3>
+              <P>
+                The bytes of a file never change, but its metadata, path and name can. A move needs{' '}
+                <code>write</code> at both the old and the new path. A copy needs <code>read</code> at
+                the source and <code>write</code> at the destination, and counts against storage like
+                any new file. Both refuse a destination that already holds a file.
+              </P>
+              <Code caption="UPDATE, MOVE, COPY">{API_UPDATE_MOVE_COPY}</Code>
+
+              <H3 id={slug('Work with folders')}>Work with folders</H3>
+              <P>
+                Folders are optional. Uploading to <code>/a/b/c.txt</code> works without any folders
+                existing; create one when you want an empty directory to show up in a listing.
+              </P>
+              <Code caption="FOLDERS">{API_FOLDERS}</Code>
+
+              <H3 id={slug('Delete files and folders')}>Delete files and folders</H3>
+              <P>
+                Deleting needs <code>delete</code> on the path. A delete is permanent: there is no
+                recycle bin and no restore call. Storage and the file count are released at once.
+              </P>
+              <Code caption="DELETE — PERMANENT">{API_DELETE}</Code>
+
+              <H3 id={slug('Manage agents and keys')}>Manage agents and keys</H3>
+              <P>
+                An agent is a named identity, and keys act as it. Give every script or model its own
+                agent, so the Activity log shows which one did what, and disabling one stops it
+                without touching the rest. A new key can never get more than the key minting it:
+                operations must be a subset, and its path restriction must be the same or deeper.
+              </P>
+              <Code caption="AN AGENT AND ITS KEY">{API_AGENTS_KEYS}</Code>
+              <List items={[
+                <><code>ops</code> is any of <code>read</code>, <code>write</code>, <code>delete</code>, <code>list</code>, <code>share</code>, <code>keys:create</code>.</>,
+                <><code>pathPrefix</code> goes at most two levels deep, like <code>/agents/research-bot</code>. Leave it out for the whole workspace, if the minting key has the whole workspace.</>,
+                <><code>mode: "test"</code> mints an <code>ask_test_…</code> key. <code>expiresAt</code> is a Unix time in milliseconds; leave it out for no expiry.</>,
+                <>Names are up to 15 characters. Agent names use letters, numbers, dots, dashes and underscores.</>,
+              ]} />
+              <Code caption="SWITCH OFF, ROTATE, REMOVE">{API_KEY_LIFECYCLE}</Code>
+
+              <H3 id={slug('Share links by API')}>Share links by API</H3>
+              <P>
+                A share link opens one file, or a folder, to anyone with the URL, for up to seven
+                days. It needs <code>share</code> on the path, and a plan that includes share links.
+                On the Free plan the call returns 403 with <code>details.limit</code> set to{' '}
+                <code>shareLinks</code>. <code>expiresAt</code> is optional: an ISO 8601 time in
+                UTC, at most seven days ahead.
+              </P>
+              <Code caption="SHARE LINKS">{API_SHARES}</Code>
+
+              <H3 id={slug('Webhooks by API')}>Webhooks by API</H3>
+              <P>
+                Register an HTTPS endpoint and AgentDisk will POST to it when files change, signed
+                with a secret that is shown once. Today <code>file.created</code> and{' '}
+                <code>file.deleted</code> are delivered. Registering needs <code>write</code>.
+              </P>
+              <Code caption="WEBHOOKS">{API_WEBHOOKS}</Code>
+              <Code caption="VERIFY A DELIVERY">{WEBHOOK_VERIFY}</Code>
+
+              <H3 id={slug('Read the activity log')}>Read the activity log</H3>
+              <P>
+                The same audit trail the dashboard shows, newest first, up to 200 rows per call. It
+                needs <code>list</code>.
+              </P>
+              <Code caption="ACTIVITY">{API_ACTIVITY}</Code>
+
+              <H3 id={slug('A complete script')}>A complete script</H3>
+              <P>
+                Check the key, upload a file of any size, then walk a folder page by page. Set{' '}
+                <code>AGENTDISK_KEY</code> first, and the same steps run in each language.
+              </P>
+              <Code caption="END TO END" variants={API_SCRIPTS} />
             </section>
 
             {/* ═══════════════════════ FEATURES ═══════════════════════ */}

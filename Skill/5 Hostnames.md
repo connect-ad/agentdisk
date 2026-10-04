@@ -133,7 +133,7 @@ pages (soft 404s, missing sitemap, four routes not prerendered), are in
 
 `npm run build` ends with `scripts/prerender.mjs`, which renders every public
 page with react-dom/server into a flat file per route: `index.html`,
-`pricing.html`, `security.html`, `blog/<slug>.html` and so on, 33 pages as of
+`pricing.html`, `security.html`, `blog/<slug>.html` and so on, 34 pages as of
 4 Oct 2026. Flat files, not directories, because the asset server's
 trailing-slash handling would redirect `/pricing` to `/pricing/` for
 `pricing/index.html`. The same script writes `sitemap.xml` from the same list,
@@ -156,7 +156,7 @@ fails the suite rather than the deploy.
 ## The long-form pages (4 Oct 2026)
 
 The trust pages (`/security`, `/privacy`, `/terms`, `/trust`,
-`/sub-processors`, in `routes/Trust.jsx`), the blog (`/blog`,
+`/sub-processors`, `/dpa`, in `routes/Trust.jsx`), the blog (`/blog`,
 `/blog/:slug`), the comparisons (`/compare`, `/compare/:slug`), the
 alternatives (`/alternatives`, `/alternatives/:slug`) and the four
 `/storage-for-<agent>` pages. They share one frame,
@@ -179,9 +179,13 @@ as FAQPage JSON-LD, and posts carry BlogPosting JSON-LD.
 - **The old trust anchors forward.** `/docs#data-security`, `#safety`,
   `#privacy` and `#terms`, and the `/docs/<id>` forms, redirect from
   `Docs.jsx` (`TRUST_MOVED`).
-- **There is no `/dpa`.** A DPA is a contract, and the Privacy Policy still
-  leaves transfer mechanisms and governing law to be specified; the Trust
-  Center says to write in instead. Competitor facts on the comparison pages
+- **`/dpa` is a click-through contract (4 Oct 2026).** The owner chose a
+  published DPA that applies through the Terms over one signed per customer,
+  and settled the governing law as Delaware. It incorporates the 2021 SCCs by
+  reference, and every commitment in it restates something the system already
+  does; its seven-day byte deletion holds only where `PENDING_DELETION_ENABLED`
+  is `"true"`. Change it with the Privacy Policy and Sub-processors pages, which
+  repeat its transfer and notice terms. Competitor facts on the comparison pages
   come from the owner's brief of 4 Oct 2026 and say so on the page; they do
   not update themselves.
 

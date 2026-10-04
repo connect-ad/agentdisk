@@ -24,7 +24,7 @@ import { Landing, Pricing } from './routes/Marketing.jsx';
 import Claim from './routes/Claim.jsx';
 import SharePage from './routes/SharePage.jsx';
 import Docs from './routes/Docs.jsx';
-import { Security, Privacy, Terms, TrustCenter, SubProcessors } from './routes/Trust.jsx';
+import { Security, Privacy, Terms, TrustCenter, SubProcessors, Dpa } from './routes/Trust.jsx';
 import { BlogIndex, BlogPost } from './routes/Blog.jsx';
 import {
   CompareIndex, ComparePage, AlternativesIndex, AlternativePage,
@@ -471,6 +471,7 @@ export default function App() {
       <Route path="/terms" element={<Terms />} />
       <Route path="/trust" element={<TrustCenter />} />
       <Route path="/sub-processors" element={<SubProcessors />} />
+      <Route path="/dpa" element={<Dpa />} />
       {/* The blog, the comparisons and the agent pages. Their content is in
           src/content; lib/pages.js lists them for the prerender. */}
       <Route path="/blog" element={<BlogIndex />} />

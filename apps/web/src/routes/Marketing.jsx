@@ -278,6 +278,7 @@ const FOOT_COLUMNS = [
     { to: '/privacy', label: 'Privacy' },
     { to: '/terms', label: 'Terms' },
     { to: '/sub-processors', label: 'Sub-processors' },
+    { to: '/dpa', label: 'DPA' },
   ] },
   { head: 'Blog', links: [
     { to: '/blog', label: 'Latest' },

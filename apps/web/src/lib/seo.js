@@ -76,6 +76,11 @@ export const PAGE_META = {
     description:
       'Third-party sub-processors used by AgentDisk: Cloudflare, Firebase, Stripe and Google Analytics, and what each one processes.'
   },
+  '/dpa': {
+    title: 'Data Processing Agreement — AgentDisk',
+    description:
+      'The AgentDisk Data Processing Agreement: our GDPR Article 28 commitments as your processor, with the EU Standard Contractual Clauses for international transfers.'
+  },
   // Index pages. The posts, comparisons and agent pages carry their own
   // metadata beside their content; lib/pages.js gathers it.
   '/blog': {

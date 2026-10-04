@@ -5,7 +5,7 @@ import {
 } from '../components-local/Prose.jsx';
 
 /**
- * The trust pages: /security, /privacy, /terms, /trust and /sub-processors.
+ * The trust pages: /security, /privacy, /terms, /trust, /sub-processors and /dpa.
  *
  * Moved out of the docs on 4 Oct 2026, where they were four sections behind
  * hash anchors (#data-security, #safety, #privacy, #terms). The text of
@@ -22,10 +22,9 @@ import {
  * and the paid products it does not have are named as absent rather than
  * left out.
  *
- * There is no /dpa. A data processing agreement is a contract Kernelv5 signs,
- * and the Privacy Policy still says the transfer mechanisms and governing law
- * are to be specified; publishing one is the owner's and counsel's call. The
- * hub says how to ask for one instead of linking to nothing.
+ * /dpa joined them on 4 Oct 2026, once the owner settled the governing law
+ * (Delaware) and chose a published click-through DPA over one signed per
+ * customer. Privacy names the transfer mechanism it brings in.
  */
 
 const TRUST_CRUMB = { to: '/trust', label: 'Trust Center' };
@@ -40,6 +39,8 @@ const TRUST_PAGES = [
     body: 'Acceptable use, agent API use, limits, billing, deletion, liability: all seventeen sections.' },
   { to: '/sub-processors', kicker: 'SUB-PROCESSORS', title: 'Sub-processors',
     body: 'Every third party that processes data for AgentDisk, what it processes and where.' },
+  { to: '/dpa', kicker: 'DPA', title: 'Data Processing Agreement',
+    body: 'Our commitments as your processor under the GDPR, with the Standard Contractual Clauses for transfers.' },
 ];
 
 function MoreTrust({ except }) {
@@ -61,7 +62,7 @@ const SECURITY_FAQ = [
   { q: 'How does AgentDisk isolate tenant data?',
     a: 'The authorization chain binds the workspace from the credential before any handler runs, and hands the handler storage and database objects already bound to that workspace. Cross-tenant access is prevented at that layer, and REST and MCP share the one chain. Tests seed two workspaces and prove every route answers the other tenant\'s IDs with 404.' },
   { q: 'Does AgentDisk support GDPR?',
-    a: 'The Privacy Policy sets out what we collect, the processors, retention and your rights, and deletion and download are self-service in the product. A data processing agreement is not published yet; if you need one, write to connect@agentdisk.io.' },
+    a: 'The Privacy Policy sets out what we collect, the processors, retention and your rights, and deletion and download are self-service in the product. Our Data Processing Agreement is published at /dpa, applies automatically as part of the Terms, and incorporates the EU Standard Contractual Clauses for international transfers.' },
   { q: 'Where is AgentDisk data stored?',
     a: 'File bytes are in Cloudflare R2 object storage and metadata, keys and the audit log are in Cloudflare\'s edge database, both on Cloudflare\'s global network. There is no region to choose.' },
   { q: 'How are API keys secured?',
@@ -314,7 +315,7 @@ export function Privacy() {
       crumbs={[TRUST_CRUMB, { label: 'Privacy Policy' }]}
       kicker="TRUST"
       title="Privacy Policy"
-      meta="Last updated: 26 September 2026"
+      meta="Last updated: 4 October 2026"
       toc={PRIVACY_TOC}
     >
       <section id="privacy" className="doc__section">
@@ -383,8 +384,10 @@ export function Privacy() {
         <P>
           Our infrastructure, sign-in and analytics providers operate global networks, so your
           data may be processed outside your home country; Google Analytics data, when you allow
-          it, is processed by Google in the United States. The specific transfer mechanisms will be
-          stated here once the operating entity is finalised.
+          it, is processed by Google in the United States. Kernelv5 Inc. is established in the
+          United States. For files and metadata you store with us, transfers from the EU, the UK and
+          Switzerland are covered by the Standard Contractual Clauses in our{' '}
+          <Link to="/dpa">Data Processing Agreement</Link>.
         </P>
 
         <H3 id={slug('Children')}>Children</H3>
@@ -396,8 +399,8 @@ export function Privacy() {
         <H3 id={slug('Your rights')}>Your rights</H3>
         <P>
           Depending on where you live you may have rights to access, correct, delete, export
-          or object to the processing of your data. Deletion and export are in your own hands
-          in the product, see <Link to="/docs/deleting-data">Deleting your data</Link> and{' '}
+          or object to the processing of your data. Deleting your data and downloading your files
+          are in your own hands in the product, see <Link to="/docs/deleting-data">Deleting your data</Link> and{' '}
           <Link to="/docs/deleting-account">Deleting your account</Link>. For anything else, contact
           us.
         </P>
@@ -432,7 +435,7 @@ export function Terms() {
       crumbs={[TRUST_CRUMB, { label: 'Terms of Service' }]}
       kicker="TRUST"
       title="Terms of Service"
-      meta="Last updated: 26 September 2026"
+      meta="Last updated: 4 October 2026"
       toc={TERMS_TOC}
     >
       <section id="terms" className="doc__section">
@@ -440,7 +443,7 @@ export function Terms() {
           These are the terms under which Kernelv5 Inc. (&ldquo;we&rdquo;, &ldquo;us&rdquo;) provides
           AgentDisk (the &ldquo;Service&rdquo;). They apply to you and to
           any agent acting under credentials you control. The <Link to="/privacy">Privacy
-          Policy</Link> is part of them.
+          Policy</Link> and the <Link to="/dpa">Data Processing Agreement</Link> are part of them.
         </P>
 
         <H3 id={slug('Acceptance')}>1. Acceptance</H3>
@@ -578,10 +581,219 @@ export function Terms() {
 
         <H3 id={slug('Governing law')}>17. Governing law</H3>
         <P>
-          To be specified once the operating entity is finalised.
+          These Terms are governed by the laws of the State of Delaware, USA, without regard to
+          its conflict-of-laws rules. Any dispute arising from them or from the Service is
+          subject to the jurisdiction of the state and federal courts located in Delaware,
+          except where the law of your country gives you a right to bring it elsewhere.
         </P>
       </section>
       <MoreTrust except="/terms" />
+    </SitePage>
+  );
+}
+
+/* ═════════════════════════════ DPA ═════════════════════════════ */
+
+/**
+ * The data processing agreement, published 4 Oct 2026 at the owner's
+ * instruction from the standard GDPR Article 28 structure, with the EU
+ * Standard Contractual Clauses incorporated by reference for transfers.
+ *
+ * The rule is the rest of this file's: every commitment is something the
+ * running system or the existing policies already do. Deletion timings are
+ * the ones on /docs/deleting-data and depend on PENDING_DELETION_ENABLED being
+ * "true" in the environment; breach notice is the statutory "without undue
+ * delay", not an hour count nobody has drilled. Customer Data is the files,
+ * their metadata and the Activity log; account, billing and analytics data are
+ * Kernelv5's own as controller and stay under the Privacy Policy.
+ */
+const DPA_TOC = ['Scope', 'Roles', 'Instructions', 'Confidentiality', 'Security', 'Sub-processors',
+  'International transfers', 'Data subject requests', 'Personal data breaches', 'Deletion and return',
+  'Audits and information', 'Liability and precedence', 'Governing law', 'Annex: details of processing']
+  .map((label, i) => ({ id: slug(label), label: i < 13 ? `${i + 1}. ${label}` : label }));
+
+export function Dpa() {
+  return (
+    <SitePage
+      crumbs={[TRUST_CRUMB, { label: 'Data Processing Agreement' }]}
+      kicker="TRUST"
+      title="Data Processing Agreement"
+      meta="Last updated: 4 October 2026"
+      toc={DPA_TOC}
+    >
+      <section id="dpa" className="doc__section">
+        <P>
+          This Data Processing Agreement (the &ldquo;DPA&rdquo;) is between Kernelv5 Inc., a Delaware
+          corporation that provides AgentDisk (&ldquo;we&rdquo;, &ldquo;us&rdquo;), and the account holder
+          (&ldquo;you&rdquo;). It forms part of the <Link to="/terms">Terms of Service</Link> and needs no
+          signature: it applies automatically whenever we process personal data on your behalf that
+          is protected by the GDPR, the UK GDPR or the Swiss Federal Act on Data Protection. If your
+          organisation needs a countersigned copy, write to <code>connect@agentdisk.io</code>.
+        </P>
+
+        <H3 id={slug('Scope')}>1. Scope</H3>
+        <P>
+          &ldquo;Customer Data&rdquo; means the files you and your agents store in AgentDisk, the
+          metadata attached to them (paths, captions, tags and custom key-values) and your
+          workspaces' Activity log. This DPA covers the personal data within Customer Data. Your
+          account, billing and website-analytics information is ours to handle as a controller and
+          is covered by the <Link to="/privacy">Privacy Policy</Link> instead. A sandbox workspace
+          that nobody has claimed has no account holder; this DPA applies to it from the moment it
+          is claimed.
+        </P>
+
+        <H3 id={slug('Roles')}>2. Roles</H3>
+        <P>
+          For Customer Data you are the controller, or a processor acting for your own customer,
+          and we are your processor, or your sub-processor. You are responsible for having a
+          lawful basis for the personal data you store and for what you tell the people it is
+          about.
+        </P>
+
+        <H3 id={slug('Instructions')}>3. Instructions</H3>
+        <P>
+          We process Customer Data only to provide the Service, on your documented instructions.
+          Your instructions are these Terms and this DPA, and every request you or your agents make
+          through the dashboard, the API or the MCP server. We do not use Customer Data for our own
+          purposes, do not sell it, and do not use it to train any AI model; no AI processor touches
+          it. We will tell you if we believe an instruction breaks data protection law, and we may
+          process Customer Data otherwise only where the law requires it, in which case we will tell
+          you first unless the law forbids that.
+        </P>
+
+        <H3 id={slug('Confidentiality')}>4. Confidentiality</H3>
+        <P>
+          Only people who need access to run the Service may reach Customer Data, and each of them
+          is bound to confidentiality. We do not open file contents in the ordinary course; we do so
+          only to investigate abuse or a security incident, or to answer a valid legal request.
+          Operator access goes through a separate admin console in which every action is audited.
+        </P>
+
+        <H3 id={slug('Security')}>5. Security</H3>
+        <P>
+          We maintain the technical and organisational measures described on the{' '}
+          <Link to="/security">Security</Link> page, which forms Annex II of this DPA. In summary:
+          TLS on every connection, encryption at rest by our infrastructure provider, tenant
+          isolation bound from the credential before any handler runs, API keys scoped to operations
+          and a path prefix, keys stored only as a hash and as authenticated ciphertext, short-lived
+          single-object URLs for file transfer, and an audit log of agent and owner actions. We may
+          improve these measures over time but will not reduce the overall level of protection.
+        </P>
+
+        <H3 id={slug('Sub-processors')}>6. Sub-processors</H3>
+        <P>
+          You authorise us to use the sub-processors listed on the{' '}
+          <Link to="/sub-processors">Sub-processors</Link> page, which forms Annex III of this DPA.
+          Each one is bound by a written agreement with data protection obligations no less
+          protective than ours here, and we remain responsible to you for its performance. Before
+          we add or replace a sub-processor that processes Customer Data, we update that page and
+          email account owners at least 14 days in advance. You may object on reasonable data
+          protection grounds by writing to us within that period; if we cannot resolve the
+          objection, you may stop using the Service and delete your account, which you can do at
+          any time without asking us.
+        </P>
+
+        <H3 id={slug('International transfers')}>7. International transfers</H3>
+        <P>
+          We are established in the United States, and Customer Data is stored on Cloudflare's
+          global network, where no region can be chosen. Where Customer Data protected by the GDPR is
+          transferred to a country without an adequacy decision, the Standard Contractual Clauses
+          approved by European Commission Implementing Decision (EU) 2021/914 apply and are
+          incorporated into this DPA by reference: Module Two where you are a controller and Module
+          Three where you are a processor, with you as data exporter and us as data importer. For
+          those Clauses, the optional Clause 7 does not apply; under Clause 9 option 2 applies with
+          the notice period in section 6; the optional wording in Clause 11 does not apply; Clauses
+          17 and 18 select the law and courts of Ireland; and the Annexes are completed by the
+          Annex below, the Security page and the Sub-processors page.
+        </P>
+        <P>
+          For Customer Data protected by the UK GDPR, the International Data Transfer Addendum
+          issued by the UK Information Commissioner applies to those Clauses. For Customer Data
+          protected by Swiss law, the same Clauses apply with references to the GDPR read as the
+          Swiss Federal Act on Data Protection, the Swiss Federal Data Protection and Information
+          Commissioner as the competent supervisory authority, and the term &ldquo;member
+          state&rdquo; read so that data subjects in Switzerland can enforce their rights there.
+        </P>
+
+        <H3 id={slug('Data subject requests')}>8. Data subject requests</H3>
+        <P>
+          The Service lets you find, download and permanently delete Customer Data yourself, through
+          the dashboard, the API or the MCP tools, which is how you answer requests for access,
+          erasure and portability. If a person contacts us directly about Customer Data, we will pass
+          the request to you and will not answer it ourselves unless you ask us to. Where you need
+          more help, such as information for a data protection impact assessment, we will provide
+          what we reasonably can.
+        </P>
+
+        <H3 id={slug('Personal data breaches')}>9. Personal data breaches</H3>
+        <P>
+          If we become aware of a personal data breach affecting Customer Data, we will notify the
+          account owner's email address without undue delay. The notice will describe what happened,
+          the data and people likely affected, the likely consequences and what we are doing about
+          it, as far as that is known, and we will send more as we learn it. Notifying you is not an
+          admission of fault.
+        </P>
+
+        <H3 id={slug('Deletion and return')}>10. Deletion and return</H3>
+        <P>
+          You can download your files at any time while your account exists, and delete them at any
+          time. When you delete a file, its bytes and its record go in the same request. When you
+          delete a workspace or your account, its records go in the request and the file bytes are
+          removed from storage within seven days, as described in{' '}
+          <Link to="/docs/deleting-data">Deleting your data</Link> and{' '}
+          <Link to="/docs/deleting-account">Deleting your account</Link>. Deleted database records can
+          remain in our infrastructure provider's point-in-time recovery for up to 30 days before they
+          expire; we use that only to recover the Service from a failure. Request logs are kept for
+          around 90 days. We keep nothing longer unless the law requires it.
+        </P>
+
+        <H3 id={slug('Audits and information')}>11. Audits and information</H3>
+        <P>
+          The Security and Sub-processors pages, and the certifications of our infrastructure
+          providers, are the information we make available to show compliance with this DPA. We will
+          also answer a reasonable written security questionnaire once a year. Where that is not
+          enough to meet a requirement of data protection law or of a supervisory authority, you may
+          have an audit carried out by an independent auditor bound to confidentiality, at your cost,
+          on at least 30 days' written notice, no more than once in any twelve months, and in a way
+          that does not disrupt the Service or expose other customers' data.
+        </P>
+
+        <H3 id={slug('Liability and precedence')}>12. Liability and precedence</H3>
+        <P>
+          Each party's liability under this DPA is subject to the limitation of liability in the
+          Terms, except where data protection law or the Standard Contractual Clauses do not allow
+          it to be limited. If this DPA conflicts with the Terms, this DPA prevails for Customer Data;
+          if it conflicts with the Standard Contractual Clauses, the Clauses prevail. This DPA lasts
+          as long as we process Customer Data for you.
+        </P>
+
+        <H3 id={slug('Governing law')}>13. Governing law</H3>
+        <P>
+          This DPA is governed by the laws of the State of Delaware, USA, as the Terms are, except
+          that the Standard Contractual Clauses are governed by the law their Clause 17 selects. We
+          may update this DPA as the law or the Service changes; a change that reduces your
+          protection is announced to account owners by email before it takes effect, and the date
+          above moves.
+        </P>
+
+        <H3 id={slug('Annex: details of processing')}>Annex: details of processing</H3>
+        <Table
+          head={['Item', 'Detail']}
+          rows={[
+            ['Subject matter', 'Storing and serving files for AI agents and the people who run them'],
+            ['Duration', 'While your account exists, then until deletion completes as in section 10'],
+            ['Nature and purpose', 'Storage, retrieval, listing and search by name, path, caption and tags, transfer, sharing by link, webhook notification and deletion, as you or your agents request'],
+            ['Personal data', 'Whatever personal data you choose to store in files and their metadata; IP addresses and identities recorded in the Activity log'],
+            ['Data subjects', 'Whoever the stored data is about, as you decide; the people and agents acting in your workspaces'],
+            ['Special categories', 'Only if you choose to store them; the Service does not inspect content to detect them'],
+            ['Frequency', 'Continuous, for as long as you use the Service'],
+            ['Sub-processors', <><Link to="/sub-processors">Sub-processors</Link> page</>],
+            ['Security measures', <><Link to="/security">Security</Link> page</>],
+            ['Contact', <code>connect@agentdisk.io</code>],
+          ]}
+        />
+      </section>
+      <MoreTrust except="/dpa" />
     </SitePage>
   );
 }
@@ -600,9 +812,11 @@ export function TrustCenter() {
       <section className="doc__section" aria-labelledby="trust-dpa">
         <H2 id="trust-dpa">Data processing agreement</H2>
         <P>
-          AgentDisk does not publish a data processing agreement yet. If your organisation
-          needs one before storing personal data, write to <code>connect@agentdisk.io</code>{' '}
-          and we will work through it with you.
+          Our <Link to="/dpa">Data Processing Agreement</Link> sets out our commitments as your
+          processor under the GDPR, the UK GDPR and Swiss law, and incorporates the Standard
+          Contractual Clauses for international transfers. It is part of the Terms and applies
+          automatically, with nothing to sign; if your organisation needs a countersigned copy,
+          write to <code>connect@agentdisk.io</code>.
         </P>
       </section>
 
@@ -663,10 +877,10 @@ export function SubProcessors() {
       />
       <P>
         When a processor is added or changes, this page and the Privacy Policy are updated with
-        a new date, and significant changes are announced by email to account owners; see{' '}
-        <Link to="/privacy">Privacy Policy</Link>. A data processing agreement is not published
-        yet; write to <code>connect@agentdisk.io</code> if you need one. How the data is
-        protected is on <Link to="/security">Security</Link>.
+        a new date. A new sub-processor for the files and metadata you store is announced by
+        email to account owners at least 14 days before it starts, as the{' '}
+        <Link to="/dpa">Data Processing Agreement</Link> sets out. How the data is protected is
+        on <Link to="/security">Security</Link>.
       </P>
       <MoreTrust except="/sub-processors" />
     </SitePage>

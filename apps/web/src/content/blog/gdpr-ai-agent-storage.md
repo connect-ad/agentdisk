@@ -64,9 +64,9 @@ Article 28 requires that processing by a processor is governed by a contract tha
 
 If you transfer personal data outside the EU, there is a further question of which transfer mechanism applies.
 
-Here is where AgentDisk stands, plainly. **We have not published a DPA yet.** The international transfer mechanisms and governing law are to be specified once the operating entity is finalised. We are not going to describe AgentDisk as GDPR compliant or claim transfer safeguards we have not put in writing. AgentDisk itself holds no compliance certification; it runs on infrastructure from providers that hold SOC 2 and ISO 27001 among others.
+AgentDisk's [Data Processing Agreement](/dpa) is published and forms part of the [Terms](/terms), so it applies automatically with nothing to sign. It covers the Article 28 points above, and for transfers out of the EU it incorporates the Standard Contractual Clauses (Module Two, or Module Three where you are yourself a processor), with the UK Addendum and the Swiss adjustments. Kernelv5 Inc., which provides AgentDisk, is a Delaware corporation. If your organisation needs a countersigned copy, write to connect@agentdisk.io.
 
-If your use of AgentDisk depends on a signed DPA, write to connect@agentdisk.io and tell us what you need. That is useful input for us, and it is better than finding the gap after you have built on us. Also note that AgentDisk has no regions and you cannot choose where data is stored, which may matter for your own assessment.
+Two things worth knowing for your own assessment. AgentDisk holds no compliance certification of its own; it runs on infrastructure from providers that hold SOC 2 and ISO 27001 among others. And AgentDisk has no regions, so you cannot choose where data is stored.
 
 ## What AgentDisk gives you today
 
@@ -127,15 +127,15 @@ Separate workspaces give an even harder boundary. If you process data for severa
 
 ### Is AgentDisk GDPR compliant?
 
-We do not describe AgentDisk that way. Compliance depends on how you use a service as well as on the service itself, and AgentDisk has not yet published a DPA or specified its international transfer mechanisms. What it offers today is self-service deletion, a stated retention list, consent-only analytics and no AI processing of your files.
+We do not describe AgentDisk that way, because compliance depends on how you use a service as well as on the service itself. What AgentDisk provides is a published Data Processing Agreement with the Standard Contractual Clauses, self-service deletion, a stated retention list, consent-only analytics and no AI processing of your files.
 
 ### Who is the controller and who is the processor?
 
 For the files you store, you are the controller and AgentDisk acts as a processor. You decide what is stored, why and for how long; AgentDisk stores and serves it as your requests direct.
 
-### Can I get a signed DPA?
+### Does AgentDisk have a DPA?
 
-Not yet; no DPA has been published. If you need one, email connect@agentdisk.io with your requirements so we know what to prioritise.
+Yes. The Data Processing Agreement at /dpa is part of the Terms and applies automatically, with the Standard Contractual Clauses for international transfers. If you need a countersigned copy, email connect@agentdisk.io.
 
 ### How fast is data deleted?
 

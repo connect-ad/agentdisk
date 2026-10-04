@@ -51,7 +51,7 @@
 const SITE_ROUTES = new Set([
   '/', '/pricing', '/docs', '/sandbox',
   // The trust pages, the indexes and the agent pages (4 Oct 2026).
-  '/security', '/privacy', '/terms', '/trust', '/sub-processors',
+  '/security', '/privacy', '/terms', '/trust', '/sub-processors', '/dpa',
   '/blog', '/compare', '/alternatives',
   '/storage-for-claude', '/storage-for-openai', '/storage-for-cursor', '/storage-for-cline'
 ]);
@@ -73,7 +73,7 @@ const SITE_SECTIONS = /^\/(blog|compare|alternatives)\/[a-z0-9-]+$/;
 export const MARKDOWN_PAGES = {
   '/': '/index.md', '/pricing': '/pricing.md', '/docs': '/docs.md',
   '/security': '/security.md', '/privacy': '/privacy.md', '/terms': '/terms.md',
-  '/trust': '/trust.md', '/sub-processors': '/sub-processors.md',
+  '/trust': '/trust.md', '/sub-processors': '/sub-processors.md', '/dpa': '/dpa.md',
   '/blog': '/blog.md', '/compare': '/compare.md', '/alternatives': '/alternatives.md',
   '/storage-for-claude': '/storage-for-claude.md', '/storage-for-openai': '/storage-for-openai.md',
   '/storage-for-cursor': '/storage-for-cursor.md', '/storage-for-cline': '/storage-for-cline.md'

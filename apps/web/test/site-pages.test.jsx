@@ -23,7 +23,7 @@ vi.mock('../src/lib/auth.jsx', () => ({
 const { parseFrontmatter, parseBlocks, parseInline, splitFaq } = await import('../src/lib/markdown.js');
 const { POSTS, relatedPosts } = await import('../src/lib/blog.js');
 const { Footer } = await import('../src/routes/Marketing.jsx');
-const { Security, SubProcessors } = await import('../src/routes/Trust.jsx');
+const { Security, SubProcessors, Dpa, Terms, TrustCenter } = await import('../src/routes/Trust.jsx');
 
 afterEach(cleanup);
 
@@ -108,7 +108,7 @@ describe('the footer and the old anchors', () => {
     at('/', <Footer />);
     const footer = screen.getByRole('contentinfo');
     const hrefs = within(footer).getAllByRole('link').map(a => a.getAttribute('href'));
-    for (const href of ['/security', '/trust', '/privacy', '/terms', '/sub-processors', '/blog',
+    for (const href of ['/security', '/trust', '/privacy', '/terms', '/sub-processors', '/dpa', '/blog',
       '/compare/agentdisk-vs-fast-io', '/compare/agentdisk-vs-s3', '/compare/agentdisk-vs-diskd-ai', '/alternatives']) {
       expect(hrefs, href).toContain(href);
     }
@@ -159,5 +159,43 @@ describe('the security page', () => {
     expect(rows).toEqual([
       'Cloudflare, Inc.', 'Google LLC (Firebase Authentication)', 'Stripe, Inc.', 'Google LLC (Google Analytics)',
     ]);
+  });
+});
+
+describe('the data processing agreement', () => {
+  it('names the processor, the transfer clauses and the governing law', () => {
+    const { container } = at('/dpa', <Dpa />);
+    const text = container.textContent;
+    expect(text).toMatch(/Kernelv5 Inc\., a Delaware/);
+    expect(text).toMatch(/\(EU\) 2021\/914/);
+    expect(text).toMatch(/Module Two/);
+    expect(text).toMatch(/International Data Transfer Addendum/);
+    expect(text).toMatch(/without undue delay/);
+    expect(text).toMatch(/within seven days/);
+    expect(text).toMatch(/laws of the State of Delaware/);
+  });
+
+  it('is linked from the Trust Center and named by the Terms', () => {
+    const hub = at('/trust', <TrustCenter />).container;
+    expect([...hub.querySelectorAll('a')].map(a => a.getAttribute('href'))).toContain('/dpa');
+    cleanup();
+    const terms = at('/terms', <Terms />).container.textContent;
+    expect(terms).toMatch(/Data Processing Agreement/);
+    expect(terms).toMatch(/laws of the State of Delaware/);
+  });
+
+  it('leaves no page saying the entity, the DPA or the governing law is still to come', () => {
+    const files = [];
+    (function walk(dir) {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (/\.(jsx?|md)$/.test(name)) files.push(path);
+      }
+    })(resolve(process.cwd(), 'src'));
+    for (const file of files) {
+      const text = readFileSync(file, 'utf8');
+      expect(text, file).not.toMatch(/operating entity is finalised|not published (a DPA|yet)|DPA has been published|does not publish a data processing agreement/);
+    }
   });
 });

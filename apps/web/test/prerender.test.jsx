@@ -23,6 +23,7 @@ const EXPECTED = {
   '/terms': 'Terms of Service',
   '/trust': 'Trust Center',
   '/sub-processors': 'Sub-processors',
+  '/dpa': 'Data Processing Agreement',
   '/blog': 'Blog',
   '/compare/agentdisk-vs-s3': 'AgentDisk vs S3 for AI agents',
   '/alternatives/fast-io': 'Looking for a Fast.io alternative?',

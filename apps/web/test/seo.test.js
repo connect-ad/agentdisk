@@ -127,7 +127,7 @@ describe('the sitemap', () => {
 
   it('includes every trust page, index, comparison, agent page and blog post', () => {
     const xml = sitemapFile();
-    for (const path of ['/security', '/privacy', '/terms', '/trust', '/sub-processors', '/blog',
+    for (const path of ['/security', '/privacy', '/terms', '/trust', '/sub-processors', '/dpa', '/blog',
       '/compare', '/alternatives', '/compare/agentdisk-vs-s3', '/alternatives/fast-io', '/storage-for-cline']) {
       expect(xml, path).toContain(`<loc>https://agentdisk.io${path}</loc>`);
     }

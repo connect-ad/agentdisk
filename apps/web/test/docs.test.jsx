@@ -32,9 +32,11 @@ function renderAt(path) {
   );
 }
 
+/* Data security, safety, privacy and the terms are pages of their own since
+   4 Oct 2026 (routes/Trust.jsx); the deletion sections stayed, under PRODUCT. */
 const SECTION_IDS = [
-  'overview', 'quickstart', 'api', 'features', 'data-security',
-  'deleting-data', 'deleting-account', 'privacy', 'terms', 'safety', 'reference',
+  'overview', 'quickstart', 'api', 'features',
+  'deleting-data', 'deleting-account', 'reference',
 ];
 
 /** `apps/api/src/mcp/tools.ts`, in registration order. */
@@ -242,7 +244,36 @@ describe('docs page', () => {
   });
 
   it('renders the same page for a nested docs path', () => {
-    const { container } = renderAt('/docs/safety');
-    expect(container.querySelector('section#safety')).not.toBeNull();
+    const { container } = renderAt('/docs/reference');
+    expect(container.querySelector('section#reference')).not.toBeNull();
+  });
+
+  it('forwards the old trust anchors, hash or path form, to their own pages', () => {
+    const moved = [
+      ['/docs#data-security', '/security'], ['/docs#safety', '/security'],
+      ['/docs#privacy', '/privacy'], ['/docs#terms', '/terms'], ['/docs/terms', '/terms'],
+    ];
+    for (const [from, to] of moved) {
+      render(
+        <MemoryRouter initialEntries={[from]}>
+          <Routes>
+            <Route path="/docs" element={<Docs />} />
+            <Route path="/docs/*" element={<Docs />} />
+            <Route path={to} element={<p>landed on {to}</p>} />
+          </Routes>
+        </MemoryRouter>
+      );
+      expect(screen.getByText(`landed on ${to}`), from).toBeTruthy();
+      cleanup();
+    }
+  });
+
+  it('keeps the deletion sections under PRODUCT and has no TRUST group', () => {
+    renderAt('/docs');
+    const toc = screen.getByRole('complementary', { name: 'Documentation sections' });
+    expect(toc.textContent).not.toMatch(/TRUST/);
+    const product = [...toc.querySelectorAll('.doc__tocgroup')].find(g => g.textContent.startsWith('PRODUCT'));
+    expect(product.textContent).toMatch(/Deleting your data/);
+    expect(product.textContent).toMatch(/Deleting your account/);
   });
 });

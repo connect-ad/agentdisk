@@ -38,8 +38,8 @@ const DEST = {
   signup: '/signup',
   reset: '/forgot-password',
   app: '/app',
-  privacy: '/docs#privacy',
-  terms: '/docs#terms',
+  privacy: '/privacy',
+  terms: '/terms',
 };
 
 const ERRORS = {

@@ -5,7 +5,6 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { discoveryFiles } from './scripts/agent-discovery.js';
 import { renderHeadersFile, renderRobotsFile, robotsMetaTag } from './scripts/security-headers.js';
-import { renderSitemapFile } from './src/lib/seo.js';
 
 // This config is ESM (`"type": "module"`), so the CommonJS `__dirname` global
 // does not exist here.
@@ -59,9 +58,9 @@ function securityHeadersFile(env) {
     closeBundle() {
       writeFileSync(join(here, 'dist', '_headers'), renderHeadersFile(options), 'utf8');
       writeFileSync(join(here, 'dist', 'robots.txt'), renderRobotsFile(options), 'utf8');
-      // Every environment: the URLs are production's, and dev's robots.txt
-      // disallows everything anyway. Without it /sitemap.xml was the homepage.
-      writeFileSync(join(here, 'dist', 'sitemap.xml'), renderSitemapFile(), 'utf8');
+      // sitemap.xml is written by scripts/prerender.mjs since 4 Oct 2026,
+      // from the same list of routes it prerenders, blog posts included.
+      //
       // The agent discovery documents (auth.md, openapi.json, the API catalog,
       // the MCP server card, the skills index, the ARD manifest), naming this
       // environment's API and site. Only a build that knows both hostnames

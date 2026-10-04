@@ -273,7 +273,9 @@ if (!appBehindAccess) {
   console.log("\n[3b] Prerendered marketing routes");
   /** The root body as served once the new asset list has propagated. */
   let propagatedRoot = rootBody;
-  for (const path of ["/", "/pricing", "/docs"]) {
+  // /security and /blog since 4 Oct 2026: one trust page and one index, so a
+  // build that lost the content pages fails here rather than in a search console.
+  for (const path of ["/", "/pricing", "/docs", "/security", "/blog"]) {
     const marker = `<meta name="agentdisk:prerendered" content="${path}"`;
     let response;
     let body = "";

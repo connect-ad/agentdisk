@@ -2,7 +2,7 @@ import React from 'react';
 import { COMPANY_BYLINE, COMPANY_NAME, COMPANY_URL } from '../lib/company.js';
 
 /**
- * "A project by Kernelv5", as a link to the company site.
+ * "A product by Kernelv5", as a link to the company site.
  *
  * A text wordmark, deliberately: the company has no logo, and an <img>
  * waiting for one would be a broken glyph on every page until it arrived.

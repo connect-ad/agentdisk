@@ -32,8 +32,26 @@ import { AuthProvider } from './lib/auth.jsx';
 import { ThemeProvider } from './lib/theme.jsx';
 import { WorkspaceProvider } from './lib/workspace.jsx';
 
-/** The routes that get a static file, from the one list the sitemap also reads. */
-export { PRERENDERED_ROUTES } from './lib/seo.js';
+import { headTags, renderSitemapFile } from './lib/seo.js';
+import { ALL_ROUTES, CONTENT_META } from './lib/pages.js';
+
+export { CONTENT_META };
+
+/**
+ * The routes that get a static file: the hand-written pages and every post,
+ * comparison and agent page (lib/pages.js). The sitemap lists the same set.
+ */
+export const PRERENDERED_ROUTES = ALL_ROUTES;
+
+/** A route's head markup, with the content pages' own titles. */
+export function headTagsFor(route) {
+  return headTags(route, CONTENT_META);
+}
+
+/** The sitemap.xml body for exactly the prerendered routes. */
+export function sitemapFile() {
+  return renderSitemapFile(ALL_ROUTES);
+}
 
 export function render(url) {
   return renderToString(

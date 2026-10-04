@@ -50,8 +50,8 @@ const converter = new NodeHtmlMarkdown(
 /** Front matter values are quoted; a double quote inside one is escaped. */
 const quote = value => `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
-export function pageMarkdown(route, html) {
-  const { title, description } = metaFor(route);
+export function pageMarkdown(route, html, extra = {}) {
+  const { title, description } = metaFor(route, extra);
   const url = route === '/' ? `${SITE_ORIGIN}/` : `${SITE_ORIGIN}${route}`;
   const body = converter.translate(html).trim();
   return ['---', `title: ${quote(title)}`, `description: ${quote(description)}`, `url: ${url}`, '---', '', body, ''].join('\n');

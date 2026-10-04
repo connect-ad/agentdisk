@@ -143,12 +143,14 @@ export const PLANS = [
 export const FREE_SUMMARY = '1 GB of storage and one agent identity';
 
 /**
- * Counted per organization, not per workspace: agents, keys, members and
- * workspaces are account-wide totals. Stated once, on the page, rather than
- * repeated on four cards.
+ * How the allowances are counted, stated once on the page rather than
+ * repeated on four cards. Agents, keys, members, workspaces, storage and file
+ * count are account-wide totals; egress is the one per-workspace counter
+ * (Skill 8). Members are readers, and share links come with the paid plans:
+ * both are things a buyer meets after paying, so the page says them first.
  */
 export const COUNTING_NOTE =
-  'Agents, keys, members and workspaces are counted across your whole account, not per workspace.';
+  'Agents, keys, members and workspaces are counted across your whole account, not per workspace. Storage and file count are shared by all your workspaces; monthly egress is counted per workspace. Members can view a workspace but not change it. Share links come with the paid plans.';
 
 /**
  * The yearly discount, stated once.
@@ -182,3 +184,37 @@ export const RENEWAL_NOTE =
  * question open.
  */
 export const OVERAGES = [];
+
+/**
+ * The two billing periods behind the Monthly / Yearly switch on the pricing
+ * page. `yearly` carries the saving the switch advertises; it is the one number
+ * in `YEARLY_NOTE` restated as a badge, so the two cannot disagree.
+ */
+export const PERIODS = [
+  { id: 'monthly', label: 'Monthly' },
+  { id: 'yearly', label: 'Yearly', badge: 'Save 15%' },
+];
+
+/** `'$9'` → 9. Prices are whole dollars throughout the catalogue. */
+const dollars = s => Number(String(s).replace(/[^0-9.]/g, ''));
+
+/**
+ * What a year of the plan costs month by month, as a price string — the
+ * figure the yearly card strikes through. Null on plans with no yearly price
+ * (Free), which show the same card in both periods.
+ */
+export function yearlyListPrice(plan) {
+  if (!plan.yearlyPrice) return null;
+  return `$${dollars(plan.price) * 12}`;
+}
+
+/**
+ * The dollars saved by paying yearly, as a price string. Computed from the two
+ * real prices rather than from the 15% figure, so the badge never claims a
+ * cent more than Stripe actually discounts (Basic saves $17 on $108, which is
+ * 15.7%; the page rounds down, never up).
+ */
+export function yearlySaving(plan) {
+  if (!plan.yearlyPrice) return null;
+  return `$${dollars(plan.price) * 12 - dollars(plan.yearlyPrice)}`;
+}

@@ -17,7 +17,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
 
@@ -28,7 +28,9 @@ vi.mock('../src/lib/auth.jsx', () => ({
 }));
 
 const { Pricing } = await import('../src/routes/Marketing.jsx');
-const { PLANS, OVERAGES, FREE_SUMMARY } = await import('../src/lib/pricing.js');
+const { PLANS, OVERAGES, FREE_SUMMARY, yearlyListPrice, yearlySaving } = await import('../src/lib/pricing.js');
+const { WORKS_WITH } = await import('../src/lib/clients.js');
+const docsSrc = readFileSync(resolve(process.cwd(), 'src/routes/Docs.jsx'), 'utf8');
 
 const plansTs = readFileSync(
   resolve(process.cwd(), '../api/src/lib/plans.ts'),
@@ -152,6 +154,62 @@ describe('pricing page → the plans the API actually enforces', () => {
     expect(
       screen.getByText(/counted across your whole account/i)
     ).toBeTruthy();
+  });
+
+  it('switches every paid card to its yearly price, struck list price and saving', () => {
+    mount();
+    const yearly = screen.getByRole('button', { name: /yearly/i });
+    expect(yearly.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(yearly);
+    expect(yearly.getAttribute('aria-pressed')).toBe('true');
+    for (const p of PLANS) {
+      const card = screen.getByText(p.kicker).closest('.mk__plan');
+      if (!p.yearlyPrice) {
+        // Free has no yearly price and keeps its own card in both periods.
+        expect(within(card).getByText(p.price)).toBeTruthy();
+        continue;
+      }
+      expect(within(card).getByText(p.yearlyPrice)).toBeTruthy();
+      expect(within(card).getByText(yearlyListPrice(p))).toBeTruthy();
+      expect(within(card).getByText(`Save ${yearlySaving(p)} · billed yearly`)).toBeTruthy();
+    }
+    // Back to monthly restores the catalogue price.
+    fireEvent.click(screen.getByRole('button', { name: /monthly/i }));
+    for (const p of PLANS) {
+      const card = screen.getByText(p.kicker).closest('.mk__plan');
+      expect(within(card).getByText(p.price)).toBeTruthy();
+    }
+  });
+
+  it('never advertises a yearly saving larger than the two prices justify', () => {
+    // 15% is the claim; each real Stripe price is rounded down to the dollar,
+    // so the computed saving is always at or above 15% and the badge is safe.
+    for (const p of PLANS.filter(p => p.yearlyPrice)) {
+      const list = Number(yearlyListPrice(p).slice(1));
+      const saved = Number(yearlySaving(p).slice(1));
+      expect(saved / list).toBeGreaterThanOrEqual(0.15);
+      expect(list - saved).toBe(Number(p.yearlyPrice.slice(1)));
+    }
+  });
+
+  it('shows the same works-with row on every card, each mark linking into the docs', () => {
+    mount();
+    for (const p of PLANS) {
+      const card = screen.getByText(p.kicker).closest('.mk__plan');
+      expect(within(card).getByText(/works with/i)).toBeTruthy();
+      for (const c of WORKS_WITH) {
+        const link = within(card).getByRole('link', { name: c.name });
+        expect(link.getAttribute('href')).toBe(`/docs/${c.docsId}`);
+      }
+    }
+  });
+
+  it('points every mark at a client section the docs page actually renders', () => {
+    // The anchors are `client-<id>` for each entry of CLIENTS in Docs.jsx.
+    const ids = [...docsSrc.matchAll(/^\s*id: '([a-z-]+)', name: '/gm)].map(m => m[1]);
+    for (const c of WORKS_WITH) {
+      expect(ids, `${c.id} → ${c.docsId}`).toContain(c.docsId.replace(/^client-/, ''));
+    }
   });
 
   it('keeps the free-tier sentence in step with the free card', () => {

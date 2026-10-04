@@ -24,14 +24,14 @@ vi.mock('../src/lib/auth.jsx', () => ({
 }));
 
 const { Nav, Footer } = await import('../src/routes/Marketing.jsx');
-const Docs = (await import('../src/routes/Docs.jsx')).default;
+const { Terms, Privacy } = await import('../src/routes/Trust.jsx');
 
 afterEach(cleanup);
 
 const at = (path, ui) => render(<MemoryRouter initialEntries={[path]}>{ui}</MemoryRouter>);
 
 /** Every byline on the page: a link to the company site whose text is the wordmark. */
-const bylines = () => screen.getAllByRole('link', { name: new RegExp(`project by ${COMPANY_NAME}`, 'i') });
+const bylines = () => screen.getAllByRole('link', { name: new RegExp(`product by ${COMPANY_NAME}`, 'i') });
 
 describe('the company byline', () => {
   it('sits in the header beside the brand, as a link to the company site in a new tab', () => {
@@ -56,9 +56,10 @@ describe('the company byline', () => {
     at('/', <Footer />);
     const foot = screen.getByRole('contentinfo');
     const base = foot.querySelector('.mk__footbase');
-    // Exact wording, 30 Sept 2026: "© <year> Kernelv5. AgentDisk is a product by Kernelv5."
-    expect(base.textContent).toContain(`© ${new Date().getFullYear()} ${COMPANY_NAME}. AgentDisk is a product by ${COMPANY_NAME}.`);
-    expect(within(base).getByRole('link', { name: COMPANY_NAME }).getAttribute('href')).toBe(COMPANY_URL);
+    // The owner's sentence of 30 Sept 2026, with the legal name in the
+    // copyright since 4 Oct 2026: "© <year> Kernelv5 Inc. AgentDisk is a product by Kernelv5."
+    expect(base.textContent).toContain(`© ${new Date().getFullYear()} ${COMPANY_LEGAL_NAME} AgentDisk is a product by ${COMPANY_NAME}.`);
+    expect(within(base).getByRole('link', { name: COMPANY_LEGAL_NAME }).getAttribute('href')).toBe(COMPANY_URL);
     // Inside the footer's brand lockup, under the wordmark.
     expect(foot.querySelector('.mk__footbrand .byline')).not.toBeNull();
     // AgentDisk stays the brand: the wordmark is still there, above the company.
@@ -79,9 +80,10 @@ describe('the dashboard shell', () => {
 
 describe('the legal text names the company', () => {
   it('says in the Terms and the Privacy policy that Kernelv5 Inc. provides AgentDisk', () => {
-    const { container } = at('/docs', <Docs />);
-    const terms = container.querySelector('#terms').textContent;
-    const privacy = container.querySelector('#privacy').textContent;
+    // Their own pages since 4 Oct 2026 (routes/Trust.jsx).
+    const terms = at('/terms', <Terms />).container.querySelector('#terms').textContent;
+    cleanup();
+    const privacy = at('/privacy', <Privacy />).container.querySelector('#privacy').textContent;
     expect(terms).toContain(COMPANY_LEGAL_NAME);
     expect(privacy).toContain(COMPANY_LEGAL_NAME);
     // The one fact a person checks against a bank statement.

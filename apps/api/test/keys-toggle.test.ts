@@ -15,12 +15,14 @@
 
 import { SELF, env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { NOW, WORKSPACE_A, WORKSPACE_B, bearer, seedAgent, seedApiKey, seedTwoWorkspaces } from "./helpers";
+import { NOW, WORKSPACE_A, WORKSPACE_B, bearer, seedAgent, seedApiKey, seedTwoWorkspaces, setOrgPlan } from "./helpers";
 
 const URL_BASE = "https://api-dev.agentdisk.io";
 
 async function reset(): Promise<void> {
   await seedTwoWorkspaces();
+  // Room to mint freely; the count gates have their own file.
+  await setOrgPlan("team");
   await env.DB.prepare(`DELETE FROM api_keys`).run();
   await env.DB.prepare(`DELETE FROM agents`).run();
   await env.DB.prepare(`DELETE FROM audit_events`).run();

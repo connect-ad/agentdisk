@@ -42,6 +42,7 @@ import { assertScope, type KeyScope, type ScopeOp } from "../auth/scopes";
 import { revokeSessionsBefore } from "../db/user-lookup";
 import { findOrgForWorkspace } from "../billing/organizations";
 import { WorkspaceMembers } from "../db/members";
+import { OrgCounts } from "../db/org-counts";
 import type { JwksCache } from "../auth/firebase";
 import { extractBearerToken, isApiKeyToken } from "../lib/keys";
 import type { Identity } from "../auth/identity";
@@ -69,6 +70,13 @@ export interface AuthContext {
    * so cannot come from the workspace-scoped repositories.
    */
   members: WorkspaceMembers;
+  /**
+   * Live counts across the billing account, for the plan's count gates
+   * (lib/count-gate.ts). Bound to the organization the same way `members`
+   * is bound to the workspace: the four counted limits are account-wide, and
+   * a workspace-scoped repository cannot see the sibling workspaces.
+   */
+  orgCounts: OrgCounts;
   /**
    * Somewhere to put work that must outlive the response — the audit write and
    * webhook fan-out. Optional because the middleware is also driven directly
@@ -362,6 +370,7 @@ export async function withAuth(
     db: createWorkspaceContext(deps.db, identity.workspaceId),
     storage: new WorkspaceScopedStorage(deps.files, deps.signing, identity.workspaceId),
     members: new WorkspaceMembers(deps.db, identity.workspaceId),
+    orgCounts: new OrgCounts(deps.db, workspace.org_id),
     waitUntil: deps.waitUntil,
     queue: deps.queue,
     sandboxWarning: null,

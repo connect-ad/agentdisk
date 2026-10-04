@@ -70,9 +70,9 @@ missing file with a real 404 rather than the SPA fallback. Both are in
 
 ## Markdown for agents
 
-`/`, `/pricing` and `/docs` on the site host negotiate: a request whose
+Every prerendered page on the site host negotiates: a request whose
 `Accept` names `text/markdown` at least as strongly as `text/html` gets
-`index.md`, `pricing.md` or `docs.md` with `Content-Type: text/markdown`,
+its twin (`index.md`, `pricing.md`, `blog/<slug>.md`...) with `Content-Type: text/markdown`,
 `Vary: Accept` and an `x-markdown-tokens` estimate (characters ÷ 4). Every
 other request, every browser included, gets the HTML, which also carries
 `Vary: Accept`. The `.md` files are written by `scripts/prerender.mjs` from
@@ -82,10 +82,12 @@ form controls are dropped; title, description and canonical URL go in front
 matter. The files are also reachable by name (`/docs.md`).
 
 Cloudflare's zone-level Markdown for Agents would do this at the edge with no
-code, but it needs the Pro plan and the zone is Free. **A route added to
-`PRERENDERED_ROUTES` needs its entry in `MARKDOWN_PAGES` in `worker.js`**;
-`test/prerender.test.jsx` fails until the two agree. The app host and
-single-host mode never negotiate.
+code, but it needs the Pro plan and the zone is Free. **A top-level route
+added to `PRERENDERED_ROUTES` needs its entry in `MARKDOWN_PAGES` in
+`worker.js`**; pages under `/blog/`, `/compare/` and `/alternatives/` are
+covered by the `SITE_SECTIONS` pattern instead. `markdownTwin()` answers for
+both, and `test/prerender.test.jsx` fails until it agrees with the build. The
+app host and single-host mode never negotiate.
 
 ## Agent discovery documents
 
@@ -129,11 +131,13 @@ pages (soft 404s, missing sitemap, four routes not prerendered), are in
 
 ## The public pages are static HTML
 
-`npm run build` ends with `scripts/prerender.mjs`, which renders `/`,
-`/pricing` and `/docs` with react-dom/server into `index.html`, `pricing.html`
-and `docs.html`. Flat files, not directories, because the asset server's
+`npm run build` ends with `scripts/prerender.mjs`, which renders every public
+page with react-dom/server into a flat file per route: `index.html`,
+`pricing.html`, `security.html`, `blog/<slug>.html` and so on, 34 pages as of
+4 Oct 2026. Flat files, not directories, because the asset server's
 trailing-slash handling would redirect `/pricing` to `/pricing/` for
-`pricing/index.html`.
+`pricing/index.html`. The same script writes `sitemap.xml` from the same list,
+so the sitemap cannot name a page the build did not write.
 
 The client does not hydrate: `main.jsx` mounts with `createRoot` and React
 discards the markup on its first commit. The trap is that `index.html` is also
@@ -145,9 +149,56 @@ nothing inline, hides the markup before first paint when the meta and the URL
 disagree, or when `/` is opened on the app host.
 
 **Nothing in the prerendered trees may touch a browser global while
-rendering.** Effects are fine. `test/prerender.test.jsx` renders all three
-routes under Node, not jsdom, so a component that reads `window` at render
+rendering.** Effects are fine. `test/prerender.test.jsx` renders every
+route under Node, not jsdom, so a component that reads `window` at render
 fails the suite rather than the deploy.
+
+## The long-form pages (4 Oct 2026)
+
+The trust pages (`/security`, `/privacy`, `/terms`, `/trust`,
+`/sub-processors`, `/dpa`, in `routes/Trust.jsx`), the blog (`/blog`,
+`/blog/:slug`), the comparisons (`/compare`, `/compare/:slug`), the
+alternatives (`/alternatives`, `/alternatives/:slug`) and the four
+`/storage-for-<agent>` pages. They share one frame,
+`components-local/Prose.jsx`, which reuses the docs' `doc__*` prose classes
+and adds the `pg__*` layout in `app.css`; every FAQ on them is also written
+as FAQPage JSON-LD, and posts carry BlogPosting JSON-LD.
+
+- **Content is data.** Posts are markdown in `src/content/blog/*.md`, parsed
+  by `lib/markdown.js`, a dependency-free parser for a fixed subset documented
+  in its header. Comparisons, alternatives and agent pages are
+  `src/content/compare.js` and `src/content/agents.js`. Adding a post or a
+  comparison is adding data: `lib/pages.js` gathers their titles and routes,
+  and the prerender, the sitemap and the live `PageMeta` all read it.
+- **Two metadata sources.** `lib/seo.js` keeps the hand-written pages and
+  stays importable by plain Node; content pages pass their table as the
+  `extra` argument of `metaFor`, `headTags` and `applyPageMeta`.
+- **Four routing lists must agree** for a new top-level page: the route in
+  `App.jsx` above `AppHostOnly`, `SITE_ROUTES` and `MARKDOWN_PAGES` in
+  `worker.js`, and an entry in `PAGE_META` or the content files.
+- **The old trust anchors forward.** `/docs#data-security`, `#safety`,
+  `#privacy` and `#terms`, and the `/docs/<id>` forms, redirect from
+  `Docs.jsx` (`TRUST_MOVED`).
+- **`/dpa` is a click-through contract (4 Oct 2026).** The owner chose a
+  published DPA that applies through the Terms over one signed per customer,
+  and settled the governing law as Delaware. It incorporates the 2021 SCCs by
+  reference, and every commitment in it restates something the system already
+  does; its seven-day byte deletion holds only where `PENDING_DELETION_ENABLED`
+  is `"true"`. Change it with the Privacy Policy and Sub-processors pages, which
+  repeat its transfer and notice terms.
+- **Public pages state what is in place, not what is missing (4 Oct 2026
+  content review).** Gaps that help an attacker or undercut a plan more than
+  they inform a buyer (no per-key rate limit, the paid Cloudflare products
+  that are off) live in Skill 11, not on the site.
+  Gaps a buyer must know to judge fit (not end-to-end encrypted, no
+  certification, no regions, no MFA, what REST does not audit) stay public.
+  The site implies no customers it does not have: no "most teams" badges,
+  no "why people switch".
+- **Competitor facts were checked on each vendor's site on 4 Oct 2026**
+  (Fast.io pricing and overage, Composio's 1,500+ apps and SOC 2 Type II,
+  AWS's general MCP server, Diskd.ai's hosted app). A row that could not be
+  verified is dropped, never written as "not covered". They do not update
+  themselves; recheck them when a competitor reprices or ships.
 
 Per-route metadata rides the same mechanism. `src/lib/seo.js` is one table of
 title and description per public route, read by the prerender and by the live

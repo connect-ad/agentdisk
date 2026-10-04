@@ -18,4 +18,4 @@
 export const COMPANY_NAME = 'Kernelv5';
 export const COMPANY_LEGAL_NAME = 'Kernelv5 Inc.';
 export const COMPANY_URL = 'https://kernelv5.com/';
-export const COMPANY_BYLINE = 'A project by';
+export const COMPANY_BYLINE = 'A product by';

@@ -117,9 +117,11 @@ beforeEach(async () => {
     `INSERT INTO users (id, email, firebase_uid, is_provisional, session_revoked_after,
                         created_at, updated_at) VALUES (?, ?, ?, 0, 0, ?, ?)`
   ).bind(OWNER, 'wsowner@example.com', OWNER_UID, NOW, NOW).run();
+  // On Team, so the tests below can hold several workspaces at once; the
+  // count gate on this route has its own file.
   await env.DB.prepare(
-    `INSERT INTO organizations (id, name, owner_user_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?)`
+    `INSERT INTO organizations (id, name, owner_user_id, plan, created_at, updated_at)
+     VALUES (?, ?, ?, 'team', ?, ?)`
   ).bind('org_WSOWNED', 'Owned', OWNER, NOW, NOW).run();
   await env.DB.prepare(
     `INSERT INTO memberships (id, org_id, user_id, workspace_id, role, created_at)

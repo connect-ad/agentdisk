@@ -18,8 +18,8 @@
  *                  and a crawler sees a redirect rather than a copy.
  *                  A file that does not exist is a real 404, and `/` carries
  *                  a Link header naming llms.txt and the docs (3 Oct 2026).
- *                  `/`, `/pricing` and `/docs` asked for with
- *                  `Accept: text/markdown` answer their markdown twin from
+ *                  Every prerendered site page asked for with
+ *                  `Accept: text/markdown` answers its markdown twin from
  *                  the build (4 Oct 2026); HTML stays the default. The
  *                  agent discovery documents (auth.md, the API catalog, the
  *                  MCP server card...) are served readable from any origin.
@@ -48,7 +48,21 @@
  * (`AppHostOnly`) covers client-side navigation and this covers the first
  * request, so the two lists must agree.
  */
-const SITE_ROUTES = new Set(['/', '/pricing', '/docs', '/sandbox', '/terms', '/privacy']);
+const SITE_ROUTES = new Set([
+  '/', '/pricing', '/docs', '/sandbox',
+  // The trust pages, the indexes and the agent pages (4 Oct 2026).
+  '/security', '/privacy', '/terms', '/trust', '/sub-processors', '/dpa',
+  '/blog', '/compare', '/alternatives',
+  '/storage-for-claude', '/storage-for-openai', '/storage-for-cursor', '/storage-for-cline'
+]);
+
+/**
+ * Sections whose pages are one level below a site route: /blog/<slug>,
+ * /compare/<slug>, /alternatives/<slug>. Each is prerendered with a markdown
+ * twin beside it. A slug that does not exist still renders the SPA's 404 on
+ * the site host rather than bouncing to the app.
+ */
+const SITE_SECTIONS = /^\/(blog|compare|alternatives)\/[a-z0-9-]+$/;
 
 /**
  * The site pages that have a markdown twin in `dist/`, written beside the
@@ -56,7 +70,19 @@ const SITE_ROUTES = new Set(['/', '/pricing', '/docs', '/sandbox', '/terms', '/p
  * zone-level Markdown for Agents would convert at the edge, but it needs the
  * Pro plan; the zone is on Free.
  */
-export const MARKDOWN_PAGES = { '/': '/index.md', '/pricing': '/pricing.md', '/docs': '/docs.md' };
+export const MARKDOWN_PAGES = {
+  '/': '/index.md', '/pricing': '/pricing.md', '/docs': '/docs.md',
+  '/security': '/security.md', '/privacy': '/privacy.md', '/terms': '/terms.md',
+  '/trust': '/trust.md', '/sub-processors': '/sub-processors.md', '/dpa': '/dpa.md',
+  '/blog': '/blog.md', '/compare': '/compare.md', '/alternatives': '/alternatives.md',
+  '/storage-for-claude': '/storage-for-claude.md', '/storage-for-openai': '/storage-for-openai.md',
+  '/storage-for-cursor': '/storage-for-cursor.md', '/storage-for-cline': '/storage-for-cline.md'
+};
+
+/** The markdown twin of a site page, or undefined. A twin missing from the build falls back to the HTML. */
+export function markdownTwin(path) {
+  return MARKDOWN_PAGES[path] ?? (SITE_SECTIONS.test(path) ? `${path}.md` : undefined);
+}
 
 /** The robots.txt the app host always answers. */
 const APP_ROBOTS = 'User-agent: *\nDisallow: /\n';
@@ -73,6 +99,7 @@ export function isSitePath(pathname) {
   const path = normalize(pathname);
   if (SITE_ROUTES.has(path)) return true;
   if (path.startsWith('/docs/')) return true;
+  if (SITE_SECTIONS.test(path)) return true;
   // Hashed bundles, and any file by name: robots.txt, llms.txt, the logo,
   // the prerender guard, pricing.html itself. A route never has an extension.
   if (path.startsWith('/assets/')) return true;
@@ -176,7 +203,7 @@ export function decide(url, env, accept = '') {
   }
 
   if (host === site) {
-    const markdown = MARKDOWN_PAGES[path];
+    const markdown = markdownTwin(path);
     if (markdown && prefersMarkdown(accept)) return { kind: 'site-markdown', file: markdown };
     if (path === '/') return { kind: 'site-home' };
     if (markdown) return { kind: 'site-page' };

@@ -76,8 +76,8 @@ document gets corrected.**
 ## Status
 
 ```
-apps/api   1014 tests · 52 files · typecheck clean
-apps/web    479 tests · 41 files · build clean
+apps/api   1030 tests · 53 files · typecheck clean
+apps/web    601 tests · 44 files · build clean
 apps/admin   62 tests ·  6 files · build clean
 apps/cli     11 tests ·  1 file
 ```
@@ -85,8 +85,8 @@ apps/cli     11 tests ·  1 file
 Prod: `agentdisk.io`, `app.`, `api.`, `mcp.`, `securepanel.`. Dev: the same
 five with `dev.` and `-dev` suffixes, deployed on every push to `dev`. The
 four plans are linked to live Stripe. No customers yet. The open work is the
-known-gaps list in Skill 11, of which the plan count gates are the one piece
-of the billing module left unbuilt.
+known-gaps list in Skill 11. The plan count gates (workspaces, agents, keys,
+members) were enforced on 4 October 2026; see Skill 7.
 
 ## graphify
 

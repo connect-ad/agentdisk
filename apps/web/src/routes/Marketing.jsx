@@ -3,11 +3,13 @@ import { Link, NavLink } from 'react-router-dom';
 import { Button, Icon } from '../components/index.js';
 import { useAuth } from '../lib/auth.jsx';
 import {
-  PLANS, OVERAGES, FREE_SUMMARY, COUNTING_NOTE, YEARLY_NOTE, RENEWAL_NOTE
+  PLANS, OVERAGES, FREE_SUMMARY, COUNTING_NOTE, YEARLY_NOTE, RENEWAL_NOTE,
+  PERIODS, yearlyListPrice, yearlySaving
 } from '../lib/pricing.js';
+import { WORKS_WITH } from '../lib/clients.js';
 import Logo from '../components-local/Logo.jsx';
 import Byline from '../components-local/Byline.jsx';
-import { COMPANY_NAME, COMPANY_URL } from '../lib/company.js';
+import { COMPANY_LEGAL_NAME, COMPANY_NAME, COMPANY_URL } from '../lib/company.js';
 import { SupportDialog } from '../components-local/SupportDialog.jsx';
 import ThemeToggle from '../components-local/ThemeToggle.jsx';
 
@@ -69,7 +71,7 @@ const FEATURES = [
   {
     kicker: 'SCOPED',
     title: "Keys that can't overreach",
-    body: 'Every key carries explicit scopes and an optional path prefix. Denied calls are logged with the scope they needed.',
+    body: 'Every key carries explicit scopes and an optional path prefix. A denied MCP call is logged with the scope it needed.',
   },
   {
     kicker: 'PERSISTENT',
@@ -135,6 +137,7 @@ const NAV_PAGES = [
   { to: '/', label: 'Product', end: true },
   { to: '/pricing', label: 'Pricing' },
   { to: '/docs', label: 'Docs' },
+  { to: '/blog', label: 'Blog' },
 ];
 
 const navLinkClass = ({ isActive }) =>
@@ -251,24 +254,43 @@ export function Nav() {
  * exists; the support address is the one the Support form delivers to.
  * There is no region badge, for the reason the old footer recorded: the
  * reference drew "EU-CENTRAL-1" and nothing in this system has a region.
+ *
+ * Reworked 4 Oct 2026 for the trust pages, the blog and the comparisons. The
+ * Account column went: Sign in and Start free are in the bar above on every
+ * page, and the support address moved under the blurb.
  */
 const FOOT_COLUMNS = [
   { head: 'Product', links: [
-    { to: '/docs/quickstart', label: 'Quick start' },
-    { to: '/pricing', label: 'Pricing' },
     { to: '/docs', label: 'Docs' },
-    { to: '/sandbox', label: 'Try the sandbox' },
+    { to: '/pricing', label: 'Pricing' },
+    { to: '/sandbox', label: 'Sandbox' },
+    { to: '/docs/quickstart', label: 'Quick start' },
+  ] },
+  { head: 'Use with', links: [
+    { to: '/storage-for-claude', label: 'Claude' },
+    { to: '/storage-for-openai', label: 'OpenAI' },
+    { to: '/storage-for-cursor', label: 'Cursor' },
+    { to: '/storage-for-cline', label: 'Cline' },
   ] },
   { head: 'Trust', links: [
-    { to: '/docs#data-security', label: 'Data security' },
-    { to: '/docs#safety', label: 'Safety' },
-    { to: '/docs#privacy', label: 'Privacy' },
-    { to: '/docs#terms', label: 'Terms' },
+    { to: '/security', label: 'Security' },
+    { to: '/trust', label: 'Trust Center' },
+    { to: '/privacy', label: 'Privacy' },
+    { to: '/terms', label: 'Terms' },
+    { to: '/sub-processors', label: 'Sub-processors' },
+    { to: '/dpa', label: 'DPA' },
   ] },
-  { head: 'Account', links: [
-    { to: '/signup', label: 'Start free' },
-    { to: '/login', label: 'Sign in' },
-    { href: 'mailto:connect@agentdisk.io', label: 'connect@agentdisk.io' },
+  { head: 'Blog', links: [
+    { to: '/blog', label: 'Latest' },
+    { to: '/blog?tag=tutorial', label: 'Tutorials' },
+    { to: '/blog?tag=security', label: 'Security guides' },
+  ] },
+  { head: 'Compare', links: [
+    { to: '/compare/agentdisk-vs-fast-io', label: 'vs Fast.io' },
+    { to: '/compare/agentdisk-vs-s3', label: 'vs S3' },
+    { to: '/compare/agentdisk-vs-diskd-ai', label: 'vs Diskd.ai' },
+    { to: '/alternatives', label: 'Alternatives' },
+    { to: '/compare', label: 'All comparisons' },
   ] },
 ];
 
@@ -286,6 +308,9 @@ export function Footer() {
             <p className="mk__footblurb">
               A scoped, persistent workspace for every AI agent: files, folders and
               metadata over REST and MCP, with the audit log kept for you.
+            </p>
+            <p className="mk__footblurb">
+              <a href="mailto:connect@agentdisk.io">connect@agentdisk.io</a>
             </p>
             <div className="mk__footfacts" aria-label="In short">
               {HERO_TAGS.map(t => <span key={t} className="mk__footfact">{t}</span>)}
@@ -309,11 +334,11 @@ export function Footer() {
         <div className="mk__footbase">
           {/* Owner's wording, 30 Sept 2026. The company is named so that
               somebody who sees "Kernelv5" on a card statement can find the
-              word on this site; the legal "Inc." lives in the Terms and on
-              the billing page, where the statement match matters. */}
+              word on this site. Since 4 Oct 2026 the copyright carries the
+              legal name, as the Terms, the DPA and the statement do. */}
           <span>
             © {new Date().getFullYear()}{' '}
-            <a href={COMPANY_URL} target="_blank" rel="noopener noreferrer">{COMPANY_NAME}</a>.
+            <a href={COMPANY_URL} target="_blank" rel="noopener noreferrer">{COMPANY_LEGAL_NAME}</a>
             {' '}AgentDisk is a product by {COMPANY_NAME}.
           </span>
           <span>Files your agents can reason about.</span>
@@ -466,7 +491,7 @@ export function Landing() {
         <section className="mk__section">
           <div className="mk__band">
             <div className="mk__bandtext">
-              <h2 className="mk__h2">Give an agent a disk in four minutes.</h2>
+              <h2 className="mk__h2">Give an agent a disk in five minutes.</h2>
               <p className="mk__bandsub">
                 The free tier is {FREE_SUMMARY}. No card, no sales call.
               </p>
@@ -483,59 +508,130 @@ export function Landing() {
 
 /* ── pricing ──────────────────────────────────────────────────────────────── */
 
+/**
+ * One client mark on a plan card. A link into the docs section that sets the
+ * client up, named for the screen reader and the hover; the SVG itself is
+ * decoration. `fill` is the brand colour or `currentColor` (see clients.js).
+ */
+function ClientMark({ client }) {
+  return (
+    <Link
+      to={`/docs/${client.docsId}`}
+      className="mk__mark"
+      title={client.name}
+      aria-label={client.name}
+    >
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+        <path d={client.path} fill={client.color} />
+      </svg>
+    </Link>
+  );
+}
+
 export function Pricing() {
+  // Monthly first: it is the price Stripe lists and the one a reader can
+  // compare across the row without arithmetic. Yearly is one tap away and
+  // wears its saving on the switch, so nothing is hidden behind the toggle.
+  const [period, setPeriod] = useState('monthly');
+  const yearly = period === 'yearly';
+
   return (
     <div className="mk">
       <Nav />
       <div className="mk__wrap">
 
         <section className="mk__hero mk__hero--single">
-          {/* Requests are unlimited on every plan, so the old headline — "Pay
-              for storage and requests" — named a meter that does not exist. */}
-          <h1 className="mk__h1">Pay for storage. Nothing else.</h1>
-          <p className="mk__lead">
-            Every plan includes the MCP server, webhooks, path-scoped keys and the
-            full audit log, with unlimited requests.
-          </p>
+          {/* Headline and lead on the left, the billing switch on the right,
+              both on the lead's baseline. The switch used to have a row of its
+              own under the lead, which pushed the cards a full row down for
+              two words; the space beside the headline was empty. */}
+          <div className="mk__pricehead">
+            <div className="mk__priceheadtext">
+              {/* Requests are unlimited on every plan, so the old headline — "Pay
+                  for storage and requests" — named a meter that does not exist. */}
+              <h1 className="mk__h1">Pay for storage. Nothing else.</h1>
+              <p className="mk__lead">
+                Every plan includes the MCP server, webhooks, path-scoped keys and the
+                full audit log, with unlimited requests.
+              </p>
+            </div>
+
+            {/* The billing period, as a two-option switch. `aria-pressed` on
+                buttons rather than a radio group: the two are commands that
+                redraw the cards, and a pressed button is what the pill looks like. */}
+            <div className="mk__period" role="group" aria-label="Billing period">
+              {PERIODS.map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={period === opt.id ? 'mk__periodbtn is-on' : 'mk__periodbtn'}
+                  aria-pressed={period === opt.id}
+                  onClick={() => setPeriod(opt.id)}
+                >
+                  {opt.label}
+                  {opt.badge ? <span className="mk__periodbadge">{opt.badge}</span> : null}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="mk__prices">
-            {PLANS.map(p => (
-              <div key={p.id} className={p.featured ? 'mk__plan mk__plan--pop' : 'mk__plan'}>
-                <div className="mk__planhead">
-                  <span className="mk__kicker">{p.kicker}</span>
-                  {p.featured ? <span className="mk__planflag">MOST TEAMS</span> : null}
+            {PLANS.map(p => {
+              const showYearly = yearly && p.yearlyPrice;
+              return (
+                <div key={p.id} className={p.featured ? 'mk__plan mk__plan--pop' : 'mk__plan'}>
+                  <div className="mk__planhead">
+                    <span className="mk__kicker">{p.kicker}</span>
+                    {p.featured ? <span className="mk__planflag">RECOMMENDED</span> : null}
+                  </div>
+                  <div>
+                    <div className="mk__planprice">
+                      {showYearly ? (
+                        // Twelve months at the monthly rate, struck through, so
+                        // the saving is shown rather than asserted.
+                        <s className="mk__pricewas">{yearlyListPrice(p)}</s>
+                      ) : null}
+                      <span className="mk__price">{showYearly ? p.yearlyPrice : p.price}</span>
+                      <span className="mk__planunit">{showYearly ? p.yearlyUnit : p.unit}</span>
+                    </div>
+                    {/* One line under the price in every state, so the cards
+                        stay the same height when the switch flips. */}
+                    {showYearly ? (
+                      <p className="mk__plansave">Save {yearlySaving(p)} · billed yearly</p>
+                    ) : p.yearlyPrice ? (
+                      <p className="mk__planyear">Billed monthly · or {p.yearlyPrice} {p.yearlyUnit}</p>
+                    ) : (
+                      <p className="mk__planyear">No card required</p>
+                    )}
+                  </div>
+                  <div className="mk__feats">
+                    {p.lines.map(l => (
+                      <span key={l} className="mk__feat">
+                        <Icon name="check" size={15} />
+                        <span>{l}</span>
+                      </span>
+                    ))}
+                  </div>
+                  <Button
+                    full
+                    as={Link}
+                    to={p.ctaTo}
+                    variant={p.featured ? 'primary' : 'secondary'}
+                  >
+                    {p.cta}
+                  </Button>
+                  {/* The same row on every card, because the MCP server is
+                      ungated: a reader compares tiers card by card, and a tier
+                      without the row would read as a tier without the clients. */}
+                  <div className="mk__works">
+                    <span className="mk__workslabel">Works with</span>
+                    <div className="mk__marks" style={{ '--marks': WORKS_WITH.length }}>
+                      {WORKS_WITH.map(c => <ClientMark key={c.id} client={c} />)}
+                    </div>
+                  </div>
                 </div>
-                <div className="mk__planprice">
-                  <span className="mk__price">{p.price}</span>
-                  <span className="mk__planunit">{p.unit}</span>
-                </div>
-                {/* The yearly figure sits under the monthly one rather than
-                    behind a toggle. A toggle on a marketing page hides half the
-                    pricing from anybody who does not find it, and the saving is
-                    the reason to read on. */}
-                {p.yearlyPrice ? (
-                  <p className="mk__planyear">
-                    or {p.yearlyPrice} {p.yearlyUnit} — save 15%
-                  </p>
-                ) : null}
-                <div className="mk__feats">
-                  {p.lines.map(l => (
-                    <span key={l} className="mk__feat">
-                      <Icon name="check" size={15} />
-                      <span>{l}</span>
-                    </span>
-                  ))}
-                </div>
-                <Button
-                  full
-                  as={Link}
-                  to={p.ctaTo}
-                  variant={p.featured ? 'primary' : 'secondary'}
-                >
-                  {p.cta}
-                </Button>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Said once here rather than on four cards: every count on them is an

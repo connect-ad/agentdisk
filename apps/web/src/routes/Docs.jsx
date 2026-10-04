@@ -6,13 +6,15 @@ import { SandboxDialog } from '../components-local/SandboxDialog.jsx';
 import { SITE_ORIGIN } from '../lib/seo.js';
 
 /**
- * The documentation — one page, eleven sections, written from the code.
+ * The documentation — one page, seven sections, written from the code.
  *
  * Rebuilt 26 September 2026. The previous page was a single MCP quickstart
  * whose sidebar named eight pages that did not exist, and whose key placeholder
  * used a prefix this API has never issued. This is the whole thing: what the
- * product is, how to connect every client, what it does, and how data is kept,
- * deleted and protected.
+ * product is, how to connect every client, what it does, and how data is
+ * deleted. Data security, safety, privacy and the terms moved to pages of
+ * their own on 4 Oct 2026 (routes/Trust.jsx); `TRUST_MOVED` forwards their
+ * old anchors.
  *
  * ── Every claim here has a source in `apps/api` ───────────────────────────
  * The tool list is `mcp/tools.ts`; the scope vocabulary is `auth/scopes.ts`;
@@ -54,21 +56,21 @@ const SECTIONS = [
     subs: ['Without the dashboard', 'Base URL and authentication', 'Request conventions', 'Get a key by API', 'Check the key', 'Upload a file', 'List, search and read', 'Download a file', 'Update, move and copy', 'Work with folders', 'Delete files and folders', 'Manage agents and keys', 'Share links by API', 'Webhooks by API', 'Read the activity log', 'A complete script'] },
   { id: 'features', label: 'Features', group: 'PRODUCT',
     subs: ['Files and folders', 'Agents and scoped keys', 'The MCP server', 'Workspaces and claiming', 'Members', 'Share links', 'Webhooks', 'Activity log', 'Usage, plans and billing', 'The dashboard'] },
-  { id: 'data-security', label: 'Data security', group: 'TRUST',
-    subs: ['Where your data lives', 'Tenant isolation', 'Encryption', 'Credentials', 'Upload and download integrity', 'What we log'] },
-  { id: 'deleting-data', label: 'Deleting your data', group: 'TRUST',
+  { id: 'deleting-data', label: 'Deleting your data', group: 'PRODUCT',
     subs: ['Files', 'Folders', 'Agents and keys', 'Share links and webhooks', 'A whole workspace', 'Exporting first'] },
-  { id: 'deleting-account', label: 'Deleting your account', group: 'TRUST',
+  { id: 'deleting-account', label: 'Deleting your account', group: 'PRODUCT',
     subs: ['How to do it', 'What happens, in order', 'What outlives the account', 'If you were a guest'] },
-  { id: 'privacy', label: 'Privacy', group: 'TRUST',
-    subs: ['What we collect', 'What we never see', 'Processors', 'Retention', 'Cookies', 'International transfers', 'Children', 'Your rights', 'Changes and contact'] },
-  { id: 'terms', label: 'Terms of Service', group: 'TRUST',
-    subs: ['Acceptance', 'Acceptable use', 'Your responsibility for content', 'Prohibited content', 'API and automated agent use', 'Limits and fair use', 'Storage limits', 'Account suspension', 'Your right to delete', 'Billing', 'Intellectual property', 'Third-party services', 'Warranties', 'Limitation of liability', 'Termination', 'Changes to these Terms', 'Governing law'] },
-  { id: 'safety', label: 'Safety', group: 'TRUST',
-    subs: ['The platform', 'The request path', 'The edges', 'The operators', 'How we know it works', 'What we do not claim', 'Reporting a vulnerability'] },
   { id: 'reference', label: 'Reference', group: 'REFERENCE',
     subs: ['REST endpoints', 'Error codes', 'Webhook events', 'Activity events', 'Limits'] },
 ];
+
+/** Where the old trust anchors went (4 Oct 2026). See the redirect in `Docs`. */
+export const TRUST_MOVED = {
+  'data-security': '/security',
+  safety: '/security',
+  privacy: '/privacy',
+  terms: '/terms',
+};
 
 const GROUPS = SECTIONS.reduce((acc, s) => {
   (acc[s.group] ??= []).push(s);
@@ -179,7 +181,7 @@ const ROUTES = [
 const ERRORS = [
   ['400', 'VALIDATION_ERROR', 'The body or query did not validate. The message says which field.'],
   ['401', 'UNAUTHORIZED', 'The credential was not accepted. Always the same body, whatever the reason.'],
-  ['403', 'FORBIDDEN', 'Authenticated, but this operation, path or role is outside what the credential holds.'],
+  ['403', 'FORBIDDEN', 'Authenticated, but this operation, path or role is outside what the credential holds, or the plan has no room for one more workspace, agent, key, member or share link (details.limit names which).'],
   ['404', 'NOT_FOUND', 'No such route or resource. A file outside your prefix answers this, not 403.'],
   ['409', 'CONFLICT', 'The state refuses it: a path already exists, a file is already deleted, a billing call failed.'],
   ['413', 'PAYLOAD_TOO_LARGE', 'Inline content over 1 MB, or a file over the plan’s per-file cap.'],
@@ -1396,11 +1398,18 @@ export function Docs({ sandbox = false }) {
     if (sandbox) navigate('/docs/quickstart', { replace: true });
   };
 
-  // `/docs/quickstart` and `/docs#privacy` both scroll to the section on
+  // `/docs/quickstart` and `/docs#features` both scroll to the section on
   // arrival. The browser handles a hash on a full load, but a client-side
-  // navigation (the footer's Privacy link, the /privacy redirect) does not
-  // scroll on its own, so both forms are handled here.
+  // navigation does not scroll on its own, so both forms are handled here.
+  //
+  // The trust sections moved to pages of their own on 4 Oct 2026. Their old
+  // addresses, hash or path form, are in emails, bookmarks and other sites,
+  // so they forward rather than land at the top of the docs.
   const location = useLocation();
+  useEffect(() => {
+    const moved = TRUST_MOVED[location.hash.slice(1)] ?? TRUST_MOVED[(params['*'] || '').replace(/\/+$/, '')];
+    if (moved) navigate(moved, { replace: true });
+  }, [params, location.hash, navigate]);
   useEffect(() => {
     const target = params['*'] || location.hash.slice(1) || (sandbox ? 'quickstart' : '');
     if (!target) return;
@@ -1478,9 +1487,10 @@ export function Docs({ sandbox = false }) {
             <h1 className="doc__h1">AgentDisk documentation</h1>
             <p className="doc__lead">
               Everything you need to give an AI agent a disk: what the product is, how to connect
-              the tools you already use, what it can do, and exactly how your data is kept,
-              deleted and protected. Every statement on this page describes the code that is
-              running, not a roadmap.
+              the tools you already use, what it can do, and exactly how your data is deleted.
+              Every statement on this page describes the code that is running, not a roadmap.
+              How your data is protected, the privacy policy and the terms are in
+              the <Link to="/trust">Trust Center</Link>.
             </p>
 
             {/* ════════════════════════ OVERVIEW ════════════════════════ */}
@@ -1666,6 +1676,7 @@ export function Docs({ sandbox = false }) {
                 <><strong>Claude Code says the server failed to start.</strong> The <code>.mcp.json</code> entry is missing <code>"type": "http"</code>, so it tried to spawn the URL as a command.</>,
                 <><strong>Claude Desktop shows nothing.</strong> Its config cannot hold a URL; use the mcp-remote bridge above and restart the app.</>,
                 <><strong>429 LIMIT_EXCEEDED.</strong> A quota (the body's <code>details.limit</code> says which: storage, files, egress) or a rate limit. Free space, upgrade, or wait for the window. If the message says <em>too many failed authentication attempts</em>, your address sent thirty bad credentials in fifteen minutes, usually a stale key in one client's config, and every call from that address is refused until the window ends. Fix the key, then wait.</>,
+                <><strong>403 with <code>details.limit</code>.</strong> The plan has no room for one more of what you are creating: <code>workspaces</code>, <code>agents</code>, <code>apiKeys</code>, <code>members</code> or <code>shareLinks</code>. Agents, keys, members and workspaces count across the whole account, and disabled agents and keys still count; delete one you no longer need, or upgrade. A sandbox holds one agent and one key until it is claimed.</>,
                 <><strong>Every write fails with a billing message.</strong> The account is past due or expired. Fix the card under Billing; reads keep working throughout.</>,
               ]} />
             </section>
@@ -1987,18 +1998,13 @@ export function Docs({ sandbox = false }) {
                 head={['Plan', 'Storage', 'Files', 'Egress / month', 'Max file', 'Agents', 'Keys', 'Members', 'Workspaces', 'Share links']}
                 rows={PLANS.map(p => [p.name, p.storage, p.files, p.egress, p.file, p.agents, p.keys, p.members, p.workspaces, p.shares])}
               />
-              <Note tone="warn">
-                Storage, file count, egress, the per-file cap and share-link counts are enforced on
-                every write today. The agent, key, member and workspace counts are the plan's terms
-                and are being wired into the request path; until they are, the dashboard reports them
-                but the API does not refuse on them.
-              </Note>
               <List items={[
+                <><strong>Every allowance in the table is enforced</strong> on the request that would exceed it: storage, files and egress with 429, a file over the cap with 413, and workspaces, agents, keys, members and share links with 403. In each case <code>details.limit</code> names which, and the message says how to make room.</>,
                 <><strong>Requests are unlimited</strong> on every plan. Storage and file count pool across the account; egress is counted per workspace per month and resets on the workspace's own period.</>,
                 <><strong>Warnings before walls.</strong> A write that lands the account at 80% or 95% of its allowance carries a warning on the response; a write that would exceed it is refused with 429 and the dimension named.</>,
                 <><strong>Monthly or yearly, auto-renewing.</strong> Checkout happens on our payment processor's page, where promotion codes are entered. Cards and invoices live in its portal; we never see or store card numbers.</>,
                 <><strong>Upgrades are immediate and prorated; downgrades wait for the period end</strong>, so nobody is dropped below the storage they are already using mid-period.</>,
-                <><strong>Cancel and resume are ours.</strong> Cancelling stops renewal at the period end and keeps everything you paid for until then; resume takes it back any time before the date.</>,
+                <><strong>Cancel and resume yourself.</strong> Cancelling stops renewal at the period end and keeps everything you paid for until then; resume takes it back any time before the date.</>,
                 <><strong>A failing card does not delete anything quickly.</strong> Writes are blocked while the account is past due, reads continue, and the seven-day grace is counted on our clock and announced by email before any data is scheduled for removal. A successful payment clears the schedule.</>,
               ]} />
 
@@ -2009,76 +2015,6 @@ export function Docs({ sandbox = false }) {
                 with a switcher across workspaces. Sign-in is
                 Google, GitHub, email and password, or an email link. Log out everywhere from
                 Profile revokes every browser session at once.
-              </P>
-            </section>
-
-            {/* ═════════════════════ DATA SECURITY ═════════════════════ */}
-            <section id="data-security" className="doc__section">
-              <H2 id="data-security-heading">Data security</H2>
-              <P>
-                How your data is kept while it is with us. The short version: one workspace's bytes
-                and rows are reachable only through objects that were bound to that workspace before
-                any handler ran, every credential is hashed or sealed, and every URL that touches a
-                byte is short-lived and scoped to one object.
-              </P>
-
-              <H3 id={slug('Where your data lives')}>Where your data lives</H3>
-              <Table
-                head={['Data', 'Where', 'Notes']}
-                rows={[
-                  ['File bytes', 'Block-based object storage', 'One object per file, under a per-workspace prefix built from server IDs. Your path is metadata and never part of the object key.'],
-                  ['Metadata, keys, memberships, audit', 'Edge database', 'Keys are stored as a SHA-256 hash for authentication and as AES-256-GCM ciphertext for reveal.'],
-                  ['Rate-limit counters, key cache', 'Edge cache', 'Short-lived, no file content.'],
-                  ['Webhook deliveries', 'Delivery queue', 'Payloads carry ids, paths and sizes only.'],
-                  ['Identity', 'Managed sign-in provider', 'Passwords, OAuth and session tokens. We receive the verified identifier and email, never a password.'],
-                  ['Billing', 'Payment processor', 'Card, invoices, subscription. We store the customer and subscription ids and a mirror of the period.'],
-                ]}
-              />
-
-              <H3 id={slug('Tenant isolation')}>Tenant isolation</H3>
-              <P>
-                A route handler never receives a raw database or a raw bucket. The authorization
-                chain binds the workspace from the credential, never from anything the client sent,
-                and hands the handler repositories and a storage object whose constructor already
-                holds that workspace. Every storage method takes a file ID and derives the object key
-                itself; no method accepts a workspace ID or a raw key, so there is no argument
-                through which a handler could name another tenant's object, even by mistake. The
-                one cross-workspace operation in the product, the sandbox merge, takes two
-                already-bound storage objects and no workspace ID, so a caller can only cross a
-                boundary it has legitimately opened both sides of. The isolation tests seed two
-                workspaces and prove that every route answers the other tenant's IDs with 404.
-              </P>
-
-              <H3 id={slug('Encryption')}>Encryption</H3>
-              <List items={[
-                <><strong>In transit.</strong> TLS everywhere: browser to dashboard, client to API, presigned upload and download to storage. The dashboard sends HSTS for a year with subdomains included.</>,
-                <><strong>At rest.</strong> Object storage and the database are encrypted at rest by our infrastructure provider. This is provider-managed encryption, not end-to-end: our own service can read your files when a request authorizes it to, which is what serving them requires.</>,
-                <><strong>Secrets at rest.</strong> API keys are sealed with AES-256-GCM under a key that exists only as a runtime secret, never in infrastructure state or build output, and each ciphertext is bound to its own row so a copied ciphertext opens as nothing. Share-link passwords are PBKDF2 hashes. Claim tokens and API keys are looked up by SHA-256.</>,
-              ]} />
-
-              <H3 id={slug('Credentials')}>Credentials</H3>
-              <List items={[
-                <>Keys are 32 base62 characters of CSPRNG output, about 190 bits, read from the Authorization header and nowhere else. A key in a query string is rejected with a message telling you to rotate it.</>,
-                <>Every authentication failure returns one identical body, so the API is never an oracle telling somebody which of their guesses is a real key that merely expired.</>,
-                <>Scopes fail closed: an unparseable or unrecognised scope grants nothing.</>,
-                <>Human sessions are signed identity tokens verified in our service against the sign-in provider's public keys. A deleted or disabled account is refused from our own record before the provider's, so a token that is still technically valid cannot outlive the account.</>,
-                <>An API key can never act as a person: it cannot close the account, delete a workspace, reveal another key, invite a member or end browser sessions.</>,
-              ]} />
-
-              <H3 id={slug('Upload and download integrity')}>Upload and download integrity</H3>
-              <List items={[
-                <>Presigned upload URLs last 15 minutes and are scoped to exactly one object and one HTTP method. Download URLs last one hour. Nothing this product issues may exceed seven days.</>,
-                <>The size booked against your quota comes from storage, never from your declaration. A client that declares 1 KB and uploads 1 GB has its bytes deleted, not its quota mis-booked.</>,
-                <>A SHA-256 declared with an inline upload is verified by storage on write. On the presigned path it is recorded, not verified.</>,
-                <>Presigned URLs are never logged in full: only that one was issued, to whom, and when.</>,
-              ]} />
-
-              <H3 id={slug('What we log')}>What we log</H3>
-              <P>
-                Structured request logs: endpoint, method, status, latency, request ID and the
-                identity that called. Never request or response bodies that hold file content or
-                secrets. Infrastructure logs are kept around 90 days; your workspace's Activity log is
-                kept for the life of the workspace.
               </P>
             </section>
 
@@ -2104,8 +2040,9 @@ export function Docs({ sandbox = false }) {
               <P>
                 <code>DELETE /v1/folders/:id</code> removes an empty folder. Emptiness is decided by
                 path, so a folder that still holds files, however they were created, refuses with
-                409. Delete the files first; the product never deletes files as a side effect of
-                deleting a folder.
+                409. To delete a folder and everything in it, add <code>?recursive=true</code>:
+                every file inside is destroyed permanently, exactly as if each had been deleted on its
+                own, and the response says how many files and bytes went.
               </P>
 
               <H3 id={slug('Agents and keys')}>Agents and keys</H3>
@@ -2136,9 +2073,8 @@ export function Docs({ sandbox = false }) {
 
               <H3 id={slug('Exporting first')}>Exporting first</H3>
               <P>
-                There is no packaged export yet, and we would rather say so than imply a button that
-                does not exist. Download what you need through the file browser, or list and
-                download through the API, before you delete.
+                Download what you need through the file browser, or list and download through the
+                API, before you delete.
               </P>
             </section>
 
@@ -2181,319 +2117,6 @@ export function Docs({ sandbox = false }) {
                 If your account owned no workspaces and you were only ever invited into other
                 people's, closing it removes your seats and your own record. The hosts' workspaces,
                 files and subscriptions are not affected.
-              </P>
-            </section>
-
-            {/* ═══════════════════════ PRIVACY ═══════════════════════ */}
-            <section id="privacy" className="doc__section">
-              <H2 id="privacy-heading">Privacy</H2>
-              <p className="doc__meta">Privacy Policy · last updated 26 September 2026</p>
-              <P>
-                This is AgentDisk's privacy policy. AgentDisk is provided by Kernelv5 Inc.
-                (&ldquo;we&rdquo;, &ldquo;us&rdquo;), and this policy explains how we collect, use and share information when you
-                use the website, the dashboard, the API and the MCP server. It applies to human
-                account holders and to information generated by AI agents acting under an account
-                holder's authorisation. Files an agent creates are treated exactly as files a
-                person uploads; nothing here differs by who acted.
-              </P>
-
-              <H3 id={slug('What we collect')}>What we collect</H3>
-              <List items={[
-                <><strong>Account information:</strong> the identifier our sign-in provider issues for you, your email address, and which sign-in method you used.</>,
-                <><strong>Your content:</strong> the files you and your agents store, with the metadata you attach.</>,
-                <><strong>Request logs:</strong> endpoint, method, status, latency, request ID and the calling identity, for security, quota enforcement and debugging. IP addresses, for rate limiting and abuse prevention, on the same schedule.</>,
-                <><strong>Support requests:</strong> what you send through the Support form, from the address you signed in with.</>,
-                <><strong>Usage analytics, only if you allow them:</strong> which pages of this site are visited, through Google Analytics. Workspace names, file paths and link tokens are removed from the address before it is sent. Nothing about your files, and nothing from the API or MCP.</>,
-              ]} />
-
-              <H3 id={slug('What we never see')}>What we never see</H3>
-              <List items={[
-                <><strong>Your password.</strong> Sign-up, reset and change all go to the sign-in provider. This backend never receives, hashes or stores one, and the password policy is enforced there.</>,
-                <><strong>Your card number.</strong> Checkout and the portal are the payment processor's pages. We hold its customer and subscription identifiers and nothing about the card.</>,
-                <><strong>Your file contents, in the ordinary course.</strong> We compute a checksum, sign a URL and measure a size. We do not open, view or process contents except to investigate abuse, a security incident or a valid legal request, and we do not claim the architecture makes that impossible, because it does not.</>,
-                <><strong>Advertising data.</strong> Google Analytics runs with ad storage, ad personalisation and Google signals switched off, and there are no marketing cookies.</>,
-              ]} />
-
-              <H3 id={slug('Processors')}>Processors</H3>
-              <Table
-                head={['Processor', 'For']}
-                rows={[
-                  ['Cloudflare, Inc.', 'Compute, object storage, database, cache, queues, bot verification, and outbound email'],
-                  ['Google LLC (Firebase Authentication)', 'Sign-in and session tokens'],
-                  ['Google LLC (Google Analytics)', 'Page-visit analytics on this site, only with your consent'],
-                  ['Stripe, Inc.', 'Payments, invoices, the customer portal'],
-                ]}
-              />
-              <P>
-                No AI processor touches your files. Optional per-workspace AI features are not
-                enabled in this release, and the policy will name the processor before that changes,
-                because it is the one case where content would leave the storage boundary.
-              </P>
-
-              <H3 id={slug('Retention')}>Retention</H3>
-              <List items={[
-                <>Account and file data: while the account and workspace exist.</>,
-                <>A deleted file: gone in the request.</>,
-                <>A deleted workspace or account: records gone in the request, bytes within seven days, the email address and sign-in released on day seven with one confirmation message.</>,
-                <>Request logs: around 90 days. Your workspace's Activity log: the life of the workspace.</>,
-                <>Invoices: seven years, at the payment processor.</>,
-                <>We may hold data longer where an active dispute or a legal obligation demands it.</>,
-              ]} />
-
-              <H3 id={slug('Cookies')}>Cookies</H3>
-              <P>
-                Session and security storage is strictly necessary and always on. Google
-                Analytics is optional: it loads only after you allow it in the cookie notice,
-                sets Google's <code>_ga</code> cookies, and switching it off removes them. There
-                are no marketing cookies. Your theme choice is kept in your browser and never
-                sent to us.
-              </P>
-
-              <H3 id={slug('International transfers')}>International transfers</H3>
-              <P>
-                Our infrastructure, sign-in and analytics providers operate global networks, so your
-                data may be processed outside your home country; Google Analytics data, when you allow
-                it, is processed by Google in the United States. The specific transfer mechanisms will be
-                stated here once the operating entity is finalised.
-              </P>
-
-              <H3 id={slug('Children')}>Children</H3>
-              <P>
-                The service is not directed to anyone under 16, and we do not knowingly collect
-                their information. If we learn that we have, we delete it.
-              </P>
-
-              <H3 id={slug('Your rights')}>Your rights</H3>
-              <P>
-                Depending on where you live you may have rights to access, correct, delete, export
-                or object to the processing of your data. Deletion and export are in your own hands
-                in the product, see <a href="#deleting-data">Deleting your data</a> and{' '}
-                <a href="#deleting-account">Deleting your account</a>. For anything else, contact
-                us.
-              </P>
-
-              <H3 id={slug('Changes and contact')}>Changes and contact</H3>
-              <P>
-                Material changes are posted here with an updated date, and account owners are
-                notified by email for significant ones. Questions about this policy go to{' '}
-                <code>connect@agentdisk.io</code> or the Support form in the dashboard.
-              </P>
-            </section>
-
-            {/* ════════════════════════ TERMS ════════════════════════ */}
-            <section id="terms" className="doc__section">
-              <H2 id="terms-heading">Terms of Service</H2>
-              <p className="doc__meta">Terms of Service · last updated 26 September 2026</p>
-              <P>
-                These are the terms under which Kernelv5 Inc. (&ldquo;we&rdquo;, &ldquo;us&rdquo;) provides
-                AgentDisk (the &ldquo;Service&rdquo;). They apply to you and to
-                any agent acting under credentials you control. The <a href="#privacy">Privacy
-                Policy</a> above is part of them.
-              </P>
-
-              <H3 id={slug('Acceptance')}>1. Acceptance</H3>
-              <P>
-                By creating an account or using the Service, including through an API key, a
-                sandbox workspace or an MCP connection, you agree to these Terms.
-              </P>
-
-              <H3 id={slug('Acceptable use')}>2. Acceptable use</H3>
-              <P>
-                You may not use the Service to store, transmit or process content that is illegal
-                in your jurisdiction; malware or anything designed to attack systems, including
-                ours; content that infringes another party's intellectual property; content
-                involving the sexual exploitation of minors, which we report to the appropriate
-                authorities without exception; or content intended to harass, threaten or
-                facilitate violence against real people.
-              </P>
-
-              <H3 id={slug('Your responsibility for content')}>3. Your responsibility for content</H3>
-              <P>
-                You, and any agent acting under your account, are solely responsible for the files
-                and data you store. We do not pre-screen content, but may review, remove or
-                restrict access to content that violates these Terms or the law, and may suspend
-                accounts for repeated or severe violations.
-              </P>
-
-              <H3 id={slug('Prohibited content')}>4. Prohibited content</H3>
-              <P>
-                You may not upload content you do not have the right to store or share. You may
-                not use the Service as a public content-distribution network: share links exist
-                so a person can hand a file to another person, not to serve the public. You may
-                not circumvent storage limits or the sandbox allowance through automated account
-                or workspace creation.
-              </P>
-
-              <H3 id={slug('API and automated agent use')}>5. API and automated agent use</H3>
-              <P>
-                The API and the MCP server are meant to be used by AI agents and automated systems
-                acting on your behalf under credentials you control. <strong>You are responsible for
-                what your agents do with your API keys, exactly as you would be for your own
-                actions.</strong> Scope keys to what an agent needs. Do not share keys across
-                unrelated parties or resell access without our written agreement.
-              </P>
-
-              <H3 id={slug('Limits and fair use')}>6. Limits and fair use</H3>
-              <P>
-                We enforce the quotas of your plan, and rate limits where they apply, to keep the
-                Service reliable for everyone. We may throttle or temporarily suspend access we
-                reasonably believe is abusive, is degrading reliability for others, or is
-                circumventing those limits.
-              </P>
-
-              <H3 id={slug('Storage limits')}>7. Storage limits</H3>
-              <P>
-                Your plan defines storage, file count, egress and per-file limits, see{' '}
-                <Link to="/pricing">Pricing</Link> and the <a href="#features">plan table</a>.
-                Responses warn you as an account approaches its storage allowance; a write that
-                would exceed a limit is refused until you upgrade, free space or, for egress, the
-                workspace's period resets.
-              </P>
-
-              <H3 id={slug('Account suspension')}>8. Account suspension</H3>
-              <P>
-                We may suspend or terminate accounts that violate these Terms, pose a security risk,
-                or where required by law. Suspension comes first and is reversible; where practical
-                we will give notice and an opportunity to download your data before anything is
-                deleted, except where immediate action is required.
-              </P>
-
-              <H3 id={slug('Your right to delete')}>9. Your right to delete</H3>
-              <P>
-                You may delete your files, workspaces or account at any time, from the dashboard or
-                the API. Deletion is permanent, with no recovery, as described under{' '}
-                <a href="#deleting-data">Deleting your data</a> and{' '}
-                <a href="#deleting-account">Deleting your account</a>.
-              </P>
-
-              <H3 id={slug('Billing')}>10. Billing</H3>
-              <P>
-                Paid plans are billed in advance, monthly or yearly, and renew automatically until
-                you cancel. Cancelling stops renewal at the end of the paid period and you keep the
-                plan until then. Fees are non-refundable except as required by law or as we state at
-                the time of purchase. An upgrade takes effect immediately and is prorated; a
-                downgrade takes effect at the end of the paid period, and if your usage is then over
-                the new plan's limits, new writes are refused until it is back within them. If a
-                payment fails, writes are blocked while the account is past due, reads continue, and
-                you are notified by email before any data is scheduled for removal. Payments are
-                taken by Stripe and appear on your card statement as Kernelv5 Inc., the company
-                that provides AgentDisk.
-              </P>
-
-              <H3 id={slug('Intellectual property')}>11. Intellectual property</H3>
-              <P>
-                You keep all rights to the content you store. You grant us only the limited rights
-                needed to store, process, transmit and display that content back to you and the
-                people and agents you authorise. We keep all rights to the Service itself.
-              </P>
-
-              <H3 id={slug('Third-party services')}>12. Third-party services</H3>
-              <P>
-                The Service relies on the third-party infrastructure, sign-in, payment and analytics
-                providers named in the Privacy Policy. No third-party AI processor handles your files today;
-                if an optional feature ever sends content to one, the Privacy Policy will name it
-                before that happens. We are not responsible for the availability or acts of services
-                outside our control, though we select and monitor them as part of running the
-                Service responsibly.
-              </P>
-
-              <H3 id={slug('Warranties')}>13. Warranties</H3>
-              <P>
-                The Service is provided "as is" without warranties of any kind, express or implied,
-                including merchantability, fitness for a particular purpose and non-infringement,
-                except as expressly stated here or required by law.
-              </P>
-
-              <H3 id={slug('Limitation of liability')}>14. Limitation of liability</H3>
-              <P>
-                To the maximum extent permitted by law, we are not liable for indirect, incidental,
-                special or consequential damages, or for lost data, profits or revenue, arising from
-                your use of the Service.
-              </P>
-
-              <H3 id={slug('Termination')}>15. Termination</H3>
-              <P>
-                You may stop using the Service and delete your account at any time. We may terminate
-                or suspend access for breach of these Terms. Sections 11, 13 and 14 survive
-                termination.
-              </P>
-
-              <H3 id={slug('Changes to these Terms')}>16. Changes to these Terms</H3>
-              <P>
-                We may update these Terms. For material changes we will notify account owners by
-                email before the change takes effect, and the date above will move.
-              </P>
-
-              <H3 id={slug('Governing law')}>17. Governing law</H3>
-              <P>
-                To be specified once the operating entity is finalised.
-              </P>
-            </section>
-
-            {/* ════════════════════════ SAFETY ════════════════════════ */}
-            <section id="safety" className="doc__section">
-              <H2 id="safety-heading">Safety</H2>
-              <P>
-                How the infrastructure itself is protected. This section describes what is built and
-                deployed, and closes with what we do not claim.
-              </P>
-
-              <H3 id={slug('The platform')}>The platform</H3>
-              <List items={[
-                <><strong>Serverless at the edge.</strong> No servers, no SSH, no patching window. The API with its MCP server, the dashboard and the admin console are three edge services; the data is in block-based object storage, an edge database, a cache and a queue in the same account.</>,
-                <><strong>Custom domains only.</strong> The provider's default public hostname is switched off for every service, so there is no second entry point that bypasses the named domains.</>,
-                <><strong>Infrastructure as code.</strong> Everything is declared, one configuration per environment, with a guard that refuses to run in any other. Only one pipeline may apply changes; the others read outputs and cannot write.</>,
-                <><strong>Resource IDs are never typed by hand.</strong> The deploy injects them from the infrastructure outputs and asserts every name against the environment before deploying, so a stale selection fails loudly instead of applying one environment's intent to another's resources.</>,
-                <><strong>Secrets that decrypt data never enter infrastructure state or build artifacts.</strong> The database encryption key and the session signing key live only as runtime secrets.</>,
-              ]} />
-
-              <H3 id={slug('The request path')}>The request path</H3>
-              <List items={[
-                <><strong>One authorization chain</strong> for REST and MCP: authenticate, resolve scope, bind the workspace from the credential, authorize the operation and the path, check quota and billing, then run the handler with only workspace-bound access. A handler cannot write an unscoped query because it never holds anything that could run one.</>,
-                <><strong>Identical failures.</strong> Every authentication failure returns one body, and so does every refusal on a public share link other than the password prompt itself. Reasons go to the log.</>,
-                <><strong>Prefixes match whole segments</strong>, listings are clipped to the prefix, and a file outside it answers 404 rather than confirming it exists.</>,
-                <><strong>Moves and copies check both ends</strong>, so write on a source never buys write on a destination.</>,
-                <><strong>Sizes come from storage</strong>, and a lie about size costs the bytes, not the quota.</>,
-              ]} />
-
-              <H3 id={slug('The edges')}>The edges</H3>
-              <List items={[
-                <><strong>The dashboard</strong> ships a Content-Security-Policy that names only the API it was built against, the sign-in provider, the bot check, the font host and the upload host; plus HSTS, <code>X-Frame-Options: DENY</code>, <code>nosniff</code> and a strict referrer policy. A CORS allow-list names the dashboard and console origins and nothing else.</>,
-                <><strong>The one unauthenticated write</strong>, sandbox creation, sits behind two per-IP limits: ten creations an hour, and five unclaimed sandboxes held at once. A browser's bot check is still verified server-side when one is sent, but an agent needs none, because what makes a flood of sandboxes harmless is what a sandbox cannot do: it has no share links, holds 500 MB, and is deleted after three days unless a person claims it.</>,
-                <><strong>Share-link passwords</strong> are limited to ten wrong guesses per fifteen minutes per link, and share tokens are 32 random characters looked up by hash.</>,
-                <><strong>Webhook deliveries</strong> are signed with a timestamp inside the signed material and a five-minute replay window.</>,
-              ]} />
-
-              <H3 id={slug('The operators')}>The operators</H3>
-              <List items={[
-                <><strong>A separate console on a separate origin.</strong> Support engineers use an internal admin console with its own hostname and its own look, so an operator always knows which surface they are in.</>,
-                <><strong>Being an operator is a row in a table</strong>, read fresh on every request, never a claim baked into a token. Removing the row takes effect immediately.</>,
-                <><strong>Every operator action is audited</strong>, including refusals, by a base class no admin area can bypass. Deleting a customer's workspace or account from the console is a two-step act: suspend first, which is instant and reversible, then delete, which sets a 30-day timestamp and stops; the actual removal is a separate job that defaults to reporting rather than deleting.</>,
-                <><strong>Operators never see card numbers</strong>, and the console renders nothing it cannot source.</>,
-              ]} />
-
-              <H3 id={slug('How we know it works')}>How we know it works</H3>
-              <List items={[
-                <>The API has over 950 automated tests, including repository and route tests that seed two workspaces and prove each answers the other's IDs with nothing, and a sweep across every authenticated route that proves a missing credential is answered like an invalid one.</>,
-                <>Every security-critical behaviour in the storage core was mutation-tested: 22 deliberate breaks, each confirmed to turn the suite red.</>,
-                <>Branch protection requires the application and infrastructure checks to pass before anything merges; the deployment pipeline ends with a smoke test against the live hostnames that fails the run if a security header goes missing.</>,
-                <>Destructive background jobs, the sandbox sweep, the admin purge and the billing ladder, each default to reporting and need an explicit flag per environment to delete anything.</>,
-              ]} />
-
-              <H3 id={slug('What we do not claim')}>What we do not claim</H3>
-              <List items={[
-                <>Not end-to-end encrypted. Our service can read your files when a request authorizes it; encryption at rest is the infrastructure provider's.</>,
-                <>No compliance certification is claimed.</>,
-                <>Log out everywhere invalidates every issued session token but cannot revoke the sign-in provider's underlying refresh token; a stolen device should also change its password.</>,
-                <>No per-key rate limit on the authenticated surface yet. Quotas are the throttle there; the rate limits that exist guard sandbox creation and share-link passwords, and are coarse and eventually consistent.</>,
-              ]} />
-
-              <H3 id={slug('Reporting a vulnerability')}>Reporting a vulnerability</H3>
-              <P>
-                Email <code>connect@agentdisk.io</code> with "Security" in the subject, or use the
-                Support form in the dashboard. Please do not open a public issue. If you have pasted
-                a key somewhere it should not be, disable it under API keys first; re-enabling
-                issues a new secret.
               </P>
             </section>
 

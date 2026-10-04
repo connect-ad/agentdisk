@@ -500,8 +500,8 @@ export function Signup() {
               <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} />
               <span className="auth__check"><Tick width={3.4} /></span>
               <span className="auth__consenttx">
-                I agree to the <Link to="/docs#terms">terms of service</Link> and{' '}
-                <Link to="/docs#privacy">privacy policy</Link>
+                I agree to the <Link to="/terms">terms of service</Link> and{' '}
+                <Link to="/privacy">privacy policy</Link>
               </span>
             </label>
 

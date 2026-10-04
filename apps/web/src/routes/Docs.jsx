@@ -181,7 +181,7 @@ const ROUTES = [
 const ERRORS = [
   ['400', 'VALIDATION_ERROR', 'The body or query did not validate. The message says which field.'],
   ['401', 'UNAUTHORIZED', 'The credential was not accepted. Always the same body, whatever the reason.'],
-  ['403', 'FORBIDDEN', 'Authenticated, but this operation, path or role is outside what the credential holds.'],
+  ['403', 'FORBIDDEN', 'Authenticated, but this operation, path or role is outside what the credential holds, or the plan has no room for one more workspace, agent, key, member or share link (details.limit names which).'],
   ['404', 'NOT_FOUND', 'No such route or resource. A file outside your prefix answers this, not 403.'],
   ['409', 'CONFLICT', 'The state refuses it: a path already exists, a file is already deleted, a billing call failed.'],
   ['413', 'PAYLOAD_TOO_LARGE', 'Inline content over 1 MB, or a file over the plan’s per-file cap.'],
@@ -1676,6 +1676,7 @@ export function Docs({ sandbox = false }) {
                 <><strong>Claude Code says the server failed to start.</strong> The <code>.mcp.json</code> entry is missing <code>"type": "http"</code>, so it tried to spawn the URL as a command.</>,
                 <><strong>Claude Desktop shows nothing.</strong> Its config cannot hold a URL; use the mcp-remote bridge above and restart the app.</>,
                 <><strong>429 LIMIT_EXCEEDED.</strong> A quota (the body's <code>details.limit</code> says which: storage, files, egress) or a rate limit. Free space, upgrade, or wait for the window. If the message says <em>too many failed authentication attempts</em>, your address sent thirty bad credentials in fifteen minutes, usually a stale key in one client's config, and every call from that address is refused until the window ends. Fix the key, then wait.</>,
+                <><strong>403 with <code>details.limit</code>.</strong> The plan has no room for one more of what you are creating: <code>workspaces</code>, <code>agents</code>, <code>apiKeys</code>, <code>members</code> or <code>shareLinks</code>. Agents, keys, members and workspaces count across the whole account, and disabled agents and keys still count; delete one you no longer need, or upgrade. A sandbox holds one agent and one key until it is claimed.</>,
                 <><strong>Every write fails with a billing message.</strong> The account is past due or expired. Fix the card under Billing; reads keep working throughout.</>,
               ]} />
             </section>
@@ -1998,6 +1999,7 @@ export function Docs({ sandbox = false }) {
                 rows={PLANS.map(p => [p.name, p.storage, p.files, p.egress, p.file, p.agents, p.keys, p.members, p.workspaces, p.shares])}
               />
               <List items={[
+                <><strong>Every allowance in the table is enforced</strong> on the request that would exceed it: storage, files and egress with 429, a file over the cap with 413, and workspaces, agents, keys, members and share links with 403. In each case <code>details.limit</code> names which, and the message says how to make room.</>,
                 <><strong>Requests are unlimited</strong> on every plan. Storage and file count pool across the account; egress is counted per workspace per month and resets on the workspace's own period.</>,
                 <><strong>Warnings before walls.</strong> A write that lands the account at 80% or 95% of its allowance carries a warning on the response; a write that would exceed it is refused with 429 and the dimension named.</>,
                 <><strong>Monthly or yearly, auto-renewing.</strong> Checkout happens on our payment processor's page, where promotion codes are entered. Cards and invoices live in its portal; we never see or store card numbers.</>,

@@ -351,9 +351,9 @@ export function Privacy() {
           ]}
         />
         <P>
-          No AI processor touches your files. Optional per-workspace AI features are not
-          enabled in this release, and the policy will name the processor before that changes,
-          because it is the one case where content would leave the storage boundary.
+          No AI processor touches your files. If an optional feature ever sends content to one,
+          this policy will name the processor before that happens, because it is the one case
+          where content would leave the storage boundary.
         </P>
 
         <H3 id={slug('Retention')}>Retention</H3>

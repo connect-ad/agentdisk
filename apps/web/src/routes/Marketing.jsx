@@ -3,8 +3,10 @@ import { Link, NavLink } from 'react-router-dom';
 import { Button, Icon } from '../components/index.js';
 import { useAuth } from '../lib/auth.jsx';
 import {
-  PLANS, OVERAGES, FREE_SUMMARY, COUNTING_NOTE, YEARLY_NOTE, RENEWAL_NOTE
+  PLANS, OVERAGES, FREE_SUMMARY, COUNTING_NOTE, YEARLY_NOTE, RENEWAL_NOTE,
+  PERIODS, yearlyListPrice, yearlySaving
 } from '../lib/pricing.js';
+import { WORKS_WITH } from '../lib/clients.js';
 import Logo from '../components-local/Logo.jsx';
 import Byline from '../components-local/Byline.jsx';
 import { COMPANY_NAME, COMPANY_URL } from '../lib/company.js';
@@ -483,7 +485,33 @@ export function Landing() {
 
 /* ── pricing ──────────────────────────────────────────────────────────────── */
 
+/**
+ * One client mark on a plan card. A link into the docs section that sets the
+ * client up, named for the screen reader and the hover; the SVG itself is
+ * decoration. `fill` is the brand colour or `currentColor` (see clients.js).
+ */
+function ClientMark({ client }) {
+  return (
+    <Link
+      to={`/docs/${client.docsId}`}
+      className="mk__mark"
+      title={client.name}
+      aria-label={client.name}
+    >
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+        <path d={client.path} fill={client.color} />
+      </svg>
+    </Link>
+  );
+}
+
 export function Pricing() {
+  // Monthly first: it is the price Stripe lists and the one a reader can
+  // compare across the row without arithmetic. Yearly is one tap away and
+  // wears its saving on the switch, so nothing is hidden behind the toggle.
+  const [period, setPeriod] = useState('monthly');
+  const yearly = period === 'yearly';
+
   return (
     <div className="mk">
       <Nav />
@@ -498,44 +526,81 @@ export function Pricing() {
             full audit log, with unlimited requests.
           </p>
 
-          <div className="mk__prices">
-            {PLANS.map(p => (
-              <div key={p.id} className={p.featured ? 'mk__plan mk__plan--pop' : 'mk__plan'}>
-                <div className="mk__planhead">
-                  <span className="mk__kicker">{p.kicker}</span>
-                  {p.featured ? <span className="mk__planflag">MOST TEAMS</span> : null}
-                </div>
-                <div className="mk__planprice">
-                  <span className="mk__price">{p.price}</span>
-                  <span className="mk__planunit">{p.unit}</span>
-                </div>
-                {/* The yearly figure sits under the monthly one rather than
-                    behind a toggle. A toggle on a marketing page hides half the
-                    pricing from anybody who does not find it, and the saving is
-                    the reason to read on. */}
-                {p.yearlyPrice ? (
-                  <p className="mk__planyear">
-                    or {p.yearlyPrice} {p.yearlyUnit} — save 15%
-                  </p>
-                ) : null}
-                <div className="mk__feats">
-                  {p.lines.map(l => (
-                    <span key={l} className="mk__feat">
-                      <Icon name="check" size={15} />
-                      <span>{l}</span>
-                    </span>
-                  ))}
-                </div>
-                <Button
-                  full
-                  as={Link}
-                  to={p.ctaTo}
-                  variant={p.featured ? 'primary' : 'secondary'}
-                >
-                  {p.cta}
-                </Button>
-              </div>
+          {/* The billing period, as a two-option switch. `aria-pressed` on
+              buttons rather than a radio group: the two are commands that
+              redraw the cards, and a pressed button is what the pill looks like. */}
+          <div className="mk__period" role="group" aria-label="Billing period">
+            {PERIODS.map(opt => (
+              <button
+                key={opt.id}
+                type="button"
+                className={period === opt.id ? 'mk__periodbtn is-on' : 'mk__periodbtn'}
+                aria-pressed={period === opt.id}
+                onClick={() => setPeriod(opt.id)}
+              >
+                {opt.label}
+                {opt.badge ? <span className="mk__periodbadge">{opt.badge}</span> : null}
+              </button>
             ))}
+          </div>
+
+          <div className="mk__prices">
+            {PLANS.map(p => {
+              const showYearly = yearly && p.yearlyPrice;
+              return (
+                <div key={p.id} className={p.featured ? 'mk__plan mk__plan--pop' : 'mk__plan'}>
+                  <div className="mk__planhead">
+                    <span className="mk__kicker">{p.kicker}</span>
+                    {p.featured ? <span className="mk__planflag">MOST TEAMS</span> : null}
+                  </div>
+                  <div>
+                    <div className="mk__planprice">
+                      {showYearly ? (
+                        // Twelve months at the monthly rate, struck through, so
+                        // the saving is shown rather than asserted.
+                        <s className="mk__pricewas">{yearlyListPrice(p)}</s>
+                      ) : null}
+                      <span className="mk__price">{showYearly ? p.yearlyPrice : p.price}</span>
+                      <span className="mk__planunit">{showYearly ? p.yearlyUnit : p.unit}</span>
+                    </div>
+                    {/* One line under the price in every state, so the cards
+                        stay the same height when the switch flips. */}
+                    {showYearly ? (
+                      <p className="mk__plansave">Save {yearlySaving(p)} · billed yearly</p>
+                    ) : p.yearlyPrice ? (
+                      <p className="mk__planyear">Billed monthly · or {p.yearlyPrice} {p.yearlyUnit}</p>
+                    ) : (
+                      <p className="mk__planyear">No card required</p>
+                    )}
+                  </div>
+                  <div className="mk__feats">
+                    {p.lines.map(l => (
+                      <span key={l} className="mk__feat">
+                        <Icon name="check" size={15} />
+                        <span>{l}</span>
+                      </span>
+                    ))}
+                  </div>
+                  <Button
+                    full
+                    as={Link}
+                    to={p.ctaTo}
+                    variant={p.featured ? 'primary' : 'secondary'}
+                  >
+                    {p.cta}
+                  </Button>
+                  {/* The same row on every card, because the MCP server is
+                      ungated: a reader compares tiers card by card, and a tier
+                      without the row would read as a tier without the clients. */}
+                  <div className="mk__works">
+                    <span className="mk__workslabel">Works with</span>
+                    <div className="mk__marks" style={{ '--marks': WORKS_WITH.length }}>
+                      {WORKS_WITH.map(c => <ClientMark key={c.id} client={c} />)}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {/* Said once here rather than on four cards: every count on them is an

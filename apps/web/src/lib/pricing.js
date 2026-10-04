@@ -182,3 +182,37 @@ export const RENEWAL_NOTE =
  * question open.
  */
 export const OVERAGES = [];
+
+/**
+ * The two billing periods behind the Monthly / Yearly switch on the pricing
+ * page. `yearly` carries the saving the switch advertises; it is the one number
+ * in `YEARLY_NOTE` restated as a badge, so the two cannot disagree.
+ */
+export const PERIODS = [
+  { id: 'monthly', label: 'Monthly' },
+  { id: 'yearly', label: 'Yearly', badge: 'Save 15%' },
+];
+
+/** `'$9'` → 9. Prices are whole dollars throughout the catalogue. */
+const dollars = s => Number(String(s).replace(/[^0-9.]/g, ''));
+
+/**
+ * What a year of the plan costs month by month, as a price string — the
+ * figure the yearly card strikes through. Null on plans with no yearly price
+ * (Free), which show the same card in both periods.
+ */
+export function yearlyListPrice(plan) {
+  if (!plan.yearlyPrice) return null;
+  return `$${dollars(plan.price) * 12}`;
+}
+
+/**
+ * The dollars saved by paying yearly, as a price string. Computed from the two
+ * real prices rather than from the 15% figure, so the badge never claims a
+ * cent more than Stripe actually discounts (Basic saves $17 on $108, which is
+ * 15.7%; the page rounds down, never up).
+ */
+export function yearlySaving(plan) {
+  if (!plan.yearlyPrice) return null;
+  return `$${dollars(plan.price) * 12 - dollars(plan.yearlyPrice)}`;
+}

@@ -518,30 +518,38 @@ export function Pricing() {
       <div className="mk__wrap">
 
         <section className="mk__hero mk__hero--single">
-          {/* Requests are unlimited on every plan, so the old headline — "Pay
-              for storage and requests" — named a meter that does not exist. */}
-          <h1 className="mk__h1">Pay for storage. Nothing else.</h1>
-          <p className="mk__lead">
-            Every plan includes the MCP server, webhooks, path-scoped keys and the
-            full audit log, with unlimited requests.
-          </p>
+          {/* Headline and lead on the left, the billing switch on the right,
+              both on the lead's baseline. The switch used to have a row of its
+              own under the lead, which pushed the cards a full row down for
+              two words; the space beside the headline was empty. */}
+          <div className="mk__pricehead">
+            <div className="mk__priceheadtext">
+              {/* Requests are unlimited on every plan, so the old headline — "Pay
+                  for storage and requests" — named a meter that does not exist. */}
+              <h1 className="mk__h1">Pay for storage. Nothing else.</h1>
+              <p className="mk__lead">
+                Every plan includes the MCP server, webhooks, path-scoped keys and the
+                full audit log, with unlimited requests.
+              </p>
+            </div>
 
-          {/* The billing period, as a two-option switch. `aria-pressed` on
-              buttons rather than a radio group: the two are commands that
-              redraw the cards, and a pressed button is what the pill looks like. */}
-          <div className="mk__period" role="group" aria-label="Billing period">
-            {PERIODS.map(opt => (
-              <button
-                key={opt.id}
-                type="button"
-                className={period === opt.id ? 'mk__periodbtn is-on' : 'mk__periodbtn'}
-                aria-pressed={period === opt.id}
-                onClick={() => setPeriod(opt.id)}
-              >
-                {opt.label}
-                {opt.badge ? <span className="mk__periodbadge">{opt.badge}</span> : null}
-              </button>
-            ))}
+            {/* The billing period, as a two-option switch. `aria-pressed` on
+                buttons rather than a radio group: the two are commands that
+                redraw the cards, and a pressed button is what the pill looks like. */}
+            <div className="mk__period" role="group" aria-label="Billing period">
+              {PERIODS.map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={period === opt.id ? 'mk__periodbtn is-on' : 'mk__periodbtn'}
+                  aria-pressed={period === opt.id}
+                  onClick={() => setPeriod(opt.id)}
+                >
+                  {opt.label}
+                  {opt.badge ? <span className="mk__periodbadge">{opt.badge}</span> : null}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="mk__prices">

@@ -321,8 +321,8 @@ resource "cloudflare_workers_custom_domain" "www" {
 # both alpn and port. Record value syntax is the Cloudflare API's SvcParams
 # string, not zone-file text, hence no trailing dot on the target.
 #
-# The scanner reports these as "warn" rather than "pass" until the zone's
-# DNSSEC chain is complete, which is the DS record at the registrar (12
+# The scanner parses both as valid ServiceMode, then reports the check as
+# "fail" (dnssecNotValidated) until the zone's DNSSEC chain is complete, which is the DS record at the registrar (12
 # Hardening, open action 1) - nothing here can finish that.
 resource "cloudflare_dns_record" "agents_index" {
   zone_id = var.zone_id

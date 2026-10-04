@@ -54,7 +54,7 @@ export const PAGE_META = {
   '/security': {
     title: 'Security — AgentDisk',
     description:
-      "How AgentDisk protects your AI agents' data: encryption, tenant isolation, scoped credentials, Cloudflare edge security, and 1,014 automated tests."
+      "How AgentDisk protects your AI agents' data: encryption, tenant isolation, scoped credentials, Cloudflare edge security, and more than 1,000 automated tests."
   },
   '/privacy': {
     title: 'Privacy Policy — AgentDisk',

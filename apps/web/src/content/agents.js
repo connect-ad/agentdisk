@@ -18,7 +18,7 @@ export const AGENT_PAGES = [
     name: 'Claude',
     title: 'File Storage for Claude (Claude Code & Desktop) — AgentDisk',
     description: 'Give Claude Code and Claude Desktop persistent, scoped file storage over MCP. One command to connect, a free tier, and hard-capped pricing.',
-    lead: 'Claude forgets everything between sessions; its files should not. AgentDisk gives Claude a persistent, scoped workspace over MCP: notes, task lists and results written in one session and read back in the next.',
+    lead: 'A Claude session ends; its files should not. AgentDisk gives Claude a persistent, scoped workspace over MCP: notes, task lists and results written in one session and read back in the next.',
     configs: [
       {
         caption: 'CLAUDE CODE · TERMINAL',

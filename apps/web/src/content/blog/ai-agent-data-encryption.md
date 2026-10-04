@@ -108,7 +108,7 @@ One honest note on integrity: a SHA-256 declared on an inline upload is verified
 
 Encryption keeps data unreadable to people outside the system. Isolation keeps one tenant's data unreachable by another tenant's credentials, and in a multi-tenant service that matters at least as much.
 
-The authorization chain binds the workspace from the credential, never from client input. Handlers never receive a raw database or bucket binding; storage methods take a file ID and derive the object key. Isolation tests seed two workspaces and prove every route answers the other tenant's IDs with 404. The API has 1,014 automated tests, and 22 deliberate mutations of security-critical storage code each turned the suite red. Scoped keys narrow access further; see [scoped credentials for AI agents](/blog/scoped-credentials-ai-agents).
+The authorization chain binds the workspace from the credential, never from client input. Handlers never receive a raw database or bucket binding; storage methods take a file ID and derive the object key. Isolation tests seed two workspaces and prove every route answers the other tenant's IDs with 404. The API has more than 1,000 automated tests, and 22 deliberate mutations of security-critical storage code each turned the suite red. Scoped keys narrow access further; see [scoped credentials for AI agents](/blog/scoped-credentials-ai-agents).
 
 ## What the provider certifications cover
 

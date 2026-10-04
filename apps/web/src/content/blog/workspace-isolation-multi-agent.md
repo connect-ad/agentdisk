@@ -93,7 +93,7 @@ Separating agents into workspaces does not multiply your storage. Storage and fi
 | Pro | 50 GB | 1,000,000 | 500 GB |
 | Team | 500 GB | 10,000,000 | 5,000 GB |
 
-At 80% and 95% of a limit, writes carry a warning. A write that would exceed a limit is refused with HTTP 429 naming the dimension; nothing is charged as overage, because overage charges do not exist. The plan's agent, key, member and workspace counts are reported in the dashboard, but the API does not yet refuse requests for exceeding them. More on how the caps behave in [hard-capped pricing](/blog/hard-capped-pricing-ai-storage), and the full table is on the [pricing page](/pricing).
+At 80% and 95% of a limit, writes carry a warning. A write that would exceed a limit is refused with HTTP 429 naming the dimension; nothing is charged as overage, because overage charges do not exist. More on how the caps behave in [hard-capped pricing](/blog/hard-capped-pricing-ai-storage), and the full table is on the [pricing page](/pricing).
 
 An agent can check its own position at the start of a run with `GET /v1/whoami`, which returns the workspace the key belongs to, the scopes it holds and how much room is left.
 
@@ -119,7 +119,7 @@ If a request names a file ID that belongs to another workspace, the answer is 40
 
 ### Tested, not assumed
 
-Isolation has its own tests. They seed two workspaces and prove that every route answers the other tenant's IDs with 404. Beyond that, we deliberately broke security-critical storage code in 22 different ways, and each mutation turned the test suite red. The API suite stands at 1,014 automated tests.
+Isolation has its own tests. They seed two workspaces and prove that every route answers the other tenant's IDs with 404. Beyond that, we deliberately broke security-critical storage code in 22 different ways, and each mutation turned the test suite red. The API suite has more than 1,000 automated tests.
 
 ### Audited
 

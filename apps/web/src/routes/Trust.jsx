@@ -11,16 +11,18 @@ import {
  * hash anchors (#data-security, #safety, #privacy, #terms). The text of
  * those sections is carried over as it was; the edits are the links that
  * pointed at neighbouring docs sections, which now point at real addresses,
- * and the test count in "How we know it works", which is 1,014 today.
+ * and the test count in "How we know it works", given as "more than 1,000"
+ * so it does not go stale with every commit.
  *
  * What was added, on /security, is the certifications of the providers this
- * runs on, how the practice maps to the SOC 2 criteria, and an FAQ. The rule
- * for all of it is the docs' rule: nothing that is not true of the running
- * system. AgentDisk holds no certification of its own and says so; the
- * Cloudflare protections listed are the ones this zone actually has (Skill 12
- * records Bot Fight Mode off and a Free-plan zone with one rate-limit rule),
- * and the paid products it does not have are named as absent rather than
- * left out.
+ * runs on, the controls sorted by SOC 2 category, and an FAQ. The rule for all
+ * of it is the docs' rule: nothing that is not true of the running system.
+ * AgentDisk holds no certification of its own and says so; the Cloudflare
+ * protections listed are the ones this zone actually has (Skill 12 records
+ * Bot Fight Mode off and a Free-plan zone with one rate-limit rule). Since the
+ * 4 Oct 2026 content review the page lists what is in place and no longer
+ * itemises the products and limits that are not, which told an attacker more
+ * than it told a customer; nothing on it claims those protections either.
  *
  * /dpa joined them on 4 Oct 2026, once the owner settled the governing law
  * (Delaware) and chose a published click-through DPA over one signed per
@@ -36,7 +38,7 @@ const TRUST_PAGES = [
   { to: '/privacy', kicker: 'PRIVACY', title: 'Privacy Policy',
     body: 'What we collect, what we never see, the processors, retention, cookies and your rights.' },
   { to: '/terms', kicker: 'TERMS', title: 'Terms of Service',
-    body: 'Acceptable use, agent API use, limits, billing, deletion, liability: all seventeen sections.' },
+    body: 'Acceptable use, agent API use, limits, billing, deletion, liability and governing law.' },
   { to: '/sub-processors', kicker: 'SUB-PROCESSORS', title: 'Sub-processors',
     body: 'Every third party that processes data for AgentDisk, what it processes and where.' },
   { to: '/dpa', kicker: 'DPA', title: 'Data Processing Agreement',
@@ -58,7 +60,7 @@ const SECURITY_FAQ = [
   { q: 'How does AgentDisk encrypt data?',
     a: 'In transit, every connection uses TLS (minimum TLS 1.2, with TLS 1.3 enabled) and the site sends HSTS. At rest, file bytes and the database are encrypted by Cloudflare with AES-256, managed by the provider; this is not end-to-end encryption. API keys are stored as a SHA-256 hash for lookup and as AES-256-GCM ciphertext so the owner can reveal them again.' },
   { q: 'Is AgentDisk SOC 2 compliant?',
-    a: 'AgentDisk runs on infrastructure from providers that hold SOC 2 Type II reports: Cloudflare, Google (Firebase) and Stripe. Our own practices align with the SOC 2 Trust Service Criteria, but AgentDisk does not hold its own SOC 2 report or any other certification.' },
+    a: 'AgentDisk runs on infrastructure from providers that hold SOC 2 Type II reports: Cloudflare, Google (Firebase) and Stripe. AgentDisk does not hold its own SOC 2 report or any other certification; the controls it runs are listed on this page.' },
   { q: 'How does AgentDisk isolate tenant data?',
     a: 'The authorization chain binds the workspace from the credential before any handler runs, and hands the handler storage and database objects already bound to that workspace. Cross-tenant access is prevented at that layer, and REST and MCP share the one chain. Tests seed two workspaces and prove every route answers the other tenant\'s IDs with 404.' },
   { q: 'Does AgentDisk support GDPR?',
@@ -81,7 +83,7 @@ const SECURITY_TOC = [
   { id: 'data-security', label: 'Data security' },
   { id: 'safety', label: 'Safety' },
   { id: 'certifications', label: 'Infrastructure certifications' },
-  { id: 'soc2', label: 'SOC 2 criteria alignment' },
+  { id: 'soc2', label: 'Controls by SOC 2 category' },
   { id: 'faq', label: 'FAQ' },
 ];
 
@@ -175,8 +177,7 @@ export function Security() {
         <List items={[
           <><strong>Serverless at the edge.</strong> No servers, no SSH, no patching window. The API with its MCP server, the dashboard and the admin console are three edge services; the data is in block-based object storage, an edge database, a cache and a queue in the same account.</>,
           <><strong>Custom domains only.</strong> The provider's default public hostname is switched off for every service, so there is no second entry point that bypasses the named domains.</>,
-          <><strong>Infrastructure as code.</strong> Everything is declared, one configuration per environment, with a guard that refuses to run in any other. Only one pipeline may apply changes; the others read outputs and cannot write.</>,
-          <><strong>Resource IDs are never typed by hand.</strong> The deploy injects them from the infrastructure outputs and asserts every name against the environment before deploying, so a stale selection fails loudly instead of applying one environment's intent to another's resources.</>,
+          <><strong>Infrastructure as code.</strong> Every resource is declared and deployed by a reviewed pipeline, with production and development kept apart, never configured by hand.</>,
           <><strong>Secrets that decrypt data never enter infrastructure state or build artifacts.</strong> The database encryption key and the session signing key live only as runtime secrets.</>,
         ]} />
 
@@ -199,15 +200,15 @@ export function Security() {
 
         <H3 id={slug('The operators')}>The operators</H3>
         <List items={[
-          <><strong>A separate console on a separate origin.</strong> Support engineers use an internal admin console with its own hostname and its own look, so an operator always knows which surface they are in.</>,
-          <><strong>Being an operator is a row in a table</strong>, read fresh on every request, never a claim baked into a token. Removing the row takes effect immediately.</>,
+          <><strong>A separate console on a separate origin.</strong> Operators use an internal admin console with its own hostname and its own look, so an operator always knows which surface they are in.</>,
+          <><strong>Operator access is checked on every request</strong> against our own records, never carried in a token, so revoking it takes effect immediately.</>,
           <><strong>Every operator action is audited</strong>, including refusals, by a base class no admin area can bypass. Deleting a customer's workspace or account from the console is a two-step act: suspend first, which is instant and reversible, then delete, which sets a 30-day timestamp and stops; the actual removal is a separate job that defaults to reporting rather than deleting.</>,
           <><strong>Operators never see card numbers</strong>, and the console renders nothing it cannot source.</>,
         ]} />
 
         <H3 id={slug('How we know it works')}>How we know it works</H3>
         <List items={[
-          <>The API has 1,014 automated tests, including repository and route tests that seed two workspaces and prove each answers the other's IDs with nothing, and a sweep across every authenticated route that proves a missing credential is answered like an invalid one.</>,
+          <>The API has more than 1,000 automated tests, including repository and route tests that seed two workspaces and prove each answers the other's IDs with nothing, and a sweep across every authenticated route that proves a missing credential is answered like an invalid one.</>,
           <>Every security-critical behaviour in the storage core was mutation-tested: 22 deliberate breaks, each confirmed to turn the suite red.</>,
           <>Branch protection requires the application and infrastructure checks to pass before anything merges; the deployment pipeline ends with a smoke test against the live hostnames that fails the run if a security header goes missing.</>,
           <>Destructive background jobs, the sandbox sweep, the admin purge and the billing ladder, each default to reporting and need an explicit flag per environment to delete anything.</>,
@@ -218,7 +219,6 @@ export function Security() {
           <>Not end-to-end encrypted. Our service can read your files when a request authorizes it; encryption at rest is the infrastructure provider's.</>,
           <>No compliance certification is claimed.</>,
           <>Log out everywhere invalidates every issued session token but cannot revoke the sign-in provider's underlying refresh token; a stolen device should also change its password.</>,
-          <>No per-key rate limit on the authenticated surface yet. Quotas are the throttle there; the rate limits that exist guard sandbox creation and share-link passwords, and are coarse and eventually consistent.</>,
         ]} />
 
         <H3 id={slug('Reporting a vulnerability')}>Reporting a vulnerability</H3>
@@ -252,11 +252,6 @@ export function Security() {
           <><strong>Isolated execution.</strong> The API, the MCP server and the dashboard run as Workers in V8 isolates, separated from other code on the platform.</>,
           <><strong>A rate-limiting rule</strong> in front of sandbox creation, the one unauthenticated write.</>,
         ]} />
-        <Note tone="warn" label="Not enabled">
-          Cloudflare's managed WAF rulesets, bot management and AI firewall products are paid
-          features that are not switched on for this zone, and we do not claim their
-          protection.
-        </Note>
 
         <H3 id="firebase">Firebase / Google Cloud (authentication)</H3>
         <List items={[
@@ -279,18 +274,18 @@ export function Security() {
       </section>
 
       <section id="soc2" className="doc__section">
-        <H2 id="soc2-heading">SOC 2 Trust Service Criteria alignment</H2>
+        <H2 id="soc2-heading">Controls by SOC 2 category</H2>
         <P>
-          AgentDisk does not hold its own SOC 2 certification. However, our security practices
-          align with the SOC 2 Trust Service Criteria. This is our description of what is
-          built, not an auditor's opinion.
+          AgentDisk does not hold its own SOC 2 certification. For reviewers who work from the
+          SOC 2 Trust Service Criteria, this table sorts the controls described above into its
+          five categories. It is our own description of what is built, not an auditor's opinion.
         </P>
         <Table
           head={['Criterion', 'Our practice']}
           rows={[
             ['Security', 'Cloudflare DDoS mitigation, API keys scoped to operations and a path prefix, sign-in through Firebase Authentication, one authorization chain for REST and MCP, Workers in V8 isolates.'],
             ['Availability', 'Serverless on Cloudflare\'s global network: no servers to patch or fail over, and capacity that scales with requests.'],
-            ['Processing integrity', '1,014 automated API tests, mutation testing of the storage core, a post-deploy smoke test that fails on a missing security header, sizes read from storage rather than declared, SHA-256 verified on inline upload.'],
+            ['Processing integrity', 'More than 1,000 automated API tests, mutation testing of the storage core, a post-deploy smoke test that fails on a missing security header, sizes read from storage rather than declared, SHA-256 verified on inline upload.'],
             ['Confidentiality', 'Workspace isolation bound before any handler runs, encryption at rest by the provider, AES-256-GCM sealed keys, per-agent scoped credentials, presigned URLs for one object that expire in 15 minutes (upload) or one hour (download).'],
             ['Privacy', 'No AI processor touches customer files and no customer data is used for training; analytics only with consent; file bytes removed within seven days of a workspace or account deletion.'],
           ]}
@@ -366,6 +361,7 @@ export function Privacy() {
           <>Account and file data: while the account and workspace exist.</>,
           <>A deleted file: gone in the request.</>,
           <>A deleted workspace or account: records gone in the request, bytes within seven days, the email address and sign-in released on day seven with one confirmation message.</>,
+          <>Deleted database records can remain in our infrastructure provider's point-in-time recovery for up to 30 days before they expire; it is used only to recover the service from a failure.</>,
           <>Request logs: around 90 days. Your workspace's Activity log: the life of the workspace.</>,
           <>Invoices: seven years, at the payment processor.</>,
           <>We may hold data longer where an active dispute or a legal obligation demands it.</>,

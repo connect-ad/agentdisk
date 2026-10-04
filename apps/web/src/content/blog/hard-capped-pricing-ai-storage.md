@@ -42,7 +42,7 @@ Paying yearly takes 15% off the monthly price, rounded down. Free needs no card.
 
 ### What is enforced
 
-The API enforces five limits today: total storage, file count, monthly egress, the per-file size cap and the number of share links. When a write would take you past one of them, the API refuses it with HTTP 429 and names the dimension that was exceeded, so your code knows whether it hit storage, files or something else.
+The API enforces total storage, file count, monthly egress, the per-file size cap and the number of share links. When a write would take you past one of them, the API refuses it and names the dimension that was exceeded: HTTP 429 for storage, files and egress, and 413 for a file over the per-file cap, so your code knows exactly what it hit.
 
 Before that point you get warned. When usage reaches 80% and again at 95% of a limit, writes still succeed but carry a warning. An agent, or the code around it, can pick that up and slow down, clean up or tell a person before anything is refused.
 
@@ -57,12 +57,6 @@ Reading a file's metadata does not count as egress. If your agent only needs to 
 ### Requests are unlimited
 
 There is no request quota on any plan and no per-request charge. An agent that lists a folder a thousand times costs the same as one that lists it once. We chose this because request counts are the hardest thing for an agent builder to predict, and because the dimensions that cost real money (bytes stored and bytes sent) are already capped.
-
-One honest consequence: we do not yet have a per-key rate limit. A loop that hammers the API with reads is not throttled by AgentDisk today. Caps bound what a loop can store and download, not how often it calls.
-
-### What is not enforced yet
-
-Each plan also lists a number of agents, keys, members and workspaces. The dashboard reports how many you are using against those numbers, but the API does not yet refuse a request because you are over them. Treat them as the plan's allowance; enforcement in the API is still to come.
 
 ### If a payment fails
 
@@ -135,8 +129,8 @@ No. Egress is counted per workspace per month, so each workspace gets the plan's
 
 ### Are API requests metered or rate limited?
 
-Requests are unlimited on every plan and there is no per-request charge. There is also no per-key rate limit yet, so request volume is not capped; storage, files, egress, file size and share links are.
+Requests are unlimited on every plan and there is no per-request charge. What is capped is what costs money: storage, files, egress, file size and share links. Traffic that is abusive or degrades the service for others can still be throttled under the [Terms](/terms).
 
-### Does the API enforce the agent, key, member and workspace counts?
+### Can I check how much room is left before a big job?
 
-Not yet. The dashboard reports those counts against your plan, but the API does not currently refuse a request for exceeding them. The limits the API enforces today are storage, file count, egress, the per-file size cap and the share-link count.
+Yes. GET /v1/whoami returns the workspace a key belongs to, the scopes it holds, and how much storage, file count, egress and share-link allowance is used and left, so an agent can decide whether a large job will fit before it starts.

@@ -185,9 +185,20 @@ as FAQPage JSON-LD, and posts carry BlogPosting JSON-LD.
   reference, and every commitment in it restates something the system already
   does; its seven-day byte deletion holds only where `PENDING_DELETION_ENABLED`
   is `"true"`. Change it with the Privacy Policy and Sub-processors pages, which
-  repeat its transfer and notice terms. Competitor facts on the comparison pages
-  come from the owner's brief of 4 Oct 2026 and say so on the page; they do
-  not update themselves.
+  repeat its transfer and notice terms.
+- **Public pages state what is in place, not what is missing (4 Oct 2026
+  content review).** Gaps that help an attacker or undercut a plan more than
+  they inform a buyer (no per-key rate limit, the unbuilt count gates, the
+  paid Cloudflare products that are off) live in Skill 11, not on the site.
+  Gaps a buyer must know to judge fit (not end-to-end encrypted, no
+  certification, no regions, no MFA, what REST does not audit) stay public.
+  The site implies no customers it does not have: no "most teams" badges,
+  no "why people switch".
+- **Competitor facts were checked on each vendor's site on 4 Oct 2026**
+  (Fast.io pricing and overage, Composio's 1,500+ apps and SOC 2 Type II,
+  AWS's general MCP server, Diskd.ai's hosted app). A row that could not be
+  verified is dropped, never written as "not covered". They do not update
+  themselves; recheck them when a competitor reprices or ships.
 
 Per-route metadata rides the same mechanism. `src/lib/seo.js` is one table of
 title and description per public route, read by the prerender and by the live

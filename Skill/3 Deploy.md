@@ -137,7 +137,11 @@ backward-compatible migrations. Prod received all 34 on its first deploy.
 Both environments run the Worker's `scheduled` handler at 17 minutes past
 every hour. It reaps files whose delete was interrupted between D1 and R2,
 purges expired share links, reconciles usage counters, runs the sandbox sweep,
-the billing ladder, the admin purge and the erasure notices. Three of those
+the billing ladder, the admin purge and the erasure notices. Four of those
 default to reporting and delete only when their flag is `"true"` in
-`wrangler.toml`: `SANDBOX_EXPIRY_ENABLED` (dev true, prod false),
-`BILLING_EXPIRY_ENABLED`, `ADMIN_PURGE_ENABLED`.
+`wrangler.toml`: `SANDBOX_EXPIRY_ENABLED` and `PENDING_DELETION_ENABLED`
+(both true in dev and, since 4 Oct 2026, in prod), `BILLING_EXPIRY_ENABLED`,
+`ADMIN_PURGE_ENABLED`. `PENDING_DELETION_ENABLED` is the sweep that removes a
+deleted workspace's or account's bytes after seven days and releases the
+identity; the Privacy Policy, the Security page and the DPA all promise it, so
+it must stay on in every environment customers use.

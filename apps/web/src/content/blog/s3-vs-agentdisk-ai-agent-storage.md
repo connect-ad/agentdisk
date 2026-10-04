@@ -12,7 +12,7 @@ Amazon S3 is the default answer to "where do I put files" for a large part of th
 
 ## The short answer
 
-Use S3 when you need scale, the AWS ecosystem, or very large files. Use AgentDisk when the client is an AI agent and you want per-agent scope, an MCP server, an audit trail of what the agent tried, and a bill that cannot grow past the plan, without building any of that yourself. Many teams will end up with both, each doing the job it is suited to.
+Use S3 when you need scale, the AWS ecosystem, or very large files. Use AgentDisk when the client is an AI agent and you want per-agent scope, an MCP server, an audit trail of what the agent tried, and a bill that cannot grow past the plan, without building any of that yourself. The two also work well together, each doing the job it is suited to.
 
 ## Where S3 is the better choice
 
@@ -44,7 +44,7 @@ AgentDisk runs on Cloudflare's edge and does not let you choose a region. If you
 
 ### Native MCP
 
-AgentDisk ships an MCP server at {{MCP_ENDPOINT}} with eleven file tools: list, search, read, get, get metadata, create, update, delete, create folder, move and copy. Claude Code, Cursor, VS Code with Copilot, Windsurf, Zed and other clients connect with a URL and a Bearer header. With S3 you would write and host an MCP wrapper yourself, decide which operations it exposes, and keep it in step with your own access rules. The [MCP quickstart](/blog/mcp-file-storage-quickstart) shows the AgentDisk setup end to end.
+AgentDisk ships an MCP server at {{MCP_ENDPOINT}} with eleven file tools: list, search, read, get, get metadata, create, update, delete, create folder, move and copy. Claude Code, Cursor, VS Code with Copilot, Windsurf, Zed and other clients connect with a URL and a Bearer header. AWS offers a general-purpose AWS MCP Server, but it calls raw AWS APIs with IAM credentials: there is no file-oriented tool set, and scoping each agent is still IAM policy work. The [MCP quickstart](/blog/mcp-file-storage-quickstart) shows the AgentDisk setup end to end.
 
 ### Per-agent scoped keys without policy authoring
 
@@ -103,7 +103,7 @@ A single unauthenticated `POST` to `/v1/workspaces` creates a sandbox workspace 
 | Ecosystem | Mature, very broad | REST API and MCP server |
 | S3 API | Yes | No |
 | Region choice | Yes | No |
-| MCP server | Build your own | Built in, eleven file tools |
+| MCP server | General AWS MCP Server, raw APIs behind IAM | Built in, eleven file tools |
 | Per-agent scope | IAM policies | Keys with operations and a path prefix |
 | Denied-call audit | Configure separately | Activity log, on by default |
 | Pricing model | Usage-based | Flat monthly plans with hard caps; egress included |
@@ -114,11 +114,11 @@ For a more detailed page, see [AgentDisk vs S3](/compare/agentdisk-vs-s3). If wh
 
 ## The use-both pattern
 
-For many teams the right answer is not either-or. A pattern that works well:
+Often the right answer is not either-or. A pattern that works well:
 
 1. **AgentDisk is the agent's working area.** Each agent gets a key scoped to its own folder. It writes notes, checkpoints, drafts and results there over MCP or REST.
 2. **S3 is the system of record.** Large datasets, archives and anything feeding analytics live in S3, under your existing AWS controls.
-3. **A trusted job moves finished work across.** A small service of yours subscribes to AgentDisk webhooks (`file.created`, `file.updated`, `file.deleted`, `folder.created`, `folder.deleted`), verifies the HMAC-SHA256 signature, and copies finished results into S3.
+3. **A trusted job moves finished work across.** A small service of yours subscribes to AgentDisk's `file.created` webhook, verifies the HMAC-SHA256 signature, and copies finished results into S3.
 4. **The agent never holds AWS credentials.** Its blast radius is its AgentDisk prefix, nothing more.
 
 Step 4 is the point. The agent, whose actions are chosen by a model reading untrusted input, holds only a narrow AgentDisk key. The job with S3 write access is ordinary code you wrote and reviewed. If the agent is tricked into misbehaving, the Activity log shows what it tried, and your data lake is out of its reach.

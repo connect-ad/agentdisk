@@ -137,10 +137,12 @@ describe('the security page', () => {
     const text = container.textContent;
     expect(text).toMatch(/AgentDisk does not hold its own SOC 2 certification/);
     expect(text).toMatch(/No compliance certification is claimed/);
-    expect(text).toMatch(/not switched on for this zone/);
     expect(text).not.toMatch(/AgentDisk is SOC 2 (compliant|certified)/);
     expect(text).not.toMatch(/OWASP|96\.3%|Cloudflare KV/);
-    expect(text).toMatch(/1,014 automated tests/);
+    expect(text).toMatch(/more than 1,000 automated tests/);
+    // 4 Oct 2026: no self-declared SOC 2 alignment, and no map of what is
+    // switched off or not yet built for an attacker to read.
+    expect(text).not.toMatch(/practices align|not switched on for this zone|No per-key rate limit/);
   });
 
   it('carries the merged sections, the certifications, the criteria table and ten FAQs', () => {
@@ -197,5 +199,17 @@ describe('the data processing agreement', () => {
       const text = readFileSync(file, 'utf8');
       expect(text, file).not.toMatch(/operating entity is finalised|not published (a DPA|yet)|DPA has been published|does not publish a data processing agreement/);
     }
+  });
+});
+
+describe('the comparison pages after the 4 Oct 2026 fact check', () => {
+  it('carry no unverified or superseded competitor claim', async () => {
+    const { COMPARISONS, ALTERNATIVES } = await import('../src/content/compare.js');
+    const text = JSON.stringify([COMPARISONS, ALTERNATIVES]);
+    expect(text).not.toMatch(/251 MCP|\$29|3,000|Not covered here|people switch|common pattern|Most teams|practices align/);
+    expect(text).toMatch(/\$9\.99/);
+    expect(text).toMatch(/1,500\+/);
+    for (const a of ALTERNATIVES) expect(a.h1, a.slug).toMatch(/\?$/);
+    expect(ALTERNATIVES.find(a => a.slug === 's3-for-agents').h1).toBe('Looking for an S3 alternative?');
   });
 });

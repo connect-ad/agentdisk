@@ -143,12 +143,14 @@ export const PLANS = [
 export const FREE_SUMMARY = '1 GB of storage and one agent identity';
 
 /**
- * Counted per organization, not per workspace: agents, keys, members and
- * workspaces are account-wide totals. Stated once, on the page, rather than
- * repeated on four cards.
+ * How the allowances are counted, stated once on the page rather than
+ * repeated on four cards. Agents, keys, members, workspaces, storage and file
+ * count are account-wide totals; egress is the one per-workspace counter
+ * (Skill 8). Members are readers, and share links come with the paid plans:
+ * both are things a buyer meets after paying, so the page says them first.
  */
 export const COUNTING_NOTE =
-  'Agents, keys, members and workspaces are counted across your whole account, not per workspace.';
+  'Agents, keys, members and workspaces are counted across your whole account, not per workspace. Storage and file count are shared by all your workspaces; monthly egress is counted per workspace. Members can view a workspace but not change it. Share links come with the paid plans.';
 
 /**
  * The yearly discount, stated once.

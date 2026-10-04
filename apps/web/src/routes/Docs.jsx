@@ -1997,18 +1997,12 @@ export function Docs({ sandbox = false }) {
                 head={['Plan', 'Storage', 'Files', 'Egress / month', 'Max file', 'Agents', 'Keys', 'Members', 'Workspaces', 'Share links']}
                 rows={PLANS.map(p => [p.name, p.storage, p.files, p.egress, p.file, p.agents, p.keys, p.members, p.workspaces, p.shares])}
               />
-              <Note tone="warn">
-                Storage, file count, egress, the per-file cap and share-link counts are enforced on
-                every write today. The agent, key, member and workspace counts are the plan's terms
-                and are being wired into the request path; until they are, the dashboard reports them
-                but the API does not refuse on them.
-              </Note>
               <List items={[
                 <><strong>Requests are unlimited</strong> on every plan. Storage and file count pool across the account; egress is counted per workspace per month and resets on the workspace's own period.</>,
                 <><strong>Warnings before walls.</strong> A write that lands the account at 80% or 95% of its allowance carries a warning on the response; a write that would exceed it is refused with 429 and the dimension named.</>,
                 <><strong>Monthly or yearly, auto-renewing.</strong> Checkout happens on our payment processor's page, where promotion codes are entered. Cards and invoices live in its portal; we never see or store card numbers.</>,
                 <><strong>Upgrades are immediate and prorated; downgrades wait for the period end</strong>, so nobody is dropped below the storage they are already using mid-period.</>,
-                <><strong>Cancel and resume are ours.</strong> Cancelling stops renewal at the period end and keeps everything you paid for until then; resume takes it back any time before the date.</>,
+                <><strong>Cancel and resume yourself.</strong> Cancelling stops renewal at the period end and keeps everything you paid for until then; resume takes it back any time before the date.</>,
                 <><strong>A failing card does not delete anything quickly.</strong> Writes are blocked while the account is past due, reads continue, and the seven-day grace is counted on our clock and announced by email before any data is scheduled for removal. A successful payment clears the schedule.</>,
               ]} />
 
@@ -2044,8 +2038,9 @@ export function Docs({ sandbox = false }) {
               <P>
                 <code>DELETE /v1/folders/:id</code> removes an empty folder. Emptiness is decided by
                 path, so a folder that still holds files, however they were created, refuses with
-                409. Delete the files first; the product never deletes files as a side effect of
-                deleting a folder.
+                409. To delete a folder and everything in it, add <code>?recursive=true</code>:
+                every file inside is destroyed permanently, exactly as if each had been deleted on its
+                own, and the response says how many files and bytes went.
               </P>
 
               <H3 id={slug('Agents and keys')}>Agents and keys</H3>
@@ -2076,9 +2071,8 @@ export function Docs({ sandbox = false }) {
 
               <H3 id={slug('Exporting first')}>Exporting first</H3>
               <P>
-                There is no packaged export yet, and we would rather say so than imply a button that
-                does not exist. Download what you need through the file browser, or list and
-                download through the API, before you delete.
+                Download what you need through the file browser, or list and download through the
+                API, before you delete.
               </P>
             </section>
 

@@ -9,7 +9,7 @@ import {
 import { WORKS_WITH } from '../lib/clients.js';
 import Logo from '../components-local/Logo.jsx';
 import Byline from '../components-local/Byline.jsx';
-import { COMPANY_NAME, COMPANY_URL } from '../lib/company.js';
+import { COMPANY_LEGAL_NAME, COMPANY_NAME, COMPANY_URL } from '../lib/company.js';
 import { SupportDialog } from '../components-local/SupportDialog.jsx';
 import ThemeToggle from '../components-local/ThemeToggle.jsx';
 
@@ -71,7 +71,7 @@ const FEATURES = [
   {
     kicker: 'SCOPED',
     title: "Keys that can't overreach",
-    body: 'Every key carries explicit scopes and an optional path prefix. Denied calls are logged with the scope they needed.',
+    body: 'Every key carries explicit scopes and an optional path prefix. A denied MCP call is logged with the scope it needed.',
   },
   {
     kicker: 'PERSISTENT',
@@ -334,11 +334,11 @@ export function Footer() {
         <div className="mk__footbase">
           {/* Owner's wording, 30 Sept 2026. The company is named so that
               somebody who sees "Kernelv5" on a card statement can find the
-              word on this site; the legal "Inc." lives in the Terms and on
-              the billing page, where the statement match matters. */}
+              word on this site. Since 4 Oct 2026 the copyright carries the
+              legal name, as the Terms, the DPA and the statement do. */}
           <span>
             © {new Date().getFullYear()}{' '}
-            <a href={COMPANY_URL} target="_blank" rel="noopener noreferrer">{COMPANY_NAME}</a>.
+            <a href={COMPANY_URL} target="_blank" rel="noopener noreferrer">{COMPANY_LEGAL_NAME}</a>
             {' '}AgentDisk is a product by {COMPANY_NAME}.
           </span>
           <span>Files your agents can reason about.</span>
@@ -491,7 +491,7 @@ export function Landing() {
         <section className="mk__section">
           <div className="mk__band">
             <div className="mk__bandtext">
-              <h2 className="mk__h2">Give an agent a disk in four minutes.</h2>
+              <h2 className="mk__h2">Give an agent a disk in five minutes.</h2>
               <p className="mk__bandsub">
                 The free tier is {FREE_SUMMARY}. No card, no sales call.
               </p>
@@ -582,7 +582,7 @@ export function Pricing() {
                 <div key={p.id} className={p.featured ? 'mk__plan mk__plan--pop' : 'mk__plan'}>
                   <div className="mk__planhead">
                     <span className="mk__kicker">{p.kicker}</span>
-                    {p.featured ? <span className="mk__planflag">MOST TEAMS</span> : null}
+                    {p.featured ? <span className="mk__planflag">RECOMMENDED</span> : null}
                   </div>
                   <div>
                     <div className="mk__planprice">

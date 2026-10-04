@@ -28,7 +28,7 @@ To be clear about the division of labour: AgentDisk does not run a prompt-inject
 
 Agents retry. An agent that misreads an error can write the same file hundreds of times, or decide that a "clean up temporary files" step applies to the whole tree and delete as it walks. A key with `write` but without `delete` turns the second case into a series of refused calls instead of an empty workspace.
 
-Scope does not stop a loop from running. AgentDisk does not have a per-key rate limit yet, and requests are unlimited on every plan. What bounds a write loop is the plan's hard caps on storage and file count, which we cover in [hard-capped pricing](/blog/hard-capped-pricing-ai-storage). What bounds the blast radius is the key's scope.
+Scope does not stop a loop from running, and requests are unlimited on every plan. What bounds a write loop is the plan's hard caps on storage and file count, which we cover in [hard-capped pricing](/blog/hard-capped-pricing-ai-storage). What bounds the blast radius is the key's scope.
 
 ### Leaked configuration files
 

@@ -133,4 +133,5 @@ POST routes to `createWorkspaceForUser` first. Every creation carries
   The merge writes the destination object and row before removing the source,
   the opposite of the purge job.
 - **The unclaimed sweep defaults to reporting.** `SANDBOX_EXPIRY_ENABLED` is
-  `"true"` in dev's `wrangler.toml` and `"false"` in prod's.
+  `"true"` in both environments' `wrangler.toml` since 4 Oct 2026; before that
+  prod only reported, while the site promised deletion after three days.

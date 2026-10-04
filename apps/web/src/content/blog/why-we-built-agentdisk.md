@@ -107,7 +107,6 @@ A short list of things AgentDisk does not have, so nobody has to find out the ha
 - There is no versioning and no recycle bin. A delete is permanent and the response says so with `"permanent": true`.
 - There is no S3 API and no region selection.
 - Encryption at rest is provider-managed by Cloudflare. It is not end-to-end; the service can read a file when a request authorizes it.
-- There is no per-key rate limit yet.
 
 The full security posture, including what our infrastructure providers certify and what we do not, is on the [security page](/security) and the [trust page](/trust).
 

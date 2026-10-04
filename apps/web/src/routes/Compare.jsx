@@ -73,7 +73,7 @@ export function CompareIndex() {
       <H2 id="alternatives">Alternatives</H2>
       <LinkCards
         label="Alternatives"
-        items={ALTERNATIVES.map(a => ({ to: `/alternatives/${a.slug}`, kicker: 'ALTERNATIVE', title: `Looking for a ${a.name} alternative?`, body: a.description }))}
+        items={ALTERNATIVES.map(a => ({ to: `/alternatives/${a.slug}`, kicker: 'ALTERNATIVE', title: a.h1, body: a.description }))}
       />
       <H2 id="use-with">Use AgentDisk with</H2>
       <LinkCards
@@ -140,11 +140,11 @@ export function AlternativesIndex() {
     <SitePage
       kicker="ALTERNATIVES"
       title="AgentDisk as an alternative"
-      lead="Why teams look at AgentDisk instead of, or beside, the storage they use today, and what moving takes."
+      lead="Where AgentDisk fits instead of, or beside, the storage you use today, and what moving takes."
     >
       <LinkCards
         label="Alternatives"
-        items={ALTERNATIVES.map(a => ({ to: `/alternatives/${a.slug}`, kicker: 'ALTERNATIVE', title: `Looking for a ${a.name} alternative?`, body: a.description }))}
+        items={ALTERNATIVES.map(a => ({ to: `/alternatives/${a.slug}`, kicker: 'ALTERNATIVE', title: a.h1, body: a.description }))}
       />
       <P>Side-by-side tables are on <Link to="/compare">Compare</Link>.</P>
       {CTA}
@@ -163,18 +163,18 @@ export function AlternativePage() {
     <SitePage
       crumbs={[{ to: '/alternatives', label: 'Alternatives' }, { label: a.name }]}
       kicker="ALTERNATIVE"
-      title={`Looking for a ${a.name} alternative?`}
+      title={a.h1}
       meta="Last reviewed: October 2026"
       lead={c.verdict}
       toc={[
-        { id: 'why-switch', label: 'Why people switch' },
+        { id: 'why-switch', label: 'Why consider AgentDisk' },
         { id: 'features', label: 'Feature comparison' },
         { id: 'migration', label: 'Migration guide' },
         { id: 'faq', label: 'FAQ' },
       ]}
     >
       <section className="doc__section" aria-labelledby="why-switch">
-        <H2 id="why-switch">Why people switch</H2>
+        <H2 id="why-switch">Why consider AgentDisk</H2>
         <List items={a.reasons.map((r, i) => <Md key={i}>{r}</Md>)} />
         <Note label="When to stay"><Md>{a.stay}</Md></Note>
       </section>
@@ -248,7 +248,7 @@ export function AgentLanding({ page }) {
       </section>
       <Faq items={page.faq} />
       <CtaBand
-        title={`Connect ${page.name} to AgentDisk in 2 minutes`}
+        title={`Connect ${page.name} to AgentDisk in five minutes`}
         sub="Start free with no card, or give it a sandbox with no account."
         secondary={{ to: '/sandbox', label: 'Open a sandbox' }}
       />

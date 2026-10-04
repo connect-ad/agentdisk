@@ -37,7 +37,17 @@
  * a signed, working link to a customer's file).
  *
  * Every entry point is a no-op during the prerender, in tests, and on the
- * Vite dev server, so nothing here fires from a laptop.
+ * Vite dev server, so nothing here fires from a laptop — and in any build
+ * but prod's. `VITE_ANALYTICS` is `on` only when CI builds for the `prod`
+ * environment (frontend.yml), so app-dev's test traffic never reaches the
+ * property and an unset variable means off, as `ENVIRONMENT_NAME` does for
+ * indexing.
+ *
+ * ── Events ─────────────────────────────────────────────────────────────────
+ * Beyond page views, `trackEvent` sends the funnel's few steps, under GA4's
+ * recommended names so the console recognises them: `sign_up` and `login`
+ * (with `method`), `begin_checkout` and `purchase` (with our plan id). No
+ * parameter ever names a person, a workspace or a file.
  */
 
 import { analyticsAllowed } from './consent.js';
@@ -51,7 +61,8 @@ let loaded = false;
 let enabled = false;
 
 function available() {
-  return typeof window !== 'undefined' && typeof document !== 'undefined' && !import.meta.env.DEV;
+  return typeof window !== 'undefined' && typeof document !== 'undefined'
+    && !import.meta.env.DEV && import.meta.env.VITE_ANALYTICS === 'on';
 }
 
 /** The standard shim. Defined once, on window, where gtag.js looks for it. */
@@ -132,6 +143,16 @@ export function trackPageView(pathname) {
   // page views carries the scrubbed address too.
   window.gtag('set', { page_location: location });
   window.gtag('event', 'page_view', { page_location: location, page_title: document.title });
+}
+
+/**
+ * One named event, on a page where collection is already on. `trackPageView`
+ * runs on every route first, so with consent this is always the case; without
+ * it, or after a no, this sends nothing.
+ */
+export function trackEvent(name, params = {}) {
+  if (!available() || !enabled) return;
+  window.gtag('event', name, params);
 }
 
 /** Removes the `_ga` cookies gtag.js set, from every domain it could have used. */

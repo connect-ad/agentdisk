@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet, useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import { applyPageMeta } from './lib/seo.js';
 import { onAppHost, onSiteHost, splitHosts } from './lib/hosts.js';
-import { trackPageView } from './lib/analytics.js';
+import { trackEvent, trackPageView } from './lib/analytics.js';
 import { AppShell, Badge, Button, Icon } from './components/index.js';
 
 import Dashboard from './routes/Dashboard.jsx';
@@ -369,13 +369,29 @@ function WorkspaceLayout() {
  *
  * The page view goes after the title so Google records this page's title,
  * and does nothing without analytics consent (lib/analytics.js).
+ *
+ * Stripe Checkout returns to the workspace with `?checkout=success` or
+ * `?checkout=cancelled` (billing.ts, `success_url`). A success is the
+ * `purchase` event; either way the parameter is then dropped, so a reload or
+ * a bookmark does not count the same payment twice. It comes after the page
+ * view, which is what switches collection on for this page.
  */
-function PageMeta() {
-  const { pathname } = useLocation();
+export function PageMeta() {
+  const { pathname, search } = useLocation();
+  const navigate = useNavigate();
   useEffect(() => {
     applyPageMeta(pathname);
     trackPageView(pathname);
   }, [pathname]);
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    const outcome = params.get('checkout');
+    if (!outcome) return;
+    if (outcome === 'success') trackEvent('purchase');
+    params.delete('checkout');
+    const rest = params.toString();
+    navigate({ pathname, search: rest ? `?${rest}` : '' }, { replace: true });
+  }, [pathname, search, navigate]);
   return null;
 }
 

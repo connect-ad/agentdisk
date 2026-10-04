@@ -328,6 +328,9 @@ jobs:
           # Empty for the console, which has one hostname; see apps/web/src/lib/hosts.js.
           VITE_SITE_HOST: ${{ env.VITE_SITE_HOST }}
           VITE_APP_HOST: ${{ env.VITE_APP_HOST }}
+          # Google Analytics loads only in prod's build (apps/web/src/lib/analytics.js):
+          # dev shares the GA property, and its test traffic was a third of it.
+          VITE_ANALYTICS: ${{ inputs.environment == 'prod' && 'on' || 'off' }}
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}

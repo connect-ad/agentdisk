@@ -31,11 +31,13 @@ import {
   verifyBeforeUpdateEmail,
   updatePassword,
   reauthenticateWithCredential,
-  EmailAuthProvider
+  EmailAuthProvider,
+  getAdditionalUserInfo
 } from 'firebase/auth';
 import { auth, firebaseConfigured, googleProvider, githubProvider } from './firebase.js';
 import { clearCache } from './resourceCache.js';
 import { POLICY_SENTENCE } from './password.js';
+import { trackEvent } from './analytics.js';
 
 const AuthContext = createContext(null);
 
@@ -109,6 +111,15 @@ export function describeAuthError(error, context = 'signin') {
   }
 }
 
+/**
+ * `sign_up` or `login` for a provider sign-in. Google, GitHub and an email
+ * link all create the account on first use, so which one it was is Firebase's
+ * `isNewUser`, not which button was pressed.
+ */
+function recordSignIn(credential, method) {
+  trackEvent(getAdditionalUserInfo(credential)?.isNewUser ? 'sign_up' : 'login', { method });
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(firebaseConfigured);
@@ -155,6 +166,7 @@ export function AuthProvider({ children }) {
 
       async signInWithPassword(email, password) {
         await signInWithEmailAndPassword(auth, email, password);
+        trackEvent('login', { method: 'password' });
       },
 
       /**
@@ -172,6 +184,7 @@ export function AuthProvider({ children }) {
        */
       async signUpWithPassword(email, password, displayName) {
         const credential = await createUserWithEmailAndPassword(auth, email, password);
+        trackEvent('sign_up', { method: 'password' });
         const name = displayName?.trim();
         if (name) {
           try {
@@ -187,11 +200,11 @@ export function AuthProvider({ children }) {
       },
 
       async signInWithGoogle() {
-        await signInWithPopup(auth, googleProvider());
+        recordSignIn(await signInWithPopup(auth, googleProvider()), 'google');
       },
 
       async signInWithGithub() {
-        await signInWithPopup(auth, githubProvider());
+        recordSignIn(await signInWithPopup(auth, githubProvider()), 'github');
       },
 
       async sendEmailLink(email) {
@@ -225,7 +238,7 @@ export function AuthProvider({ children }) {
           wanted.code = 'agentdisk/email-link-needs-address';
           throw wanted;
         }
-        await signInWithEmailLink(auth, email, href ?? window.location.href);
+        recordSignIn(await signInWithEmailLink(auth, email, href ?? window.location.href), 'email_link');
         try {
           window.localStorage.removeItem(EMAIL_LINK_KEY);
         } catch {

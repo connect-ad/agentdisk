@@ -42,7 +42,7 @@ Paying yearly takes 15% off the monthly price, rounded down. Free needs no card.
 
 ### What is enforced
 
-The API enforces total storage, file count, monthly egress, the per-file size cap and the number of share links. When a write would take you past one of them, the API refuses it and names the dimension that was exceeded: HTTP 429 for storage, files and egress, and 413 for a file over the per-file cap, so your code knows exactly what it hit.
+The API enforces total storage, file count, monthly egress, the per-file size cap and the number of share links. When a write would take you past one of them, the API refuses it and names the dimension that was exceeded: HTTP 429 for storage, files and egress, and 413 for a file over the per-file cap, so your code knows exactly what it hit. The plan's counts of workspaces, agents, API keys and members are enforced the same way: creating one more than the plan allows is refused with 403 and the limit named.
 
 Before that point you get warned. When usage reaches 80% and again at 95% of a limit, writes still succeed but carry a warning. An agent, or the code around it, can pick that up and slow down, clean up or tell a person before anything is refused.
 

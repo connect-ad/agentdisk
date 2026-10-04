@@ -188,8 +188,8 @@ as FAQPage JSON-LD, and posts carry BlogPosting JSON-LD.
   repeat its transfer and notice terms.
 - **Public pages state what is in place, not what is missing (4 Oct 2026
   content review).** Gaps that help an attacker or undercut a plan more than
-  they inform a buyer (no per-key rate limit, the unbuilt count gates, the
-  paid Cloudflare products that are off) live in Skill 11, not on the site.
+  they inform a buyer (no per-key rate limit, the paid Cloudflare products
+  that are off) live in Skill 11, not on the site.
   Gaps a buyer must know to judge fit (not end-to-end encrypted, no
   certification, no regions, no MFA, what REST does not audit) stay public.
   The site implies no customers it does not have: no "most teams" badges,

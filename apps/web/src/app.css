@@ -807,8 +807,8 @@
    line. Same tokens, same ground, one more rule. */
 .mk__foot{border-top:1px solid var(--line);background:var(--surface-2);
   padding:var(--s-10) 0 var(--s-7);margin-top:auto}
-.mk__footgrid{display:grid;grid-template-columns:minmax(0,1.5fr) repeat(3,minmax(0,1fr));
-  gap:var(--s-8) var(--s-9);padding-bottom:var(--s-8);border-bottom:1px solid var(--line)}
+.mk__footgrid{display:grid;grid-template-columns:minmax(0,1.6fr) repeat(5,minmax(0,1fr));
+  gap:var(--s-8) var(--s-7);padding-bottom:var(--s-8);border-bottom:1px solid var(--line)}
 .mk__footabout{min-width:0}
 /* The same lockup as the header, at the footer's size. */
 .mk__footbrand{display:grid;grid-template-columns:auto auto;grid-template-rows:auto auto;
@@ -835,13 +835,16 @@
 .mk__footlist a:hover{color:var(--ink);text-decoration:underline}
 .mk__footbase{display:flex;justify-content:space-between;gap:var(--s-5);flex-wrap:wrap;
   padding-top:var(--s-6);font-size:var(--t-12);color:var(--ink-3)}
-@media (max-width:875px){
-  .mk__footgrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-7) var(--s-7)}
+/* Five link columns since 4 Oct 2026: three a row under the blurb on a
+   tablet, two on a phone, where every label is short enough to pair. */
+@media (max-width:1125px){
+  .mk__footgrid{grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s-7) var(--s-7)}
   .mk__footabout{grid-column:1 / -1}
 }
 @media (max-width:560px){
-  .mk__footgrid{grid-template-columns:minmax(0,1fr)}
+  .mk__footgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+.mk__footblurb a{color:var(--ink-2)}
 
 @media (max-width:1350px){
   .mk__hero{grid-template-columns:minmax(0,1fr);padding:var(--s-10) 0 var(--s-8)}
@@ -2097,6 +2100,76 @@ button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
   .share__rowact{width:100%;justify-content:flex-end}
 }
 
+/* --- long-form site pages (components-local/Prose.jsx), 4 Oct 2026 ---
+   The trust pages, the blog, the comparisons and the agent pages. The prose
+   inside is the docs' own doc__* vocabulary; this is only the frame around
+   it: one article column with an optional "on this page" rail, link cards,
+   comparison marks and the closing band. Tokens only. */
+.pg{display:grid;grid-template-columns:minmax(0,1fr) 12rem;gap:var(--s-10);
+  align-items:start;padding:var(--s-9) 0 var(--s-7)}
+.pg--single{grid-template-columns:minmax(0,1fr)}
+.pg__body{min-width:0;max-width:50rem}
+.pg--single .pg__body{max-width:62rem}
+.pg__rail{min-width:0;position:sticky;top:calc(var(--topbar-h) + var(--s-6))}
+.pg__kicker{margin-bottom:var(--s-4)}
+.pg__body .doc__crumb a{color:var(--ink-3)}
+.pg__body .doc__crumb a:hover{color:var(--ink)}
+.pg__body > .doc__section:first-of-type .doc__h2{border-top:1px solid var(--line);
+  padding-top:var(--s-6)}
+.pg__body .doc__p,.pg__body .doc__list{max-width:none}
+.pg__body .doc__code{margin-bottom:var(--s-6)}
+.pg__body .doc__note{margin-bottom:var(--s-6)}
+.pg__body blockquote{margin:0 0 var(--s-6);padding:var(--s-2) var(--s-6);
+  border-left:2px solid var(--accent-line);color:var(--ink-2);font-size:var(--t-14);
+  line-height:var(--lh-loose)}
+.pg__body ol.doc__list{list-style:decimal}
+.pg__body .doc__table a{color:var(--accent-ink)}
+
+.pg__cards{list-style:none;margin:0 0 var(--s-8);padding:0;display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:var(--s-5)}
+.pg__cards > li{min-width:0;display:flex}
+.pg__card{flex:1;display:flex;flex-direction:column;gap:var(--s-3);min-width:0;
+  padding:var(--s-7);border:1px solid var(--line);border-radius:var(--r-3);
+  background:var(--surface);color:inherit}
+.pg__card:hover{text-decoration:none;border-color:var(--accent-line);
+  background:var(--surface-2)}
+.pg__cardtitle{font-family:var(--font-display);font-size:var(--t-16);
+  font-weight:var(--w-semi);letter-spacing:var(--tr-snug);line-height:var(--lh-snug);
+  color:var(--ink);text-wrap:balance}
+.pg__cardbody{font-size:var(--t-13);line-height:var(--lh-loose);color:var(--ink-2);
+  text-wrap:pretty}
+.pg__cardmeta{font-family:var(--font-mono);font-size:var(--t-11);color:var(--ink-3);
+  margin-top:auto}
+.pg__tags{display:flex;flex-wrap:wrap;gap:var(--s-2)}
+.pg__tag{font-family:var(--font-mono);font-size:var(--t-10-5);color:var(--ink-2);
+  border:1px solid var(--line-2);border-radius:var(--r-full);padding:0 var(--s-3);
+  line-height:1.6;white-space:nowrap}
+.pg__byline{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-3) var(--s-5);
+  margin:0 0 var(--s-8);font-size:var(--t-12);color:var(--ink-3)}
+
+.pg__yes strong{color:var(--ok-ink)}
+.pg__no strong{color:var(--danger-ink)}
+.pg__part strong{color:var(--warn-ink)}
+.pg__yes,.pg__no,.pg__part{white-space:normal}
+
+.pg__cta{margin:var(--s-9) 0 var(--s-4)}
+.pg__cta .mk__band{padding:var(--s-8)}
+.pg__ctatitle{margin-bottom:var(--s-3)}
+.pg__ctabtns{display:flex;flex-wrap:wrap;gap:var(--s-4)}
+.pg__pager{display:flex;justify-content:space-between;align-items:center;gap:var(--s-5);
+  margin:0 0 var(--s-8);font-size:var(--t-13);color:var(--ink-2)}
+.pg__pager a{color:var(--accent-ink)}
+
+@media (max-width:1125px){
+  .pg{grid-template-columns:minmax(0,1fr)}
+  .pg__rail{display:none}
+}
+@media (max-width:560px){
+  .pg{padding-top:var(--s-7)}
+  .pg__cta .mk__band{padding:var(--s-7)}
+  .pg__cards{grid-template-columns:minmax(0,1fr)}
+}
+
 /* ==========================================================================
    Responsive pass (26 Sept 2026)
 
@@ -2305,3 +2378,4 @@ button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
      the error page's two actions share a row. */
   .err__actions .btn{flex:1 1 auto}
 }
+

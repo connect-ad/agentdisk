@@ -28,11 +28,10 @@
  * the defect this script exists to remove.
  */
 
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'vite';
-import { headTags } from '../src/lib/seo.js';
 import { markdownFileFor, pageMarkdown } from './page-markdown.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -59,7 +58,7 @@ await build({
   }
 });
 
-const { render, PRERENDERED_ROUTES } = await import(
+const { render, headTagsFor, sitemapFile, CONTENT_META, PRERENDERED_ROUTES } = await import(
   pathToFileURL(join(ssrDir, 'entry-prerender.js')).href
 );
 
@@ -82,16 +81,22 @@ for (const route of PRERENDERED_ROUTES) {
   const marker = `<meta name="agentdisk:prerendered" content="${route}" />`;
   const page = template
     .replace(CHARSET, match => `${match}\n    ${marker}`)
-    .replace(TITLE, headTags(route))
+    .replace(TITLE, headTagsFor(route))
     .replace(MOUNT, `<div id="root"><div data-prerendered="${route}">${html}</div></div>`);
   const file = route === '/' ? 'index.html' : `${route.slice(1)}.html`;
+  mkdirSync(dirname(join(dist, file)), { recursive: true });
   writeFileSync(join(dist, file), page, 'utf8');
   console.log(`prerendered ${route} -> dist/${file} (${page.length} bytes)`);
 
-  const markdown = pageMarkdown(route, html);
+  const markdown = pageMarkdown(route, html, CONTENT_META);
   const mdFile = markdownFileFor(route);
   writeFileSync(join(dist, mdFile), markdown, 'utf8');
   console.log(`prerendered ${route} -> dist/${mdFile} (${markdown.length} bytes)`);
 }
+
+// The sitemap lists exactly the pages just written, so it is written here,
+// from the same list, rather than by the Vite build that runs before it.
+writeFileSync(join(dist, 'sitemap.xml'), sitemapFile(), 'utf8');
+console.log(`wrote dist/sitemap.xml (${PRERENDERED_ROUTES.length} URLs)`);
 
 rmSync(ssrDir, { recursive: true, force: true });

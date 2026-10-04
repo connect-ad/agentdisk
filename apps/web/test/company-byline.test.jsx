@@ -24,7 +24,7 @@ vi.mock('../src/lib/auth.jsx', () => ({
 }));
 
 const { Nav, Footer } = await import('../src/routes/Marketing.jsx');
-const Docs = (await import('../src/routes/Docs.jsx')).default;
+const { Terms, Privacy } = await import('../src/routes/Trust.jsx');
 
 afterEach(cleanup);
 
@@ -79,9 +79,10 @@ describe('the dashboard shell', () => {
 
 describe('the legal text names the company', () => {
   it('says in the Terms and the Privacy policy that Kernelv5 Inc. provides AgentDisk', () => {
-    const { container } = at('/docs', <Docs />);
-    const terms = container.querySelector('#terms').textContent;
-    const privacy = container.querySelector('#privacy').textContent;
+    // Their own pages since 4 Oct 2026 (routes/Trust.jsx).
+    const terms = at('/terms', <Terms />).container.querySelector('#terms').textContent;
+    cleanup();
+    const privacy = at('/privacy', <Privacy />).container.querySelector('#privacy').textContent;
     expect(terms).toContain(COMPANY_LEGAL_NAME);
     expect(privacy).toContain(COMPANY_LEGAL_NAME);
     // The one fact a person checks against a bank statement.

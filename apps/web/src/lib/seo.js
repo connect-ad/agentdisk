@@ -48,7 +48,50 @@ export const PAGE_META = {
   '/docs': {
     title: 'Documentation — AgentDisk',
     description:
-      'How to give an AI agent a disk: connect Claude, Cursor or any MCP client, use the REST API, and see exactly how your data is kept, deleted and protected.'
+      'How to give an AI agent a disk: connect Claude, Cursor or any MCP client, use the REST API, and see exactly how your data is kept and deleted.'
+  },
+  // The trust pages, out of the docs since 4 Oct 2026 (routes/Trust.jsx).
+  '/security': {
+    title: 'Security — AgentDisk',
+    description:
+      "How AgentDisk protects your AI agents' data: encryption, tenant isolation, scoped credentials, Cloudflare edge security, and 1,014 automated tests."
+  },
+  '/privacy': {
+    title: 'Privacy Policy — AgentDisk',
+    description:
+      'What AgentDisk collects, how we handle your data, retention, cookies, the processors we use, and your rights.'
+  },
+  '/terms': {
+    title: 'Terms of Service — AgentDisk',
+    description:
+      'Terms of Service for AgentDisk — acceptable use, content policies, billing, agent API use, and limitation of liability.'
+  },
+  '/trust': {
+    title: 'Trust Center — AgentDisk',
+    description:
+      'AgentDisk Trust Center: security architecture, privacy policy, terms of service and sub-processor transparency.'
+  },
+  '/sub-processors': {
+    title: 'Sub-processors — AgentDisk',
+    description:
+      'Third-party sub-processors used by AgentDisk: Cloudflare, Firebase, Stripe and Google Analytics, and what each one processes.'
+  },
+  // Index pages. The posts, comparisons and agent pages carry their own
+  // metadata beside their content; lib/pages.js gathers it.
+  '/blog': {
+    title: 'Blog — AgentDisk',
+    description:
+      'Tutorials, architecture and security writing from the team behind AgentDisk, file storage built for AI agents.'
+  },
+  '/compare': {
+    title: 'Compare AgentDisk — AgentDisk',
+    description:
+      'AgentDisk compared with Fast.io, Amazon S3, Diskd.ai, Cloudflare R2 and Composio for AI agent file storage, including where each one wins.'
+  },
+  '/alternatives': {
+    title: 'Alternatives — AgentDisk',
+    description:
+      'AgentDisk as an alternative to Fast.io and S3 for AI agents, and as file storage beside Composio: why teams switch and how to move.'
   }
 };
 
@@ -57,8 +100,12 @@ export const PAGE_META = {
  * and canonical URL. The prerender renders exactly these, and the sitemap
  * lists exactly these: a route whose canonical points at `/` does not belong
  * in a sitemap, so the two lists must be one list.
+ *
+ * These are the hand-written pages. The blog posts, comparisons,
+ * alternatives and agent pages are added by lib/pages.js from their content,
+ * and the prerender and the sitemap read the combined list from there.
  */
-export const PRERENDERED_ROUTES = ['/', '/pricing', '/docs'];
+export const PRERENDERED_ROUTES = Object.keys(PAGE_META);
 
 /**
  * The `sitemap.xml` body, written to `dist/` at build. Production URLs in
@@ -77,10 +124,15 @@ export function renderSitemapFile(routes = PRERENDERED_ROUTES) {
   ].join('\n');
 }
 
-/** The table entry for a pathname, or the default for anything not listed. */
-export function metaFor(pathname) {
+/**
+ * The table entry for a pathname, or the default for anything not listed.
+ * `extra` is the metadata that lives beside content (lib/pages.js): the blog
+ * posts, the comparisons and the agent pages. It is a parameter rather than
+ * an import so this file stays importable by Node with no bundler.
+ */
+export function metaFor(pathname, extra = {}) {
   const path = (pathname || '/').replace(/\/+$/, '') || '/';
-  return PAGE_META[path] ?? DEFAULT_META;
+  return extra[path] ?? PAGE_META[path] ?? DEFAULT_META;
 }
 
 function escapeHtml(value) {
@@ -99,14 +151,14 @@ function escapeHtml(value) {
  * the product, not its prices — those live in Stripe and the catalogue and
  * would go stale here.
  */
-export function headTags(route) {
-  const meta = metaFor(route);
+export function headTags(route, extra = {}) {
+  const meta = metaFor(route, extra);
   const url = `${SITE_ORIGIN}${route === '/' ? '/' : route}`;
   const tags = [
     `<title>${escapeHtml(meta.title)}</title>`,
     `<meta name="description" content="${escapeHtml(meta.description)}" />`,
     `<link rel="canonical" href="${url}" />`,
-    `<meta property="og:type" content="website" />`,
+    `<meta property="og:type" content="${meta.type === 'article' ? 'article' : 'website'}" />`,
     `<meta property="og:site_name" content="${SITE_NAME}" />`,
     `<meta property="og:title" content="${escapeHtml(meta.title)}" />`,
     `<meta property="og:description" content="${escapeHtml(meta.description)}" />`,
@@ -117,6 +169,9 @@ export function headTags(route) {
     `<meta name="twitter:description" content="${escapeHtml(meta.description)}" />`,
     `<meta name="twitter:image" content="${SOCIAL_IMAGE}" />`
   ];
+  if (meta.published) {
+    tags.push(`<meta property="article:published_time" content="${escapeHtml(meta.published)}" />`);
+  }
   if (route === '/') {
     const ld = {
       '@context': 'https://schema.org',
@@ -167,10 +222,11 @@ function upsertMeta(kind, name, content) {
  * table get the defaults, so a dashboard tab reads "AgentDisk" rather than
  * the homepage's headline the fallback shell was built with.
  */
-export function applyPageMeta(pathname) {
+export function applyPageMeta(pathname, extra = {}) {
   if (typeof document === 'undefined') return;
-  const meta = metaFor(pathname);
-  const listed = Boolean(PAGE_META[(pathname || '/').replace(/\/+$/, '') || '/']);
+  const meta = metaFor(pathname, extra);
+  const key = (pathname || '/').replace(/\/+$/, '') || '/';
+  const listed = Boolean(extra[key] ?? PAGE_META[key]);
   const url = listed ? `${SITE_ORIGIN}${pathname === '/' ? '/' : pathname.replace(/\/+$/, '')}` : SITE_ORIGIN;
 
   document.title = meta.title;

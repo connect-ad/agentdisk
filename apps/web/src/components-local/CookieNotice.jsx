@@ -176,7 +176,7 @@ export default function CookieNotice() {
           <p className="ckb__foot">
             Analytics runs only while it is switched on here, and switching it
             off stops it on this page. The full detail is in the{' '}
-            <Link to="/docs#privacy" onClick={() => setPrefsOpen(false)}>privacy policy</Link>.
+            <Link to="/privacy" onClick={() => setPrefsOpen(false)}>privacy policy</Link>.
           </p>
         </Modal>
       ) : null}

@@ -24,6 +24,13 @@ import { Landing, Pricing } from './routes/Marketing.jsx';
 import Claim from './routes/Claim.jsx';
 import SharePage from './routes/SharePage.jsx';
 import Docs from './routes/Docs.jsx';
+import { Security, Privacy, Terms, TrustCenter, SubProcessors } from './routes/Trust.jsx';
+import { BlogIndex, BlogPost } from './routes/Blog.jsx';
+import {
+  CompareIndex, ComparePage, AlternativesIndex, AlternativePage,
+  StorageForClaude, StorageForOpenAI, StorageForCursor, StorageForCline,
+} from './routes/Compare.jsx';
+import { CONTENT_META } from './lib/pages.js';
 import McpConnection from './routes/McpConnection.jsx';
 import Billing from './routes/Billing.jsx';
 import Webhooks from './routes/Webhooks.jsx';
@@ -380,7 +387,7 @@ export function PageMeta() {
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
   useEffect(() => {
-    applyPageMeta(pathname);
+    applyPageMeta(pathname, CONTENT_META);
     trackPageView(pathname);
   }, [pathname]);
   useEffect(() => {
@@ -457,11 +464,25 @@ export default function App() {
       {/* `/docs/<section>` deep-links into the one page; the component reads
           the splat and scrolls. Without this a shared link to a section 404s. */}
       <Route path="/docs/*" element={<Docs />} />
-      {/* The legal texts live in the docs now. The old addresses keep
-          working for the cookie notice, the sign-up form and any link in the
-          wild. */}
-      <Route path="/terms" element={<Navigate to="/docs#terms" replace />} />
-      <Route path="/privacy" element={<Navigate to="/docs#privacy" replace />} />
+      {/* The trust pages, out of the docs since 4 Oct 2026 (routes/Trust.jsx).
+          /docs#terms and the other old anchors forward here from Docs. */}
+      <Route path="/security" element={<Security />} />
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/terms" element={<Terms />} />
+      <Route path="/trust" element={<TrustCenter />} />
+      <Route path="/sub-processors" element={<SubProcessors />} />
+      {/* The blog, the comparisons and the agent pages. Their content is in
+          src/content; lib/pages.js lists them for the prerender. */}
+      <Route path="/blog" element={<BlogIndex />} />
+      <Route path="/blog/:slug" element={<BlogPost />} />
+      <Route path="/compare" element={<CompareIndex />} />
+      <Route path="/compare/:slug" element={<ComparePage />} />
+      <Route path="/alternatives" element={<AlternativesIndex />} />
+      <Route path="/alternatives/:slug" element={<AlternativePage />} />
+      <Route path="/storage-for-claude" element={<StorageForClaude />} />
+      <Route path="/storage-for-openai" element={<StorageForOpenAI />} />
+      <Route path="/storage-for-cursor" element={<StorageForCursor />} />
+      <Route path="/storage-for-cline" element={<StorageForCline />} />
       {/* The docs at the Quick start with the sandbox dialog already open. The
           dialog talks to the real API, unlike every other screen here: it is
           the one way to obtain a first credential (05 PART 13's

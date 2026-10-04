@@ -137,6 +137,7 @@ const NAV_PAGES = [
   { to: '/', label: 'Product', end: true },
   { to: '/pricing', label: 'Pricing' },
   { to: '/docs', label: 'Docs' },
+  { to: '/blog', label: 'Blog' },
 ];
 
 const navLinkClass = ({ isActive }) =>
@@ -253,24 +254,42 @@ export function Nav() {
  * exists; the support address is the one the Support form delivers to.
  * There is no region badge, for the reason the old footer recorded: the
  * reference drew "EU-CENTRAL-1" and nothing in this system has a region.
+ *
+ * Reworked 4 Oct 2026 for the trust pages, the blog and the comparisons. The
+ * Account column went: Sign in and Start free are in the bar above on every
+ * page, and the support address moved under the blurb.
  */
 const FOOT_COLUMNS = [
   { head: 'Product', links: [
-    { to: '/docs/quickstart', label: 'Quick start' },
-    { to: '/pricing', label: 'Pricing' },
     { to: '/docs', label: 'Docs' },
-    { to: '/sandbox', label: 'Try the sandbox' },
+    { to: '/pricing', label: 'Pricing' },
+    { to: '/sandbox', label: 'Sandbox' },
+    { to: '/docs/quickstart', label: 'Quick start' },
+  ] },
+  { head: 'Use with', links: [
+    { to: '/storage-for-claude', label: 'Claude' },
+    { to: '/storage-for-openai', label: 'OpenAI' },
+    { to: '/storage-for-cursor', label: 'Cursor' },
+    { to: '/storage-for-cline', label: 'Cline' },
   ] },
   { head: 'Trust', links: [
-    { to: '/docs#data-security', label: 'Data security' },
-    { to: '/docs#safety', label: 'Safety' },
-    { to: '/docs#privacy', label: 'Privacy' },
-    { to: '/docs#terms', label: 'Terms' },
+    { to: '/security', label: 'Security' },
+    { to: '/trust', label: 'Trust Center' },
+    { to: '/privacy', label: 'Privacy' },
+    { to: '/terms', label: 'Terms' },
+    { to: '/sub-processors', label: 'Sub-processors' },
   ] },
-  { head: 'Account', links: [
-    { to: '/signup', label: 'Start free' },
-    { to: '/login', label: 'Sign in' },
-    { href: 'mailto:connect@agentdisk.io', label: 'connect@agentdisk.io' },
+  { head: 'Blog', links: [
+    { to: '/blog', label: 'Latest' },
+    { to: '/blog?tag=tutorial', label: 'Tutorials' },
+    { to: '/blog?tag=security', label: 'Security guides' },
+  ] },
+  { head: 'Compare', links: [
+    { to: '/compare/agentdisk-vs-fast-io', label: 'vs Fast.io' },
+    { to: '/compare/agentdisk-vs-s3', label: 'vs S3' },
+    { to: '/compare/agentdisk-vs-diskd-ai', label: 'vs Diskd.ai' },
+    { to: '/alternatives', label: 'Alternatives' },
+    { to: '/compare', label: 'All comparisons' },
   ] },
 ];
 
@@ -288,6 +307,9 @@ export function Footer() {
             <p className="mk__footblurb">
               A scoped, persistent workspace for every AI agent: files, folders and
               metadata over REST and MCP, with the audit log kept for you.
+            </p>
+            <p className="mk__footblurb">
+              <a href="mailto:connect@agentdisk.io">connect@agentdisk.io</a>
             </p>
             <div className="mk__footfacts" aria-label="In short">
               {HERO_TAGS.map(t => <span key={t} className="mk__footfact">{t}</span>)}

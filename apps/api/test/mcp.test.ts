@@ -178,6 +178,25 @@ describe("initialize", () => {
     // Unauthenticated, so nothing workspace-shaped may appear.
     expect(result.instructions).not.toMatch(/ws_/);
   });
+
+  it("tells an agent with no key how to get one, and how to end a sandbox session", async () => {
+    const res = await rpc("initialize", {});
+    const { instructions } = res.result as { instructions: string };
+    // The way in without a person: the public sandbox call on this host.
+    expect(instructions).toMatch(/POST \/v1\/workspaces/);
+    expect(instructions).toMatch(/no Authorization header/);
+    // The way out: what to tell the person before the session ends.
+    expect(instructions).toMatch(/before (you|the session) end/i);
+    expect(instructions).toMatch(/claim link/);
+    expect(instructions).toMatch(/deleted/);
+  });
+
+  it("names the sandbox call in the refusal an agent gets with no key", async () => {
+    const res = await rpc("tools/list", {});
+    const error = res.error as { message: string; data: { code: string } };
+    expect(error.data.code).toBe("UNAUTHORIZED");
+    expect(error.message).toMatch(/POST \/v1\/workspaces/);
+  });
 });
 
 describe("tools/call", () => {

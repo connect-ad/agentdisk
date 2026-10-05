@@ -32,7 +32,10 @@ function renderLanding() {
 describe('landing spotlight', () => {
   it('sends people to the sandbox and to the claiming guide', () => {
     renderLanding();
-    expect(screen.getByRole('link', { name: /Open a sandbox/ }).getAttribute('href')).toBe('/sandbox');
+    // Twice: the spotlight and the closing band both open the sandbox.
+    const sandbox = screen.getAllByRole('link', { name: /Open a sandbox/ });
+    expect(sandbox.length).toBe(2);
+    for (const a of sandbox) expect(a.getAttribute('href')).toBe('/sandbox');
     expect(screen.getByRole('link', { name: 'How claiming works' }).getAttribute('href')).toBe('/docs/quickstart');
   });
 

@@ -3,7 +3,7 @@ import { Link, NavLink } from 'react-router-dom';
 import { Button, Icon } from '../components/index.js';
 import { useAuth } from '../lib/auth.jsx';
 import {
-  PLANS, OVERAGES, FREE_SUMMARY, COUNTING_NOTE, YEARLY_NOTE, RENEWAL_NOTE,
+  PLANS, OVERAGES, COUNTING_NOTE, YEARLY_NOTE, RENEWAL_NOTE,
   PERIODS, yearlyListPrice, yearlySaving
 } from '../lib/pricing.js';
 import { WORKS_WITH } from '../lib/clients.js';
@@ -13,6 +13,7 @@ import { COMPANY_LEGAL_NAME, COMPANY_NAME, COMPANY_URL } from '../lib/company.js
 import { SupportDialog } from '../components-local/SupportDialog.jsx';
 import ThemeToggle from '../components-local/ThemeToggle.jsx';
 import HomeDiagram from '../components-local/HomeDiagram.jsx';
+import { Spotlight, Proof, Steps, Versus, Band } from '../components-local/HomeSections.jsx';
 
 /**
  * 8.1 Landing · 8.2 Pricing.
@@ -66,60 +67,6 @@ const TRANSCRIPT = [
   { text: '> delete_file /memory/tasks.md' },
   { text: '  ✗ 403 FORBIDDEN', tone: 'danger' },
   { text: '  key ask_live_••••4aUgT lacks delete', tone: 'warn' },
-];
-
-const FEATURES = [
-  {
-    kicker: 'SCOPED',
-    title: "Keys that can't overreach",
-    body: 'Every key carries explicit scopes and an optional path prefix. A denied MCP call is logged with the scope it needed.',
-  },
-  {
-    kicker: 'PERSISTENT',
-    title: 'State between runs',
-    body: 'Agents pick up where they left off. Notes, task lists and results written in one session are read back in the next.',
-  },
-  {
-    kicker: 'MCP NATIVE',
-    title: 'One config block',
-    body: 'File tools registered in any MCP client. No SDK, no wrapper service to maintain.',
-  },
-  {
-    kicker: 'AUDITED',
-    title: 'Who touched what',
-    body: 'Human and agent actions land in the same log, with actor, path, scope and source IP.',
-  },
-];
-
-/** The sandbox-to-claim flow on the landing page. Numbers, not paragraphs. */
-const SPOT_FLOW = [
-  { num: '01', title: 'Sandbox', sub: 'workspace + key, no sign-up' },
-  { num: '02', title: 'Agent works', sub: 'files land, scoped and logged' },
-  { num: '03', title: 'Claim link', sub: 'one click makes it yours', claim: true },
-];
-
-const STEPS = [
-  {
-    n: '1',
-    title: 'Create a key',
-    body: 'Pick scopes and a prefix in the dashboard, or over the API. View it again whenever you need it.',
-    // The design showed `adk keys create …`. There is no CLI; this is the
-    // real request (`routes/keys.ts`), and the dashboard's Create-key dialog
-    // sends the same fields.
-    code: "POST /v1/keys\n{ \"name\": \"research-bot\",\n  \"ops\": [\"read\",\"write\",\"list\"],\n  \"pathPrefix\": \"/projects\" }",
-  },
-  {
-    n: '2',
-    title: 'Point your client at it',
-    body: 'One entry in your MCP config, or one header for REST. The workspace comes from the key.',
-    code: "export AGENTDISK_KEY=ask_live_…\n# Authorization: Bearer $AGENTDISK_KEY",
-  },
-  {
-    n: '3',
-    title: 'Let the agent work',
-    body: 'Watch the audit log fill in as calls arrive.',
-    code: "> create_file /projects/notes.md\n  ✓ 4.2 KB · sha256:c81e0f2d",
-  },
 ];
 
 /* ── shared chrome ────────────────────────────────────────────────────────── */
@@ -425,93 +372,15 @@ export function Landing() {
             question first-time visitors asked us. */}
         <HomeDiagram />
 
-        {/* The sandbox and the claim link, as the attraction they are: a disk
-            with no sign-up, then one link to make it yours. Three nodes and a
-            mock claim card carry it; the words are kept to what fits on a
-            glance, and the docs carry the rest. */}
-        <section className="mk__section">
-          <div className="mk__spot">
-            <div className="mk__spotglow" aria-hidden="true" />
-            <div className="mk__spotcol">
-              <span className="mk__kicker">NO ACCOUNT · ONE MINUTE</span>
-              <h2 className="mk__spoth">A disk for your agent, before you even sign up.</h2>
-              <ol className="mk__spotflow" aria-label="From sandbox to your account">
-                {SPOT_FLOW.map((n, i) => (
-                  <React.Fragment key={n.title}>
-                    {i > 0 ? <li className="mk__spotarrow" aria-hidden="true">→</li> : null}
-                    <li className={n.claim ? 'mk__spotnode mk__spotnode--claim' : 'mk__spotnode'}>
-                      <span className="mk__spotnum">{n.num}</span>
-                      <strong>{n.title}</strong>
-                      <span className="mk__spotsub">{n.sub}</span>
-                    </li>
-                  </React.Fragment>
-                ))}
-              </ol>
-              <div className="mk__ctas">
-                <Button size="lg" as={Link} to="/sandbox"
-                  iconRight={<Icon name="chevronRight" size={16} />}>
-                  Open a sandbox
-                </Button>
-                <Button size="lg" variant="secondary" as={Link} to="/docs/quickstart">
-                  How claiming works
-                </Button>
-              </div>
-            </div>
-            <div className="mk__spotcard" aria-hidden="true">
-              <span className="mk__spotcardkick">CLAIM LINK · SHOWN ONCE</span>
-              <span className="mk__spotcardurl">app.agentdisk.io/claim/••••••••</span>
-              <div className="mk__spotopts">
-                <span className="mk__spotopt mk__spotopt--on">Keep as new workspace</span>
-                <span className="mk__spotopt">Merge into mine</span>
-              </div>
-              <span className="mk__spotcardfoot">
-                Your agent's key keeps working · 500 MB · 3 days to claim
-              </span>
-            </div>
-          </div>
-        </section>
-
-        <section className="mk__section">
-          <div className="mk__grid4">
-            {FEATURES.map(f => (
-              <div key={f.kicker} className="mk__card">
-                <div className="mk__kicker">{f.kicker}</div>
-                <h3>{f.title}</h3>
-                <p>{f.body}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="mk__section">
-          <div className="mk__panel">
-            <h2 className="mk__h2">Three steps to a working agent workspace</h2>
-            <div className="mk__grid3">
-              {STEPS.map(s => (
-                <div key={s.n} className="mk__step">
-                  <div className="mk__stephead">
-                    <span className="mk__stepno">{s.n}</span>
-                    <span className="mk__steptitle">{s.title}</span>
-                  </div>
-                  <p className="mk__stepbody">{s.body}</p>
-                  <pre className="mk__stepcode">{s.code}</pre>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="mk__section">
-          <div className="mk__band">
-            <div className="mk__bandtext">
-              <h2 className="mk__h2">Give an agent a disk in five minutes.</h2>
-              <p className="mk__bandsub">
-                The free tier is {FREE_SUMMARY}. No card, no sales call.
-              </p>
-            </div>
-            <Button size="lg" as={Link} to="/signup">Create a workspace</Button>
-          </div>
-        </section>
+        {/* Below the picture, in its language: the sandbox that needs no
+            account, four proofs of the claims the picture made, the three
+            steps with the real Claude Code command, the honest comparison
+            against Drive and a local disk, and the way in. */}
+        <Spotlight />
+        <Proof />
+        <Steps />
+        <Versus />
+        <Band />
 
       </div>
       <Footer />

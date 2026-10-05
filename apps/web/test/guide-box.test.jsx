@@ -122,11 +122,13 @@ describe('the landing page', () => {
   it('sends people straight to the quick start', async () => {
     const { Landing } = await import('../src/routes/Marketing.jsx');
     render(<MemoryRouter initialEntries={['/']}><Landing /></MemoryRouter>);
-    // Twice: the hero button and the footer's Product column.
-    const quick = screen.getAllByRole('link', { name: /Quick start/ });
-    expect(quick.length).toBe(2);
-    for (const a of quick) expect(a.getAttribute('href')).toBe('/docs/quickstart');
-    expect(quick[0].classList.contains('mk__quick')).toBe(true);
-    expect(screen.getByRole('link', { name: 'Read the docs' }).getAttribute('href')).toBe('/docs');
+    // The hero calls it the guided tour (a first-time visitor read "Quick
+    // start" as a page, not a tour); the footer's Product column keeps the
+    // docs' own name for the section. Both go to the same place.
+    const hero = screen.getAllByRole('link', { name: /Follow the guided tour/ })[0];
+    expect(hero.getAttribute('href')).toBe('/docs/quickstart');
+    expect(hero.classList.contains('mk__quick')).toBe(true);
+    expect(screen.getByRole('link', { name: /Quick start/ }).getAttribute('href')).toBe('/docs/quickstart');
+    expect(screen.getByRole('link', { name: /Read the docs/ }).getAttribute('href')).toBe('/docs');
   });
 });

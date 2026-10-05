@@ -525,6 +525,87 @@ describe("GET /v1/files/:id/download", () => {
   });
 });
 
+describe("/v1/files/by-path - the same file, named by its path", () => {
+  async function activeFile(token: string, path: string, text = "by path"): Promise<string> {
+    const res = await call("POST", "/v1/files", token, { path, content: toBase64(text), mimeType: "text/plain" });
+    expect(res.status).toBe(201);
+    const { file } = (await res.json()) as { file: { id: string } };
+    return file.id;
+  }
+
+  it("returns the metadata the ID route returns", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
+    const fileId = await activeFile(token, "/notes/hello.txt");
+
+    const res = await call("GET", "/v1/files/by-path?path=/notes/hello.txt", token);
+    expect(res.status).toBe(200);
+    const byPath = (await res.json()) as { file: { id: string; path: string } };
+    expect(byPath.file.id).toBe(fileId);
+    expect(byPath.file.path).toBe("/notes/hello.txt");
+
+    const byId = (await (await call("GET", `/v1/files/${fileId}`, token)).json()) as { file: unknown };
+    expect(byPath.file).toEqual(byId.file);
+  });
+
+  it("reads the bytes back inline, the way an agent that wrote /notes.json expects", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
+    await activeFile(token, "/notes.json", '{"ok":true}');
+
+    const res = await call("GET", "/v1/files/by-path/content?path=/notes.json", token);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { content: string; encoding: string; file: { path: string } };
+    expect(body.encoding).toBe("utf-8");
+    expect(body.content).toBe('{"ok":true}');
+    expect(body.file.path).toBe("/notes.json");
+  });
+
+  it("hands out a download URL by path", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
+    await activeFile(token, "/big/report.bin");
+
+    const res = await call("GET", "/v1/files/by-path/download?path=/big/report.bin", token);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { downloadUrl?: string; url?: string };
+    expect(typeof (body.downloadUrl ?? body.url)).toBe("string");
+  });
+
+  it("deletes by path", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
+    await activeFile(token, "/scratch/tmp.txt");
+
+    const res = await call("DELETE", "/v1/files/by-path?path=/scratch/tmp.txt", token);
+    expect([200, 204]).toContain(res.status);
+    expect((await call("GET", "/v1/files/by-path?path=/scratch/tmp.txt", token)).status).toBe(404);
+  });
+
+  it("is 404 for a path nobody wrote, and 400 with no path at all", async () => {
+    const { token } = await seedApiKey({ workspaceId: WORKSPACE_A });
+    expect((await call("GET", "/v1/files/by-path?path=/nowhere.txt", token)).status).toBe(404);
+    expect((await call("GET", "/v1/files/by-path/content?path=/nowhere.txt", token)).status).toBe(404);
+    const res = await call("GET", "/v1/files/by-path", token);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as ErrorBody;
+    expect(body.error.message).toMatch(/path/);
+  });
+
+  it("refuses a path outside the key's prefix before looking anything up", async () => {
+    const owner = await seedApiKey({ workspaceId: WORKSPACE_A });
+    await activeFile(owner.token, "/private/secret.txt");
+    const scoped = await seedApiKey({ workspaceId: WORKSPACE_A, pathPrefix: "/agents/bot/*" });
+
+    expect((await call("GET", "/v1/files/by-path?path=/private/secret.txt", scoped.token)).status).toBe(403);
+    expect((await call("GET", "/v1/files/by-path/content?path=/private/secret.txt", scoped.token)).status).toBe(403);
+  });
+
+  it("never sees another workspace's file at the same path", async () => {
+    const a = await seedApiKey({ workspaceId: WORKSPACE_A });
+    const b = await seedApiKey({ workspaceId: WORKSPACE_B });
+    await activeFile(a.token, "/shared-name.txt", "A's");
+
+    expect((await call("GET", "/v1/files/by-path?path=/shared-name.txt", b.token)).status).toBe(404);
+  });
+});
+
 describe("GET /v1/files/:id/content", () => {
   async function activeFile(
     token: string,

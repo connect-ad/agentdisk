@@ -71,6 +71,13 @@ spare.
   route through it; `/v1/workspaces` is hand-routed because `POST` with no
   credential is the public sandbox, and `test/auth.test.ts` sweeps every
   authenticated route. A route added outside `withAuth` belongs in that table.
+  The one body ends by naming the public sandbox call (`POST /v1/workspaces`,
+  no Authorization header, relative path because hostnames are never typed
+  into code): an absent credential is the same failure, and an agent that
+  connects before it holds a key otherwise reads the refusal as "locked out"
+  and stops. The MCP `initialize` instructions, served before any key is
+  checked, name the same call and tell the agent to close a sandbox session by
+  handing its person the claim link and the deletion date (5 October 2026).
 - **Failed credentials are throttled per address, and only failures count.**
   Thirty refused credentials from one IP in fifteen minutes and that IP gets
   429 before the lookup until the window ends. A valid key is never charged; a

@@ -2170,6 +2170,227 @@ button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
   .pg__cards{grid-template-columns:minmax(0,1fr)}
 }
 
+/* ── home diagram ─────────────────────────────────────────────────────────
+   What AgentDisk is, as one picture: the disk in the middle, inputs on the
+   left, the owner above, outputs on the right. The stage is a 1000×600 box;
+   the SVG draws only the lines, the nodes and path chips are HTML placed by
+   percentage so their type stays sharp. Below 1125px the stage hides and the
+   list under it takes over. Every line colour is paired with a word in the
+   legend and on the chip itself. */
+/* The picture follows the hero's tags with one gap, not two: the section's
+   own top padding goes, the hero's bottom padding is the gap. */
+.hd{padding-top:0}
+.hd__steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s-5);
+  max-width:50rem;margin:0 auto var(--s-3);list-style:none;padding:0}
+.hd__step{display:flex;align-items:center;gap:var(--s-4);font-family:var(--font-mono);
+  font-size:var(--t-11);letter-spacing:var(--tr-caps);text-transform:uppercase;color:var(--ink-3);
+  white-space:nowrap}
+.hd__step:nth-child(2){justify-content:center}
+.hd__step:nth-child(3){justify-content:flex-end}
+.hd__stepno{width:1.25rem;height:1.25rem;border-radius:var(--r-2);background:var(--accent-soft);
+  border:1px solid var(--accent-line);color:var(--accent-ink);font-weight:var(--w-semi);
+  display:flex;align-items:center;justify-content:center;letter-spacing:0;flex:none}
+.hd__stage{position:relative;width:100%;max-width:50rem;margin:0 auto;aspect-ratio:1000/600}
+.hd__lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.hd__line{fill:none}
+.hd__line--write{stroke:var(--accent);stroke-width:1.6}
+.hd__line--read{stroke:var(--ink-3);stroke-width:1.5;stroke-dasharray:4 4}
+.hd__line--share{stroke:var(--ok);stroke-width:1.6}
+.hd__line--owner{stroke:var(--warn);stroke-width:1.8}
+.hd__line--denied{stroke:var(--danger);stroke-width:1.5;stroke-dasharray:1.5 4;stroke-linecap:round}
+.hd__m--write{fill:var(--accent)}
+.hd__m--read{fill:var(--ink-3)}
+.hd__m--share{fill:var(--ok)}
+.hd__m--owner{fill:var(--warn)}
+.hd__ring{fill:none;stroke:var(--line-2);stroke-width:1;stroke-dasharray:3 5}
+.hd__hub{position:absolute;left:50%;top:53%;transform:translate(-50%,-50%);
+  width:9.25rem;height:9.25rem;border-radius:var(--r-full);background:var(--surface);
+  border:1.5px solid var(--accent-line);box-shadow:0 0 0 0.625rem var(--accent-soft);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--s-2)}
+.hd__hub img{width:2.75rem;height:2.75rem;border-radius:var(--r-3);background:var(--surface);
+  padding:0.1875rem;box-sizing:border-box;display:block}
+.hd__hubname{font-family:var(--font-display);font-size:var(--t-16);font-weight:var(--w-semi);
+  letter-spacing:var(--tr-snug);color:var(--ink)}
+.hd__hubsub{font-family:var(--font-mono);font-size:var(--t-10);letter-spacing:var(--tr-caps);
+  color:var(--ink-3);text-align:center;line-height:var(--lh-snug)}
+.hd__node{position:absolute;display:flex;align-items:center;gap:var(--s-4);white-space:nowrap}
+.hd__node--left{flex-direction:row-reverse;transform:translate(calc(-100% + 1.0625rem),-50%)}
+.hd__node--left .hd__text{text-align:right}
+.hd__node--right{transform:translate(-1.0625rem,-50%)}
+.hd__node--top{flex-direction:column;gap:var(--s-2);transform:translate(-50%,-50%)}
+.hd__node--top .hd__text{text-align:center}
+.hd__tile{width:2.125rem;height:2.125rem;border-radius:var(--r-3);background:var(--surface-3);
+  border:1px solid var(--line-2);display:flex;align-items:center;justify-content:center;
+  color:var(--ink);flex:none}
+.hd__tile--owner{background:var(--warn-soft);border-color:var(--warn-line);color:var(--warn)}
+.hd__tile--share{background:var(--ok-soft);border-color:var(--ok-line);color:var(--ok)}
+.hd__stack{display:grid;grid-template-columns:1fr 1fr;gap:2px}
+.hd__custom{font-family:var(--font-mono);font-size:var(--t-12);font-weight:var(--w-semi);color:var(--ink-2)}
+.hd__text{display:flex;flex-direction:column;gap:1px}
+.hd__text b{font-size:var(--t-13);font-weight:var(--w-semi);color:var(--ink)}
+.hd__text i{font-style:normal;font-family:var(--font-mono);font-size:var(--t-10);color:var(--ink-3)}
+.hd__chip{position:absolute;transform:translate(-50%,-50%);display:inline-flex;align-items:center;
+  gap:var(--s-3);font-family:var(--font-mono);font-size:var(--t-10);font-weight:var(--w-semi);
+  color:var(--accent-ink);background:var(--surface);border:1px solid var(--accent-line);
+  border-radius:var(--r-2);padding:0.1875rem var(--s-4);white-space:nowrap}
+.hd__chip em{font-style:normal;font-weight:var(--w-med);color:var(--ink-3)}
+.hd__chip--read{color:var(--ink);border-color:var(--line-2)}
+.hd__chip--denied{color:var(--danger);background:var(--danger-soft);border-color:var(--danger-line)}
+.hd__list{display:none}
+.hd__bridge{margin:var(--s-7) auto 0;max-width:50rem;display:flex;align-items:center;gap:var(--s-6)}
+.hd__bridge::before,.hd__bridge::after{content:"";flex:1;border-top:1px solid var(--line-2)}
+.hd__bridge span{font-family:var(--font-display);font-size:var(--t-18);font-weight:var(--w-semi);
+  letter-spacing:var(--tr-snug);color:var(--ink);text-align:center;text-wrap:balance}
+.hd__legend{display:flex;flex-wrap:wrap;gap:var(--s-7);justify-content:center;margin:var(--s-5) 0 0;
+  padding:0;list-style:none;font-family:var(--font-mono);font-size:var(--t-11);color:var(--ink-2)}
+.hd__legend li{display:inline-flex;align-items:center;gap:var(--s-3)}
+.hd__sw{width:1.375rem;height:0;display:block;border-top:2px solid var(--accent)}
+.hd__sw--read{border-top-style:dashed;border-top-color:var(--ink-3)}
+.hd__sw--owner{border-top-color:var(--warn)}
+.hd__sw--share{border-top-color:var(--ok)}
+.hd__sw--denied{border-top-style:dotted;border-top-color:var(--danger)}
+.hd__more{margin:var(--s-6) auto 0;max-width:46rem;text-align:center;font-size:var(--t-13-5);
+  color:var(--ink-2);line-height:var(--lh-loose);text-wrap:pretty}
+/* Between 1125 and 1350 the stage is narrower than its labels are long, so
+   it gives up 6.5rem a side for them rather than let them run off the page. */
+@media (max-width:1350px){
+  .hd__stage{max-width:min(50rem,calc(100% - 13rem))}
+}
+/* Below 1125px the stage would have to shrink while its labels could not,
+   and they spilled past both edges at 1024. The list takes over there. */
+@media (max-width:1125px){
+  .hd__steps,.hd__stage{display:none}
+  .hd__list{display:grid;gap:var(--s-7);border:1px solid var(--line);border-radius:var(--r-4);
+    background:var(--surface);padding:var(--s-6)}
+  .hd__colhead{font-family:var(--font-mono);font-size:var(--t-11);letter-spacing:var(--tr-caps);
+    text-transform:uppercase;color:var(--accent-ink);margin-bottom:var(--s-4)}
+  .hd__row{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-3) var(--s-4);
+    padding:var(--s-3) 0;border-bottom:1px solid var(--line);min-width:0}
+  .hd__row:last-child{border-bottom:none}
+  .hd__list .hd__node{position:static;transform:none;flex-direction:row;min-width:0}
+  .hd__list .hd__node .hd__text{text-align:left;min-width:0}
+  .hd__list .hd__node .hd__text i,.hd__list .hd__node .hd__text b{white-space:normal}
+  .hd__list .hd__chip{position:static;transform:none;margin-left:calc(2.125rem + var(--s-4));max-width:100%;white-space:normal}
+}
+
+/* The hero's third way in: "Read the docs" as a quiet pill rather than bare
+   text. A book mark, a hairline that warms to the accent on hover, and the
+   arrow nudging right, so it reads as a door and not an afterthought. */
+.mk__docs{display:inline-flex;align-items:center;gap:var(--s-3);height:2.625rem;
+  padding:0 var(--s-6) 0 var(--s-5);border:1px solid var(--line-2);border-radius:var(--r-full);
+  background:transparent;font-size:var(--t-13-5);font-weight:var(--w-med);color:var(--ink-2);
+  transition:color var(--d-2) var(--ease),border-color var(--d-2) var(--ease),
+    background var(--d-2) var(--ease),box-shadow var(--d-2) var(--ease)}
+.mk__docs .mk__docsico{color:var(--accent);display:inline-flex}
+.mk__docs .mk__docsarrow{display:inline-flex;transition:transform var(--d-2) var(--ease)}
+.mk__docs:hover{color:var(--ink);border-color:var(--accent-line);background:var(--accent-soft);
+  text-decoration:none;box-shadow:0 0 0 0.25rem var(--accent-soft)}
+.mk__docs:hover .mk__docsarrow{transform:translateX(0.1875rem)}
+
+/* ── landing sections, in the diagram's language ─────────────────────────
+   One header shape for every section (mono kicker, display heading, an
+   optional lead), the diagram's tiles and chips for actors and paths, and
+   its numbered stops for anything sequential. Colour pairs with a word
+   everywhere: the ticks say yes and no to a screen reader, the chips print
+   the path, the denied line is red and says 403. */
+.mk__sechead{max-width:46rem;margin-bottom:var(--s-7)}
+.mk__sechead .mk__kicker{display:block;margin-bottom:var(--s-4)}
+.mk__sechead .mk__h2{margin-bottom:0}
+.mk__sechead--tight{margin-bottom:var(--s-6)}
+.mk__seclead{margin-top:var(--s-5);font-size:var(--t-14);line-height:var(--lh-loose);
+  color:var(--ink-2);text-wrap:pretty}
+
+/* spotlight: the three stops are tiles with a number beside them, joined by
+   a hairline with an arrowhead rather than a glyph, and each prints the one
+   call or path it stands for. */
+.mk__spot .mk__kicker{display:block;margin-bottom:var(--s-2)}
+.mk__spothead{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--s-3)}
+.mk__spotnode{gap:var(--s-2);padding:var(--s-5)}
+.mk__spotnode--claim .hd__tile--share{box-shadow:0 0 0 0.25rem var(--ok-soft)}
+.mk__spotchip{position:static;transform:none;align-self:flex-start;margin-top:var(--s-3)}
+.mk__spotarrow{width:1.75rem;display:flex;align-items:center}
+.mk__spotarrow i{display:block;width:100%;height:0;border-top:1.5px solid var(--line-3);position:relative}
+.mk__spotarrow i::after{content:'';position:absolute;right:-1px;top:-0.25rem;
+  border:0.25rem solid transparent;border-left:0.375rem solid var(--line-3)}
+
+/* proof cards: a tile and the kicker on one line, then the claim, then two
+   lines of the real thing in mono, set like the diagram's chips. */
+.mk__card--proof{gap:var(--s-3)}
+.mk__cardhead{display:flex;align-items:center;gap:var(--s-4);margin-bottom:var(--s-2)}
+.mk__card--proof h3{font-size:var(--t-16)}
+.mk__card--proof p{flex:1}
+.mk__proof{margin:var(--s-4) 0 0;padding:var(--s-4) var(--s-5);border:1px solid var(--line);
+  border-radius:var(--r-2);background:var(--surface-2);display:flex;flex-direction:column;gap:var(--s-2)}
+.mk__proofrow{display:flex;gap:var(--s-4);align-items:baseline;min-width:0;
+  font-family:var(--font-mono);font-size:var(--t-11)}
+.mk__proofrow{justify-content:space-between}
+.mk__proofrow dt{color:var(--ink-3);flex:none;white-space:nowrap}
+.mk__proofrow dd{margin:0;color:var(--accent-ink);font-weight:var(--w-semi);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+
+/* steps: the diagram's numbered stops, a caption on every block saying what
+   kind of thing it is, and a way to the other tools beside the Claude Code
+   command. */
+.mk__panel--steps{padding:var(--s-9) var(--s-8) var(--s-8)}
+.mk__stepslist{list-style:none;margin:0;padding:0}
+.mk__stephead .hd__stepno{width:1.5rem;height:1.5rem;font-family:var(--font-mono);font-size:var(--t-11)}
+.mk__stepblock{position:relative;display:flex;flex-direction:column;gap:0}
+.mk__stepcap{position:absolute;top:0;right:0;padding:var(--s-1) var(--s-4);
+  border-left:1px solid var(--dark-line);border-bottom:1px solid var(--dark-line);
+  border-radius:0 var(--r-2) 0 var(--r-2);font-family:var(--font-mono);font-size:var(--t-10);
+  letter-spacing:var(--tr-caps);color:var(--dark-accent);background:var(--dark-2)}
+.mk__stepcode{padding-top:var(--s-7);flex:1;white-space:pre-wrap;overflow-wrap:anywhere}
+.mk__stepmore{display:inline-flex;align-items:center;gap:var(--s-2);margin-top:var(--s-4);
+  font-size:var(--t-13);font-weight:var(--w-med);color:var(--accent-ink)}
+
+/* versus: two short tables side by side, the last column washed in the
+   accent so the eye lands on it, each cell a tick or a cross with a word
+   for the screen reader. */
+.mk__vs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 var(--s-9);
+  border:1px solid var(--line);border-radius:var(--r-4);background:var(--surface);
+  padding:var(--s-5) var(--s-8)}
+.mk__vstable{width:100%;border-collapse:collapse;table-layout:fixed}
+.mk__vstable th,.mk__vstable td{padding:var(--s-4) var(--s-2);border-bottom:1px solid var(--line)}
+.mk__vstable tbody tr:last-child th,.mk__vstable tbody tr:last-child td{border-bottom:none}
+.mk__vstable thead th{font-family:var(--font-mono);font-size:var(--t-10);letter-spacing:var(--tr-wide);
+  text-transform:uppercase;color:var(--ink-3);font-weight:var(--w-semi);text-align:center;
+  line-height:var(--lh-snug);width:4.75rem;vertical-align:bottom;white-space:nowrap}
+.mk__vstable thead th:first-child{width:auto;text-align:left}
+.mk__vstable thead th.mk__vsus{color:var(--accent-ink)}
+.mk__vstable tbody th{font-size:var(--t-13);font-weight:var(--w-reg);color:var(--ink);text-align:left}
+.mk__vstable td{text-align:center}
+.mk__vstable td.mk__vsus{background:var(--accent-soft)}
+.mk__vstable tbody tr:first-child td.mk__vsus{border-radius:var(--r-2) var(--r-2) 0 0}
+.mk__vstable tbody tr:last-child td.mk__vsus{border-radius:0 0 var(--r-2) var(--r-2)}
+.mk__tick{display:inline-flex;align-items:center;justify-content:center;width:1.25rem;height:1.25rem}
+.mk__tick--yes{color:var(--ok)}
+.mk__tick--no{color:var(--ink-4)}
+.mk__vsmore{margin-top:var(--s-5);font-size:var(--t-13);color:var(--ink-2);text-align:center}
+
+/* closing band: the hub's mark, the two ways in, and the hero's three tags
+   so the page ends where it began. */
+.mk__band{gap:var(--s-7)}
+.mk__bandmark{flex:none;width:3.75rem;height:3.75rem;border-radius:var(--r-full);
+  background:var(--surface);border:1.5px solid var(--accent-line);
+  box-shadow:0 0 0 0.5rem var(--accent-soft);display:grid;place-items:center}
+.mk__bandmark img{width:2.5rem;height:2.5rem;border-radius:var(--r-3);display:block}
+.mk__bandtext .mk__h2{margin-bottom:var(--s-3)}
+.mk__bandtext .mk__tags{margin-top:var(--s-5)}
+.mk__bandctas{display:flex;flex-wrap:wrap;gap:var(--s-4);flex:none}
+@media (max-width:875px){
+  .mk__vs{grid-template-columns:minmax(0,1fr);padding:var(--s-4) var(--s-6)}
+  .mk__vstable+.mk__vstable thead{display:none}
+  .mk__spotarrow{display:none}
+}
+@media (max-width:560px){
+  .mk__bandctas{width:100%}
+  .mk__bandctas .btn{flex:1 1 100%}
+  .mk__vs{padding:var(--s-3) var(--s-4)}
+  .mk__vstable thead th{width:3rem;font-size:var(--t-10);letter-spacing:0}
+  .mk__vstable th,.mk__vstable td{padding:var(--s-3) 0}
+  .mk__vstable tbody th{font-size:var(--t-12);padding-right:var(--s-3)}
+}
+
 /* ==========================================================================
    Responsive pass (26 Sept 2026)
 

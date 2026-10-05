@@ -104,6 +104,23 @@ describe("authentication", () => {
     }
   });
 
+  it("tells a caller with no credential how to get one, in the same body as every other failure", async () => {
+    const absent = await get("/v1/whoami");
+    expect(absent.status).toBe(401);
+    const body = (await absent.json()) as ErrorBody;
+    // The only way in without a person: the public sandbox call. It must be
+    // named, with the one fact an agent needs (no Authorization header), or a
+    // fresh agent reads this as "locked out" and stops.
+    expect(body.error.message).toMatch(/POST \/v1\/workspaces/);
+    expect(body.error.message).toMatch(/no Authorization header/);
+    // And where the request shapes are described, for an agent with no docs.
+    expect(body.error.message).toMatch(/GET \/ on this host/);
+
+    const bogus = await get("/v1/whoami", bearer("ask_live_" + "y".repeat(32)));
+    const other = (await bogus.json()) as ErrorBody;
+    expect({ ...other.error, requestId: "" }).toEqual({ ...body.error, requestId: "" });
+  });
+
   it("rejects a key belonging to a disabled agent", async () => {
     const agentId = await seedAgent({ id: "agt_DISABLED", status: "disabled" });
     const { token } = await seedApiKey({ workspaceId: WORKSPACE_A, agentId });

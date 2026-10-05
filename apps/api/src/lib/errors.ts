@@ -67,6 +67,11 @@ const UNCLAIMED_DAYS = Math.round(UNCLAIMED_TTL_MS / (24 * 60 * 60 * 1000));
 /**
  * The single message every authentication failure returns.
  *
+ * It ends by naming the public sandbox call, because an absent credential is
+ * this same failure (Skill 6) and an agent that connects before it has a key
+ * otherwise reads "isn't valid" as "locked out" and stops. The path is
+ * relative: hostnames are never typed into code.
+ *
  * Deliberately says nothing about which part failed. `internalReason` carries
  * that for the log line. The message may still be useful: it lists every way
  * a key stops working and what to do next, because a person holding a swept
@@ -79,7 +84,10 @@ export const UNAUTHORIZED_MESSAGE =
   "That credential isn't valid. Check that the key was copied in full and is sent as " +
   "an Authorization: Bearer header. A key stops working once it is revoked, its agent is " +
   `disabled or its workspace is deleted, and an unclaimed sandbox is deleted after ${UNCLAIMED_DAYS} days. ` +
-  "Mint a new key in the dashboard, or start a new sandbox.";
+  "Mint a new key in the dashboard, or start a new sandbox: POST /v1/workspaces on this host " +
+  "with no Authorization header and a JSON body (an empty object is enough) creates a free " +
+  "sandbox and returns its key. If you have no key yet, that same call is how you get one. " +
+  "GET / on this host lists the documentation and the OpenAPI description.";
 
 export function unauthorized(internalReason: string): ApiError {
   return new ApiError("UNAUTHORIZED", UNAUTHORIZED_MESSAGE, { internalReason });

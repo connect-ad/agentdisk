@@ -14,7 +14,7 @@ import { markdownTwin } from '../worker.js';
 import { markdownFileFor, pageMarkdown } from '../scripts/page-markdown.mjs';
 
 const EXPECTED = {
-  '/': 'Storage your agents can actually reason about.',
+  '/': 'A shared disk where agents work and humans own.',
   '/pricing': 'Pay for storage. Nothing else.',
   '/docs': 'AgentDisk documentation',
   // 4 Oct 2026: the trust pages, the blog and the comparison pages.

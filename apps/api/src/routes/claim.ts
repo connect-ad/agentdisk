@@ -30,7 +30,7 @@
 
 import { z } from "zod";
 import { ApiError, forbidden, validationError } from "../lib/errors";
-import { newId } from "../lib/ids";
+import { newId, sandboxAgentName } from "../lib/ids";
 import { sha256Hex } from "../lib/keys";
 import { SANDBOX_LIMITS, limitsFor } from "../lib/plans";
 import { assertWithinQuota } from "../lib/quota";
@@ -648,7 +648,7 @@ async function claimByAttaching(
   );
 
   const agent = await sandboxAgent(db, sandbox.id);
-  const desiredAgentName = agent?.name ?? "sandbox-agent";
+  const desiredAgentName = agent?.name ?? sandboxAgentName();
   const finalAgentName = await uniqueAgentName(db, targetWorkspaceId, desiredAgentName);
 
   // The merged files land under a folder named for the agent, which is this

@@ -133,6 +133,7 @@ const body = (properties, required = []) => ({
   content: { 'application/json': { schema: { type: 'object', additionalProperties: false, required, properties } } }
 });
 const idParam = { name: 'id', in: 'path', required: true, schema: { type: 'string' } };
+const pathQuery = { name: 'path', in: 'query', required: true, description: 'The file path, for example /notes/hello.txt', schema: { type: 'string' } };
 const query = (name, description, schema = { type: 'string' }) => ({ name, in: 'query', required: false, description, schema });
 const metadata = { type: 'object', description: 'Custom key-value metadata.', additionalProperties: true };
 const tags = { type: 'array', maxItems: 32, items: { type: 'string', minLength: 1, maxLength: 64 } };
@@ -225,6 +226,14 @@ function openapi({ api, site }) {
       },
       '/v1/files/{id}/content': { parameters: [idParam], get: { summary: 'The bytes inline, up to 1 MB', responses: withErrors(ok('File content')) } },
       '/v1/files/{id}/download': { parameters: [idParam], get: { summary: 'A one-hour presigned download URL', responses: withErrors(ok('Download URL')) } },
+      '/v1/files/by-path': {
+        parameters: [pathQuery],
+        get: { summary: 'A file by its path: the same resource GET /v1/files/{id} returns', responses: withErrors(ok('The file')) },
+        patch: { summary: 'Update caption, metadata or tags, by path', requestBody: body({ caption: { type: 'string', maxLength: 1024 }, metadata, tags }), responses: withErrors(ok('The file')) },
+        delete: { summary: 'Delete a file by path. Permanent.', responses: withErrors(ok('Deleted')) }
+      },
+      '/v1/files/by-path/content': { parameters: [pathQuery], get: { summary: 'The bytes inline by path, up to 1 MB', responses: withErrors(ok('File content')) } },
+      '/v1/files/by-path/download': { parameters: [pathQuery], get: { summary: 'A one-hour presigned download URL, by path', responses: withErrors(ok('Download URL')) } },
       '/v1/files/{id}/complete': {
         parameters: [idParam],
         post: {

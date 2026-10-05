@@ -31,7 +31,7 @@ import { z } from "zod";
 import { ApiError, validationError } from "../lib/errors";
 import { basename, dirname, normalizePath } from "../lib/paths";
 import { assertFileSizeAllowed } from "../lib/quota";
-import { assertScope, assertScopedPath, scopeAllowsPath } from "../auth/scopes";
+import { assertScope, assertScopedPath, scopeAllowsPath, type ScopeOp } from "../auth/scopes";
 import { newId } from "../lib/ids";
 import { MAX_INLINE_BYTES } from "../storage/workspace-scoped";
 import { DOWNLOAD_URL_TTL_SECONDS, UPLOAD_URL_TTL_SECONDS, redactPresigned } from "../storage/presign";
@@ -205,6 +205,29 @@ async function requireFile(ctx: AuthContext, id: string, op: "read" | "write" | 
   }
   assertScope(ctx.scope, op, row.path);
   return row;
+}
+
+/**
+ * The file a `?path=` names, for the `/v1/files/by-path` routes.
+ *
+ * Agents write by path and expect to read by path; until this existed every
+ * file route took only an ID, so an agent that wrote `/notes.json` and asked
+ * for `/notes.json` back got a 404 (the reviewer's words, 5 October 2026).
+ * The path is validated and scope-checked with the same function the MCP
+ * read tool uses, before any lookup, so a key scoped to `/agents/bot/*` is
+ * refused for `/private/x` rather than told whether it exists. The handler
+ * that runs afterwards re-checks scope on the row it fetches, exactly as it
+ * does for an ID.
+ */
+export async function resolveFileByPath(ctx: AuthContext, request: Request, op: ScopeOp): Promise<string> {
+  const raw = new URL(request.url).searchParams.get("path");
+  if (raw === null || raw.trim() === "") {
+    throw validationError("Pass the file's path as ?path=/folder/name.ext.");
+  }
+  const canonical = assertScopedPath(ctx.scope, op, raw);
+  const row = await ctx.db.files.getByPath(canonical);
+  if (row === null) throw new ApiError("NOT_FOUND", "No such file.");
+  return row.id;
 }
 
 /** Folders are optional; a file may live at a path with no folder row. */

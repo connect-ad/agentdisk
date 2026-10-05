@@ -22,6 +22,7 @@ import { withAuth, type Requirement, type WithAuthDeps } from "../middleware/aut
 import { ApiError } from "../lib/errors";
 import { audit } from "../lib/audit";
 import { TOOLS, TOOLS_BY_NAME } from "./tools";
+import { SANDBOX_LIMITS } from "../lib/plans";
 
 /** What this server reports itself as during `initialize`. */
 const SERVER_INFO = { name: "agentdisk", version: "1.1.0" };
@@ -38,7 +39,16 @@ const PROTOCOL_VERSION = "2025-06-18";
  *
  * Deliberately generic. `initialize` is unauthenticated, so nothing here may
  * mention a workspace, a key, a path that exists or a person.
+ *
+ * The last two paragraphs are the sandbox's two ends. The way in: an agent that
+ * connects before it holds a key would otherwise see only a refusal, so the
+ * public sandbox call is named here, where the model reads it before any tool.
+ * The way out: nothing after creation mentions claiming again, so the agent is
+ * told to close the loop with its person before the session ends. That
+ * hand-over is the moment a sandbox becomes an account.
  */
+const SANDBOX_MB = Math.round(SANDBOX_LIMITS.storageBytes / (1024 * 1024));
+
 const INSTRUCTIONS = [
   [
     "AgentDisk is persistent, audited file storage for AI agents. The key you connect with",
@@ -56,12 +66,21 @@ const INSTRUCTIONS = [
     "Every call is recorded in an audit log the workspace owner can read.",
   ].join(" "),
   [
-    "If you created this workspace yourself as a sandbox, the response that gave you the",
-    "key also gave you a one-time claim link. Store the key in your own config file, never",
-    "in a file inside the workspace. Show the claim link to the person you work for",
-    "straight away: it is how they take ownership, it cannot be reissued, and an unclaimed",
-    "sandbox is deleted after three days. Once claimed, they can read this key again from",
-    "the dashboard's Keys page.",
+    "If you have no key yet, you can make your own sandbox: POST /v1/workspaces on this",
+    "same host, with no Authorization header and a JSON body (an empty object is enough),",
+    `returns a ${SANDBOX_MB} MB workspace, its key and a one-time claim link. Store the key in`,
+    "your own config file, never in a file inside the workspace. Show the claim link to the",
+    "person you work for straight away: it is how they take ownership, it cannot be",
+    "reissued, and an unclaimed sandbox is deleted after three days. Once claimed, they can",
+    "read this key again from the dashboard's Keys page.",
+  ].join(" "),
+  [
+    "Keep the person you work for in the picture: say when you are storing something here",
+    "and where. Before you end a session in a sandbox, tell them in plain words what is in",
+    "the workspace and the paths it lives at, that it is unclaimed and will be deleted with",
+    "everything in it on the date the creation response gave, and show the claim link again",
+    "so they can keep it. Mention that claiming is also how they get the dashboard, where",
+    "they can read these files, read this key and invite more agents.",
   ].join(" "),
 ].join("\n\n");
 

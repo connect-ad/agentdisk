@@ -70,8 +70,10 @@ Write a small file (up to 1 MB, base64 content):
       -H "Content-Type: application/json" \
       -d '{"path":"/reports/summary.md","content":"<base64>"}'
 
-Read it back: `GET /v1/files/{id}/content` for anything up to 1 MB, or
-`GET /v1/files/{id}/download` for a one-hour presigned URL. List:
+Read it back by path: `GET /v1/files/by-path/content?path=/reports/summary.md`
+for anything up to 1 MB, or `.../by-path/download?path=...` for a one-hour
+presigned URL. The same routes exist by ID: `GET /v1/files/{id}/content` and
+`GET /v1/files/{id}/download`. List:
 `GET /v1/files`. Search: `GET /v1/search?q=...`. Larger uploads: send
 `sizeBytes` instead of `content` to receive a 15-minute presigned PUT, then
 `POST /v1/files/{id}/complete`.

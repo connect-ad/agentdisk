@@ -314,6 +314,31 @@ describe("POST /v1/workspaces - provisioning", () => {
   });
 });
 
+describe("POST /v1/workspaces - the default agent name", () => {
+  it("is sandbox- plus eight random unambiguous characters, different every time", async () => {
+    stubSiteverify();
+    const names: string[] = [];
+    for (const ip of ["9.9.9.1", "9.9.9.2"]) {
+      const res = await createWorkspace(post({ turnstileToken: "t" }, ip), deps());
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as { agent: { name: string } };
+      names.push(body.agent.name);
+    }
+    // A fixed "sandbox-agent" made every agent-made sandbox look the same in
+    // the dashboard and the audit log. The alphabet drops 0, O, 1 and I so a
+    // name copied by hand or read aloud cannot be misread.
+    for (const name of names) expect(name).toMatch(/^sandbox-[A-HJ-NP-Z2-9]{8}$/);
+    expect(new Set(names).size).toBe(2);
+  });
+
+  it("keeps a name the caller chose", async () => {
+    stubSiteverify();
+    const res = await createWorkspace(post({ turnstileToken: "t", agentName: "tidy-bot" }), deps());
+    const body = (await res.json()) as { agent: { name: string } };
+    expect(body.agent.name).toBe("tidy-bot");
+  });
+});
+
 describe("the full loop", () => {
   it("provisions a workspace whose key then authenticates a real request", async () => {
     stubSiteverify();

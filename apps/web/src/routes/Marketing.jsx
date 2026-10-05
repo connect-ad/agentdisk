@@ -12,6 +12,7 @@ import Byline from '../components-local/Byline.jsx';
 import { COMPANY_LEGAL_NAME, COMPANY_NAME, COMPANY_URL } from '../lib/company.js';
 import { SupportDialog } from '../components-local/SupportDialog.jsx';
 import ThemeToggle from '../components-local/ThemeToggle.jsx';
+import HomeDiagram from '../components-local/HomeDiagram.jsx';
 
 /**
  * 8.1 Landing · 8.2 Pricing.
@@ -394,16 +395,23 @@ export function Landing() {
                 Start free
               </Button>
               {/* Straight to the docs' guided quick start, which writes a
-                  path for the goal and the tool you pick. "Read the docs"
-                  stays as the quiet third way in, for the person who would
-                  rather read the whole thing. */}
+                  path for the goal and the tool you pick. Named for what it
+                  does, not for how fast it is: a first-time visitor told us
+                  "Quick start" did not say there was a tour behind it.
+                  "Read the docs" is the third way in, for the person who
+                  would rather read the whole thing; a pill with a book mark
+                  so it is seen, not a bare link that scrolled past. */}
               <Button size="lg" variant="secondary" as={Link} to="/docs/quickstart"
                 className="mk__quick"
                 icon={<Icon name="bolt" size={15} />}
                 iconRight={<Icon name="chevronRight" size={16} />}>
-                Quick start
+                Follow the guided tour
               </Button>
-              <Link to="/docs" className="mk__ctalink">Read the docs</Link>
+              <Link to="/docs" className="mk__docs">
+                <span className="mk__docsico" aria-hidden="true"><Icon name="book" size={15} /></span>
+                Read the docs
+                <span className="mk__docsarrow" aria-hidden="true"><Icon name="chevronRight" size={14} /></span>
+              </Link>
             </div>
             <div className="mk__tags">
               {HERO_TAGS.map(t => <span key={t} className="mk__tag">{t}</span>)}
@@ -411,6 +419,11 @@ export function Landing() {
           </div>
           <TerminalPanel />
         </section>
+
+        {/* What it is, before how to get one: the picture answers "why not
+            Drive, or my disk plus git" on the first scroll, which is the
+            question first-time visitors asked us. */}
+        <HomeDiagram />
 
         {/* The sandbox and the claim link, as the attraction they are: a disk
             with no sign-up, then one link to make it yours. Three nodes and a

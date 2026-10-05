@@ -77,7 +77,7 @@ document gets corrected.**
 
 ```
 apps/api   1045 tests · 54 files · typecheck clean
-apps/web    601 tests · 44 files · build clean
+apps/web    607 tests · 45 files · build clean
 apps/admin   62 tests ·  6 files · build clean
 apps/cli     11 tests ·  1 file
 ```

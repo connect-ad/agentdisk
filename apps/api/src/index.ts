@@ -69,8 +69,10 @@ import {
   listFiles,
   patchFile,
   readFile,
+  resolveFileByPath,
   searchFiles,
 } from "./routes/files";
+import { apiIndex, discoveryRedirect, redirectResponse } from "./lib/discovery";
 import {
   copyFile,
   createFolder,
@@ -143,6 +145,12 @@ export interface Env {
    * points. Public configuration.
    */
   DASHBOARD_URL?: string;
+  /**
+   * The marketing site, where the agent discovery documents (OpenAPI,
+   * auth.md, llms.txt, the API catalog) are published. `GET /` on this host
+   * indexes them from here; see lib/discovery.ts. Public configuration.
+   */
+  SITE_URL?: string;
 
   /**
    * Whether the unclaimed-sandbox sweep actually deletes, or only reports.
@@ -304,6 +312,16 @@ export default {
       // Also public, and the same answer in every environment: see lib/robots.ts.
       if (route === "GET /robots.txt") {
         return robotsTxtResponse();
+      }
+      // Public discovery for an agent that lands here with only a URL: an
+      // index at the root, and the two well-known documents redirected to
+      // the site's copies rather than duplicated. lib/discovery.ts.
+      if (route === "GET /") {
+        return json(apiIndex(url.origin, env.SITE_URL));
+      }
+      if (request.method === "GET") {
+        const target = discoveryRedirect(url.pathname, env.SITE_URL);
+        if (target !== null) return redirectResponse(target);
       }
 
       const authed = (requirement: Requirement, handler: Handler): Promise<Response> =>
@@ -804,8 +822,17 @@ export default {
 
         // A handler bound to the ID from the URL, so no handler parses the path
         // itself and none can disagree with the router about which file it is.
+        //
+        // `/v1/files/by-path/...?path=` is the same set of routes with the file
+        // named by its path instead: the ID is resolved once here, under the
+        // same op the route requires, and the very same handler runs. "by-path"
+        // can never be a real ID, which all begin `fil_`.
+        const byPath = fileId === "by-path";
         const onFile = (requirement: Requirement, handler: FileHandler): Promise<Response> =>
-          authed(requirement, (authCtx, req) => handler(authCtx, req, fileId));
+          authed(requirement, async (authCtx, req) => {
+            const id = byPath ? await resolveFileByPath(authCtx, req, requirement.op ?? "read") : fileId;
+            return handler(authCtx, req, id);
+          });
 
         if (action === undefined) {
           if (request.method === "GET") return await onFile({ op: "read" }, getFile);

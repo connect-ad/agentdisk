@@ -115,6 +115,18 @@ deleted after three days. Only the anonymous branch is charged; a signed-in
 POST routes to `createWorkspaceForUser` first. Every creation carries
 `RateLimit-*` headers.
 
+- **An agent that gives no `agentName` is called `sandbox-` plus eight random
+  characters** from an alphabet without 0, O, 1 and I (`sandboxAgentName` in
+  `lib/ids.ts`), the same default the attach path uses when the agent row is
+  gone. Not a secret: nothing accepts an agent name as a credential. The
+  dashboard's own dialog still stamps the UTC time instead, since a person
+  made that one. Replaced the fixed `sandbox-agent` on 5 October 2026.
+- **Every file route exists twice: by ID and by path.** `/v1/files/by-path`,
+  `.../by-path/content` and `.../by-path/download` take `?path=` and run the
+  very same handler after `resolveFileByPath` turns the path into an ID under
+  the route's own op, so a key scoped to a prefix is refused for a path
+  outside it before any lookup. `by-path` can never be a real ID; IDs begin
+  `fil_`.
 - **An unclaimed sandbox is a claim state, never a plan.** `SANDBOX_LIMITS`
   is deliberately absent from `PLAN_NAMES`, so nobody can be placed on it and
   swept.

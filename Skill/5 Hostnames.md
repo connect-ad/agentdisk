@@ -93,7 +93,9 @@ app host and single-host mode never negotiate.
 
 The build also writes the documents the Cloudflare Agent Readiness checks
 look for, from `scripts/agent-discovery.js` in the same plugin that writes
-robots.txt: `/auth.md`, `/openapi.json`, `/.well-known/api-catalog`,
+robots.txt (the API host indexes them at `GET /` and redirects its own
+`/openapi.json` and `/.well-known/api-catalog` to these copies, reading the
+site origin from `SITE_URL` in `apps/api/wrangler.toml`): `/auth.md`, `/openapi.json`, `/.well-known/api-catalog`,
 `/.well-known/mcp/server-card.json`, `/.well-known/agent-skills/index.json`
 with its `SKILL.md` (llms.txt with front matter, digest computed at build),
 and `/.well-known/ai-catalog.json`. Every URL in them comes from

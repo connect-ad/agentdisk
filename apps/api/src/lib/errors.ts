@@ -86,7 +86,8 @@ export const UNAUTHORIZED_MESSAGE =
   `disabled or its workspace is deleted, and an unclaimed sandbox is deleted after ${UNCLAIMED_DAYS} days. ` +
   "Mint a new key in the dashboard, or start a new sandbox: POST /v1/workspaces on this host " +
   "with no Authorization header and a JSON body (an empty object is enough) creates a free " +
-  "sandbox and returns its key. If you have no key yet, that same call is how you get one.";
+  "sandbox and returns its key. If you have no key yet, that same call is how you get one. " +
+  "GET / on this host lists the documentation and the OpenAPI description.";
 
 export function unauthorized(internalReason: string): ApiError {
   return new ApiError("UNAUTHORIZED", UNAUTHORIZED_MESSAGE, { internalReason });

@@ -60,6 +60,31 @@ export function ulid(now = Date.now()): string {
   return encodeTime(now) + lastRandom.map((i) => ENCODING[i]).join("");
 }
 
+/**
+ * The default name of an agent that made itself a sandbox without giving one.
+ *
+ * `sandbox-` plus eight characters from an alphabet without 0, O, 1 and I, so
+ * a name read aloud or copied by hand cannot be misread, and about a trillion
+ * combinations, so two sandboxes do not share a name and the attach path's
+ * rename-on-conflict stays a rare fallback. A fixed "sandbox-agent" made every
+ * agent-made sandbox look identical in the dashboard and the audit log.
+ *
+ * Not a secret and not a capability: nothing accepts an agent name as a
+ * credential. Random rather than sequential only so the next name is not a
+ * function of the last. Fits the agentName rule in routes/create-workspace.ts.
+ */
+const AGENT_NAME_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const AGENT_NAME_LEN = 8;
+
+export function sandboxAgentName(): string {
+  const bytes = new Uint8Array(AGENT_NAME_LEN);
+  crypto.getRandomValues(bytes);
+  // 32 symbols divide 256 evenly, so the modulo introduces no bias.
+  let suffix = "";
+  for (const b of bytes) suffix += AGENT_NAME_ALPHABET[b % AGENT_NAME_ALPHABET.length];
+  return `sandbox-${suffix}`;
+}
+
 /** Entity ID prefixes, per the schema comments in 05 PART 11.1. */
 export const ID_PREFIX = {
   organization: "org",

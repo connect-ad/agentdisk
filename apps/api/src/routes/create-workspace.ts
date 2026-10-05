@@ -43,6 +43,7 @@ import { clientIdentifier, enforce, type RateLimitRule } from "../lib/rate-limit
 import { parseAllowedHostnames, verifyTurnstile } from "../lib/turnstile";
 import { provisionSandboxWorkspace, SANDBOX_KEY_SCOPE } from "../db/bootstrap";
 import { SANDBOX_LIMITS } from "../lib/plans";
+import { sandboxAgentName } from "../lib/ids";
 import { claimUrl } from "../lib/claim";
 
 /** 05 PART 13's stated limit for this route. */
@@ -182,9 +183,12 @@ export async function createWorkspace(
     }
   }
 
+  // Chosen once so the agent row and the response cannot disagree.
+  const agentName = parsed.data.agentName ?? sandboxAgentName();
+
   const result = await provisionSandboxWorkspace(deps.db, {
     workspaceName: parsed.data.name ?? "Sandbox",
-    agentName: parsed.data.agentName ?? "sandbox-agent",
+    agentName: agentName,
     now,
     encryptionKey: deps.encryptionKey ?? null,
     creatorIp: identifier,
@@ -228,7 +232,7 @@ export async function createWorkspace(
     },
     agent: {
       id: result.agentId,
-      name: parsed.data.agentName ?? "sandbox-agent",
+      name: agentName,
     },
     apiKey: {
       id: result.keyId,

@@ -113,6 +113,8 @@ describe("authentication", () => {
     // fresh agent reads this as "locked out" and stops.
     expect(body.error.message).toMatch(/POST \/v1\/workspaces/);
     expect(body.error.message).toMatch(/no Authorization header/);
+    // And where the request shapes are described, for an agent with no docs.
+    expect(body.error.message).toMatch(/GET \/ on this host/);
 
     const bogus = await get("/v1/whoami", bearer("ask_live_" + "y".repeat(32)));
     const other = (await bogus.json()) as ErrorBody;

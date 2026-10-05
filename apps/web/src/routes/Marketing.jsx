@@ -330,11 +330,15 @@ export function Landing() {
               <span className="mk__badgedot" aria-hidden="true" />
               <span className="mk__badgetext">MCP SERVER · GENERALLY AVAILABLE</span>
             </span>
-            <h1 className="mk__h1">Storage your agents can actually reason about.</h1>
+            {/* One pitch above the picture, not two: the headline is the
+                claim the diagram below draws, and the lead is its three
+                clauses in one sentence. The older line, "Storage your agents
+                can actually reason about", heads the proof cards, where the
+                four cards are its evidence. */}
+            <h1 className="mk__h1">A shared disk where agents work and humans own.</h1>
             <p className="mk__lead">
-              AgentDisk gives every AI agent a scoped, persistent workspace for files,
-              folders and metadata — over a REST API and an MCP server. You keep the
-              audit log.
+              Agents and apps connect over MCP or REST, each key writes to its own path,
+              and you own the disk from the dashboard.
             </p>
             <div className="mk__ctas">
               <Button size="lg" as={Link} to="/signup"

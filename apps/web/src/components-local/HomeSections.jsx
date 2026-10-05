@@ -112,7 +112,7 @@ export function Proof() {
     <section className="mk__section" aria-labelledby="proof-title">
       <div className="mk__sechead">
         <span className="mk__kicker">WHY A DISK, NOT A BUCKET</span>
-        <h2 className="mk__h2" id="proof-title">Built for the way agents actually work.</h2>
+        <h2 className="mk__h2" id="proof-title">Storage your agents can actually reason about.</h2>
       </div>
       <div className="mk__grid4">
         {FEATURES.map(f => (

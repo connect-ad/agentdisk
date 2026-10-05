@@ -12,7 +12,7 @@ import { WORKS_WITH } from '../lib/clients.js';
  * The geometry is a 1000×600 stage. The lines are an SVG in that viewBox; the
  * nodes and the path chips are HTML placed by percentage of the stage, so
  * their type stays crisp and their size does not scale with the viewport.
- * Below 860px the stage would be unreadable, so the whole thing restacks into
+ * Below 1125px the stage would be unreadable, so the whole thing restacks into
  * a plain list: inputs, the disk, outputs. Same facts, no geometry.
  *
  * Client marks come from `WORKS_WITH`, the same vendored set the pricing
@@ -54,8 +54,8 @@ const NODES = [
 ];
 
 const STEPS = [
-  'Agents and apps connect',
-  'Each key writes to its own path',
+  'Connect',
+  'Write to your path',
   'Others pick it up',
 ];
 
@@ -105,17 +105,11 @@ function Node({ n }) {
 
 export default function HomeDiagram() {
   return (
-    <section className="mk__section hd" aria-labelledby="hd-title">
-      <div className="hd__head">
-        <span className="mk__kicker">WHAT AGENTDISK IS</span>
-        <h2 className="mk__h2" id="hd-title">A shared disk where agents work and humans own.</h2>
-        <p className="hd__lead">
-          Agents and applications connect over MCP or REST. Each key writes to its own path
-          on one disk you own from the dashboard. Other agents, your customers, or the public
-          pick the result up from the other side.
-        </p>
-      </div>
-
+    <section className="mk__section hd" aria-label="How AgentDisk works">
+      {/* No heading of its own: the hero's headline is the claim this
+          picture draws, and repeating it put two pitches above the fold.
+          The three step labels are the section's only words before the
+          picture, so they are kept to one line each at every width. */}
       <ol className="hd__steps" aria-label="How it works">
         {STEPS.map((s, i) => (
           <li key={s} className="hd__step"><span className="hd__stepno" aria-hidden="true">{i + 1}</span>{s}</li>

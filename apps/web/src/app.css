@@ -2174,16 +2174,17 @@ button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
    What AgentDisk is, as one picture: the disk in the middle, inputs on the
    left, the owner above, outputs on the right. The stage is a 1000×600 box;
    the SVG draws only the lines, the nodes and path chips are HTML placed by
-   percentage so their type stays sharp. Below 860px the stage hides and the
+   percentage so their type stays sharp. Below 1125px the stage hides and the
    list under it takes over. Every line colour is paired with a word in the
    legend and on the chip itself. */
-.hd__head{max-width:46rem}
-.hd__lead{font-size:var(--t-16);line-height:var(--lh-loose);color:var(--ink-2);
-  text-wrap:pretty;margin:calc(-1 * var(--s-5)) 0 var(--s-8)}
+/* The picture follows the hero's tags with one gap, not two: the section's
+   own top padding goes, the hero's bottom padding is the gap. */
+.hd{padding-top:0}
 .hd__steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s-5);
   max-width:50rem;margin:0 auto var(--s-3);list-style:none;padding:0}
 .hd__step{display:flex;align-items:center;gap:var(--s-4);font-family:var(--font-mono);
-  font-size:var(--t-11);letter-spacing:var(--tr-caps);text-transform:uppercase;color:var(--ink-3)}
+  font-size:var(--t-11);letter-spacing:var(--tr-caps);text-transform:uppercase;color:var(--ink-3);
+  white-space:nowrap}
 .hd__step:nth-child(2){justify-content:center}
 .hd__step:nth-child(3){justify-content:flex-end}
 .hd__stepno{width:1.25rem;height:1.25rem;border-radius:var(--r-2);background:var(--accent-soft);
@@ -2250,7 +2251,14 @@ button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
 .hd__sw--denied{border-top-style:dotted;border-top-color:var(--danger)}
 .hd__more{margin:var(--s-6) auto 0;max-width:46rem;text-align:center;font-size:var(--t-13-5);
   color:var(--ink-2);line-height:var(--lh-loose);text-wrap:pretty}
-@media (max-width:860px){
+/* Between 1125 and 1350 the stage is narrower than its labels are long, so
+   it gives up 6.5rem a side for them rather than let them run off the page. */
+@media (max-width:1350px){
+  .hd__stage{max-width:min(50rem,calc(100% - 13rem))}
+}
+/* Below 1125px the stage would have to shrink while its labels could not,
+   and they spilled past both edges at 1024. The list takes over there. */
+@media (max-width:1125px){
   .hd__steps,.hd__stage{display:none}
   .hd__list{display:grid;gap:var(--s-7);border:1px solid var(--line);border-radius:var(--r-4);
     background:var(--surface);padding:var(--s-6)}

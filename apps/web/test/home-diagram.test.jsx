@@ -35,7 +35,7 @@ describe('home diagram', () => {
     renderLanding();
     const steps = screen.getByRole('list', { name: 'How it works' });
     const items = [...steps.querySelectorAll('li')].map(li => li.textContent.replace(/^\d/, '').trim());
-    expect(items).toEqual(['Agents and apps connect', 'Each key writes to its own path', 'Others pick it up']);
+    expect(items).toEqual(['Connect', 'Write to your path', 'Others pick it up']);
   });
 
   it('shows writes to distinct paths, a read, a shared link and one denial', () => {
@@ -73,7 +73,7 @@ describe('home diagram', () => {
 
   it('leads to the guided tour and the comparisons', () => {
     renderLanding();
-    const section = screen.getByRole('region', { name: /A shared disk where agents work/ });
+    const section = screen.getByRole('region', { name: 'How AgentDisk works' });
     expect(within(section).getByRole('link', { name: 'Follow the guided tour' }).getAttribute('href')).toBe('/docs/quickstart');
     expect(within(section).getByRole('link', { name: 'see how this compares' }).getAttribute('href')).toBe('/compare');
   });

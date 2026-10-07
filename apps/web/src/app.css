@@ -833,6 +833,8 @@
 .mk__footlist a{font-size:var(--t-13);color:var(--ink-2);text-decoration:none;
   overflow-wrap:anywhere}
 .mk__footlist a:hover{color:var(--ink);text-decoration:underline}
+/* The one link the owner wants found first: Safety Information (7 Oct 2026). */
+.mk__footlist a.mk__footlink--bold{font-weight:var(--w-semi);color:var(--ink)}
 .mk__footbase{display:flex;justify-content:space-between;gap:var(--s-5);flex-wrap:wrap;
   padding-top:var(--s-6);font-size:var(--t-12);color:var(--ink-3)}
 /* Five link columns since 4 Oct 2026: three a row under the blurb on a

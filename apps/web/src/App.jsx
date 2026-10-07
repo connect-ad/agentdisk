@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Routes, Route, Navigate, Outlet, useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import { applyPageMeta } from './lib/seo.js';
 import { onAppHost, onSiteHost, splitHosts } from './lib/hosts.js';
@@ -384,6 +384,30 @@ function WorkspaceLayout() {
  * a bookmark does not count the same payment twice. It comes after the page
  * view, which is what switches collection on for this page.
  */
+/**
+ * Client-side navigation keeps the window's scroll position, so a footer
+ * link clicked at the bottom of one page opened the next page at its bottom
+ * (7 Oct 2026). On a route change this puts the window back at the top, or
+ * at the element a hash names, since nothing else moves for a hash on a
+ * client-side navigation. It skips the first render: on a full load the
+ * browser already handles the hash and its own scroll restoration, and a
+ * reload must not jump to the top. The dashboard scrolls a pane rather than
+ * the window, so there this is a harmless no-op.
+ */
+export function ScrollOnNavigate() {
+  const { pathname, hash } = useLocation();
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    const target = hash ? document.getElementById(hash.slice(1)) : null;
+    try {
+      if (target && typeof target.scrollIntoView === 'function') target.scrollIntoView();
+      else window.scrollTo(0, 0);
+    } catch { /* a browser without scrolling; nothing to put right */ }
+  }, [pathname, hash]);
+  return null;
+}
+
 export function PageMeta() {
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
@@ -455,6 +479,7 @@ export default function App() {
   return (
     <>
     <PageMeta />
+    <ScrollOnNavigate />
     <Routes>
       {/* The marketing routes: everything from here to /sandbox renders on
           the site host (agentdisk.io) as well as the app host. worker.js

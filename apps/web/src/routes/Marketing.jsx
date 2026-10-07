@@ -223,6 +223,7 @@ const FOOT_COLUMNS = [
   { head: 'Trust', links: [
     { to: '/security', label: 'Security' },
     { to: '/trust', label: 'Trust Center' },
+    { to: '/info-summary', label: 'Safety Information', bold: true },
     { to: '/privacy', label: 'Privacy' },
     { to: '/terms', label: 'Terms' },
     { to: '/sub-processors', label: 'Sub-processors' },
@@ -272,7 +273,7 @@ export function Footer() {
                   <li key={l.label}>
                     {l.href
                       ? <a href={l.href}>{l.label}</a>
-                      : <Link to={l.to}>{l.label}</Link>}
+                      : <Link to={l.to} className={l.bold ? 'mk__footlink--bold' : undefined}>{l.label}</Link>}
                   </li>
                 ))}
               </ul>

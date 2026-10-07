@@ -71,6 +71,11 @@ export const PAGE_META = {
     description:
       'AgentDisk Trust Center: security architecture, privacy policy, terms of service and sub-processor transparency.'
   },
+  '/info-summary': {
+    title: 'Safety Information — AgentDisk',
+    description:
+      'AgentDisk safety on one page: the certifications behind the service, how a request is protected, where your data goes, and how deletion works.'
+  },
   '/sub-processors': {
     title: 'Sub-processors — AgentDisk',
     description:

@@ -24,6 +24,7 @@ const { parseFrontmatter, parseBlocks, parseInline, splitFaq } = await import('.
 const { POSTS, relatedPosts } = await import('../src/lib/blog.js');
 const { Footer } = await import('../src/routes/Marketing.jsx');
 const { Security, SubProcessors, Dpa, Terms, TrustCenter } = await import('../src/routes/Trust.jsx');
+const { InfoSummary } = await import('../src/routes/InfoSummary.jsx');
 
 afterEach(cleanup);
 
@@ -108,7 +109,7 @@ describe('the footer and the old anchors', () => {
     at('/', <Footer />);
     const footer = screen.getByRole('contentinfo');
     const hrefs = within(footer).getAllByRole('link').map(a => a.getAttribute('href'));
-    for (const href of ['/security', '/trust', '/privacy', '/terms', '/sub-processors', '/dpa', '/blog',
+    for (const href of ['/security', '/trust', '/info-summary', '/privacy', '/terms', '/sub-processors', '/dpa', '/blog',
       '/compare/agentdisk-vs-fast-io', '/compare/agentdisk-vs-s3', '/compare/agentdisk-vs-diskd-ai', '/alternatives']) {
       expect(hrefs, href).toContain(href);
     }
@@ -161,6 +162,74 @@ describe('the security page', () => {
     expect(rows).toEqual([
       'Cloudflare, Inc.', 'Google LLC (Firebase Authentication)', 'Stripe, Inc.', 'Google LLC (Google Analytics)',
     ]);
+  });
+});
+
+describe('the safety information page', () => {
+  it('draws the five sections and links each to the page with the detail', () => {
+    const { container } = at('/info-summary', <InfoSummary />);
+    for (const id of ['certifications', 'request-path', 'data-flow', 'deletion', 'detail']) {
+      expect(container.querySelector(`section#${id}`), id).not.toBeNull();
+    }
+    const hrefs = [...container.querySelectorAll('a')].map(a => a.getAttribute('href'));
+    for (const href of ['/security', '/privacy', '/terms', '/sub-processors', '/dpa', '/trust',
+      '/security#certifications', '/docs/deleting-data', '/docs/deleting-account']) {
+      expect(hrefs, href).toContain(href);
+    }
+    // The closing cards are the other five pages, never this one.
+    const cards = [...container.querySelectorAll('.pg__card')].map(a => a.getAttribute('href'));
+    expect(cards).toEqual(['/security', '/privacy', '/terms', '/sub-processors', '/dpa']);
+  });
+
+  it('attributes every certification to its provider and claims none of its own', () => {
+    const { container } = at('/info-summary', <InfoSummary />);
+    const text = container.textContent;
+    const seals = [...container.querySelectorAll('.sf__sealcard')];
+    expect(seals.map(s => s.querySelector('.sf__sealname').textContent)).toEqual([
+      'SOC 2 Type II', 'ISO 27001', 'ISO 27701', 'ISO 27017 / 27018', 'PCI DSS Level 1', 'GDPR DPA + SCCs',
+    ]);
+    // Five seals name the providers that hold them; the sixth is our own click-through DPA.
+    expect(seals.filter(s => /Held by/.test(s.textContent))).toHaveLength(5);
+    const chips = s => [...s.querySelectorAll('.sf__prov')].map(c => c.textContent);
+    expect(chips(seals[0])).toEqual(['Cloudflare', 'Google', 'Stripe']);
+    expect(chips(seals[4])).toEqual(['Stripe', 'Cloudflare']);
+    expect(chips(seals[5])).toEqual(['AgentDisk']);
+    expect(seals[5].textContent).toMatch(/AgentDisk · click-through/);
+    expect(text).toMatch(/AgentDisk holds no certification of its own/);
+    expect(text).toMatch(/No certification of our own/);
+    expect(text).not.toMatch(/AgentDisk is SOC 2 (compliant|certified)/);
+    // The crosses that make the ticks credible.
+    for (const claim of ['Not end-to-end encrypted', 'No multi-factor sign-in yet', 'No region to choose']) {
+      expect(text).toContain(claim);
+    }
+  });
+
+  it('states the deletion timeline as the docs do: records now, bytes by day 7, sandboxes at day 3', () => {
+    const { container } = at('/info-summary', <InfoSummary />);
+    const rows = [...container.querySelectorAll('.sf__tl tbody tr')];
+    expect(rows.map(r => r.querySelector('th b').textContent)).toEqual(['A file', 'A workspace', 'Your account', 'A sandbox']);
+    const events = r => [...r.querySelectorAll('.sf__ev b')].map(b => b.textContent);
+    expect(events(rows[0])).toEqual(['Delete', 'Bytes and record gone']);
+    expect(events(rows[1])).toEqual(['Owner types the exact name', 'Everything unreachable', 'Bytes erased']);
+    expect(events(rows[2])).toEqual([
+      'Type your email to confirm', 'Billing settled, then destroyed', 'Bytes erased, identity released', 'Invoices, seven years',
+    ]);
+    expect(events(rows[3])).toEqual(['Created by an agent or a browser', 'Claimed with the one-time link', 'Unclaimed: wiped']);
+    const text = container.textContent;
+    expect(text).toMatch(/removal after three days/);
+    expect(text).toMatch(/retried 48 h/);
+    expect(text).toMatch(/a key is refused/);
+    expect(text).not.toMatch(/recycle bin\./i);
+  });
+
+  it('is the first card on the Trust Center and in the footer', () => {
+    const hub = at('/trust', <TrustCenter />).container;
+    const cards = [...hub.querySelectorAll('.pg__card')].map(a => a.getAttribute('href'));
+    expect(cards[0]).toBe('/info-summary');
+    cleanup();
+    at('/', <Footer />);
+    const footer = screen.getByRole('contentinfo');
+    expect(within(footer).getByRole('link', { name: 'Safety Information' }).getAttribute('href')).toBe('/info-summary');
   });
 });
 

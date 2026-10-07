@@ -26,14 +26,18 @@ import { TRUST_PAGES, TRUST_CRUMB } from './Trust.jsx';
  * prerendered and has a markdown twin (worker.js MARKDOWN_PAGES).
  */
 
-/** The six seals. `own` marks AgentDisk's own commitment rather than a provider's certification. */
+/**
+ * The six seals. `providers` are the chips under each; `own` marks
+ * AgentDisk's own commitment rather than a provider's certification, and
+ * `note` is the one line that says what the standard covers here.
+ */
 export const SEALS = [
-  { big: 'SOC 2', small: 'TYPE II', name: 'SOC 2 Type II', held: 'Held by providers', by: 'Cloudflare · Google · Stripe' },
-  { big: '27001', small: 'ISO / IEC', name: 'ISO 27001', held: 'Held by providers', by: 'Cloudflare · Google · Stripe' },
-  { big: '27701', small: 'ISO / IEC', name: 'ISO 27701', held: 'Held by provider', by: 'Cloudflare · privacy management' },
-  { big: '27017', small: '+ 27018', name: 'ISO 27017 / 27018', held: 'Held by provider', by: 'Google · cloud and PII controls' },
-  { big: 'PCI', small: 'DSS LEVEL 1', name: 'PCI DSS Level 1', held: 'Held by providers', by: 'Stripe · Cloudflare · cards never touch us' },
-  { big: 'GDPR', small: 'DPA + SCCs', name: 'GDPR DPA + SCCs', held: 'AgentDisk · click-through', by: 'EU, UK and Swiss transfers · part of the Terms', own: true },
+  { big: 'SOC 2', small: 'TYPE II', name: 'SOC 2 Type II', held: 'Held by', providers: ['Cloudflare', 'Google', 'Stripe'], note: 'audited controls, reported annually' },
+  { big: '27001', small: 'ISO / IEC', name: 'ISO 27001', held: 'Held by', providers: ['Cloudflare', 'Google', 'Stripe'], note: 'information security management' },
+  { big: '27701', small: 'ISO / IEC', name: 'ISO 27701', held: 'Held by', providers: ['Cloudflare'], note: 'privacy information management' },
+  { big: '27017', small: '+ 27018', name: 'ISO 27017 / 27018', held: 'Held by', providers: ['Google'], note: 'cloud security and PII in the cloud' },
+  { big: 'PCI', small: 'DSS LEVEL 1', name: 'PCI DSS Level 1', held: 'Held by', providers: ['Stripe', 'Cloudflare'], note: 'card data never touches AgentDisk' },
+  { big: 'GDPR', small: 'DPA + SCCs', name: 'GDPR DPA + SCCs', held: 'AgentDisk · click-through', providers: ['AgentDisk'], note: 'EU, UK and Swiss transfers · part of the Terms', own: true },
 ];
 
 /** The four layers a request falls through, outermost first. */
@@ -110,7 +114,13 @@ function Seal({ s }) {
         <span className="sf__sealtick"><Icon name="check" size={13} strokeWidth={3} /></span>
       </span>
       <span className="sf__sealname">{s.name}</span>
-      <span className="sf__holder"><b>{s.held}</b><br />{s.by}</span>
+      <span className="sf__holder">
+        <b>{s.held}</b>
+        <span className="sf__provs">
+          {s.providers.map(p => <i key={p} className={s.own ? 'sf__prov sf__prov--own' : 'sf__prov'}>{p}</i>)}
+        </span>
+      </span>
+      <span className="sf__sealnote">{s.note}</span>
     </li>
   );
 }
@@ -163,12 +173,14 @@ export function InfoSummary() {
           </div>
           <Link to="/security#certifications" className="sf__more">/security#certifications →</Link>
         </div>
-        <ul className="sf__seals" aria-label="Certifications">
-          {SEALS.map(s => <Seal key={s.name} s={s} />)}
-        </ul>
-        <div className="sf__key">
-          <span><i className="sf__dot sf__dot--ok" aria-hidden="true" />Held by a provider, covers its infrastructure</span>
-          <span><i className="sf__dot sf__dot--own" aria-hidden="true" />AgentDisk's own commitment</span>
+        <div className="sf__certband">
+          <div className="sf__certhead">
+            <span><i className="sf__dot sf__dot--ok" aria-hidden="true" />Five held by a provider, covering its infrastructure</span>
+            <span><i className="sf__dot sf__dot--own" aria-hidden="true" />One AgentDisk commitment of its own</span>
+          </div>
+          <ul className="sf__seals" aria-label="Certifications">
+            {SEALS.map(s => <Seal key={s.name} s={s} />)}
+          </ul>
         </div>
         <P>
           <strong>AgentDisk holds no certification of its own</strong> and says so on every page.

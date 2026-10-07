@@ -188,8 +188,12 @@ describe('the safety information page', () => {
     expect(seals.map(s => s.querySelector('.sf__sealname').textContent)).toEqual([
       'SOC 2 Type II', 'ISO 27001', 'ISO 27701', 'ISO 27017 / 27018', 'PCI DSS Level 1', 'GDPR DPA + SCCs',
     ]);
-    // Five seals say which provider holds them; the sixth is our own click-through DPA.
-    expect(seals.filter(s => /Held by provider/.test(s.textContent))).toHaveLength(5);
+    // Five seals name the providers that hold them; the sixth is our own click-through DPA.
+    expect(seals.filter(s => /Held by/.test(s.textContent))).toHaveLength(5);
+    const chips = s => [...s.querySelectorAll('.sf__prov')].map(c => c.textContent);
+    expect(chips(seals[0])).toEqual(['Cloudflare', 'Google', 'Stripe']);
+    expect(chips(seals[4])).toEqual(['Stripe', 'Cloudflare']);
+    expect(chips(seals[5])).toEqual(['AgentDisk']);
     expect(seals[5].textContent).toMatch(/AgentDisk · click-through/);
     expect(text).toMatch(/AgentDisk holds no certification of its own/);
     expect(text).toMatch(/No certification of our own/);

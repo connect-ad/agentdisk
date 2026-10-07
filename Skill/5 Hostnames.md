@@ -166,7 +166,8 @@ fails the suite rather than the deploy.
 ## The long-form pages (4 Oct 2026)
 
 The trust pages (`/security`, `/privacy`, `/terms`, `/trust`,
-`/sub-processors`, `/dpa`, in `routes/Trust.jsx`), the blog (`/blog`,
+`/sub-processors`, `/dpa`, in `routes/Trust.jsx`, and `/info-summary`, the
+one-page drawing of them in `routes/InfoSummary.jsx`), the blog (`/blog`,
 `/blog/:slug`), the comparisons (`/compare`, `/compare/:slug`), the
 alternatives (`/alternatives`, `/alternatives/:slug`) and the four
 `/storage-for-<agent>` pages. They share one frame,

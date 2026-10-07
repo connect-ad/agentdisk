@@ -25,6 +25,7 @@ import Claim from './routes/Claim.jsx';
 import SharePage from './routes/SharePage.jsx';
 import Docs from './routes/Docs.jsx';
 import { Security, Privacy, Terms, TrustCenter, SubProcessors, Dpa } from './routes/Trust.jsx';
+import { InfoSummary } from './routes/InfoSummary.jsx';
 import { BlogIndex, BlogPost } from './routes/Blog.jsx';
 import {
   CompareIndex, ComparePage, AlternativesIndex, AlternativePage,
@@ -472,6 +473,8 @@ export default function App() {
       <Route path="/trust" element={<TrustCenter />} />
       <Route path="/sub-processors" element={<SubProcessors />} />
       <Route path="/dpa" element={<Dpa />} />
+      {/* The one-page drawing of the trust pages (routes/InfoSummary.jsx, 7 Oct 2026). */}
+      <Route path="/info-summary" element={<InfoSummary />} />
       {/* The blog, the comparisons and the agent pages. Their content is in
           src/content; lib/pages.js lists them for the prerender. */}
       <Route path="/blog" element={<BlogIndex />} />

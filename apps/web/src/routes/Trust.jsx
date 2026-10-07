@@ -29,10 +29,16 @@ import {
  * customer. Privacy names the transfer mechanism it brings in.
  */
 
-const TRUST_CRUMB = { to: '/trust', label: 'Trust Center' };
+export const TRUST_CRUMB = { to: '/trust', label: 'Trust Center' };
 
-/** The other trust pages, as cards at the foot of each one. */
-const TRUST_PAGES = [
+/**
+ * The other trust pages, as cards at the foot of each one. /info-summary
+ * (routes/InfoSummary.jsx, 7 Oct 2026) leads the list: it is the one-page
+ * drawing of the other five, for the reader who will not read them.
+ */
+export const TRUST_PAGES = [
+  { to: '/info-summary', kicker: 'SUMMARY', title: 'Safety Information',
+    body: 'The whole picture on one page: certifications, the request path, where data goes and how it is deleted, drawn rather than written.' },
   { to: '/security', kicker: 'SECURITY', title: 'Security',
     body: 'Encryption, tenant isolation, credentials, the platform, how it is tested, and the certifications of the providers it runs on.' },
   { to: '/privacy', kicker: 'PRIVACY', title: 'Privacy Policy',

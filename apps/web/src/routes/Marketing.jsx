@@ -223,6 +223,7 @@ const FOOT_COLUMNS = [
   { head: 'Trust', links: [
     { to: '/security', label: 'Security' },
     { to: '/trust', label: 'Trust Center' },
+    { to: '/info-summary', label: 'Safety Information' },
     { to: '/privacy', label: 'Privacy' },
     { to: '/terms', label: 'Terms' },
     { to: '/sub-processors', label: 'Sub-processors' },

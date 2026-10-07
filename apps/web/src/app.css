@@ -2401,6 +2401,11 @@ button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
    paired with a word in the markup, so the colour never carries meaning
    alone. The figures are grids that restack at the tablet width. */
 .sf__sec .doc__h2{margin-top:0}
+/* The first section leads with the certificate band, so it carries no rule
+   of its own above; the hairline the shell puts over the first heading then
+   separates the band from the words that explain it. */
+.sf__sec--first{margin-top:0;padding-top:0;border-top:0}
+.sf__sec--first .sf__certband{margin-bottom:var(--s-8)}
 .sf__sechead{display:flex;align-items:baseline;justify-content:space-between;gap:var(--s-6);
   flex-wrap:wrap}
 .sf__sechead > div{flex:1 1 32rem;min-width:0}

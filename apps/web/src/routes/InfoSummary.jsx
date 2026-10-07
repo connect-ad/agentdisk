@@ -162,7 +162,18 @@ export function InfoSummary() {
       lead="The whole picture on one page: the certifications this service runs on, how a request is protected on its way to your bytes, where your data travels, how it is deleted, and the five pages that carry the detail. Every mark here is true of the system running today."
     >
       {/* ── 1. certifications ── */}
-      <section id="certifications" className="doc__section sf__sec">
+      <section id="certifications" className="doc__section sf__sec sf__sec--first">
+        {/* The band leads the page: the seals are what the reader came for,
+            so they sit above the first heading rather than below it. */}
+        <div className="sf__certband">
+          <div className="sf__certhead">
+            <span><i className="sf__dot sf__dot--ok" aria-hidden="true" />Five held by a provider, covering its infrastructure</span>
+            <span><i className="sf__dot sf__dot--own" aria-hidden="true" />One AgentDisk commitment of its own</span>
+          </div>
+          <ul className="sf__seals" aria-label="Certifications">
+            {SEALS.map(s => <Seal key={s.name} s={s} />)}
+          </ul>
+        </div>
         <div className="sf__sechead">
           <div>
             <H2 id="certifications-heading">Certifications behind the service</H2>
@@ -172,15 +183,6 @@ export function InfoSummary() {
             </P>
           </div>
           <Link to="/security#certifications" className="sf__more">/security#certifications →</Link>
-        </div>
-        <div className="sf__certband">
-          <div className="sf__certhead">
-            <span><i className="sf__dot sf__dot--ok" aria-hidden="true" />Five held by a provider, covering its infrastructure</span>
-            <span><i className="sf__dot sf__dot--own" aria-hidden="true" />One AgentDisk commitment of its own</span>
-          </div>
-          <ul className="sf__seals" aria-label="Certifications">
-            {SEALS.map(s => <Seal key={s.name} s={s} />)}
-          </ul>
         </div>
         <P>
           <strong>AgentDisk holds no certification of its own</strong> and says so on every page.

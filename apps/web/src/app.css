@@ -2657,6 +2657,75 @@ button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
   .sf__nums{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 
+/* ── post diagrams ───────────────────────────────────────────────────────
+   A blog post's inline architecture diagram (components-local/PostDiagram).
+   Same construction as the landing diagram: an SVG line layer in a fixed
+   viewBox under HTML tiles placed by percentage, so the lines scale and the
+   type does not. The lane colours are accent, ok and warn, and each one is
+   named in the fallback list and the caption, so the hue is never alone in
+   carrying which automation a lane is.
+
+   Below that an article column cannot hold four columns of labels, so the
+   stage gives way to the list rather than shrinking. */
+.pd{margin:var(--s-8) 0;padding:0}
+.pd__stage{position:relative;width:100%;aspect-ratio:960/430;
+  border:1px solid var(--line);border-radius:var(--r-4);background:var(--surface);
+  padding:0}
+.pd__lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.pd__band{fill:var(--surface-3);stroke:var(--line-2);stroke-width:1;stroke-dasharray:3 5}
+.pd__line{fill:none;stroke-width:1.6}
+.pd__line--memory{stroke:var(--accent)}
+.pd__line--handoff{stroke:var(--ok)}
+.pd__line--schedule{stroke:var(--warn)}
+.pd__m--memory{fill:var(--accent)}
+.pd__m--handoff{fill:var(--ok)}
+.pd__m--schedule{fill:var(--warn)}
+.pd__bandlabel{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;
+  font-family:var(--font-mono);font-size:var(--t-10);letter-spacing:var(--tr-caps);
+  color:var(--ink-3);background:var(--surface);padding:0 var(--s-3)}
+.pd__lane{position:absolute;transform:translateY(-50%);white-space:nowrap;
+  font-family:var(--font-mono);font-size:var(--t-10);letter-spacing:var(--tr-caps);
+  text-transform:uppercase;font-weight:var(--w-semi)}
+.pd__lane--memory{color:var(--accent-ink)}
+.pd__lane--handoff{color:var(--ok)}
+.pd__lane--schedule{color:var(--warn)}
+.pd__stop{position:absolute;transform:translate(-50%,-50%);display:block;white-space:nowrap}
+.pd__tilewrap{display:flex;align-items:center;gap:var(--s-3)}
+.pd__tile{width:1.875rem;height:1.875rem;flex:none;border-radius:var(--r-3);
+  background:var(--surface-3);border:1px solid var(--line-2);color:var(--ink-2);
+  display:inline-flex;align-items:center;justify-content:center}
+.pd__tile--memory{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
+.pd__tile--handoff{background:var(--ok-soft);border-color:var(--ok-line);color:var(--ok)}
+.pd__tile--schedule{background:var(--warn-soft);border-color:var(--warn-line);color:var(--warn)}
+.pd__text{display:flex;flex-direction:column;gap:1px;min-width:0}
+.pd__text b{font-size:var(--t-12-5);font-weight:var(--w-semi);color:var(--ink)}
+.pd__text i{font-style:normal;font-family:var(--font-mono);font-size:var(--t-10);color:var(--ink-3)}
+.pd__path{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;
+  font-family:var(--font-mono);font-size:var(--t-11);font-weight:var(--w-med);
+  padding:var(--s-2) var(--s-3);border-radius:var(--r-2);
+  background:var(--surface);border:1px solid var(--line-2);color:var(--ink)}
+.pd__path--memory{border-color:var(--accent-line)}
+.pd__path--handoff{border-color:var(--ok-line)}
+.pd__path--schedule{border-color:var(--warn-line)}
+.pd__list{display:none}
+.pd__cap{margin:var(--s-5) 0 0;font-size:var(--t-13);color:var(--ink-2);
+  line-height:var(--lh-loose);text-wrap:pretty}
+@media (max-width:875px){
+  .pd__stage{display:none}
+  .pd__list{display:grid;gap:var(--s-6);border:1px solid var(--line);
+    border-radius:var(--r-4);background:var(--surface);padding:var(--s-6)}
+  .pd__lrow{min-width:0}
+  .pd__lhead{font-family:var(--font-mono);font-size:var(--t-11);
+    letter-spacing:var(--tr-caps);text-transform:uppercase;font-weight:var(--w-semi);
+    margin-bottom:var(--s-3)}
+  .pd__lhead--memory{color:var(--accent-ink)}
+  .pd__lhead--handoff{color:var(--ok)}
+  .pd__lhead--schedule{color:var(--warn)}
+  .pd__lsteps{margin:0;padding-left:var(--s-6);display:grid;gap:var(--s-2);
+    font-size:var(--t-13);color:var(--ink-2);line-height:var(--lh-loose)}
+  .pd__lsteps b{color:var(--ink);font-weight:var(--w-semi)}
+}
+
 /* ==========================================================================
    Responsive pass (26 Sept 2026)
 
@@ -2865,4 +2934,3 @@ button.kst:hover,button.kst[aria-expanded="true"]{filter:brightness(1.12)}
      the error page's two actions share a row. */
   .err__actions .btn{flex:1 1 auto}
 }
-

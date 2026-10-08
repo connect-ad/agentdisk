@@ -2,11 +2,17 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { parseInline, headingId } from '../lib/markdown.js';
 import { H2, H3, P, List, Table, Code } from './Prose.jsx';
+import PostDiagram, { hasDiagram } from './PostDiagram.jsx';
 
 /**
  * Parsed blog blocks (lib/markdown.js) as the same prose components the
  * trust and docs pages use. A link that starts with `/` is a router link; any
  * other opens where it points, with no referrer and no opener.
+ *
+ * A fence tagged `diagram` is the one block that is not prose: its body is
+ * the name of a diagram in PostDiagram.jsx, because the parser has no HTML or
+ * image block to carry one. A name nothing answers to renders as the ordinary
+ * code block, so a typo is visible rather than a gap in the page.
  */
 
 function Inline({ tokens }) {
@@ -33,7 +39,10 @@ export function MarkdownBlocks({ blocks }) {
       case 'h3': return <H3 key={i} id={headingId(b.text)}>{inline(b.text)}</H3>;
       case 'ul': return <List key={i} items={b.items.map(inline)} />;
       case 'ol': return <List key={i} ordered items={b.items.map(inline)} />;
-      case 'code': return <Code key={i} caption={b.lang.toUpperCase()}>{b.text}</Code>;
+      case 'code':
+        return b.lang === 'diagram' && hasDiagram(b.text)
+          ? <PostDiagram key={i} name={b.text} />
+          : <Code key={i} caption={b.lang.toUpperCase()}>{b.text}</Code>;
       case 'table': return <Table key={i} head={b.head.map(inline)} rows={b.rows.map(r => r.map(inline))} />;
       case 'quote': return <blockquote key={i}>{inline(b.text)}</blockquote>;
       default: return <P key={i}>{inline(b.text)}</P>;

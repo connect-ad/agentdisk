@@ -66,7 +66,7 @@ describe('the posts', () => {
   const TRUST = /\]\((\/security|\/privacy|\/trust|\/sub-processors|\/terms)\)/;
 
   it('are all there, newest first', () => {
-    expect(POSTS.length).toBe(10);
+    expect(POSTS.length).toBe(11);
     const dates = POSTS.map(p => p.date);
     expect([...dates].sort().reverse()).toEqual(dates);
   });

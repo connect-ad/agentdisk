@@ -125,6 +125,26 @@ describe('the sources the app genuinely needs', () => {
     expect(sources).toContain('https://*.analytics.google.com');
   });
 
+  /** Deleting these silently drops every Google Ads conversion. The same tag
+      serves both destinations, so the symptom is not "analytics broke" but a
+      campaign reporting itself misconfigured with nothing wrong on screen. */
+  it('lets the same tag reach Google Ads conversion measurement', () => {
+    const sources = directive(policy(), 'connect-src');
+    expect(sources).toContain('https://pagead2.googlesyndication.com');
+    expect(sources).toContain('https://googleads.g.doubleclick.net');
+    expect(sources).toContain('https://www.googleadservices.com');
+    expect(sources).toContain('https://www.google.com');
+  });
+
+  /** The Ads hosts are a connect-src concession and nothing more: the loader
+      still comes from the tag manager host, so the script-src list above is
+      unchanged and stays at three entries. */
+  it('does not widen script-src for the Ads destination', () => {
+    const sources = directive(policy(), 'script-src');
+    expect(sources).not.toContain('https://pagead2.googlesyndication.com');
+    expect(sources).not.toContain('https://www.googleadservices.com');
+  });
+
   /** Deleting these strips the app's typography — styles.css line 1. */
   it('allows the Google Fonts stylesheet and its font files', () => {
     expect(directive(policy(), 'style-src')).toContain('https://fonts.googleapis.com');

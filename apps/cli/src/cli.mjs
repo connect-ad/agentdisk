@@ -24,7 +24,14 @@ import { readFile as readLocal, writeFile as writeLocal, stat } from 'node:fs/pr
 import { basename } from 'node:path';
 
 /** Dev is the only deployed environment today; `AGENTDISK_API` overrides it. */
-export const DEFAULT_API = 'https://api-dev.agentdisk.io';
+/**
+ * Production, because this package is published to npm and a default is what
+ * everyone who never sets `AGENTDISK_API` gets. It read `api-dev` until
+ * 11 Oct 2026 — harmless while the package was unpublished and every caller
+ * was us, and a bug the moment a stranger runs `npx agentdisk`. Point it at
+ * dev with the environment variable, the way CI does.
+ */
+export const DEFAULT_API = 'https://api.agentdisk.io';
 
 /** The inline read and write cap, mirroring `storage/workspace-scoped.ts`. */
 const MAX_INLINE_BYTES = 1024 * 1024;
@@ -52,7 +59,7 @@ Environment:
   AGENTDISK_KEY       The API key (required). Never passed as an argument.
   AGENTDISK_API       The API base URL (default: ${DEFAULT_API})
 
-No account yet? Open a sandbox in the browser: https://app-dev.agentdisk.io/sandbox
+No account yet? Open a sandbox in the browser: https://agentdisk.io/sandbox
 `;
 
 const MIME_BY_EXT = {

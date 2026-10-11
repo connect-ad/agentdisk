@@ -7,6 +7,27 @@ on:
     branches: [main]
   push:
     branches: [dev]
+    # Prose that ships with the repository but never reaches a deployment.
+    # The seven deploy callers already allow-list one directory each
+    # (`apps/api/**`, `apps/web/**`, `apps/admin/**`, `infra/terraform/**`),
+    # so none of these can trigger a deploy; this only stops them running the
+    # dev-push build for nothing.
+    #
+    # **This filter is on `push` alone, and must stay that way.** Branch
+    # protection on `main` requires `App (lint, typecheck, test, build)` and
+    # `Terraform (fmt, validate)` by name. A `pull_request` filter that
+    # skipped a docs-only PR would leave both checks never reporting, and
+    # that PR unmergeable for ever - the same trap the job-name comment below
+    # describes, reached from the other side.
+    #
+    # Not `**/*.md`: `apps/web/src/content/blog/*.md` are the blog posts, and
+    # changing one changes the site. Keep this list explicit.
+    paths-ignore:
+      - "Skill/**"
+      - ".claude/**"
+      - "CLAUDE.md"
+      - "README.md"
+      - "design-system/**"
   # Lets a plan be run on demand against any branch, so infrastructure changes
   # can be reviewed before anything is applied.
   workflow_dispatch:

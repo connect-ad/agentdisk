@@ -244,6 +244,56 @@ permission classifier (see the memory note `classifier-blocks-live-writes`);
 it can read the account freely.
 **State:** conversion rule still broken; campaign still enabled.
 
+#### The spend-matching coupon — recommendation: let it wait, probably let it go
+
+Read from Billing → Promotions on 11 Oct 2026, because the overview card
+rounds and mislabels it:
+
+| | |
+|---|---|
+| Code | `6C7XV-NRWCL-CFRWA` |
+| Terms | Spend **SGD 489.53** → receive **SGD 489.54 credit for future ad spend** |
+| Spent so far | **SGD 0.00** |
+| Expires | **9 December 2026** — 59 days from today |
+
+Two corrections to what the overview card implies. The amounts are **SGD, not
+USD** (~US$375, not $490), and the reward is **credit against future spend**,
+not cash back. So the real shape is: pay ~US$375 now, and earn the right to
+spend another ~US$375 on ads later.
+
+**Why this does not change the verdict in §2.** A matched-credit offer is a
+discount, and a discount is only a good deal on something you wanted at half
+price. The question is not "should we claim SGD 490 of credit" — it is "do we
+want to spend SGD 490 of real cash on ads right now". With zero customers, an
+unvalidated product and W1–W3 still undone, the answer is no. The organic
+channels cost nothing and are not finished; money spent before them buys
+noise.
+
+The arithmetic is also sobering. Qualifying means **SGD 8.30/day for 59 days**
+— nearly three times the current budget. All in, both halves together buy
+roughly **95–190 clicks** at this niche's CPC, which at a 2–3% signup rate is
+a handful of signups and realistically zero to one paying customer. That is
+not a channel test. It will not prove paid works.
+
+**What it is genuinely good for.** §7 says paid may only resume when allowable
+CAC is *measured* rather than estimated. This coupon is the cheapest way to
+buy that measurement — real CPC, real visitor→signup rate — at half price.
+That is worth something, but only once there is an organic baseline to compare
+it against.
+
+**Decision: revisit around 10 November 2026.** Spend nothing before then. Four
+preconditions, all of them, before a cent goes out:
+
+1. The conversion action actually records — otherwise the spend teaches nothing.
+2. PMax is gone, replaced by exact-match Search on eight to ten terms.
+3. W1–W3 are live and an organic baseline exists to compare against.
+4. Karim is content to lose the whole SGD 490 and call it tuition.
+
+If all four hold on 10 Nov: SGD 17/day × 29 days = SGD 493, which qualifies
+with a few days' buffer before 9 Dec. If they do not hold, **let it expire**.
+An expired coupon costs nothing. A chased one costs SGD 490 and the attention
+that should have gone to the registries.
+
 ### W6 · One launch moment — *only after W1–W4 are done*
 
 A launch to a product nobody can install is a wasted launch, and you get one.
@@ -359,6 +409,8 @@ Newest first. One line per entry: what changed, what moved, what was decided.
 
 | Date | Entry |
 |---|---|
+| 2026-10-11 | Spend-matching coupon `6C7XV-NRWCL-CFRWA` recorded (SGD 489.53 → SGD 489.54 of future ad credit, expires 9 Dec 2026). Decision: spend nothing now, revisit 10 Nov against four preconditions, let it expire if they are not met. See §5 W5. |
+| 2026-10-11 | CI's `push` trigger now ignores `Skill/`, `.claude/`, `CLAUDE.md`, `README.md` and `design-system/`. The seven deploy callers already allow-list one app directory each, so prose could never trigger a deployment; this only stops the dev-push build running for nothing. The `pull_request` trigger is deliberately unfiltered — filtering it would leave docs-only PRs waiting for required checks that never report. |
 | 2026-10-11 | W1 prepared. Dry-running the npm publish caught two defects that would have shipped to every user: the CLI defaulted to the **dev** API, and its help pointed at the dev sandbox host. Both fixed; a README added so the npm page is not blank. Package verified publish-ready; the publish itself needs Karim's npm login. |
 | 2026-10-11 | Plan written. Diagnosis: product well-built, entirely undistributed — npm unpublished, absent from the MCP registry, GitHub repo public but blank. Paid search ruled out on ARPU arithmetic (§2). Goal set: 10–30 engaged users in 90 days. `sandbox_created` and `file_stored` instrumented. GitHub metadata set. Baseline: 0 customers, 0 npm downloads, 0 GitHub stars, 0 ad impressions, 0 conversions ever recorded. |
 | 2026-10-11 | CSP fix shipped (`Fixing_feedback_53`) — the Google tag's Ads conversion pings were blocked by `connect-src`. Campaign moved from *Eligible (Misconfigured)* to *Eligible (Limited)*; tag Account and Signals checks went green. |

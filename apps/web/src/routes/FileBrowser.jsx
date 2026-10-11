@@ -11,6 +11,7 @@ import { fetchFiles } from '../lib/resources.js';
 import { useWorkspace } from '../lib/workspace.jsx';
 import { useWorkspaceUsage } from '../lib/usage.jsx';
 import { uploadFile } from '../lib/upload.js';
+import { trackEvent } from '../lib/analytics.js';
 
 /**
  * 8.9 File Browser (MVP-0) + 8.10 File Details drawer + 8.11 Create Folder modal
@@ -137,6 +138,11 @@ export default function FileBrowser() {
         onProgress: progress => patch({ progress })
       });
       patch({ status: 'done', progress: 1 });
+      // Activation, in Skill 14 §4's sense: somebody has put a real file in.
+      // The ratio of this to `sandbox_created` is the number §7 stops all
+      // marketing over. No parameters — a file's name and size are the
+      // customer's, not Google's.
+      trackEvent('file_stored');
       // Drop the finished row after a beat so the list does not become a
       // permanent history of everything uploaded this session.
       setTimeout(() => setUploads(list => list.filter(u => u.id !== id)), 2500);

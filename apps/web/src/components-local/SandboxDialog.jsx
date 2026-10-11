@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Button, CodeBlock, Modal } from '../components/index.js';
+import { trackEvent } from '../lib/analytics.js';
 
 /**
  * The agent-first sandbox (02 PART 4.3, 05 PART 13's `POST /v1/workspaces`),
@@ -188,6 +189,12 @@ export function SandboxDialog({ open, onClose }) {
         return;
       }
       setResult(body);
+      // The first step of the funnel in Skill 14 §4, and the only one that
+      // can be measured at all: whoever did this has no account, so sign-ups
+      // undercount the people who actually tried the product. No parameters —
+      // the body holds a live credential and a workspace name, and this
+      // module's rule is that nothing reaching Google names either.
+      trackEvent('sandbox_created');
     } catch {
       setError('Could not reach the API. Check your connection and try again.');
     } finally {

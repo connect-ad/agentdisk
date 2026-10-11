@@ -27,7 +27,7 @@ date was a build; this page and the skills describe the product as it runs.
 | `Skill/` | How this project is built, deployed and operated, by topic. **Read the skill for the area before touching it.** |
 | `design-system/` | Four hand-exported Claude Design artboards and the logo. Read-only; the source of truth is the Claude Design project `d311bfd0-9751-4a9b-84f4-b33e7a09378e`. |
 | `regression-tests/` | Playwright against a live hostname. |
-| `.claude/commands/` | `cpack`, which persists session knowledge into these documents. |
+| `.claude/commands/` | `cpack`, which persists session knowledge into these documents, and `mcheck`, the daily marketing check that reads Skill 14's funnel and fires its decision rules. |
 
 This page is the only index. The root `README.md` is a symlink to it; never
 write to `README.md` directly.
@@ -52,6 +52,7 @@ document gets corrected.**
 | 11 | [Operations](Skill/11%20Operations.md) | What is live, what was set up by hand, known gaps, what to check when something stops |
 | 12 | [Hardening](Skill/12%20Hardening.md) | The 30 September 2026 zone audit: Cloudflare settings changed by hand, the edge header rule, DNSSEC, SEO and agent-readiness findings, the open list |
 | 13 | [UI Layering](Skill/13%20UI%20Layering.md) | The overlay ladder and the modal contract shared by the dashboard and the console; cited by section number from both apps |
+| 14 | [Marketing and Sales](Skill/14%20Marketing%20and%20Sales.md) | Getting the first users and the first revenue: positioning, the pricing arithmetic that rules out paid ads, the channel plan, the funnel events, the decision rules and the daily check |
 
 ## Rules that apply everywhere
 
@@ -84,7 +85,8 @@ apps/cli     11 tests ·  1 file
 
 Prod: `agentdisk.io`, `app.`, `api.`, `mcp.`, `securepanel.`. Dev: the same
 five with `dev.` and `-dev` suffixes, deployed on every push to `dev`. The
-four plans are linked to live Stripe. No customers yet. The open work is the
+four plans are linked to live Stripe. No customers yet — getting the first
+ones is Skill 14, and `/mcheck` runs its daily check. The open work is the
 known-gaps list in Skill 11. The plan count gates (workspaces, agents, keys,
 members) were enforced on 4 October 2026; see Skill 7.
 

@@ -128,15 +128,29 @@ currently fails. Every developer who follows the quick start hits a 404. It is
 also the cheapest credibility signal a dev tool has, and the name is sitting
 unclaimed.
 
+**Two defects were found by dry-running the publish on 11 Oct 2026, and both
+are fixed.** They are worth recording because each would have shipped to every
+user and neither was visible from inside the repo:
+
+- `DEFAULT_API` read `https://api-dev.agentdisk.io`. Harmless while the
+  package was unpublished and every caller was us; the moment a stranger runs
+  `npx agentdisk`, it silently points them at **dev**.
+- The help text sent people to `https://app-dev.agentdisk.io/sandbox`.
+- The tarball had no README, so the npm page — the first thing anyone
+  evaluating a dev tool reads — would have been blank. `apps/cli/README.md`
+  now leads with what it is, the no-signup sandbox, and the MCP config block.
+
 **Steps**
 
 1. `cd apps/cli && npm login` *(Karim — needs his npm account)*
 2. `npm publish --access public`
-3. Verify: `npx agentdisk@latest --help`
-4. Add the npm badge and install line to the README (W3).
+3. Verify: `npx agentdisk@latest --help` — the sandbox line must read
+   `agentdisk.io`, not `app-dev`.
+4. Then W2, which is worth far more once this works.
 
-**Owner:** Karim runs the publish; Claude prepares and verifies.
-**State:** not done.
+**Owner:** Karim runs the publish; Claude prepared and verified the package.
+**State:** package ready and `npm pack --dry-run` clean (4 files, 5.2 kB).
+Publish not run — needs Karim's npm credentials.
 
 ### W2 · Be listed — registries and directories
 
@@ -345,5 +359,6 @@ Newest first. One line per entry: what changed, what moved, what was decided.
 
 | Date | Entry |
 |---|---|
+| 2026-10-11 | W1 prepared. Dry-running the npm publish caught two defects that would have shipped to every user: the CLI defaulted to the **dev** API, and its help pointed at the dev sandbox host. Both fixed; a README added so the npm page is not blank. Package verified publish-ready; the publish itself needs Karim's npm login. |
 | 2026-10-11 | Plan written. Diagnosis: product well-built, entirely undistributed — npm unpublished, absent from the MCP registry, GitHub repo public but blank. Paid search ruled out on ARPU arithmetic (§2). Goal set: 10–30 engaged users in 90 days. `sandbox_created` and `file_stored` instrumented. GitHub metadata set. Baseline: 0 customers, 0 npm downloads, 0 GitHub stars, 0 ad impressions, 0 conversions ever recorded. |
 | 2026-10-11 | CSP fix shipped (`Fixing_feedback_53`) — the Google tag's Ads conversion pings were blocked by `connect-src`. Campaign moved from *Eligible (Misconfigured)* to *Eligible (Limited)*; tag Account and Signals checks went green. |

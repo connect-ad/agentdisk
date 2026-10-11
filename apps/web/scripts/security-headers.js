@@ -67,6 +67,35 @@ const GA_SCRIPT = "https://www.googletagmanager.com";
 const GA_COLLECT = ["https://*.google-analytics.com", "https://*.analytics.google.com"];
 
 /**
+ * Google Ads conversion measurement, which rides the *same* tag as GA4.
+ *
+ * The Google tag `AgentDisk` carries two destinations — `G-20LJDYJVHD` (the
+ * GA4 property) and `AW-18505313134` (the Ads account) — so the one loader
+ * `lib/analytics.js` injects already serves both. Nothing extra is fetched and
+ * nothing extra is configured in the page; the Ads destination simply sends
+ * its conversion pings to four hosts that are not GA4's.
+ *
+ * None of them were listed, so every one of those pings was refused by this
+ * policy. Google Ads' own tag diagnostics caught it on 11 Oct 2026 — "Your
+ * website's security settings are blocking measurement", naming `connect-src`
+ * and `pagead2.googlesyndication.com` on `agentdisk.io/` — and the campaign
+ * read as *Eligible (Misconfigured)* with the conversion action stuck on
+ * "Awaiting conversions". The other three are the rest of the published set
+ * for an Ads destination; listing only the host that happened to be observed
+ * first would buy a second round of this.
+ *
+ * These are `connect-src` only. The script still comes from the tag manager
+ * host above, so `script-src` keeps its three entries and the note there
+ * stands.
+ */
+const ADS_COLLECT = [
+  "https://pagead2.googlesyndication.com",
+  "https://googleads.g.doubleclick.net",
+  "https://www.googleadservices.com",
+  "https://www.google.com",
+];
+
+/**
  * Only production may be indexed.
  *
  * The dev deployment is a working product on public hostnames, and until 28
@@ -139,7 +168,16 @@ export function contentSecurityPolicy({ apiBase, firebaseAuthDomain } = {}) {
     ["img-src", ["'self'", "data:", "blob:", "https:"]],
     [
       "connect-src",
-      ["'self'", api, ...FIREBASE_ENDPOINTS, R2_S3, TURNSTILE, GA_SCRIPT, ...GA_COLLECT],
+      [
+        "'self'",
+        api,
+        ...FIREBASE_ENDPOINTS,
+        R2_S3,
+        TURNSTILE,
+        GA_SCRIPT,
+        ...GA_COLLECT,
+        ...ADS_COLLECT,
+      ],
     ],
     ["frame-src", [TURNSTILE, GOOGLE_APIS, ...(authDomain ? [authDomain] : [])]],
     ["worker-src", ["'self'", "blob:"]],

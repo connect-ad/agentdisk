@@ -35,14 +35,56 @@ gh repo view connect-ad/agentdisk --json stargazerCount,description,homepageUrl,
 gh api repos/connect-ad/agentdisk/traffic/views --jq '.count, .uniques'
 ```
 
-**The funnel** — GA4 property `556215733` via the analytics MCP. Pull last 7
-days for `sandbox_created`, `file_stored`, `sign_up`, `purchase`, plus users
-and sessions.
+**The funnel** — GA4 property `556215733`. Pull last 7 days for
+`sandbox_created`, `file_stored`, `sign_up`, `purchase`, plus users and
+sessions, and the traffic sources.
 
-If the MCP returns a reauthentication error, say so in one line and tell Karim
-to run `gcloud auth application-default login`. Do not guess the numbers and do
-not silently skip them — a missing funnel is the single most important thing
-on the report.
+Try the analytics MCP first. **If it returns a reauthentication error, do not
+stop there** — the MCP server reads ADC once at start-up, so it keeps
+reporting that error for the rest of the session even after ADC has been
+repaired. Check whether the credentials are actually dead before believing it:
+
+```bash
+gcloud auth application-default print-access-token   # silence = genuinely dead
+```
+
+If that prints a token, the credentials are fine and only the MCP is stale.
+Say so, tell Karim the MCP needs a restart (`/mcp` in an interactive session),
+and **get the numbers anyway** from the Data API directly:
+
+```bash
+TOKEN=$(gcloud auth application-default print-access-token)
+curl -sS -X POST \
+  "https://analyticsdata.googleapis.com/v1beta/properties/556215733:runReport" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"dateRanges":[{"startDate":"7daysAgo","endDate":"today"}],
+       "dimensions":[{"name":"eventName"}],
+       "metrics":[{"name":"eventCount"},{"name":"totalUsers"}]}'
+```
+
+Swap `eventName` for `sessionDefaultChannelGroup` and `sessionSource` to see
+where the traffic came from — worth doing every time while the numbers are
+small enough that one visitor matters.
+
+Only if `print-access-token` is silent is the funnel genuinely unreadable. Then
+tell Karim to re-run the login **with the project's own OAuth client**, not the
+default one, which Google now blocks for the analytics scope:
+
+```bash
+gcloud auth application-default login \
+  --client-id-file=<desktop client JSON> \
+  --scopes=https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/analytics.readonly
+```
+
+The client is `analytics-mcp` in Cloud project `agentdisk` (514497115904).
+Its secret can no longer be downloaded from the console, but the old
+`application_default_credentials.json` holds the same `client_id` and
+`client_secret` — rebuild the file from those rather than rotating the secret.
+Sign in as **connect@amardrive.com**; that is the account with access to the
+property.
+
+Never guess the numbers and never silently skip them — a missing funnel is the
+single most important thing on the report.
 
 **Paid** — only while Campaign #1 is enabled. Read the Google Ads overview in
 Chrome for impressions, clicks, cost and conversions. Read only; the classifier

@@ -392,9 +392,28 @@ Where each number comes from, and who can read it:
 | npm downloads | `api.npmjs.org/downloads/point/last-week/agentdisk` | Yes |
 | GitHub stars, views, clones | `gh repo view`, `gh api repos/.../traffic/views` | Yes |
 | MCP registry listing | `registry.modelcontextprotocol.io/v0/servers?search=agentdisk` | Yes |
-| `sandbox_created`, `file_stored`, `sign_up`, `purchase` | GA4 property **556215733** via the analytics MCP | Yes — **needs `gcloud auth application-default login` when the token expires** |
+| `sandbox_created`, `file_stored`, `sign_up`, `purchase` | GA4 property **556215733** | Yes — see the note below |
 | Ads impressions, clicks, cost, conversions | Google Ads UI, read-only via Chrome | Yes (read only; writes are blocked) |
 | Subscriptions, MRR | Stripe MCP, read | Yes |
+
+**Reading GA4, and the two traps in it.** Sorted 13 Oct 2026 after two checks
+ran blind:
+
+- The analytics MCP reads ADC **once, at start-up**. Once credentials expire it
+  keeps reporting "Reauthentication is needed" for the rest of the session even
+  after they are repaired, which reads exactly like a dead token and is not
+  one. `gcloud auth application-default print-access-token` settles it: if it
+  prints, the credentials are fine and only the MCP is stale. Restart it with
+  `/mcp`, and meanwhile read the Data API directly over `curl` — `/mcheck`
+  carries the request.
+- Re-authenticating needs the **project's own OAuth client**, not gcloud's
+  default, which Google now blocks for `analytics.readonly`. The client is
+  `analytics-mcp` in Cloud project `agentdisk` (514497115904). Its secret can
+  no longer be downloaded from the console, but the expired
+  `application_default_credentials.json` still holds the same `client_id` and
+  `client_secret` — rebuild the client file from those rather than adding a new
+  secret and leaving one to rotate. The account with access to the property is
+  **connect@amardrive.com**, not `kernelv5@`.
 
 **Do not expect daily movement.** At this stage most days are flat and that is
 not failure. The check exists to catch the week where something moves, and to
@@ -409,6 +428,8 @@ Newest first. One line per entry: what changed, what moved, what was decided.
 
 | Date | Entry |
 |---|---|
+| 2026-10-13 | **GA4 restored, and the funnel read for the first time.** 7 days: 15 users, 10 first visits, 58 page views — and **zero** `sandbox_created`, `file_stored`, `sign_up` or `purchase`. Not one event past a page view. Sources: 12 users direct (mostly us), 1 organic Google, 1 via `syndicatedsearch.goog` (the paid click, on search partners rather than google.com), 1 unassigned. So real external traffic is **one to three people a week**. This is the §4 diagnosis in numbers: the product is undistributed, not unconvincing — too few people arrive to learn anything about whether it converts. No decision rule fires; the §7 rules gate on W1–W3 being live, and they are not. Fixing the credentials needed the project's own OAuth client, and the MCP needed a restart on top; both traps are now written into §9 and `/mcheck`. |
+| 2026-10-13 | `/mcheck`. **The campaign started serving** — 20 impressions, 1 click, SGD 2.23 spent (Oct 10–12), from a standing start of zero. "Ad strength is poor" cleared on its own, leaving two diagnostics. Distribution unmoved: npm still 404, MCP registry still zero, GitHub still 0 stars. GitHub traffic is CI, not people — 1,124 clones from 229 uniques is Actions, and page views show 1 unique. Funnel unreadable: GA4 needs `gcloud auth application-default login`. Live Stripe unreadable: only a test-mode context in this session. No decision rule fired — W1–W3 aren't live, so the rules that gate on them have no standing, and there is no funnel data for the ratios. **Money is now leaving against a conversion action that structurally cannot fire.** |
 | 2026-10-11 | Spend-matching coupon `6C7XV-NRWCL-CFRWA` recorded (SGD 489.53 → SGD 489.54 of future ad credit, expires 9 Dec 2026). Decision: spend nothing now, revisit 10 Nov against four preconditions, let it expire if they are not met. See §5 W5. |
 | 2026-10-11 | CI's `push` trigger now ignores `Skill/`, `.claude/`, `CLAUDE.md`, `README.md` and `design-system/`. The seven deploy callers already allow-list one app directory each, so prose could never trigger a deployment; this only stops the dev-push build running for nothing. The `pull_request` trigger is deliberately unfiltered — filtering it would leave docs-only PRs waiting for required checks that never report. |
 | 2026-10-11 | W1 prepared. Dry-running the npm publish caught two defects that would have shipped to every user: the CLI defaulted to the **dev** API, and its help pointed at the dev sandbox host. Both fixed; a README added so the npm page is not blank. Package verified publish-ready; the publish itself needs Karim's npm login. |

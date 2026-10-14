@@ -66,9 +66,17 @@ Swap `eventName` for `sessionDefaultChannelGroup` and `sessionSource` to see
 where the traffic came from — worth doing every time while the numbers are
 small enough that one visitor matters.
 
-Only if `print-access-token` is silent is the funnel genuinely unreadable. Then
-tell Karim to re-run the login **with the project's own OAuth client**, not the
-default one, which Google now blocks for the analytics scope:
+If `print-access-token` fails too, the credentials are genuinely dead and the
+funnel is unreadable today. Two different failures land here:
+
+- `invalid_grant / invalid_rapt` — a reauthentication-policy expiry on
+  `connect@amardrive.com`. It recurs roughly every day, so a browser login
+  buys one day. Say so, and repeat the standing recommendation: replace ADC
+  with a **service account** holding Viewer on property 556215733.
+- anything else — the refresh token is spent.
+
+Either way, tell Karim to re-run the login **with the project's own OAuth
+client**, not the default one, which Google now blocks for the analytics scope:
 
 ```bash
 gcloud auth application-default login \

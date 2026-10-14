@@ -450,9 +450,13 @@ ran blind:
   browser login fixes it for about a day and then it dies again, so **`/mcheck`
   cannot read GA4 on its own.** The durable fix is a **service account** with
   Viewer on property 556215733: service accounts carry no reauth policy and do
-  not expire. It needs Karim — a key created in Cloud project `agentdisk`,
-  stored outside this repository, and its address added under GA4 Admin →
-  Property access management.
+  not expire. **Created 14 Oct 2026**: `ga4-reader@agentdisk.iam.gserviceaccount.com`
+  in Cloud project `agentdisk`, its key at
+  `%APPDATA%/gcloud/ga4-reader-key.json` — outside this repository, and it
+  stays outside. One step remains and it is Karim's: add that address under
+  **GA4 Admin → Property access management** with the **Viewer** role on
+  property 556215733. Until then the check still runs on the daily-expiring
+  user credential.
 
 **Do not expect daily movement.** At this stage most days are flat and that is
 not failure. The check exists to catch the week where something moves, and to
@@ -467,6 +471,7 @@ Newest first. One line per entry: what changed, what moved, what was decided.
 
 | Date | Entry |
 |---|---|
+| 2026-10-14 | Follow-up to the check above, after Karim re-authenticated. **The funnel is readable and still flat.** 7 days: 46 page views, 16 users, 11 first visits, 6 scrolls, **1 `form_start`** — and zero `sandbox_created`, `file_stored`, `sign_up`, `purchase`. 28 days: 294 page views, 20 users, 8 clicks, 2 `form_start`, **1 `login`**, and still zero of all four funnel events. Sources unchanged in character — 12 direct users (mostly us), one via `checkout.stripe.com`, one `syndicatedsearch.goog` (the paid click), one organic Google. Note against the Ads finding above: **GA4 has recorded no `sign_up` in 28 days**, so the conversion Ads logged at 20:30 was a URL page-load match rather than an account being created. `ga4-reader` service account created to end the daily credential expiry; it needs Viewer on the property before it can be used. No §7 rule fires — W1–W3 are still not live, and 16 users a week is too few to say anything about conversion. |
 | 2026-10-14 | `/mcheck`. **The ad budget was raised from SGD 3.00/day to SGD 10.00/day** — change history names `connect@amardrive.com`, 13 Oct 20:46, Web client (manual). That is 3.3× more money into a Performance Max campaign bidding against a conversion action that has still never fired, while §5 W5 says pause it. Paid since launch: **82 impressions, 2 clicks, SGD 3.10, 0 conversions** (Oct 10–13; it was 20/1/SGD 2.23 through Oct 12, so Oct 13 alone bought 62 impressions and one click). A new **EU political-ads confirmation** dialog now blocks every Ads page and states this account was previously confirmed to run EU political ads — wrong for this product, it costs EU serving, and clearing it is a write only Karim can make. Funnel unreadable: the GA4 refresh token now fails `invalid_rapt`, a reauth-policy expiry rather than the stale-MCP trap, and it will recur daily until a service account replaces it (§9). Distribution unmoved — npm 404, MCP registry zero, 0 stars. Live Stripe still unreadable, test-mode context only. No §7 rule fires on the funnel for want of data; the paid-channel row fires in substance, and its answer is to cut spend, not raise it. |
 | 2026-10-13 | **GA4 restored, and the funnel read for the first time.** 7 days: 15 users, 10 first visits, 58 page views — and **zero** `sandbox_created`, `file_stored`, `sign_up` or `purchase`. Not one event past a page view. Sources: 12 users direct (mostly us), 1 organic Google, 1 via `syndicatedsearch.goog` (the paid click, on search partners rather than google.com), 1 unassigned. So real external traffic is **one to three people a week**. This is the §4 diagnosis in numbers: the product is undistributed, not unconvincing — too few people arrive to learn anything about whether it converts. No decision rule fires; the §7 rules gate on W1–W3 being live, and they are not. Fixing the credentials needed the project's own OAuth client, and the MCP needed a restart on top; both traps are now written into §9 and `/mcheck`. |
 | 2026-10-13 | `/mcheck`. **The campaign started serving** — 20 impressions, 1 click, SGD 2.23 spent (Oct 10–12), from a standing start of zero. "Ad strength is poor" cleared on its own, leaving two diagnostics. Distribution unmoved: npm still 404, MCP registry still zero, GitHub still 0 stars. GitHub traffic is CI, not people — 1,124 clones from 229 uniques is Actions, and page views show 1 unique. Funnel unreadable: GA4 needs `gcloud auth application-default login`. Live Stripe unreadable: only a test-mode context in this session. No decision rule fired — W1–W3 aren't live, so the rules that gate on them have no standing, and there is no funnel data for the ratios. **Money is now leaving against a conversion action that structurally cannot fire.** |

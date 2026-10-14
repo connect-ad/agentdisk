@@ -229,8 +229,14 @@ Those four are the funnel. Everything in §7 is read off them.
 
 **Steps**
 
-1. **Pause Campaign #1.** It cannot learn at SGD 3/day and the conversion
-   action it bids against has never fired.
+1. ~~**Pause Campaign #1.**~~ **Withdrawn 14 October 2026.** Karim raised the
+   budget to SGD 10.00/day on 13 Oct deliberately and chose to keep the
+   campaign running. That is his call and it is recorded here so the daily
+   check stops re-proposing a pause. The arithmetic in §2 has not changed and
+   is not retracted — SGD 10/day still does not reach the 10–20 weekly
+   conversions Performance Max needs to leave the learning phase — but the
+   spend is a decision, not a defect. What `/mcheck` should report from here is
+   cost against conversions, not the budget level.
 2. Fix the conversion action anyway, so the funnel is intact when traffic
    arrives: Goals → Conversions → **Sign Up** → Settings → **Event** →
    *Match when* `URL starts with` → **`URL contains`**. The rule currently
@@ -242,7 +248,29 @@ Those four are the funnel. Everything in §7 is read off them.
 **Owner:** Karim. Claude is blocked from writing to the Ads account by the
 permission classifier (see the memory note `classifier-blocks-live-writes`);
 it can read the account freely.
-**State:** conversion rule still broken; campaign still enabled.
+**State:** campaign enabled at SGD 10.00/day by decision. Two things learned
+on 14 Oct, one of which contradicts what is written above.
+
+- **The conversion action is recording.** Its Details tab reads *Active*,
+  *“Conversions have been recorded within the last 7 days”*, **last recorded
+  conversion 14 Oct 2026, 20:30** account time — forty minutes before the check
+  ran. The rule is still `URL starts with agentdisk.io/signup` and
+  `agentdisk.io/signup` still answers **302 → app.agentdisk.io/signup**, so the
+  mechanism is not understood. What is certain is that step 2's premise — that
+  this rule can never match — is **no longer safe to assert**. Establish why it
+  fired before changing the match type; `contains` is still the more robust
+  rule, but it is no longer an emergency and should not be changed blind. The
+  campaign's own conversion count stays 0.00, which is consistent: *All conv.*
+  counts only ad-attributed conversions, and this one had no ad click.
+- **An EU political-ads confirmation dialog** now appears on roughly half of
+  all page loads and intercepts every click beneath it. Its only control is
+  **Update**, which propagates the political-ads designation *to* all campaigns
+  rather than clearing it — that is what stops them serving in the EU, so it
+  must not be clicked. The per-campaign declaration is the correct lever.
+
+Claude reached the editable rule on 14 Oct and the permission classifier denied
+the write, as it has every previous time. That boundary is holding and is not
+to be worked around.
 
 #### The spend-matching coupon — recommendation: let it wait, probably let it go
 

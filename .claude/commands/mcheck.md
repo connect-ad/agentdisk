@@ -39,7 +39,20 @@ gh api repos/connect-ad/agentdisk/traffic/views --jq '.count, .uniques'
 `sandbox_created`, `file_stored`, `sign_up`, `purchase`, plus users and
 sessions, and the traffic sources.
 
-Try the analytics MCP first. **If it returns a reauthentication error, do not
+**Read it with the `ga4-reader` service account first** (Viewer on the
+property since 15 Oct 2026; it does not expire). Use an isolated gcloud
+config so the user login is untouched:
+
+```bash
+export CLOUDSDK_CONFIG=<scratchpad>/gcloud-sa
+gcloud auth activate-service-account --key-file="$APPDATA/gcloud/ga4-reader-key.json" --quiet
+TOKEN=$(gcloud auth print-access-token --scopes=https://www.googleapis.com/auth/analytics.readonly)
+```
+
+Then send the `runReport` request below with that token. Only if this fails,
+fall back to the analytics MCP and the user credential.
+
+The analytics MCP is the fallback. **If it returns a reauthentication error, do not
 stop there** — the MCP server reads ADC once at start-up, so it keeps
 reporting that error for the rest of the session even after ADC has been
 repaired. Check whether the credentials are actually dead before believing it:

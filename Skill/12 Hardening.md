@@ -182,8 +182,12 @@ SEO and agent improvements:
 
 12. A real `favicon.ico`, apple-touch-icon and web manifest; a 1200×630 OG
     image with `summary_large_image` (F5).
-13. JSON-LD `Organization` (Kernelv5, logo, `sameAs`) and `offers` with the
-    free tier at price 0 (F6).
+13. ~~JSON-LD `Organization`~~ Built 15 Oct 2026: the homepage graph
+    (`headTags` in `lib/seo.js`) carries `WebSite` (name AgentDisk,
+    `alternateName` agentdisk) and `Organization` (legalName from
+    `company.js`, logo, GitHub `sameAs`), because Google was correcting the
+    brand search "agentdisk" to "agentdesk". `offers` with the free tier at
+    price 0 is still open (F6).
 14. Split `/docs` into one page per topic (F6).
 15. ~~Markdown for docs: `Accept: text/markdown` negotiation (F20).~~ Done
     4 Oct 2026; `/llms-full.txt` remains unbuilt.
@@ -193,7 +197,11 @@ SEO and agent improvements:
 17. ~~An MCP Server Card~~ (served since 4 Oct 2026), and a listing in the
     official MCP Registry (F20).
 18. Verify the site in Google Search Console and Bing Webmaster Tools, then
-    submit the sitemap.
+    submit the sitemap. Checked 15 Oct 2026: `connect@amardrive.com` has no
+    `agentdisk.io` property in Search Console (only `amardrive.com`), although
+    the zone carries a `google-site-verification` TXT, so it may be verified
+    under another Google account. Adding the property is a console write the
+    classifier refuses to Claude; it is Karim's.
 19. Optional: the edge rate limit on `POST /v1/workspaces` (F14).
 20. Business decision: the AI Training policy is Disallow. Allowing it lets
     future models learn about AgentDisk; blocking it keeps the content out of

@@ -8,9 +8,9 @@
  * JavaScript-rendering crawler see. Both read `PAGE_META`, so the title a
  * search result shows cannot differ from the one the tab shows.
  *
- * Plain JavaScript with no imports on purpose: Node imports this file
- * directly during the build, outside Vite, so nothing here may use JSX,
- * `import.meta.env` or a browser global at module scope.
+ * Plain JavaScript, importing only other plain modules (`company.js`): Node
+ * imports this file directly during the build, outside Vite, so nothing here
+ * may use JSX, `import.meta.env` or a browser global at module scope.
  *
  * `SITE_ORIGIN` is production, in every environment. Only prod may be
  * indexed (see `scripts/security-headers.js`), and a staging page whose
@@ -22,8 +22,13 @@
  * tells a crawler which copy is the real one.
  */
 
+import { COMPANY_LEGAL_NAME } from './company.js';
+
 export const SITE_ORIGIN = 'https://agentdisk.io';
 export const SITE_NAME = 'AgentDisk';
+
+/** The public repository, named in the homepage's Organization `sameAs`. */
+export const SOURCE_REPOSITORY = 'https://github.com/connect-ad/agentdisk';
 
 /** The one image the site has. A 1200×630 social card would be better; this is what exists. */
 export const SOCIAL_IMAGE = `${SITE_ORIGIN}/agentdisk-logo.png`;
@@ -183,14 +188,41 @@ export function headTags(route, extra = {}) {
     tags.push(`<meta property="article:published_time" content="${escapeHtml(meta.published)}" />`);
   }
   if (route === '/') {
+    // WebSite and Organization are what tell a search engine that "AgentDisk"
+    // is a name rather than a misspelling of a better-known one: Google reads
+    // the site name, and its alternate spellings, from the WebSite node. The
+    // brand is the organization's name; the legal entity rides as legalName.
+    const organization = `${SITE_ORIGIN}/#organization`;
     const ld = {
       '@context': 'https://schema.org',
-      '@type': 'SoftwareApplication',
-      name: SITE_NAME,
-      url: SITE_ORIGIN,
-      applicationCategory: 'DeveloperApplication',
-      operatingSystem: 'Any',
-      description: meta.description
+      '@graph': [
+        {
+          '@type': 'WebSite',
+          '@id': `${SITE_ORIGIN}/#website`,
+          name: SITE_NAME,
+          alternateName: ['agentdisk', 'agentdisk.io'],
+          url: `${SITE_ORIGIN}/`,
+          publisher: { '@id': organization }
+        },
+        {
+          '@type': 'Organization',
+          '@id': organization,
+          name: SITE_NAME,
+          legalName: COMPANY_LEGAL_NAME,
+          url: SITE_ORIGIN,
+          logo: SOCIAL_IMAGE,
+          sameAs: [SOURCE_REPOSITORY]
+        },
+        {
+          '@type': 'SoftwareApplication',
+          name: SITE_NAME,
+          url: SITE_ORIGIN,
+          applicationCategory: 'DeveloperApplication',
+          operatingSystem: 'Any',
+          description: meta.description,
+          publisher: { '@id': organization }
+        }
+      ]
     };
     // `</` cannot appear inside a script element; JSON.stringify never
     // emits it from this object, but the replace keeps that true if a

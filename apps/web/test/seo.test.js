@@ -19,6 +19,7 @@ import {
 import { PRERENDERED_ROUTES, sitemapFile } from '../src/entry-prerender.jsx';
 import { CONTENT_META } from '../src/lib/pages.js';
 import { POSTS } from '../src/lib/blog.js';
+import { COMPANY_LEGAL_NAME } from '../src/lib/company.js';
 
 const ALL_META = { ...PAGE_META, ...CONTENT_META };
 
@@ -78,6 +79,22 @@ describe('headTags', () => {
     expect(headTags('/')).toContain('application/ld+json');
     expect(headTags('/')).toContain('"@type":"SoftwareApplication"');
     expect(headTags('/pricing')).not.toContain('application/ld+json');
+  });
+
+  it('names the site and the organization, so a search for the brand finds it', () => {
+    const ld = JSON.parse(headTags('/').match(/<script type="application\/ld\+json">(.*)<\/script>/)[1]);
+    const byType = Object.fromEntries(ld['@graph'].map(node => [node['@type'], node]));
+
+    expect(byType.WebSite).toMatchObject({ name: 'AgentDisk', url: `${SITE_ORIGIN}/` });
+    expect(byType.WebSite.alternateName).toContain('agentdisk');
+    expect(byType.Organization).toMatchObject({
+      name: 'AgentDisk',
+      legalName: COMPANY_LEGAL_NAME,
+      url: SITE_ORIGIN
+    });
+    expect(byType.Organization.logo).toMatch(/^https:\/\/agentdisk\.io\//);
+    expect(byType.SoftwareApplication.publisher).toEqual({ '@id': byType.Organization['@id'] });
+    expect(byType.WebSite.publisher).toEqual({ '@id': byType.Organization['@id'] });
   });
 
   it('escapes what it interpolates', () => {
